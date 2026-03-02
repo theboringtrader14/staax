@@ -1,0 +1,35 @@
+/* STAAX — Global Styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary:    #2A2C2E;
+  --bg-secondary:  #1E2022;
+  --bg-surface:    #3A3C3E;
+  --accent-blue:   #00B0F0;
+  --accent-amber:  #D77B12;
+  --text-primary:  #FFFFFF;
+  --text-muted:    #A6A6A6;
+  --border:        #D9D9D9;
+  --green:         #22C55E;
+  --red:           #EF4444;
+  --amber:         #F59E0B;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Dubai Light', 'Calibri', Arial, sans-serif;
+  font-size: 14px;
+}
+
+h1, h2, h3 {
+  font-family: 'ADLaM Display', 'Calibri', Arial, sans-serif;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--bg-surface); border-radius: 3px; }
