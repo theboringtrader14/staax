@@ -1,6 +1,17 @@
 """
 Algo model — stores strategy configuration.
 Each algo is created once and deployed to days via GridEntry.
+
+CHANGES vs previous version:
+- REMOVED: EntryType.WT and EntryType.ORB_WT  — W&T is per-leg, not an entry type
+- REMOVED: wt_type, wt_value, wt_unit on Algo  — W&T is per-leg only
+- REMOVED: next_day_sl_check_time              — hardcoded 9:18 AM in scheduler, not configurable
+- REMOVED: default_days                         — day assignment is Smart Grid only
+- REMOVED: reentry_config (JSON blob)           — re-entry is per-leg (see AlgoLeg)
+- ADDED:   dte                                  — Days To Expiry for Positional strategy (1–30)
+- ADDED:   wt_direction on AlgoLeg             — "up" or "down"
+- ADDED:   wt_value, wt_unit on AlgoLeg        — W&T per leg
+- ADDED:   reentry_mode, reentry_max on AlgoLeg — re-entry config per leg
 """
 from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, JSON, Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -19,10 +30,13 @@ class StrategyMode(str, enum.Enum):
 
 
 class EntryType(str, enum.Enum):
+    """
+    Entry type is set at algo level.
+    W&T is NOT an entry type — it is a per-leg feature toggle.
+    ORB can be combined with per-leg W&T (the W&T buffer refines the ORB breakout level).
+    """
     DIRECT = "direct"
     ORB    = "orb"
-    WT     = "wt"
-    ORB_WT = "orb_wt"
 
 
 class OrderType(str, enum.Enum):
@@ -30,53 +44,61 @@ class OrderType(str, enum.Enum):
     LIMIT  = "limit"
 
 
+class ReentryMode(str, enum.Enum):
+    """
+    AT_ENTRY_PRICE : watch 1-min candle close returning to original fill price
+    IMMEDIATE      : re-run entry logic immediately after exit
+    AT_COST        : watch LTP return to original entry price (only valid when TSL has trailed)
+    """
+    AT_ENTRY_PRICE = "at_entry_price"
+    IMMEDIATE      = "immediate"
+    AT_COST        = "at_cost"
+
+
 class Algo(Base):
     __tablename__ = "algos"
 
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name           = Column(String(100), unique=True, nullable=False)  # e.g. "AWS-1"
-    account_id     = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
-    strategy_mode  = Column(Enum(StrategyMode), nullable=False)
-    entry_type     = Column(Enum(EntryType), nullable=False)
-    order_type     = Column(Enum(OrderType), default=OrderType.MARKET)
-    is_active      = Column(Boolean, default=True)
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name         = Column(String(100), unique=True, nullable=False)   # e.g. "AWS-1"
+    account_id   = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
+    strategy_mode = Column(Enum(StrategyMode), nullable=False)
+    entry_type   = Column(Enum(EntryType), nullable=False)            # direct or orb only
+    order_type   = Column(Enum(OrderType), default=OrderType.MARKET)
+    is_active    = Column(Boolean, default=True)
 
-    # Timing
-    entry_time     = Column(String(8), nullable=True)   # HH:MM:SS — E: time (all modes)
-    exit_time      = Column(String(8), nullable=True)   # HH:MM:SS — intraday SQ time
-    orb_start_time = Column(String(8), nullable=True)   # HH:MM:SS
-    orb_end_time   = Column(String(8), nullable=True)   # HH:MM:SS
-    next_day_exit_time = Column(String(8), nullable=True)  # E: for BTST/STBT
-    next_day_sl_check_time = Column(String(8), nullable=True)  # N: for BTST/STBT
+    # ── Timing ────────────────────────────────────────────────────────────────
+    entry_time      = Column(String(8), nullable=True)    # HH:MM:SS — E: time (all modes)
+    exit_time       = Column(String(8), nullable=True)    # HH:MM:SS — intraday SQ time
+    orb_start_time  = Column(String(8), nullable=True)    # HH:MM:SS — ORB window open
+    orb_end_time    = Column(String(8), nullable=True)    # HH:MM:SS — ORB window close
+    next_day_exit_time = Column(String(8), nullable=True) # HH:MM:SS — BTST/STBT next-day exit
+    # NOTE: next_day_sl_check_time is NOT stored — hardcoded as entry_time - 2 minutes in scheduler
 
-    # W&T config
-    wt_type        = Column(String(10), nullable=True)  # "up" or "down"
-    wt_value       = Column(Float, nullable=True)
-    wt_unit        = Column(String(5), nullable=True)   # "pts" or "pct"
+    # ── Positional ────────────────────────────────────────────────────────────
+    dte = Column(Integer, nullable=True)
+    # DTE = Days to Expiry before auto-exit. Range 1–30. NULL = exit on expiry day.
+    # Only relevant when strategy_mode = 'positional'. Ignored for all other modes.
 
-    # MTM controls
-    mtm_sl         = Column(Float, nullable=True)
-    mtm_tp         = Column(Float, nullable=True)
-    mtm_unit       = Column(String(5), nullable=True)   # "amt" or "pct"
+    # ── MTM controls (algo-level) ─────────────────────────────────────────────
+    mtm_sl   = Column(Float, nullable=True)
+    mtm_tp   = Column(Float, nullable=True)
+    mtm_unit = Column(String(5), nullable=True)    # "amt" or "pct"
 
-    # Order delays
+    # ── Order delays ──────────────────────────────────────────────────────────
     entry_delay_buy_secs  = Column(Integer, default=0)
     entry_delay_sell_secs = Column(Integer, default=0)
     exit_delay_buy_secs   = Column(Integer, default=0)
     exit_delay_sell_secs  = Column(Integer, default=0)
 
-    # Error settings
+    # ── Error handling ────────────────────────────────────────────────────────
     exit_on_margin_error  = Column(Boolean, default=True)
     exit_on_entry_failure = Column(Boolean, default=True)
 
-    # Default days (stored as JSON array: ["mon","tue","wed","thu","fri"])
-    default_days   = Column(JSON, default=["mon","tue","wed","thu","fri"])
+    # ── Lot sizing ────────────────────────────────────────────────────────────
     base_lot_multiplier = Column(Integer, default=1)
+    # Per-day multiplier lives on GridEntry.lot_multiplier, not here.
 
-    # Re-entry config (JSON — see PRD Section 7.6)
-    reentry_config = Column(JSON, nullable=True)
-
-    # Journey config (JSON — see PRD Section 7.7)
+    # ── Journey config (Phase 1E) ─────────────────────────────────────────────
     journey_config = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -88,31 +110,53 @@ class AlgoLeg(Base):
     """
     Individual legs within an algo.
     A straddle = 2 legs (CE + PE). A strangle = 2+ legs.
+
+    W&T and Re-entry are stored per-leg — they are NOT algo-level concepts.
     """
     __tablename__ = "algo_legs"
 
-    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    algo_id      = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False)
-    leg_number   = Column(Integer, nullable=False)   # 1, 2 — parent leg number
-    direction    = Column(String(4), nullable=False)  # "buy" or "sell"
-    instrument   = Column(String(5), nullable=False)  # "ce", "pe", "fu"
-    underlying   = Column(String(20), nullable=False) # "NIFTY", "BANKNIFTY", etc.
-    expiry       = Column(String(20), nullable=False) # "current_week", "next_week", "monthly_current", "monthly_next"
-    strike_type  = Column(String(10), nullable=False) # "atm", "itm", "otm", "premium", "straddle_premium"
-    strike_offset = Column(Integer, default=0)        # 1-10 for ITM/OTM
-    strike_value = Column(Float, nullable=True)       # for premium-based selection
-    lots         = Column(Integer, default=1)
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    algo_id    = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False)
+    leg_number = Column(Integer, nullable=False)    # display order: 1, 2, 3...
+    direction  = Column(String(4), nullable=False)  # "buy" or "sell"
+    instrument = Column(String(5), nullable=False)  # "ce", "pe", "fu"
+    underlying = Column(String(20), nullable=False) # "NIFTY", "BANKNIFTY", etc.
+    expiry     = Column(String(20), nullable=False) # "current_weekly", "next_weekly", "current_monthly", "next_monthly"
+    strike_type   = Column(String(20), nullable=False) # "atm", "itm3", "otm2", "premium", "straddle_premium"
+    strike_offset = Column(Integer, default=0)          # 1–10 for ITM/OTM
+    strike_value  = Column(Float, nullable=True)        # ₹ for premium-based selection
+    lots       = Column(Integer, default=1)
 
-    # Per-leg risk params
-    sl_type      = Column(String(20), nullable=True)  # "pts_instrument", "pct_instrument", "pts_underlying", "pct_underlying"
-    sl_value     = Column(Float, nullable=True)
-    tp_type      = Column(String(20), nullable=True)
-    tp_value     = Column(Float, nullable=True)
-    tsl_x        = Column(Float, nullable=True)       # TSL: for every X move
-    tsl_y        = Column(Float, nullable=True)       # TSL: shift SL by Y
-    tsl_unit     = Column(String(5), nullable=True)   # "pts" or "pct"
-    ttp_x        = Column(Float, nullable=True)
-    ttp_y        = Column(Float, nullable=True)
-    ttp_unit     = Column(String(5), nullable=True)
+    # ── Per-leg SL / TP ───────────────────────────────────────────────────────
+    # sl_type / tp_type values: "pts_instrument" | "pct_instrument" | "pts_underlying" | "pct_underlying"
+    sl_type  = Column(String(20), nullable=True)
+    sl_value = Column(Float, nullable=True)
+    tp_type  = Column(String(20), nullable=True)
+    tp_value = Column(Float, nullable=True)
 
-    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+    # ── Per-leg TSL (Trailing Stop Loss) ──────────────────────────────────────
+    # For every X move in favour, shift SL by Y. Same unit for X and Y.
+    tsl_x    = Column(Float, nullable=True)
+    tsl_y    = Column(Float, nullable=True)
+    tsl_unit = Column(String(5), nullable=True)    # "pts" or "pct"
+
+    # ── Per-leg TTP (Trailing Target Profit — Phase 1E) ───────────────────────
+    ttp_x    = Column(Float, nullable=True)
+    ttp_y    = Column(Float, nullable=True)
+    ttp_unit = Column(String(5), nullable=True)
+
+    # ── Per-leg W&T (Wait and Trade) ──────────────────────────────────────────
+    # At entry_time: capture reference price, then wait for threshold cross.
+    # wt_direction: "up" → entry when LTP rises X above ref; "down" → falls X below ref
+    wt_enabled   = Column(Boolean, default=False)
+    wt_direction = Column(String(5), nullable=True)   # "up" or "down"
+    wt_value     = Column(Float, nullable=True)
+    wt_unit      = Column(String(5), nullable=True)   # "pts" or "pct"
+
+    # ── Per-leg Re-entry ──────────────────────────────────────────────────────
+    # reentry_max: 0 = disabled, 1–5 = max re-entries per day
+    reentry_enabled = Column(Boolean, default=False)
+    reentry_mode    = Column(Enum(ReentryMode), nullable=True)
+    reentry_max     = Column(Integer, default=0)   # 0–5
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
