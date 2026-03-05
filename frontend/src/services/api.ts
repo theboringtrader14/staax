@@ -14,56 +14,108 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// ── Auth ──────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
-  login: (username: string, password: string) =>
+  login:  (username: string, password: string) =>
     api.post('/auth/login', { username, password }),
-  me: () => api.get('/auth/me'),
+  me:     () => api.get('/auth/me'),
 }
 
-// ── Accounts ──────────────────────────────────────
+// ── Accounts ──────────────────────────────────────────────────────────────────
 export const accountsAPI = {
-  list: () => api.get('/accounts/'),
-  tokenStatus: (id: string) => api.get(`/accounts/${id}/token-status`),
-  updateMargin: (id: string, data: object) => api.post(`/accounts/${id}/margin`, data),
+  list:         () => api.get('/accounts/'),
+  status:       () => api.get('/accounts/status'),
+  updateMargin: (id: string, data: object) =>
+    api.post(`/accounts/${id}/margin`, data),
+  updateGlobalRisk: (id: string, data: { global_sl?: number; global_tp?: number }) =>
+    api.post(`/accounts/${id}/global-risk`, data),
+
+  // Zerodha token flow
+  zerodhaLoginUrl: () => api.get('/accounts/zerodha/login-url'),
+  zerodhaSetToken: (requestToken: string) =>
+    api.post('/accounts/zerodha/set-token', null, { params: { request_token: requestToken } }),
+  zerodhaTokenStatus: () => api.get('/accounts/zerodha/token-status'),
 }
 
-// ── Algos ─────────────────────────────────────────
+// ── Algos — CRUD ──────────────────────────────────────────────────────────────
 export const algosAPI = {
-  list: () => api.get('/algos/'),
-  get: (id: string) => api.get(`/algos/${id}`),
+  list:   () => api.get('/algos/'),
+  get:    (id: string) => api.get(`/algos/${id}`),
   create: (data: object) => api.post('/algos/', data),
   update: (id: string, data: object) => api.put(`/algos/${id}`, data),
   delete: (id: string) => api.delete(`/algos/${id}`),
+
+  // Runtime controls (Orders page buttons)
+  start:     (id: string) =>
+    api.post(`/algos/${id}/start`),
+  re:        (id: string) =>
+    api.post(`/algos/${id}/re`),
+  sq:        (id: string, legIds: string[] = []) =>
+    api.post(`/algos/${id}/sq`, { leg_ids: legIds }),
+  terminate: (id: string) =>
+    api.post(`/algos/${id}/terminate`),
 }
 
-// ── Grid ──────────────────────────────────────────
+// ── Grid ──────────────────────────────────────────────────────────────────────
 export const gridAPI = {
-  getWeek: () => api.get('/grid/week'),
-  deploy: (data: object) => api.post('/grid/deploy', data),
-  updateMultiplier: (entryId: string, multiplier: number) =>
-    api.patch(`/grid/${entryId}/multiplier`, { multiplier }),
-  removeFromDay: (entryId: string) => api.delete(`/grid/${entryId}`),
+  getWeek:    (weekStart?: string) =>
+    api.get('/grid/', { params: weekStart ? { week_start: weekStart } : {} }),
+  deploy:     (data: {
+    algo_id: string
+    trading_date: string
+    day_of_week: string
+    lot_multiplier?: number
+    is_practix?: boolean
+  }) => api.post('/grid/', data),
+  getEntry:   (entryId: string) => api.get(`/grid/${entryId}`),
+  update:     (entryId: string, data: {
+    lot_multiplier?: number
+    is_practix?: boolean
+    is_enabled?: boolean
+  }) => api.put(`/grid/${entryId}`, data),
+  remove:     (entryId: string) => api.delete(`/grid/${entryId}`),
+  archive:    (entryId: string) => api.post(`/grid/${entryId}/archive`),
+  unarchive:  (entryId: string) => api.post(`/grid/${entryId}/unarchive`),
+  setMode:    (entryId: string, isPractix: boolean) =>
+    api.post(`/grid/${entryId}/mode`, { is_practix: isPractix }),
+  promoteAllToLive: (algoId: string) =>
+    api.post(`/grid/${algoId}/promote-live`),
 }
 
-// ── Orders ────────────────────────────────────────
+// ── Orders ────────────────────────────────────────────────────────────────────
 export const ordersAPI = {
-  list: () => api.get('/orders/'),
+  list:           (date?: string) =>
+    api.get('/orders/', { params: date ? { date } : {} }),
   correctExitPrice: (orderId: string, price: number) =>
     api.patch(`/orders/${orderId}/exit-price`, { price }),
-  syncOrder: (algoId: string, data: object) => api.post(`/orders/${algoId}/sync`, data),
-  squareOff: (algoId: string) => api.post(`/orders/${algoId}/square-off`),
+  syncOrder:      (algoId: string, data: object) =>
+    api.post(`/orders/${algoId}/sync`, data),
 }
 
-// ── Reports ───────────────────────────────────────
+// ── Services (Dashboard panel) ────────────────────────────────────────────────
+export const servicesAPI = {
+  status:   () => api.get('/services/'),
+  startAll: () => api.post('/services/start-all'),
+  stopAll:  () => api.post('/services/stop-all'),
+  start:    (serviceId: string) => api.post(`/services/${serviceId}/start`),
+  stop:     (serviceId: string) => api.post(`/services/${serviceId}/stop`),
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
 export const reportsAPI = {
   equityCurve: (params?: object) => api.get('/reports/equity-curve', { params }),
-  metrics: (params?: object) => api.get('/reports/metrics', { params }),
-  calendar: (params?: object) => api.get('/reports/calendar', { params }),
+  metrics:     (params?: object) => api.get('/reports/metrics',       { params }),
+  calendar:    (params?: object) => api.get('/reports/calendar',      { params }),
+  download:    (params?: object) => api.get('/reports/download',      { params, responseType: 'blob' }),
 }
 
-// ── WebSocket ─────────────────────────────────────
-export function createOrdersWebSocket() {
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+export function createOrdersWebSocket(): WebSocket {
   const wsBase = API_BASE.replace('http', 'ws')
-  return new WebSocket(`${wsBase}/api/v1/orders/ws/live`)
+  return new WebSocket(`${wsBase}/ws/live`)
+}
+
+export function createNotificationsWebSocket(): WebSocket {
+  const wsBase = API_BASE.replace('http', 'ws')
+  return new WebSocket(`${wsBase}/ws/notifications`)
 }
