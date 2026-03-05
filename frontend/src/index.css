@@ -1,35 +1,138 @@
-/* STAAX — Global Styles */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=ADLaM+Display&display=swap');
+
 :root {
-  --bg-primary:    #2A2C2E;
-  --bg-secondary:  #1E2022;
-  --bg-surface:    #3A3C3E;
-  --accent-blue:   #00B0F0;
-  --accent-amber:  #D77B12;
-  --text-primary:  #FFFFFF;
-  --text-muted:    #A6A6A6;
-  --border:        #D9D9D9;
-  --green:         #22C55E;
-  --red:           #EF4444;
-  --amber:         #F59E0B;
+  --bg-primary:   #2A2C2E;
+  --bg-secondary: #1E2022;
+  --bg-surface:   #353739;
+  --bg-border:    #3F4143;
+  --accent-blue:  #00B0F0;
+  --accent-amber: #D77B12;
+  --green:        #22C55E;
+  --red:          #EF4444;
+  --amber:        #F59E0B;
+  --text:         #F0F0F0;
+  --text-muted:   #9CA3AF;
+  --text-dim:     #6B7280;
+  --btn-h:        32px;
+  --page-h-pad:   24px;
+  --page-v-pad:   20px;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin:0; padding:0; }
 
 body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: 'Dubai Light', 'Calibri', Arial, sans-serif;
-  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text);
+  font-family: 'Dubai Light', 'Calibri', sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 {
-  font-family: 'ADLaM Display', 'Calibri', Arial, sans-serif;
+::-webkit-scrollbar       { width:5px; height:5px; }
+::-webkit-scrollbar-track  { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb  { background: var(--bg-border); border-radius:3px; }
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+.page-content {
+  padding: var(--page-v-pad) var(--page-h-pad);
+  height: 100%;
+  overflow-y: auto;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-secondary); }
-::-webkit-scrollbar-thumb { background: var(--bg-surface); border-radius: 3px; }
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  min-height: 40px;
+}
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--btn-h); padding: 0 14px;
+  border-radius: 5px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.15s;
+  white-space: nowrap; font-family: inherit;
+}
+.btn-primary { background: var(--accent-blue); color: #000; }
+.btn-primary:hover { background: #00c8ff; }
+.btn-danger  { background: rgba(239,68,68,0.15); color: var(--red); border:1px solid rgba(239,68,68,0.3); }
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-ghost   { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+.btn-ghost:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+.chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--btn-h); padding: 0 14px;
+  border-radius: 5px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.12s; font-family: inherit;
+}
+.chip-active   { background: var(--accent-blue); color: #000; }
+.chip-inactive { background: var(--bg-secondary); color: var(--text-muted); }
+.chip-inactive:hover { background: var(--bg-surface); color: var(--text); }
+
+/* ── Table ───────────────────────────────────────────────────────── */
+.staax-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+.staax-table th {
+  background: var(--bg-secondary); color: var(--text-muted);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--bg-border);
+  white-space: nowrap; overflow: hidden;
+}
+.staax-table td { padding: 10px 10px; border-bottom: 1px solid rgba(63,65,67,0.5); font-size: 12px; overflow: hidden; }
+.staax-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ── Misc ────────────────────────────────────────────────────────── */
+.tag { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; }
+.card { background: var(--bg-surface); border: 1px solid var(--bg-border); border-radius: 8px; padding: 16px; }
+.staax-input {
+  background: var(--bg-secondary); border: 1px solid var(--bg-border);
+  color: var(--text); border-radius: 5px; padding: 0 10px;
+  height: var(--btn-h); font-size: 12px; font-family: inherit; width: 100%;
+  transition: border-color 0.15s; colorScheme: dark;
+}
+.staax-input:focus { outline:none; border-color: var(--accent-blue); }
+.staax-input::placeholder { color: var(--text-muted); }
+.staax-select {
+  background: var(--bg-secondary); border: 1px solid var(--bg-border);
+  color: var(--text); border-radius: 5px; padding: 0 28px 0 10px;
+  height: var(--btn-h); font-size: 12px; font-family: inherit; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.staax-select:focus { outline:none; border-color: var(--accent-blue); }
+
+/* ── Modal ───────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; backdrop-filter: blur(2px);
+}
+.modal-box {
+  background: var(--bg-surface); border: 1px solid var(--bg-border);
+  border-radius: 10px; padding: 24px; min-width: 340px; max-width: 520px; width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+/* ── Notification panel ──────────────────────────────────────────── */
+.notif-panel {
+  position: fixed; top: 52px; right: 0; width: 340px; height: calc(100vh - 52px);
+  background: var(--bg-surface); border-left: 1px solid var(--bg-border);
+  z-index: 900; overflow-y: auto;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+}
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }

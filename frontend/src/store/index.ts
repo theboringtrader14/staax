@@ -27,6 +27,7 @@ interface STAAXStore {
 
   // UI
   isPractixMode: boolean
+  setIsPractixMode: (v: boolean) => void
   showWeekends: boolean
   setShowWeekends: (v: boolean) => void
 }
@@ -53,6 +54,7 @@ export const useStore = create<STAAXStore>((set) => ({
   })),
 
   isPractixMode: true,
+  setIsPractixMode: (v) => set({ isPractixMode: v }),
   showWeekends: false,
   setShowWeekends: (v) => set({ showWeekends: v }),
 }))
