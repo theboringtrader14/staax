@@ -1,0 +1,68 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2868
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fswiss\fcharset0 Helvetica-Oblique;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww19920\viewh20140\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 STAAX App flow\
+\
+Login\
+Step 1 - Login to the platform (although I\'92m the only one going to use it, we will create login details as it carries sensitive info)\
+Step 2 - Click Start Session in Dashboard page (this needs to be done between 8 - 9, if missed, session can be started later but algos which have their entry time passed will not trigger)\
+Step 3 - Login all broker accounts (it would be good if this can be automated as well 
+\f1\i via
+\f0\i0  chrono)\
+Step 4 - Post successful execution of all the 4 steps under Start Session and Broker login the session is live and the platform is ready to manage the algos and trades\
+\
+Algo Creation\
+Step 1 - User clicks New Algo in Smart Grid page\
+Step 2 - User enters a algo name, sets lot multiplier, chooses the strategy and order type and broker account (all these are mandatory, show pop up if missed while clicking save algo)\
+Step 3 - User defines entry type and sets the entry and exit time (entry and exit time is mandatory, show pop up if missed while clicking save algo)\
+Step 3.1 - If ORB is selected, then additionally ORB end time is set (define this as a rule & if ORB end is not set, then error pops up while clicking save algo)\
+Step 3.2 - If Positional is selected, then DTE will have to be configured (define this as a rule & if DTE is not set, then error pops up while clicking save algo)\
+Step 4 - User configures the legs\
+Step 4.1 - If any of these are selected - W&T, SL, RE, TP, TSL are selected, they need to filled (if not filled, then show popup while clicking save algo)\
+Step 5 - Entry and Exit Order delays are optional we need to add a drop down before entry delay and exit delay with 2 options - BUY legs and SELL legs\
+Step 6 - Error settings are optional\
+Step 7 - User saves the algo\
+Step 8 - User is redirected to Smart Grid page\
+Step 9 - User sets PRACTIX or LIVE\
+Step 9.1 - User drags and drops in the respective days when the algo should trigger the trades\
+\
+Algo Execution\
+Step 1 - Platform automatically goes live after session start and broker login and displays all the algos for that day in the orders page. It also shows the active trades of other/previous days\
+Step 2 - SL check condition for all open positions of previous day (for STBT, BTST, Positional) is automatically checked at 9:18 am\
+\
+Order monitoring\
+Step 1 - User navigates to Orders page\
+Step 1.1 - By default All Accounts are shown, but user can choose the account of interest from the dropdown in the header bar\
+Step 2 - Active day is shown by default and a marker is shown to indicate the active day\
+Step 2.1 - All algos defined for that day show with account linked for the respective day\
+Step 2.2 - All algos go to live state at 9:15 am (there needs to be an indicator against the live algo something like a green indicator)\
+Step 3 - User can manage the trades of the respective algos and accounts here\
+Step 3.1 - If the algo didn\'92t go live due to some error or API or session timeout, then clicking RUN executes the algo immediately\
+Step 3.2 - If any leg goes into error, then clicking RE will retry the error legs and place the order or place the SL\
+Step 3.3 - If user wants to square off any open leg, then clicking SQ will square off the selected open position, cancel the pending SL order from the broker and square of the selected position. Other positions stay live and active\
+Step 3.4 - If user wants to terminate the entire algo, then clicking T will square off all open positions, cancel all pending orders and SL orders from the broker and terminate the entire algo. No new positions can be retried or re-run\
+\
+Modifying an algo\
+Step 1 - User clicks the respective algo name to be modified in the Smart Grid page\
+Step 2 - User is redirected to the Algo config page\
+Step 3 - User makes the modifications and saves the algo\
+Step 3.1 - Algo can\'92t be edited when the trade is live, can be edited only during off market hours and days\
+Step 4 - Saved algo modifies the upcoming trades (next day onward)\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+\cf0 \
+Reports\
+Step 1 - By default the P&L metrics are shown for All Accounts level, but user can choose the account of interest from the dropdown in the header bar\
+Step 2 - Per-algo metrics can be seen by FY, Month, Date or Custom period\
+Step 3 - User can download the metrics in Excel/CSV format (provision to download in either format) \
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+\cf0 \
+Accounts\
+Step 1 - User can set the FY margin at the start of FY\
+Step 2 - Global account level SL and Target can be set - Rs. Level\
+Step 3 - User can save these settings\
+\
+}
