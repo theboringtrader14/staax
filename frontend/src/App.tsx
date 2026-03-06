@@ -8,13 +8,28 @@ import ReportsPage from '@/pages/ReportsPage'
 import AccountsPage from '@/pages/AccountsPage'
 import DashboardPage from '@/pages/DashboardPage'
 import IndicatorsPage from '@/pages/IndicatorsPage'
+import { useStore } from '@/store'
+
+/** Redirect unauthenticated users to /login */
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = useStore(s => s.isAuthenticated)
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<Layout />}>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard"  element={<DashboardPage />} />
           <Route path="grid"       element={<GridPage />} />
@@ -25,6 +40,7 @@ export default function App() {
           <Route path="accounts"   element={<AccountsPage />} />
           <Route path="indicators" element={<IndicatorsPage />} />
         </Route>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   )

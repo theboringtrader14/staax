@@ -576,4 +576,150 @@ POST   /api/v1/services/{id}/stop         stop one service
 
 ---
 
+## 20. User Flow (Platform Flow Document — March 2026)
+
+*Source: STAAX - Platform Flow.rtf. This is the canonical user journey. Used as reference for validation rules, UI behaviour, and build prioritisation.*
+
+---
+
+### Flow 1 — Daily Session Start
+
+| Step | Action | Notes |
+|------|--------|-------|
+| 1 | Login to platform | Single user but login required — platform carries sensitive broker credentials |
+| 2 | Click **Start Session** on Dashboard | Should be done between 8–9 AM. If missed, session can start later but any algo whose entry time has already passed will NOT trigger for that day |
+| 3 | Login all broker accounts | Zerodha requires manual daily login (request token flow). Angel One auto-refreshes via TOTP. **Future:** automate broker login via scheduler (noted as desired) |
+| 4 | All 4 services running + broker tokens active → platform is live | Orders page now shows today's algos. Engine is watching. |
+
+**Key rule:** Start Session = prerequisite for everything. No broker login = no trades. Partial login = only that broker's algos run.
+
+---
+
+### Flow 2 — Algo Creation
+
+| Step | Action | Validation rule |
+|------|--------|-----------------|
+| 1 | Click **New Algo** on Smart Grid page | — |
+| 2 | Enter name, lot multiplier, strategy, order type, account | All mandatory — show popup on Save if missing |
+| 3 | Set entry type + entry time + exit time | Mandatory — popup if missing |
+| 3.1 | If ORB selected → set ORB End Time | Mandatory when ORB — popup if missing |
+| 3.2 | If Positional selected → set DTE | Mandatory when Positional — popup if missing |
+| 4 | Configure legs | — |
+| 4.1 | If W&T / SL / TP / TSL / RE enabled → fill their values | Mandatory when toggled on — popup if values missing |
+| 5 | Entry/Exit order delays | Optional. Dropdown before each delay: **BUY legs** or **SELL legs** ← *new finding — currently missing from UI* |
+| 6 | Error settings | Optional |
+| 7 | Save algo → redirect to Smart Grid | — |
+| 8 | Set PRACTIX or LIVE | Per-cell toggle in Smart Grid |
+| 9 | Drag & drop algo into day columns | Assigns algo to trading days |
+
+---
+
+### Flow 3 — Algo Execution (Automatic)
+
+| Step | What happens | Time |
+|------|-------------|------|
+| 1 | AlgoScheduler activates all today's GridEntries | 9:15 AM |
+| 2 | Orders page shows all today's algos with live indicator | 9:15 AM |
+| 3 | SL check for all open overnight positions (BTST/STBT/Positional) | 9:18 AM |
+| 4 | Each algo fires at its configured entry time | Per-algo |
+| 5 | Platform monitors open positions — SL/TP/TSL/MTM all automatic | Continuous |
+
+---
+
+### Flow 4 — Order Monitoring (Orders Page)
+
+| Step | Behaviour |
+|------|-----------|
+| 1 | Default view: All Accounts. Account filter in header dropdown |
+| 2 | Active day shown by default with a visual marker (indicator dot) |
+| 2.1 | All algos for that day listed with their linked account |
+| 2.2 | Algos go live at 9:15 AM — **green live indicator** shown per algo ← *new finding — needs implementation* |
+| 3.1 | **RUN** — algo didn't trigger due to error/timeout → executes immediately |
+| 3.2 | **RE** — a leg is in error → retries that leg (places order or re-places SL) |
+| 3.3 | **SQ** — squares off selected open leg, cancels pending SL at broker, other legs stay active |
+| 3.4 | **T** — squares off ALL positions, cancels ALL pending + SL orders at broker, terminates algo. No retry possible. |
+
+---
+
+### Flow 5 — Modifying an Algo
+
+| Step | Behaviour |
+|------|-----------|
+| 1 | Click algo name in Smart Grid → redirected to Algo Config page |
+| 2 | Make changes and save |
+| 3.1 | **Algo cannot be edited when a trade is live** — edit only allowed during off-market hours/days ← *new finding — edit lock needs enforcement* |
+| 4 | Saved changes apply from next day onward — does NOT affect today's running trades |
+
+---
+
+### Flow 6 — Reports
+
+| Step | Behaviour |
+|------|-----------|
+| 1 | Default: All Accounts P&L. Account filter in header |
+| 2 | Per-algo metrics: filter by FY / Month / Date / Custom period |
+| 3 | **Download as Excel or CSV** ← *new finding — two format options needed, currently only one* |
+
+---
+
+### Flow 7 — Accounts
+
+| Step | Behaviour |
+|------|-----------|
+| 1 | Set FY margin at start of financial year |
+| 2 | Set global account-level SL and Target (₹ amount) |
+| 3 | Save settings |
+
+---
+
+## 21. New Findings from Platform Flow Document
+
+These items are NOT yet implemented and need to be added to the build backlog:
+
+| # | Finding | Where | Priority |
+|---|---------|-------|----------|
+| F1 | **Broker auto-login via scheduler** — user wants automated broker login (Zerodha request token flow automation is hard due to OTP; Angel One already auto-refreshes) | Dashboard | Phase 1E |
+| F2 | **Entry/Exit delay dropdown: BUY legs vs SELL legs** — currently the delay inputs have no scope selector. Need a dropdown before each delay field to choose whether delay applies to BUY legs or SELL legs | Algo Config | Phase 1D frontend wiring |
+| F3 | **Green live indicator per algo on Orders page** — at 9:15 AM each algo that activates should show a green dot/indicator in the Orders table row | Orders page | Phase 1D frontend wiring |
+| F4 | **Active day marker on Orders page** — today's tab should have a distinct visual marker (dot, badge, or highlight) beyond just being the selected tab | Orders page | Phase 1D frontend wiring |
+| F5 | **Edit lock on live algos** — Algo Config page should detect if the algo has an active trade today and show a locked/read-only state with a message. Edit allowed only in off-market hours | Algo Config | Phase 1D frontend wiring |
+| F6 | **Algo changes apply next day only** — when saving an algo that has a GridEntry for today, show a warning: "Changes will apply from tomorrow" | Algo Config | Phase 1D frontend wiring |
+| F7 | **Reports download: Excel AND CSV** — currently spec says download. Need both format options (two buttons or a dropdown on the download button) | Reports | Phase 1E |
+| F8 | **Start Session time window warning** — if user clicks Start Session after 9 AM, show a warning listing which algos have already passed their entry time and will not trigger today | Dashboard | Phase 1D frontend wiring |
+| F9 | **SQ cancels broker SL order** — when SQ is triggered, must cancel the pending SL order at broker (not just close the position). Same for T (terminate). | Engine / OrderPlacer | Phase 1D engine |
+
+---
+
+## 22. Updated Build Backlog
+
+### Phase 1D — Remaining
+
+**Frontend wiring:**
+- [ ] F2 — Entry/Exit delay: BUY/SELL scope dropdown on Algo Config
+- [ ] F3 — Green live indicator per algo on Orders page (fires at 9:15 AM via WebSocket)
+- [ ] F4 — Active day marker on Orders page day tabs
+- [ ] F5 — Edit lock on Algo Config when trade is live today
+- [ ] F6 — "Changes apply tomorrow" warning on algo save
+- [ ] F8 — Late Start Session warning (list algos that missed their entry window)
+- [ ] Wire LoginPage to `POST /auth/login`, store JWT
+- [ ] Wire AlgoPage Save to `algosAPI.create()` / `.update()`
+- [ ] Wire account dropdown on AlgoPage to Zustand accounts store
+- [ ] Wire all pages to API + WebSocket (replace hardcoded demo data)
+
+**Engine:**
+- [ ] F9 — SQ and T must cancel pending SL orders at broker via `OrderPlacer`
+- [ ] AlgoRunner — entry logic orchestrator (calls ORBTracker / WTEvaluator / OrderPlacer based on entry_type)
+
+### Phase 1E — Planned
+
+- [ ] F1 — Broker auto-login automation (investigate Zerodha TOTP/session feasibility)
+- [ ] F7 — Reports download: Excel + CSV both formats
+- [ ] SYNC — manual order sync
+- [ ] Manual exit price correction
+- [ ] TTP per leg
+- [ ] Journey feature (multi-level re-entry config)
+- [ ] NotificationService (Twilio WhatsApp + AWS SES)
+
+---
+
 *Update this document at the end of every phase before closing the session.*
