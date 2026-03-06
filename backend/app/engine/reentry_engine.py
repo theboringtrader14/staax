@@ -118,12 +118,12 @@ class ReentryEngine:
                 self._watchers[entry_id] = []
 
             self._watchers[entry_id].append({
-                "leg_id":       str(leg.id),
-                "order_id":     str(order.id),
-                "mode":         leg.reentry_mode,
-                "entry_price":  order.fill_price,
-                "symbol":       order.symbol,
-                "tsl_trailed":  tsl_trailed,
+                "leg_id":        str(leg.id),
+                "order_id":      str(order.id),
+                "mode":          leg.reentry_mode,
+                "entry_price":   order.fill_price,
+                "symbol":        order.symbol,
+                "tsl_trailed":   tsl_trailed,
                 "algo_state_id": str(algo_state.id),
             })
             logger.info(
@@ -156,13 +156,12 @@ class ReentryEngine:
             should_fire = False
 
             if watcher["mode"] == ReentryMode.AT_ENTRY_PRICE:
-                # Fire when candle closes at or above entry (for buy) or at/below (for sell)
-                # For simplicity: fire when close is within 0.5% of entry price
+                # Fire when candle closes within 0.5% of original entry price
                 if abs(close_price - entry_price) / entry_price <= 0.005:
                     should_fire = True
 
             elif watcher["mode"] == ReentryMode.AT_COST:
-                # Same condition but only valid when tsl_trailed (already checked on registration)
+                # Same condition — TSL trail already validated at registration
                 if abs(close_price - entry_price) / entry_price <= 0.005:
                     should_fire = True
 
@@ -178,8 +177,28 @@ class ReentryEngine:
                 f"Re-entry triggered: {watcher['mode']} for {watcher['symbol']} "
                 f"@ close {close_price} (entry was {watcher['entry_price']})"
             )
-            # TODO Phase 1D: load Order + AlgoState and call _trigger_reentry
-            # await self._trigger_reentry(db, order, algo_state, leg, watcher["mode"])
+            try:
+                order_result = await db.execute(
+                    select(Order).where(Order.id == watcher["order_id"])
+                )
+                original_order = order_result.scalar_one_or_none()
+
+                state_result = await db.execute(
+                    select(AlgoState).where(AlgoState.id == watcher["algo_state_id"])
+                )
+                algo_state = state_result.scalar_one_or_none()
+
+                leg_result = await db.execute(
+                    select(AlgoLeg).where(AlgoLeg.id == watcher["leg_id"])
+                )
+                leg = leg_result.scalar_one_or_none()
+
+                if original_order and algo_state and leg:
+                    await self._trigger_reentry(
+                        db, original_order, algo_state, leg, watcher["mode"]
+                    )
+            except Exception as e:
+                logger.error(f"on_candle_close trigger failed: {e}")
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -206,9 +225,12 @@ class ReentryEngine:
                 f"(mode={mode}) for algo_state {algo_state.id}"
             )
 
-            # TODO Phase 1D: import and call AlgoRunner here
-            # from app.engine.algo_runner import AlgoRunner
-            # await AlgoRunner.enter(db, algo_state, reentry=True, original_order=original_order)
+            from app.engine.algo_runner import algo_runner
+            await algo_runner.enter(
+                grid_entry_id=str(algo_state.grid_entry_id),
+                reentry=True,
+                original_order=original_order,
+            )
 
         except Exception as e:
             await db.rollback()

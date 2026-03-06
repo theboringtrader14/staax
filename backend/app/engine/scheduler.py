@@ -45,6 +45,12 @@ class AlgoScheduler:
     def __init__(self):
         self._scheduler = AsyncIOScheduler(timezone=IST)
         self._per_algo_jobs: dict = {}   # grid_entry_id → [job_ids]
+        self._algo_runner = None         # injected from main.py after wire_engines()
+
+    def set_algo_runner(self, runner):
+        """Called once from main.py after algo_runner.wire_engines()."""
+        self._algo_runner = runner
+        logger.info("✅ AlgoRunner wired into Scheduler")
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -190,11 +196,10 @@ class AlgoScheduler:
         For each enabled GridEntry:
           1. Create AlgoState (status=WAITING)
           2. Schedule per-algo entry/exit jobs
-          3. Register with LTP consumer (subscribe instrument tokens)
+          3. Register ORB windows with AlgoRunner (ORB algos only)
         """
         logger.info("⏰ 09:15 — activating today's algos")
         today = date.today()
-        day_of_week = today.strftime("%a").lower()   # "mon", "tue" etc.
 
         async with AsyncSessionLocal() as db:
             try:
@@ -238,8 +243,18 @@ class AlgoScheduler:
                     # Update GridEntry status
                     grid_entry.status = GridStatus.ALGO_ACTIVE
 
-                    # Schedule per-algo jobs
+                    # Schedule per-algo time-based jobs
                     self.schedule_algo_jobs(str(grid_entry.id), algo, today)
+
+                    # Register ORB windows with AlgoRunner
+                    if algo.entry_type == EntryType.ORB and self._algo_runner:
+                        import asyncio
+                        asyncio.ensure_future(
+                            self._algo_runner.register_orb(
+                                str(grid_entry.id), algo, grid_entry
+                            )
+                        )
+
                     activated += 1
 
                 await db.commit()
@@ -253,25 +268,12 @@ class AlgoScheduler:
         """
         09:18 — check SL for ALL open overnight positions.
         For BTST/STBT/Positional algos that were opened the previous day.
-        If underlying has moved against position overnight, trigger exit.
         """
         logger.info("⏰ 09:18 — overnight SL check (all accounts)")
-        async with AsyncSessionLocal() as db:
-            try:
-                from app.models.order import Order, OrderStatus
-                result = await db.execute(
-                    select(Order).where(
-                        and_(
-                            Order.is_overnight == True,
-                            Order.status == OrderStatus.OPEN,
-                        )
-                    )
-                )
-                orders = result.scalars().all()
-                logger.info(f"Overnight SL check: {len(orders)} open positions")
-                # TODO Phase 1D: evaluate SL for each position via SLTPMonitor
-            except Exception as e:
-                logger.error(f"Overnight SL check failed: {e}")
+        if self._algo_runner:
+            await self._algo_runner.overnight_sl_check()
+        else:
+            logger.error("AlgoRunner not wired into Scheduler — overnight SL check skipped")
 
     async def _job_overnight_sl_check_single(self, grid_entry_id: str):
         """
@@ -279,27 +281,45 @@ class AlgoScheduler:
         Fires at entry_time - 2 minutes for that specific algo.
         """
         logger.info(f"⏰ Overnight SL check: {grid_entry_id}")
-        # TODO Phase 1D: same logic as above but scoped to this grid_entry_id
+        if self._algo_runner:
+            await self._algo_runner.overnight_sl_check(grid_entry_id)
+        else:
+            logger.error("AlgoRunner not wired into Scheduler — overnight SL check skipped")
 
     async def _job_entry(self, grid_entry_id: str):
         """
         Per-algo entry time job.
-        For Direct algos: fire entry logic immediately.
-        For ORB algos: ORBTracker handles this via LTP callback.
-        For W&T algos: WTEvaluator handles this via LTP callback.
+        For Direct algos: fire AlgoRunner.enter() immediately.
+        For ORB algos: ORBTracker handles entry via LTP callback — no action here.
+        For W&T algos: WTEvaluator handles entry via LTP callback — no action here.
         """
         logger.info(f"⏰ Entry time: {grid_entry_id}")
         async with AsyncSessionLocal() as db:
             try:
-                state = await db.execute(
-                    select(AlgoState).where(AlgoState.grid_entry_id == grid_entry_id)
+                result = await db.execute(
+                    select(AlgoState, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(AlgoState.grid_entry_id == grid_entry_id)
                 )
-                algo_state = state.scalar_one_or_none()
-                if not algo_state or algo_state.status != AlgoRunStatus.WAITING:
+                row = result.one_or_none()
+                if not row:
+                    return
+                algo_state, algo = row
+
+                if algo_state.status != AlgoRunStatus.WAITING:
+                    logger.info(
+                        f"Skipping entry — status={algo_state.status}: {grid_entry_id}"
+                    )
                     return
 
-                # TODO Phase 1D: fire AlgoRunner.enter() for this grid entry
-                logger.info(f"Entry triggered for {grid_entry_id}")
+                # Only fire directly for DIRECT entry type
+                # ORB and W&T are driven entirely by LTP callbacks
+                if algo.entry_type == EntryType.DIRECT:
+                    if self._algo_runner:
+                        await self._algo_runner.enter(grid_entry_id)
+                    else:
+                        logger.error("AlgoRunner not wired into Scheduler — entry skipped")
 
             except Exception as e:
                 logger.error(f"Entry job failed for {grid_entry_id}: {e}")
@@ -337,23 +357,7 @@ class AlgoScheduler:
         Exit time reached — auto square-off all open positions for this algo.
         """
         logger.info(f"⏰ Auto square-off: {grid_entry_id}")
-        async with AsyncSessionLocal() as db:
-            try:
-                result = await db.execute(
-                    select(AlgoState).where(AlgoState.grid_entry_id == grid_entry_id)
-                )
-                algo_state = result.scalar_one_or_none()
-                if not algo_state or algo_state.status != AlgoRunStatus.ACTIVE:
-                    return
-
-                algo_state.status = AlgoRunStatus.CLOSED
-                algo_state.exit_reason = "auto_sq"
-                algo_state.closed_at = datetime.now(IST)
-                await db.commit()
-
-                # TODO Phase 1D: call OrderPlacer to close all open legs
-                logger.info(f"Auto SQ complete: {grid_entry_id}")
-
-            except Exception as e:
-                await db.rollback()
-                logger.error(f"Auto SQ failed for {grid_entry_id}: {e}")
+        if self._algo_runner:
+            await self._algo_runner.exit_all(grid_entry_id, reason="auto_sq")
+        else:
+            logger.error("AlgoRunner not wired into Scheduler — auto SQ skipped")

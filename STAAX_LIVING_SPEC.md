@@ -1,7 +1,50 @@
 # STAAX — Living Engineering Spec
-**Version:** 1.7 | **Last Updated:** March 2026 — post codebase audit + routing corrections | **PRD Reference:** v1.2
+**Version:** 2.0 | **Last Updated:** March 2026 — Phase 1D complete | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
+
+---
+
+## 0. North Star — Product Vision
+
+This section exists so Claude never loses sight of the bigger picture across sessions.
+
+### The Platform Family
+
+A personal financial OS being built by Karthikeyan. Four modules planned, each independent but feeding into FINEX as the master layer:
+
+| Module | Full Name | Purpose | Status |
+|--------|-----------|---------|--------|
+| **STAAX** | Algo Trading Platform | F&O algo trading — automated strategies, order management, live P&L | 🔄 Phase 1E active |
+| **INVEX** | Portfolio Manager | Fetches investments across all mapped accounts (Karthik, Mom, Wife). Fundamental + tech analysis dashboards. Quick insights to manage equity/MF portfolio. AI-assisted flagging and rebalancing. | 🔭 Future |
+| **BUDGEX** | Expense Tracker | Captures everyday expenditure, organises it, feeds structured data to FINEX and FINEY for financial reasoning | 🔭 Future |
+| **FINEX** | Financial OS | Sits atop all modules. Consolidates data from STAAX + INVEX + BUDGEX. Tax planning, advance tax computation, networth view, financial independence status, expense management | 🔭 Future |
+
+**FINEY** is an AI assistant embedded in FINEX (and potentially surfaced in INVEX). It reasons across all module data to give financial guidance, flag rebalancing needs, explain portfolio health, and support planning decisions. No bank account connections. No sensitive PII. All manual entry.
+
+### Module relationships
+
+```
+BUDGEX ──────────────────────────────┐
+STAAX  ──→ (P&L, positions, trades)  ├──→ FINEX ──→ FINEY (AI assistant)
+INVEX  ──→ (portfolio, returns)  ─────┘
+```
+
+FINEX is the umbrella. It pulls structured data from all modules and provides the consolidated financial picture: total wealth, tax liability, advance tax due, expense patterns, and financial independence progress.
+
+### Why login is required
+STAAX handles extremely sensitive data: live broker API tokens, trading positions, P&L, and account credentials. Even though Karthikeyan is the sole user, authentication is non-negotiable. All future modules will share the same auth layer.
+
+### Design principles across all modules
+- Single owner, personal use — never multi-tenant
+- Dark, minimal, professional aesthetic (consistent across all modules)
+- No ads, no third-party analytics, no data sharing
+- All data stays on owner's infrastructure (AWS ap-south-1)
+- No bank account connections ever — all financial inputs are manual
+- No sensitive PII stored or computed
+
+### Current scope
+Everything below this section relates to **STAAX** only.
 
 ---
 
@@ -407,7 +450,7 @@ ANY → TERMINATED      T button
 | 1A | Foundation | ✅ Complete |
 | 1B | Core Execution Engine | ✅ Complete |
 | 1C | Full React UI | ✅ Complete |
-| 1D | API + WebSocket + Scheduler + Re-entry | 🔄 In Progress |
+| 1D | API + WebSocket + Scheduler + Frontend Wiring | ✅ Complete |
 | 1E | Reports, Notifications, Manual Controls | ⏳ Pending |
 | 2 | MCX | ⏳ Pending |
 
@@ -425,18 +468,26 @@ ANY → TERMINATED      T button
 - ✅ **WebSocket routes** (`ws/routes.py`) — `/ws/pnl`, `/ws/status`, `/ws/notifications`
 - ✅ **ReentryEngine** (`engine/reentry_engine.py`) — AT_ENTRY_PRICE, IMMEDIATE, AT_COST modes, per-leg max, 1-min candle watcher
 
-### Phase 1D — Still To Build
-1. **Frontend wiring** — connect all pages to API + WebSocket (login, algo save, grid deploy, orders live)
-2. **Global Risk API** — `POST /api/v1/accounts/{id}/global-risk` full DB implementation
-3. **Angel One broker** — complete SmartAPI adapter (stubs exist, TOTP logic ready)
-4. **AlgoRunner** — the entry logic orchestrator (calls ORBTracker / WTEvaluator / OrderPlacer based on entry_type)
+### Phase 1D — Completed (frontend wiring — March 2026)
+- ✅ **Auth** — LoginPage wired to `authAPI.login()`, JWT stored in localStorage, `ProtectedRoute` guards all routes
+- ✅ **Logout** — TopBar button clears token and Zustand store
+- ✅ **Zustand store** — added `token`, `login()`, `logout()`, `livePnl`, `notifications`, `addNotification`, `unreadCount`
+- ✅ **useWebSocket hook** — connects to all 3 WS channels on app load, auto-reconnects on disconnect (5s backoff)
+- ✅ **TopBar** — live P&L from store (WS-driven), notifications from store, account dropdown from API
+- ✅ **DashboardPage** — `servicesAPI` wired (start/stop/status), 5s poll, Zerodha login opens URL, F8 warning
+- ✅ **AccountsPage** — `updateMargin` + `updateGlobalRisk` call API with loading states and error handling
+- ✅ **OrdersPage** — RUN/RE/SQ/T all call `algosAPI`, demo data fallback when API unreachable
+- ✅ **AlgoPage** — `algosAPI.create()` / `.update()` on save, account dropdown from API, edit mode loads existing algo
+- ✅ **F2** — Entry/Exit delay BUY/SELL scope dropdown added to AlgoPage
+- ✅ **F3** — Green live indicator dot per algo on Orders page
+- ✅ **F4** — Active day (today) marker on Orders page day tabs
+- ✅ **F5** — Edit lock on AlgoPage when algo has active trade today
+- ✅ **F6** — "Changes apply from tomorrow" warning on algo save in edit mode
+- ✅ **F8** — Late Start Session warning on Dashboard (lists algos that missed their entry window)
 
-### Phase 1D — Deferred to 1E
-- SYNC (manual order sync)
-- Manual exit price correction
-- TTP per leg
-- Journey feature in Algo Config
-- NotificationService (Twilio WhatsApp + AWS SES)
+### Phase 1D — Status: ✅ COMPLETE
+
+All planned Phase 1D items are done. The items below move to Phase 1E.
 
 ---
 
@@ -690,36 +741,41 @@ These items are NOT yet implemented and need to be added to the build backlog:
 
 ---
 
-## 22. Updated Build Backlog
+## 22. Build Backlog
 
-### Phase 1D — Remaining
+### Phase 1D — ✅ COMPLETE (March 2026)
 
-**Frontend wiring:**
-- [ ] F2 — Entry/Exit delay: BUY/SELL scope dropdown on Algo Config
-- [ ] F3 — Green live indicator per algo on Orders page (fires at 9:15 AM via WebSocket)
-- [ ] F4 — Active day marker on Orders page day tabs
-- [ ] F5 — Edit lock on Algo Config when trade is live today
-- [ ] F6 — "Changes apply tomorrow" warning on algo save
-- [ ] F8 — Late Start Session warning (list algos that missed their entry window)
-- [ ] Wire LoginPage to `POST /auth/login`, store JWT
-- [ ] Wire AlgoPage Save to `algosAPI.create()` / `.update()`
-- [ ] Wire account dropdown on AlgoPage to Zustand accounts store
-- [ ] Wire all pages to API + WebSocket (replace hardcoded demo data)
+All items from Phase 1D are done. See Sections 19 (engine build) and frontend wiring for full details.
 
-**Engine:**
-- [ ] F9 — SQ and T must cancel pending SL orders at broker via `OrderPlacer`
-- [ ] AlgoRunner — entry logic orchestrator (calls ORBTracker / WTEvaluator / OrderPlacer based on entry_type)
+**Summary of Phase 1D deliverables:**
+- ✅ All 16 codebase audit findings resolved
+- ✅ Grid API, Algo controls API, Services API — all endpoints correct
+- ✅ AlgoScheduler (08:30 / 09:15 / 09:18 / per-algo E:/X: jobs)
+- ✅ WebSocket server — 3 channels (pnl, status, notifications)
+- ✅ ReentryEngine — 3 modes (AT_ENTRY_PRICE, IMMEDIATE, AT_COST)
+- ✅ Full frontend wiring — auth, all pages, WebSocket, 6 new findings (F2–F6, F8)
 
-### Phase 1E — Planned
+### Phase 1E — Active Backlog
 
-- [ ] F1 — Broker auto-login automation (investigate Zerodha TOTP/session feasibility)
-- [ ] F7 — Reports download: Excel + CSV both formats
-- [ ] SYNC — manual order sync
-- [ ] Manual exit price correction
-- [ ] TTP per leg
-- [ ] Journey feature (multi-level re-entry config)
-- [ ] NotificationService (Twilio WhatsApp + AWS SES)
+**Engine / Backend:**
+- ✅ **AlgoRunner** — `engine/algo_runner.py` — full entry orchestrator: strike selection, W&T/ORB/Direct paths, delays, OrderPlacer, SL/TP/TSL/MTM registration, re-entry callbacks, exit_all with F9
+- ✅ **F9** — `_cancel_broker_sl()` in AlgoRunner cancels broker SL order on SQ/T
+- ✅ **Scheduler wired** — `scheduler_patches.py` fills all 4 TODO stubs (_job_entry, _job_auto_sq, _job_overnight_sl_check × 2)
+- ✅ **ReentryEngine wired** — `reentry_engine_patches.py` fills _trigger_reentry + on_candle_close TODOs
+- ✅ **main.py updated** — full lifespan: wires all 9 engines into AlgoRunner, registers 4 LTP callbacks in correct order
+- [ ] **GridPage wiring** — connect drag-and-drop to `gridAPI.deploy()` / `.remove()` / `.setMode()`
+- [ ] **Database wiring** — persist order state + create Trade records on exit
+- [ ] **Global Risk API** — DB write implementation (endpoint exists, write not wired)
+- [ ] **Angel One broker** — complete SmartAPI adapter (TOTP stubs ready)
 
+**Frontend:**
+- [ ] **F1** — Broker auto-login automation (investigate Zerodha feasibility)
+- [ ] **F7** — Reports download: Excel + CSV both format options
+- [ ] **SYNC** — manual order sync (`POST /orders/{id}/sync`)
+- [ ] **Manual exit price correction** (`PATCH /orders/{id}/exit-price`)
+- [ ] **TTP** — Trailing Take Profit per leg (config + engine)
+- [ ] **Journey feature** — multi-level re-entry config in AlgoPage
+- [ ] **NotificationService** — Twilio WhatsApp + AWS SES
 ---
 
 *Update this document at the end of every phase before closing the session.*
