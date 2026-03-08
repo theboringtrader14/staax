@@ -36,6 +36,6 @@ class GridEntry(Base):
     is_enabled   = Column(Boolean, default=True)
     is_practix   = Column(Boolean, default=True)         # PRACTIX/LIVE toggle per cell
     is_archived  = Column(Boolean, default=False)        # archived algos hidden from active grid
-    status       = Column(Enum(GridStatus), default=GridStatus.NO_TRADE)
+    status       = Column(Enum(GridStatus, values_callable=lambda x: [e.value for e in x]), default=GridStatus.NO_TRADE)
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
     updated_at   = Column(DateTime(timezone=True), onupdate=func.now())

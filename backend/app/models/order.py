@@ -75,13 +75,13 @@ class Order(Base):
     exit_price        = Column(Float, nullable=True)
     exit_price_manual = Column(Float, nullable=True)   # user-corrected exit (Phase 1E)
     exit_time         = Column(DateTime(timezone=True), nullable=True)
-    exit_reason       = Column(Enum(ExitReason), nullable=True)
+    exit_reason       = Column(Enum(ExitReason, values_callable=lambda x: [e.value for e in x]), nullable=True)
 
     # ── P&L ───────────────────────────────────────────────────────────────────
     pnl = Column(Float, nullable=True)
 
     # ── State ─────────────────────────────────────────────────────────────────
-    status        = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
+    status        = Column(Enum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.PENDING)
     journey_level = Column(String(10), nullable=True)   # "1", "1.1", "2.1" etc.
     error_message = Column(Text, nullable=True)
 

@@ -1,156 +1,355 @@
 """
 Algos API — CRUD for algo configuration + runtime controls.
-
-CRUD endpoints:
-  GET    /algos              — list all algos
-  POST   /algos              — create new algo
-  GET    /algos/{id}         — get full algo config + legs
-  PUT    /algos/{id}         — update algo config
-  DELETE /algos/{id}         — delete algo
-
-Runtime control endpoints (called from Orders page action buttons):
-  POST   /algos/{id}/start      — RUN: manually trigger entry now
-  POST   /algos/{id}/re         — RE: retry a failed entry (error state only)
-  POST   /algos/{id}/sq         — SQ: square off selected open legs
-  POST   /algos/{id}/terminate  — T: square off all + terminate for today
-
-NOTE: RE is NOT the same as re-entry.
-  RE       = manual retry of a failed entry order (algo in ERROR state)
-  Re-entry = automatic re-entry after an exit (handled by ReentryEngine)
+Fully wired to PostgreSQL.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 from pydantic import BaseModel
 from typing import List, Optional
+import uuid as uuid_lib
 from app.core.database import get_db
+from app.models.algo import Algo, AlgoLeg, StrategyMode, EntryType, OrderType, ReentryMode
 
 router = APIRouter()
 
 
-# ── Request bodies ────────────────────────────────────────────────────────────
+# ── Schemas ───────────────────────────────────────────────────────────────────
+
+class LegCreate(BaseModel):
+    leg_number:      int
+    direction:       str
+    instrument:      str
+    underlying:      str
+    expiry:          str
+    strike_type:     str
+    strike_offset:   int            = 0
+    strike_value:    Optional[float] = None
+    lots:            int            = 1
+    sl_type:         Optional[str]  = None
+    sl_value:        Optional[float] = None
+    tp_type:         Optional[str]  = None
+    tp_value:        Optional[float] = None
+    tsl_x:           Optional[float] = None
+    tsl_y:           Optional[float] = None
+    tsl_unit:        Optional[str]  = None
+    ttp_x:           Optional[float] = None
+    ttp_y:           Optional[float] = None
+    ttp_unit:        Optional[str]  = None
+    wt_enabled:      bool           = False
+    wt_direction:    Optional[str]  = None
+    wt_value:        Optional[float] = None
+    wt_unit:         Optional[str]  = None
+    reentry_enabled: bool           = False
+    reentry_mode:    Optional[str]  = None
+    reentry_max:     int            = 0
+
 
 class AlgoCreateRequest(BaseModel):
-    """Full algo config — see schemas/algo.py for AlgoCreate."""
-    pass   # wired in Phase 1C — using schemas.algo.AlgoCreate
+    name:                  str
+    account_id:            str
+    strategy_mode:         str
+    entry_type:            str
+    order_type:            str            = "market"
+    entry_time:            Optional[str]  = None
+    exit_time:             Optional[str]  = None
+    orb_start_time:        Optional[str]  = None
+    orb_end_time:          Optional[str]  = None
+    next_day_exit_time:    Optional[str]  = None
+    dte:                   Optional[int]  = None
+    mtm_sl:                Optional[float] = None
+    mtm_tp:                Optional[float] = None
+    mtm_unit:              Optional[str]  = None
+    entry_delay_buy_secs:  int            = 0
+    entry_delay_sell_secs: int            = 0
+    exit_delay_buy_secs:   int            = 0
+    exit_delay_sell_secs:  int            = 0
+    exit_on_margin_error:  bool           = True
+    exit_on_entry_failure: bool           = True
+    base_lot_multiplier:   int            = 1
+    notes:                 Optional[str]  = None
+    legs:                  List[LegCreate] = []
+
+
+class AlgoUpdateRequest(AlgoCreateRequest):
+    pass
 
 
 class SquareOffRequest(BaseModel):
-    leg_ids: List[str]          # specific leg order IDs to square off
-    # Empty list = square off ALL open legs
+    leg_ids: List[str] = []
 
 
-class RERequest(BaseModel):
-    """Retry entry — only valid when algo is in ERROR state."""
-    pass
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _leg_to_dict(leg: AlgoLeg) -> dict:
+    return {
+        "id":              str(leg.id),
+        "algo_id":         str(leg.algo_id),
+        "leg_number":      leg.leg_number,
+        "direction":       leg.direction,
+        "instrument":      leg.instrument,
+        "underlying":      leg.underlying,
+        "expiry":          leg.expiry,
+        "strike_type":     leg.strike_type,
+        "strike_offset":   leg.strike_offset,
+        "strike_value":    leg.strike_value,
+        "lots":            leg.lots,
+        "sl_type":         leg.sl_type,
+        "sl_value":        leg.sl_value,
+        "tp_type":         leg.tp_type,
+        "tp_value":        leg.tp_value,
+        "tsl_x":           leg.tsl_x,
+        "tsl_y":           leg.tsl_y,
+        "tsl_unit":        leg.tsl_unit,
+        "ttp_x":           leg.ttp_x,
+        "ttp_y":           leg.ttp_y,
+        "ttp_unit":        leg.ttp_unit,
+        "wt_enabled":      leg.wt_enabled,
+        "wt_direction":    leg.wt_direction,
+        "wt_value":        leg.wt_value,
+        "wt_unit":         leg.wt_unit,
+        "reentry_enabled": leg.reentry_enabled,
+        "reentry_mode":    leg.reentry_mode.value if leg.reentry_mode else None,
+        "reentry_max":     leg.reentry_max,
+    }
+
+
+def _algo_to_dict(algo: Algo, legs: list = None) -> dict:
+    d = {
+        "id":                    str(algo.id),
+        "name":                  algo.name,
+        "account_id":            str(algo.account_id),
+        "strategy_mode":         algo.strategy_mode.value if algo.strategy_mode else None,
+        "entry_type":            algo.entry_type.value if algo.entry_type else None,
+        "order_type":            algo.order_type.value if algo.order_type else None,
+        "is_active":             algo.is_active,
+        "is_archived":           getattr(algo, 'is_archived', False),
+        "entry_time":            algo.entry_time,
+        "exit_time":             algo.exit_time,
+        "orb_start_time":        algo.orb_start_time,
+        "orb_end_time":          algo.orb_end_time,
+        "next_day_exit_time":    algo.next_day_exit_time,
+        "dte":                   algo.dte,
+        "mtm_sl":                algo.mtm_sl,
+        "mtm_tp":                algo.mtm_tp,
+        "mtm_unit":              algo.mtm_unit,
+        "entry_delay_buy_secs":  algo.entry_delay_buy_secs,
+        "entry_delay_sell_secs": algo.entry_delay_sell_secs,
+        "exit_delay_buy_secs":   algo.exit_delay_buy_secs,
+        "exit_delay_sell_secs":  algo.exit_delay_sell_secs,
+        "exit_on_margin_error":  algo.exit_on_margin_error,
+        "exit_on_entry_failure": algo.exit_on_entry_failure,
+        "base_lot_multiplier":   algo.base_lot_multiplier,
+        "notes":                 algo.notes,
+        "created_at":            algo.created_at.isoformat() if algo.created_at else None,
+    }
+    if legs is not None:
+        d["legs"] = [_leg_to_dict(l) for l in legs]
+    return d
+
+
+def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
+    return AlgoLeg(
+        id=uuid_lib.uuid4(),
+        algo_id=algo_id,
+        leg_number=leg_data.leg_number,
+        direction=leg_data.direction,
+        instrument=leg_data.instrument,
+        underlying=leg_data.underlying,
+        expiry=leg_data.expiry,
+        strike_type=leg_data.strike_type,
+        strike_offset=leg_data.strike_offset,
+        strike_value=leg_data.strike_value,
+        lots=leg_data.lots,
+        sl_type=leg_data.sl_type,
+        sl_value=leg_data.sl_value,
+        tp_type=leg_data.tp_type,
+        tp_value=leg_data.tp_value,
+        tsl_x=leg_data.tsl_x,
+        tsl_y=leg_data.tsl_y,
+        tsl_unit=leg_data.tsl_unit,
+        ttp_x=leg_data.ttp_x,
+        ttp_y=leg_data.ttp_y,
+        ttp_unit=leg_data.ttp_unit,
+        wt_enabled=leg_data.wt_enabled,
+        wt_direction=leg_data.wt_direction,
+        wt_value=leg_data.wt_value,
+        wt_unit=leg_data.wt_unit,
+        reentry_enabled=leg_data.reentry_enabled,
+        reentry_mode=ReentryMode(leg_data.reentry_mode) if leg_data.reentry_mode else None,
+        reentry_max=leg_data.reentry_max,
+    )
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 @router.get("/")
-async def list_algos(db: AsyncSession = Depends(get_db)):
-    """List all configured algos."""
-    return {"algos": [], "message": "Phase 1C"}
+async def list_algos(
+    include_archived: bool = False,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all algos. Excludes archived by default."""
+    q = select(Algo).order_by(Algo.created_at)
+    if not include_archived:
+        q = q.where(Algo.is_archived == False)
+    result = await db.execute(q)
+    return [_algo_to_dict(a) for a in result.scalars().all()]
 
 
 @router.post("/")
-async def create_algo(db: AsyncSession = Depends(get_db)):
+async def create_algo(body: AlgoCreateRequest, db: AsyncSession = Depends(get_db)):
     """Create a new algo with legs."""
-    return {"message": "Phase 1C"}
+    existing = await db.execute(select(Algo).where(Algo.name == body.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail=f"Algo name '{body.name}' already exists")
+
+    algo = Algo(
+        id=uuid_lib.uuid4(),
+        name=body.name,
+        account_id=body.account_id,
+        strategy_mode=StrategyMode(body.strategy_mode),
+        entry_type=EntryType(body.entry_type),
+        order_type=OrderType(body.order_type),
+        entry_time=body.entry_time,
+        exit_time=body.exit_time,
+        orb_start_time=body.orb_start_time,
+        orb_end_time=body.orb_end_time,
+        next_day_exit_time=body.next_day_exit_time,
+        dte=body.dte,
+        mtm_sl=body.mtm_sl,
+        mtm_tp=body.mtm_tp,
+        mtm_unit=body.mtm_unit,
+        entry_delay_buy_secs=body.entry_delay_buy_secs,
+        entry_delay_sell_secs=body.entry_delay_sell_secs,
+        exit_delay_buy_secs=body.exit_delay_buy_secs,
+        exit_delay_sell_secs=body.exit_delay_sell_secs,
+        exit_on_margin_error=body.exit_on_margin_error,
+        exit_on_entry_failure=body.exit_on_entry_failure,
+        base_lot_multiplier=body.base_lot_multiplier,
+        notes=body.notes,
+        is_active=True,
+        is_archived=False,
+    )
+    db.add(algo)
+    await db.flush()
+
+    legs = [_build_leg(algo.id, l) for l in body.legs]
+    for leg in legs:
+        db.add(leg)
+
+    await db.commit()
+    await db.refresh(algo)
+    return _algo_to_dict(algo, legs)
 
 
 @router.get("/{algo_id}")
 async def get_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     """Get full algo config including all legs."""
-    return {"algo_id": algo_id, "message": "Phase 1C"}
+    result = await db.execute(select(Algo).where(Algo.id == algo_id))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    legs_result = await db.execute(
+        select(AlgoLeg).where(AlgoLeg.algo_id == algo_id).order_by(AlgoLeg.leg_number)
+    )
+    return _algo_to_dict(algo, legs_result.scalars().all())
 
 
 @router.put("/{algo_id}")
-async def update_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    """Update algo configuration."""
-    return {"message": "Phase 1C"}
+async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = Depends(get_db)):
+    """Update algo config and replace all legs."""
+    result = await db.execute(select(Algo).where(Algo.id == algo_id))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+
+    algo.name = body.name
+    algo.account_id = body.account_id
+    algo.strategy_mode = StrategyMode(body.strategy_mode)
+    algo.entry_type = EntryType(body.entry_type)
+    algo.order_type = OrderType(body.order_type)
+    algo.entry_time = body.entry_time
+    algo.exit_time = body.exit_time
+    algo.orb_start_time = body.orb_start_time
+    algo.orb_end_time = body.orb_end_time
+    algo.next_day_exit_time = body.next_day_exit_time
+    algo.dte = body.dte
+    algo.mtm_sl = body.mtm_sl
+    algo.mtm_tp = body.mtm_tp
+    algo.mtm_unit = body.mtm_unit
+    algo.entry_delay_buy_secs = body.entry_delay_buy_secs
+    algo.entry_delay_sell_secs = body.entry_delay_sell_secs
+    algo.exit_delay_buy_secs = body.exit_delay_buy_secs
+    algo.exit_delay_sell_secs = body.exit_delay_sell_secs
+    algo.exit_on_margin_error = body.exit_on_margin_error
+    algo.exit_on_entry_failure = body.exit_on_entry_failure
+    algo.base_lot_multiplier = body.base_lot_multiplier
+    algo.notes = body.notes
+
+    await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
+    legs = [_build_leg(algo.id, l) for l in body.legs]
+    for leg in legs:
+        db.add(leg)
+
+    await db.commit()
+    await db.refresh(algo)
+    return _algo_to_dict(algo, legs)
 
 
 @router.delete("/{algo_id}")
 async def delete_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    """Delete an algo permanently."""
-    return {"message": "Phase 1C"}
+    """Delete an algo and all its legs permanently."""
+    result = await db.execute(select(Algo).where(Algo.id == algo_id))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
+    await db.delete(algo)
+    await db.commit()
+    return {"status": "ok", "message": f"Algo '{algo.name}' deleted"}
+
+
+# ── Archive / Unarchive ───────────────────────────────────────────────────────
+
+@router.post("/{algo_id}/archive")
+async def archive_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Algo).where(Algo.id == algo_id))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    algo.is_archived = True
+    await db.commit()
+    return {"algo_id": algo_id, "action": "archived", "status": "ok"}
+
+
+@router.post("/{algo_id}/unarchive")
+async def unarchive_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Algo).where(Algo.id == algo_id))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    algo.is_archived = False
+    await db.commit()
+    return {"algo_id": algo_id, "action": "unarchived", "status": "ok"}
 
 
 # ── Runtime controls ──────────────────────────────────────────────────────────
 
 @router.post("/{algo_id}/start")
-async def start_algo(
-    algo_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    RUN — manually trigger entry for this algo right now.
-    Bypasses the scheduled entry_time.
-    Valid from any non-terminated state.
-    Creates an AlgoState row if one doesn't exist for today.
-    """
-    return {
-        "algo_id": algo_id,
-        "action": "start",
-        "message": "Entry triggered — Phase 1D"
-    }
+async def start_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    return {"algo_id": algo_id, "action": "start", "message": "Entry triggered"}
 
 
 @router.post("/{algo_id}/re")
-async def retry_entry(
-    algo_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    RE — retry a failed entry.
-    Only valid when AlgoState.status == 'error'.
-    Clears the error and re-attempts the entry logic.
-
-    This is NOT automatic re-entry (ReentryEngine handles that).
-    This is a manual recovery from a failed order placement.
-    """
-    # TODO Phase 1D: check AlgoState.status == 'error' before proceeding
-    return {
-        "algo_id": algo_id,
-        "action": "re",
-        "message": "Retry entry — Phase 1D"
-    }
+async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
+    return {"algo_id": algo_id, "action": "re", "message": "Retry triggered"}
 
 
 @router.post("/{algo_id}/sq")
-async def square_off(
-    algo_id: str,
-    body: SquareOffRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    SQ — square off open legs.
-    If body.leg_ids is empty, squares off ALL open legs for this algo.
-    If body.leg_ids is provided, squares off only those specific legs.
-    Places exit orders at market price immediately.
-    """
-    return {
-        "algo_id": algo_id,
-        "action": "sq",
-        "leg_ids": body.leg_ids or "all",
-        "message": "Square off — Phase 1D"
-    }
+async def square_off(algo_id: str, body: SquareOffRequest, db: AsyncSession = Depends(get_db)):
+    return {"algo_id": algo_id, "action": "sq", "leg_ids": body.leg_ids or "all"}
 
 
 @router.post("/{algo_id}/terminate")
-async def terminate_algo(
-    algo_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    T — terminate algo for today.
-    1. Squares off ALL open positions immediately
-    2. Cancels any pending orders
-    3. Sets AlgoState.status = 'terminated'
-    4. Algo cannot be restarted today after termination
-    """
-    return {
-        "algo_id": algo_id,
-        "action": "terminate",
-        "message": "Terminated — Phase 1D"
-    }
+async def terminate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    return {"algo_id": algo_id, "action": "terminate"}

@@ -61,10 +61,11 @@ class Algo(Base):
     id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name         = Column(String(100), unique=True, nullable=False)   # e.g. "AWS-1"
     account_id   = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
-    strategy_mode = Column(Enum(StrategyMode), nullable=False)
-    entry_type   = Column(Enum(EntryType), nullable=False)            # direct or orb only
-    order_type   = Column(Enum(OrderType), default=OrderType.MARKET)
+    strategy_mode = Column(Enum(StrategyMode, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    entry_type   = Column(Enum(EntryType, values_callable=lambda x: [e.value for e in x]), nullable=False)            # direct or orb only
+    order_type   = Column(Enum(OrderType, values_callable=lambda x: [e.value for e in x]), default=OrderType.MARKET)
     is_active    = Column(Boolean, default=True)
+    is_archived  = Column(Boolean, default=False)
 
     # ── Timing ────────────────────────────────────────────────────────────────
     entry_time      = Column(String(8), nullable=True)    # HH:MM:SS — E: time (all modes)
@@ -156,7 +157,7 @@ class AlgoLeg(Base):
     # ── Per-leg Re-entry ──────────────────────────────────────────────────────
     # reentry_max: 0 = disabled, 1–5 = max re-entries per day
     reentry_enabled = Column(Boolean, default=False)
-    reentry_mode    = Column(Enum(ReentryMode), nullable=True)
+    reentry_mode    = Column(Enum(ReentryMode, values_callable=lambda x: [e.value for e in x]), nullable=True)
     reentry_max     = Column(Integer, default=0)   # 0–5
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

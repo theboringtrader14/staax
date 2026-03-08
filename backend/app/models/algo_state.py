@@ -52,7 +52,7 @@ class AlgoState(Base):
     trading_date   = Column(String(10), nullable=False)   # YYYY-MM-DD
 
     # ── Current state ─────────────────────────────────────────────────────────
-    status         = Column(Enum(AlgoRunStatus), default=AlgoRunStatus.INACTIVE, nullable=False)
+    status         = Column(Enum(AlgoRunStatus, values_callable=lambda x: [e.value for e in x]), default=AlgoRunStatus.INACTIVE, nullable=False)
     is_practix     = Column(Boolean, default=True)
 
     # ── Timestamps ────────────────────────────────────────────────────────────

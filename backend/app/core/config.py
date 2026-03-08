@@ -1,16 +1,20 @@
 from pydantic_settings import BaseSettings
 from typing import List
+from pathlib import Path
+
+# .env is at backend/.env — two levels up from app/core/config.py
+ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
     # App
     APP_ENV: str = "development"
-    APP_SECRET_KEY: str
+    APP_SECRET_KEY: str = "dev-secret-key"
     APP_PORT: int = 8000
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
 
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
@@ -31,7 +35,7 @@ class Settings(BaseSettings):
     ANGELONE_WIFE_TOTP_SECRET: str = ""
 
     # JWT
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = "dev-jwt-secret"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440  # 24 hours
 
@@ -43,8 +47,13 @@ class Settings(BaseSettings):
     ALERT_EMAIL_TO: str = ""
     AWS_SES_REGION: str = "ap-south-1"
 
+    # STAAX Auth
+    STAAX_USERNAME: str = "karthik"
+    STAAX_PASSWORD_HASH: str = ""
+
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_FILE)
+        env_file_encoding = "utf-8"
         extra = "ignore"
 
 

@@ -16,9 +16,9 @@ api.interceptors.request.use((config) => {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
-  login:  (username: string, password: string) =>
+  login: (username: string, password: string) =>
     api.post('/auth/login', { username, password }),
-  me:     () => api.get('/auth/me'),
+  me: () => api.get('/auth/me'),
 }
 
 // ── Accounts ──────────────────────────────────────────────────────────────────
@@ -31,64 +31,73 @@ export const accountsAPI = {
     api.post(`/accounts/${id}/global-risk`, data),
 
   // Zerodha token flow
-  zerodhaLoginUrl: () => api.get('/accounts/zerodha/login-url'),
-  zerodhaSetToken: (requestToken: string) =>
+  zerodhaLoginUrl:    () => api.get('/accounts/zerodha/login-url'),
+  zerodhaSetToken:    (requestToken: string) =>
     api.post('/accounts/zerodha/set-token', null, { params: { request_token: requestToken } }),
   zerodhaTokenStatus: () => api.get('/accounts/zerodha/token-status'),
 }
 
 // ── Algos — CRUD ──────────────────────────────────────────────────────────────
 export const algosAPI = {
-  list:   () => api.get('/algos/'),
-  get:    (id: string) => api.get(`/algos/${id}`),
-  create: (data: object) => api.post('/algos/', data),
-  update: (id: string, data: object) => api.put(`/algos/${id}`, data),
-  delete: (id: string) => api.delete(`/algos/${id}`),
+  list:      () => api.get('/algos/'),
+  get:       (id: string) => api.get(`/algos/${id}`),
+  create:    (data: object) => api.post('/algos/', data),
+  update:    (id: string, data: object) => api.put(`/algos/${id}`, data),
+  delete:    (id: string) => api.delete(`/algos/${id}`),
+  archive:   (id: string) => api.post(`/algos/${id}/archive`),
+  unarchive: (id: string) => api.post(`/algos/${id}/unarchive`),
 
   // Runtime controls (Orders page buttons)
-  start:     (id: string) =>
-    api.post(`/algos/${id}/start`),
-  re:        (id: string) =>
-    api.post(`/algos/${id}/re`),
+  start:     (id: string) => api.post(`/algos/${id}/start`),
+  re:        (id: string) => api.post(`/algos/${id}/re`),
   sq:        (id: string, legIds: string[] = []) =>
     api.post(`/algos/${id}/sq`, { leg_ids: legIds }),
-  terminate: (id: string) =>
-    api.post(`/algos/${id}/terminate`),
+  terminate: (id: string) => api.post(`/algos/${id}/terminate`),
 }
 
 // ── Grid ──────────────────────────────────────────────────────────────────────
 export const gridAPI = {
-  getWeek:    (weekStart?: string) =>
-    api.get('/grid/', { params: weekStart ? { week_start: weekStart } : {} }),
-  deploy:     (data: {
-    algo_id: string
-    trading_date: string
-    day_of_week: string
+  // Load all entries for a week — used by GridPage on mount
+  list: (params: { week_start: string; week_end: string }) =>
+    api.get('/grid/', { params }),
+
+  // Deploy an algo to a day cell
+  deploy: (data: {
+    algo_id:         string
+    trading_date:    string
     lot_multiplier?: number
-    is_practix?: boolean
+    is_practix?:     boolean
   }) => api.post('/grid/', data),
-  getEntry:   (entryId: string) => api.get(`/grid/${entryId}`),
-  update:     (entryId: string, data: {
+
+  getEntry:  (entryId: string) => api.get(`/grid/${entryId}`),
+
+  // Update multiplier or practix flag
+  update: (entryId: string, data: {
     lot_multiplier?: number
-    is_practix?: boolean
-    is_enabled?: boolean
+    is_practix?:     boolean
+    is_enabled?:     boolean
   }) => api.put(`/grid/${entryId}`, data),
-  remove:     (entryId: string) => api.delete(`/grid/${entryId}`),
-  archive:    (entryId: string) => api.post(`/grid/${entryId}/archive`),
-  unarchive:  (entryId: string) => api.post(`/grid/${entryId}/unarchive`),
-  setMode:    (entryId: string, isPractix: boolean) =>
-    api.post(`/grid/${entryId}/mode`, { is_practix: isPractix }),
+
+  remove:    (entryId: string) => api.delete(`/grid/${entryId}`),
+  archive:   (entryId: string) => api.post(`/grid/${entryId}/archive`),
+  unarchive: (entryId: string) => api.post(`/grid/${entryId}/unarchive`),
+
+  // Toggle practix/live for a single entry
+  setMode: (entryId: string, data: { is_practix: boolean }) =>
+    api.post(`/grid/${entryId}/mode`, data),
+
+  // Promote all entries for an algo to live
   promoteAllToLive: (algoId: string) =>
     api.post(`/grid/${algoId}/promote-live`),
 }
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 export const ordersAPI = {
-  list:           (date?: string) =>
+  list: (date?: string) =>
     api.get('/orders/', { params: date ? { date } : {} }),
   correctExitPrice: (orderId: string, price: number) =>
     api.patch(`/orders/${orderId}/exit-price`, { price }),
-  syncOrder:      (algoId: string, data: object) =>
+  syncOrder: (algoId: string, data: object) =>
     api.post(`/orders/${algoId}/sync`, data),
 }
 

@@ -15,12 +15,15 @@ export default function TopBar() {
   const notifications     = useStore(s => s.notifications)
   const markAllRead       = useStore(s => s.markAllRead)
   const unreadCount       = useStore(s => s.unreadCount)
-  const accounts          = useStore(s => s.accounts)
+  const rawAccounts       = useStore(s => s.accounts)
   const activeAccount     = useStore(s => s.activeAccount)
   const setActiveAccount  = useStore(s => s.setActiveAccount)
   const logout            = useStore(s => s.logout)
 
-  const [time, setTime]         = useState(new Date())
+  // Guard: ensure accounts is always a plain array regardless of what the API returned
+  const accounts = Array.isArray(rawAccounts) ? rawAccounts : []
+
+  const [time, setTime]           = useState(new Date())
   const [showNotif, setShowNotif] = useState(false)
 
   useEffect(() => {
@@ -28,7 +31,6 @@ export default function TopBar() {
     return () => clearInterval(t)
   }, [])
 
-  // Update document title with live P&L
   useEffect(() => {
     document.title = `STAAX ${livePnl >= 0 ? '+' : ''}₹${livePnl.toLocaleString('en-IN')}`
   }, [livePnl])
@@ -40,8 +42,7 @@ export default function TopBar() {
 
   const unread = unreadCount()
 
-  // Account selector options — "All Accounts" + loaded accounts
-  const accountOptions = ['All Accounts', ...accounts.map(a => a.nickname)]
+  const accountOptions = ['All Accounts', ...accounts.map((a: any) => a.nickname || a.name || a.id)]
 
   return (
     <>
@@ -68,7 +69,6 @@ export default function TopBar() {
 
         {/* Right */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Account selector — populated from API */}
           <select
             className="staax-select"
             value={activeAccount || 'All Accounts'}
@@ -78,7 +78,6 @@ export default function TopBar() {
             {accountOptions.map(a => <option key={a}>{a}</option>)}
           </select>
 
-          {/* PRACTIX / LIVE toggle */}
           <button onClick={() => setIsPractixMode(!isPractixMode)} style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             height: 'var(--btn-h)',
@@ -96,7 +95,6 @@ export default function TopBar() {
             {isPractixMode ? 'PRACTIX' : 'LIVE'}
           </button>
 
-          {/* Bell */}
           <button
             onClick={() => { setShowNotif(!showNotif); if (!showNotif) markAllRead() }}
             style={{
@@ -116,7 +114,6 @@ export default function TopBar() {
             )}
           </button>
 
-          {/* Logout */}
           <button
             onClick={logout}
             style={{
@@ -133,7 +130,6 @@ export default function TopBar() {
         </div>
       </header>
 
-      {/* Notification panel */}
       {showNotif && (
         <div className="notif-panel">
           <div style={{

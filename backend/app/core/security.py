@@ -1,30 +1,42 @@
-from datetime import datetime, timedelta
+"""
+Security utilities — password hashing and JWT token management.
+Uses bcrypt directly (bypasses passlib which has a version conflict with bcrypt 4.x).
+"""
+import bcrypt
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
+# ── Password hashing ──────────────────────────────────────────────────────────
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a plain password against a bcrypt hash."""
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (
-        expires_delta or timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+def hash_password(plain: str) -> str:
+    """Hash a plain password with bcrypt."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(12)).decode("utf-8")
+
+
+# ── JWT tokens ────────────────────────────────────────────────────────────────
+
+def create_access_token(data: dict, expires_minutes: Optional[int] = None) -> str:
+    """Create a signed JWT access token."""
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=expires_minutes or settings.JWT_EXPIRE_MINUTES
     )
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    payload = {**data, "exp": expire}
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_access_token(token: str) -> Optional[dict]:
+    """Decode and verify a JWT token. Returns payload or None if invalid."""
     try:
         return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
     except JWTError:
