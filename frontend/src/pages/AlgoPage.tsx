@@ -333,7 +333,7 @@ export default function AlgoPage() {
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
           {saveError  && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveError}</span>}
           <button className="btn btn-ghost" onClick={() => navigate('/grid')}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Algo'}</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : (isEdit ? 'Update Algo' : 'Save Algo')}</button>
         </div>
       </div>
 
