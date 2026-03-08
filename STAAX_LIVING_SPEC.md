@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 2.3 | **Last Updated:** March 2026 — Phase 1E DB wiring + stability enhancements spec | **PRD Reference:** v1.2
+**Version:** 2.5 | **Last Updated:** March 2026 — SE-1 engine + hidden failures + arch improvements | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -626,18 +626,50 @@ These four modules harden the platform against broker failures, network drops, a
 
 **API Endpoint:** `POST /api/v1/system/kill-switch`
 
-**Execution Flow:**
-```
+**Execution Flow — Broker First (critical design rule):**
+```python
 KillSwitch.activate()
-→ Fetch all open positions
-→ Fetch all pending orders
-→ Square off all positions
-→ Cancel all pending orders
-→ Update all AlgoState → TERMINATED
-→ Update GridEntry → CLOSED
-→ Broadcast WebSocket status update
-→ Log: [CRITICAL] GLOBAL KILL SWITCH ACTIVATED
+# Step 0: freeze engine immediately
+engine_state = EMERGENCY_STOP
+disable OrderRetryQueue       # no retries during kill
+disable ReEntryEngine         # no re-entries during kill
+disable Scheduler entries     # no new scheduled tasks
+
+# Step 1: fetch broker state (source of truth — NOT DB)
+open_orders    = broker.get_open_orders()
+open_positions = broker.get_positions()
+
+# Step 2: cancel all pending orders at broker first
+for order in open_orders:
+    broker.cancel_order(order.id)
+
+# Step 3: square off all open positions at broker (market orders)
+for position in open_positions:
+    broker.square_off_market(position)
+
+# Step 4: VERIFICATION RETRY LOOP — handles partial fills
+# Partial fills can create NEW positions milliseconds after square-off.
+# Never rely on a single check. Loop up to 5 times until broker is flat.
+for attempt in range(1, 6):
+    sleep(2s)
+    verify_orders    = broker.get_open_orders()
+    verify_positions = broker.get_positions()
+    for o in verify_orders:    broker.cancel_order(o.id)      # cancel stragglers
+    for p in verify_positions: broker.square_off_market(p)    # square off partial fills
+    if both empty: broker confirmed FLAT ✅ → break
+    if attempt == 5: log CRITICAL — MANUAL INTERVENTION REQUIRED
+
+# Step 5: only after broker confirmed → update DB
+update AlgoState → TERMINATED
+update GridEntry → CLOSED
+update Orders    → CLOSED / CANCELLED
+
+# Step 6: notify system
+broadcast WebSocket kill-switch event
+log [CRITICAL] GLOBAL KILL SWITCH ACTIVATED — N positions sq off, M orders cancelled
 ```
+
+**Design principle:** DB is NEVER updated before broker is acted on. If broker API call fails, DB state is NOT modified. The broker terminal is always the source of truth.
 
 **UI:** Prominent **KILL SWITCH** button on Dashboard with confirmation dialog before activation.
 
@@ -718,17 +750,117 @@ BrokerReconnectManager.check()
 ---
 
 ### SE-5 — Engine Integration (main.py additions)
-**Phase:** 1E (SE-1, SE-2, SE-3) | 1F (SE-4)
+**Phase:** 1E (SE-1, SE-2, SE-3) | 1F (SE-4, ExecutionManager, PositionRebuilder)
 
 New engine singletons to add to `backend/main.py`:
 - `global_kill_switch`
 - `order_retry_queue`
 - `broker_reconnect_manager`
 - `order_reconciler`
+- `execution_manager` (Phase 1F)
+- `position_rebuilder` (runs once on startup — Phase 1F)
 
 Scheduler jobs:
 - `order_reconciler` → every 15 seconds
 - `broker_reconnect_manager` → every 3 seconds
+
+---
+
+## 21. Hidden Failure Scenarios
+
+Critical failure scenarios identified for live trading. Each has a mitigation strategy built into the engine design.
+
+---
+
+### HF-1 — Partial Fill During Kill Switch
+**Risk:** An order is partially filled when the kill switch activates. Remaining lots get filled milliseconds after the system cancels the order, creating a new unexpected position.
+
+**Example:**
+1. Order placed for 5 lots
+2. Exchange fills 2 lots
+3. Kill switch triggers → cancels order, squares off 2 lots
+4. Remaining 3 lots fill at broker milliseconds later
+5. New position appears after system believes everything is closed
+
+**Mitigation:** Kill Switch step 4 is a **retry verification loop** (up to 5 attempts, 2s apart). Each attempt re-fetches broker positions and cancels/squares any stragglers. If broker is not flat after 5 attempts → CRITICAL log + manual intervention alert.
+
+---
+
+### HF-2 — Ghost Order (Network Response Loss)
+**Risk:** Order reaches broker and executes, but network timeout prevents the response from reaching STAAX. Platform believes order failed and retry logic places a second order, creating a duplicate position.
+
+**Example:**
+1. STAAX sends order to broker
+2. Broker executes successfully
+3. Network timeout before response arrives
+4. STAAX marks order as failed
+5. Retry logic sends second order → duplicate position
+
+**Mitigation:** Order Reconciliation Engine (SE-4) polls broker every 15 seconds and compares with DB. Uses broker order IDs as source of truth. Detects and corrects duplicate entries automatically.
+
+---
+
+### HF-3 — System Restart With Open Positions
+**Risk:** Server restarts (crash or deploy) while trades are active. Engine restarts without awareness of existing positions → SL/TP monitoring stops → positions unmanaged.
+
+**Mitigation:** Position Rebuilder (Architecture improvement AR-2) runs at startup. Fetches broker positions, rebuilds AlgoState, re-registers all SL/TP/TSL monitors.
+
+---
+
+## 22. Architecture Improvements
+
+Planned improvements to platform architecture for production resilience.
+
+---
+
+### AR-1 — Execution Manager Layer (`engine/execution_manager.py`)
+**Phase:** 1F
+**Purpose:** Central coordination layer between AlgoRunner and broker order placement.
+
+**Problem:** Without a central layer, execution logic spreads across AlgoRunner, OrderRetryQueue, and OrderPlacer — hard to control, debug, or enforce global risk rules consistently.
+
+**Proposed Architecture:**
+```
+AlgoRunner
+    ↓
+ExecutionManager          ← new central control point
+    ↓
+OrderRetryQueue
+    ↓
+OrderPlacer
+```
+
+**Responsibilities:**
+- Apply global risk checks before every order placement
+- Handle Kill Switch integration (block all orders when activated)
+- Route orders through retry queue
+- Coordinate RUN / SQ / T manual actions from Orders page
+- Maintain execution audit log (every order decision recorded)
+
+**Benefits:** Single control point for the entire order lifecycle. Easier risk enforcement. Cleaner separation of concerns. Better observability.
+
+---
+
+### AR-2 — Position Rebuilder (`engine/position_rebuilder.py`)
+**Phase:** 1F
+**Purpose:** Recover full trading state after server restart or crash.
+
+**Startup Flow:**
+```
+System boot
+→ Fetch broker positions
+→ Fetch broker open orders
+→ Compare with STAAX DB state
+→ Rebuild missing AlgoState entries
+→ Recreate monitoring pipelines:
+     SLTPMonitor
+     TSLEngine
+     MTMMonitor
+→ Re-subscribe market data tokens for open positions
+→ Log: [STARTUP] Position Rebuilder complete — N positions recovered
+```
+
+**Benefits:** Prevents orphan positions after restart. Maintains SL/TP protection continuously. Keeps DB synchronized with broker reality on every boot.
 
 ---
 
@@ -758,8 +890,8 @@ Scheduler jobs:
 - ✅ **main.py fixed** — CORS_ORIGINS, create_ticker() deferred until after broker login
 - ✅ **model enum fix** — `values_callable` added to all enum columns (account, algo, grid, algo_state, order models)
 - ✅ **algos.py wired** — CRUD + archive/unarchive reading real DB ← verified returning `[]` cleanly
-- ⬜ **grid.py wired** — deploy/list/remove/setMode real DB (file ready — copy to repo)
-- ⬜ **orders.py wired** — orders list real DB
+- ✅ **grid.py wired** — deploy/list/remove/setMode/promote-live real DB
+- ✅ **orders.py wired** — list/get/exit-price/sync/square-off real DB
 - ⬜ **AlgoConfig button label** — "Save Algo" on `/algo/new`, "Update Algo" on `/algo/:id` (frontend only)
 - ⬜ **SE-1: GlobalKillSwitch** — `engine/global_kill_switch.py` + `POST /api/v1/system/kill-switch` + Dashboard UI button
 - ⬜ **SE-2: OrderRetryQueue** — `engine/order_retry_queue.py` + wire RE button on Orders page
@@ -779,6 +911,14 @@ Scheduler jobs:
 - `app/models/account.py` — `values_callable=lambda x: [e.value for e in x]` on BrokerType + AccountStatus enums
 - `alembic/env.py` — sync-only (psycopg2), no asyncio
 - `alembic/versions/0001_initial_schema.py` — all 8 tables + seed accounts
+
+### Phase 1F — Next (after broker adapters complete)
+
+- ⬜ **SE-4: OrderReconciler** — `engine/order_reconciler.py` + scheduler every 15s (HF-2 mitigation)
+- ⬜ **AR-1: ExecutionManager** — `engine/execution_manager.py` — central order control layer
+- ⬜ **AR-2: PositionRebuilder** — `engine/position_rebuilder.py` — startup state recovery (HF-3 mitigation)
+- ⬜ **WebSocket wiring** — wire WS manager to Kill Switch broadcast
+- ⬜ **orders.py square-off** — wire actual broker square-off call via ExecutionManager
 
 ### Phase 2 — Planned
 

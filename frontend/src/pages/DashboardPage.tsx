@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { servicesAPI, accountsAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -45,6 +45,10 @@ export default function DashboardPage() {
   const [log, setLog]                         = useState<string[]>(['STAAX Dashboard ready.'])
   const [zerodhaConnected, setZerodhaConnected] = useState(false)
   const [showLateWarning, setShowLateWarning] = useState(false)
+  const [showKillConfirm, setShowKillConfirm]     = useState(false)
+  const [killActivated, setKillActivated]         = useState(false)
+  const [killLoading, setKillLoading]             = useState(false)
+  const [killResult, setKillResult]               = useState<{ positions_squared: number; orders_cancelled: number; errors: string[] } | null>(null)
 
   // Load accounts on mount
   useEffect(() => {
@@ -142,6 +146,24 @@ export default function DashboardPage() {
     }
   }
 
+  const handleKillSwitch = async () => {
+    setKillLoading(true)
+    addLog("⚠️ KILL SWITCH ACTIVATED — fetching broker state...")
+    try {
+      const res = await systemAPI.activateKillSwitch()
+      const d = res.data
+      setKillActivated(true)
+      setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
+      addLog(`[CRITICAL] KILL SWITCH — ${d.positions_squared ?? 0} positions squared, ${d.orders_cancelled ?? 0} orders cancelled`)
+      if (d.errors?.length) { d.errors.forEach((e: string) => addLog(`⚠️ ${e}`)) }
+    } catch (err: any) {
+      addLog("⛔ Kill switch failed — " + (err?.response?.data?.detail || "unknown error"))
+    } finally {
+      setKillLoading(false)
+      setShowKillConfirm(false)
+    }
+  }
+
   const handleZerodhaLogin = () => {
     accountsAPI.zerodhaLoginUrl()
       .then(res => {
@@ -182,8 +204,26 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
           <button className="btn btn-primary" onClick={startAll} disabled={allRunning}>▶ Start Session</button>
+          <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
+          <button
+            onClick={() => setShowKillConfirm(true)}
+            disabled={killActivated || killLoading}
+            style={{
+              background:    killActivated ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.9)",
+              color:         killActivated ? "var(--red)" : "#fff",
+              border:        "1px solid rgba(239,68,68,0.6)",
+              borderRadius:  "6px",
+              padding:       "0 14px",
+              height:        "34px",
+              lineHeight:    "34px",
+              fontSize:      "12px",
+              fontWeight:    700,
+              cursor:        killActivated ? "not-allowed" : "pointer",
+            }}
+          >
+            {killActivated ? "⚡ Kill Switch Activated" : killLoading ? "Activating..." : "⚡ Kill Switch"}
+          </button>
         </div>
       </div>
 
@@ -292,6 +332,85 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+
+      {/* Kill Switch confirmation modal */}
+      {showKillConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#1a1b1d', border: '1px solid rgba(239,68,68,0.5)',
+            borderRadius: '12px', padding: '28px 32px', maxWidth: '420px', width: '100%',
+            boxShadow: '0 0 40px rgba(239,68,68,0.15)',
+          }}>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--red)', marginBottom: '8px' }}>
+              ⚡ Kill Switch
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px', lineHeight: 1.6 }}>
+              This will <strong style={{ color: '#fff' }}>immediately</strong>:
+            </div>
+            <ul style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '18px', marginBottom: '20px', lineHeight: 2 }}>
+              <li>Freeze all engine activity (Scheduler, ReEntry, RetryQueue)</li>
+              <li>Fetch ALL open positions + orders from broker</li>
+              <li>Cancel all pending broker orders</li>
+              <li>Square off all open positions at market price</li>
+              <li>Verify broker is flat, then update DB</li>
+            </ul>
+            <div style={{
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: '6px', padding: '10px 12px', marginBottom: '20px',
+              fontSize: '11px', color: 'var(--red)', fontWeight: 600,
+            }}>
+              ⚠️ This action cannot be undone. All algos will be terminated for this session.
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setShowKillConfirm(false)} disabled={killLoading}>
+                Cancel
+              </button>
+              <button
+                onClick={handleKillSwitch}
+                disabled={killLoading}
+                style={{
+                  background: 'var(--red)', color: '#fff', border: 'none',
+                  borderRadius: '6px', padding: '0 20px', height: '36px',
+                  fontSize: '13px', fontWeight: 700, cursor: killLoading ? 'not-allowed' : 'pointer',
+                  opacity: killLoading ? 0.7 : 1,
+                }}
+              >
+                {killLoading ? 'Activating...' : 'Activate Kill Switch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kill Switch result banner */}
+      {killActivated && killResult && (
+        <div style={{
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: '8px', padding: '12px 16px', marginBottom: '12px',
+          display: 'flex', alignItems: 'center', gap: '12px',
+        }}>
+          <span style={{ fontSize: '18px' }}>⚡</span>
+          <div>
+            <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '13px' }}>
+              Kill Switch Activated — Session terminated
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {killResult.positions_squared} position(s) squared off &nbsp;·&nbsp;
+              {killResult.orders_cancelled} order(s) cancelled
+              {killResult.errors.length > 0 && (
+                <span style={{ color: 'var(--accent-amber)', marginLeft: '8px' }}>
+                  ⚠️ {killResult.errors.length} error(s) — check system log
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Account Status */}
       <div className="card">

@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.core.database import engine as db_engine, Base
 
 # ── API routers ────────────────────────────────────────────────────────────────
-from app.api.v1 import auth, accounts, algos, grid, orders, services
+from app.api.v1 import auth, accounts, algos, grid, orders, services, system
 
 # ── Engine imports ─────────────────────────────────────────────────────────────
 from app.engine.ltp_consumer       import LTPConsumer, LTPCache
@@ -172,6 +172,7 @@ app.include_router(algos.router,    prefix="/api/v1/algos",    tags=["algos"])
 app.include_router(grid.router,     prefix="/api/v1/grid",     tags=["grid"])
 app.include_router(orders.router,   prefix="/api/v1/orders",   tags=["orders"])
 app.include_router(services.router, prefix="/api/v1/services", tags=["services"])
+app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"])
 
 # ── WebSocket routes ───────────────────────────────────────────────────────────
 app.include_router(ws_routes.router, tags=["websocket"])

@@ -118,6 +118,12 @@ export const reportsAPI = {
   download:    (params?: object) => api.get('/reports/download',      { params, responseType: 'blob' }),
 }
 
+// ── System
+export const systemAPI = {
+  activateKillSwitch: () => api.post("/system/kill-switch"),
+  killSwitchStatus:   () => api.get("/system/kill-switch/status"),
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 export function createOrdersWebSocket(): WebSocket {
   const wsBase = API_BASE.replace('http', 'ws')
