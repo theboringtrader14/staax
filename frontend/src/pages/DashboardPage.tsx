@@ -207,19 +207,15 @@ export default function DashboardPage() {
           <button className="btn btn-primary" onClick={startAll} disabled={allRunning}>▶ Start Session</button>
           <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
           <button
+            className="btn"
             onClick={() => setShowKillConfirm(true)}
             disabled={killActivated || killLoading}
             style={{
-              background:    killActivated ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.9)",
-              color:         killActivated ? "var(--red)" : "#fff",
-              border:        "1px solid rgba(239,68,68,0.6)",
-              borderRadius:  "6px",
-              padding:       "0 14px",
-              height:        "34px",
-              lineHeight:    "34px",
-              fontSize:      "12px",
-              fontWeight:    700,
-              cursor:        killActivated ? "not-allowed" : "pointer",
+              background: killActivated ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.9)",
+              color:      killActivated ? "var(--red)" : "#fff",
+              border:     "1px solid rgba(239,68,68,0.6)",
+              fontWeight: 700,
+              opacity:    killActivated || killLoading ? 0.75 : 1,
             }}
           >
             {killActivated ? "⚡ Kill Switch Activated" : killLoading ? "Activating..." : "⚡ Kill Switch"}
@@ -367,7 +363,7 @@ export default function DashboardPage() {
               ⚠️ This action cannot be undone. All algos will be terminated for this session.
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setShowKillConfirm(false)} disabled={killLoading}>
+              <button className="btn btn-ghost" onClick={() => setShowKillConfirm(false)} disabled={killLoading} style={{ height: "36px", padding: "0 20px" }}>
                 Cancel
               </button>
               <button
