@@ -27,6 +27,7 @@ from app.core.database import engine as db_engine, Base
 
 # ── API routers ────────────────────────────────────────────────────────────────
 from app.api.v1 import auth, accounts, algos, grid, orders, services, system
+from app.engine.broker_reconnect   import broker_reconnect_manager
 
 # ── Engine imports ─────────────────────────────────────────────────────────────
 from app.engine.ltp_consumer       import LTPConsumer, LTPCache
@@ -108,6 +109,7 @@ async def lifespan(app: FastAPI):
     strike_sel     = StrikeSelector(zerodha)
 
     # ── 7. Wire AlgoRunner ────────────────────────────────────────────────────
+    broker_reconnect_manager.wire(ltp_consumer)
     algo_runner.wire_engines(
         strike_selector = strike_sel,
         order_placer    = order_placer,

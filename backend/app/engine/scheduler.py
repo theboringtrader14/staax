@@ -93,7 +93,16 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, activate_all, overnight_sl_check")
+        # Broker reconnect check — every 3 seconds
+        self._scheduler.add_job(
+            self._job_broker_reconnect,
+            "interval",
+            seconds=3,
+            id="broker_reconnect",
+            replace_existing=True,
+        )
+
+        logger.info("Fixed daily jobs registered: token_refresh, activate_all, overnight_sl_check, broker_reconnect")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -176,6 +185,13 @@ class AlgoScheduler:
                 pass
 
     # ── Job implementations ───────────────────────────────────────────────────
+
+    async def _job_broker_reconnect(self):
+        """Every 3s — check LTP feed staleness and reconnect if needed."""
+        try:
+            await broker_reconnect_manager.check()
+        except Exception as e:
+            logger.error(f"[SCHEDULER] broker_reconnect job error: {e}")
 
     async def _job_token_refresh(self):
         """08:30 — refresh all broker tokens."""
