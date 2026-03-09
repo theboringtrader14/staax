@@ -44,7 +44,8 @@ from app.engine.scheduler          import AlgoScheduler
 from app.engine.strike_selector    import StrikeSelector
 
 # ── Brokers ────────────────────────────────────────────────────────────────────
-from app.brokers.zerodha import ZerodhaBroker
+from app.brokers.zerodha  import ZerodhaBroker
+from app.brokers.angelone import AngelOneBroker
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────
 from app.ws.connection_manager import ConnectionManager
@@ -85,8 +86,12 @@ async def lifespan(app: FastAPI):
     logger.info("✅ WebSocket manager ready")
 
     # ── 4. Broker clients (no token needed at init) ───────────────────────────
-    zerodha = ZerodhaBroker()
-    app.state.zerodha = zerodha
+    zerodha       = ZerodhaBroker()
+    angelone_mom  = AngelOneBroker(account="mom")
+    angelone_wife = AngelOneBroker(account="wife")
+    app.state.zerodha       = zerodha
+    app.state.angelone_mom  = angelone_mom
+    app.state.angelone_wife = angelone_wife
     logger.info("✅ Broker clients initialised (no token yet)")
 
     # ── 5. LTP infrastructure (ticker created lazily after broker login) ───────
