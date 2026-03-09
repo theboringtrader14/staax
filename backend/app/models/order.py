@@ -83,7 +83,9 @@ class Order(Base):
     # ── State ─────────────────────────────────────────────────────────────────
     status        = Column(Enum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.PENDING)
     journey_level = Column(String(10), nullable=True)   # "1", "1.1", "2.1" etc.
-    error_message = Column(Text, nullable=True)
+    error_message    = Column(Text, nullable=True)
+    retry_count      = Column(Integer, default=0)
+    last_retry_time  = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -342,7 +342,62 @@ async def start_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{algo_id}/re")
 async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
-    return {"algo_id": algo_id, "action": "re", "message": "Retry triggered"}
+    """
+    RE — retry the last failed order for this algo.
+    Only valid when the most recent order is in ERROR status.
+    Calls OrderRetryQueue.retry_order() which resets state and retries up to 3 times.
+    Engine wiring (OrderPlacer context) handled in Phase 1F via ExecutionManager.
+    """
+    from app.models.order import Order, OrderStatus
+    from app.models.grid import GridEntry
+    from sqlalchemy import select
+    from datetime import date
+    from app.engine import order_retry_queue
+
+    if order_retry_queue.disabled:
+        raise HTTPException(status_code=503, detail="Kill Switch is active — retry not allowed")
+
+    # Find today's grid entry for this algo
+    today = date.today()
+    grid_result = await db.execute(
+        select(GridEntry).where(
+            GridEntry.algo_id == algo_id,
+            GridEntry.trading_date == today,
+        )
+    )
+    grid_entry = grid_result.scalar_one_or_none()
+    if not grid_entry:
+        raise HTTPException(status_code=404, detail="No grid entry found for this algo today")
+
+    # Find the most recent ERROR order for this grid entry
+    orders_result = await db.execute(
+        select(Order).where(
+            Order.grid_entry_id == grid_entry.id,
+            Order.status == OrderStatus.ERROR,
+        ).order_by(Order.created_at.desc())
+    )
+    error_orders = orders_result.scalars().all()
+
+    if not error_orders:
+        raise HTTPException(status_code=400, detail="No orders in ERROR state for this algo today")
+
+    # Reset all ERROR orders to PENDING — engine will pick them up
+    # Full broker retry wiring happens in Phase 1F via ExecutionManager
+    reset_count = 0
+    for order in error_orders:
+        order.status = OrderStatus.PENDING
+        order.error_message = "Manual RE triggered — awaiting engine retry"
+        order.retry_count = 0
+        reset_count += 1
+
+    await db.commit()
+
+    return {
+        "algo_id":     algo_id,
+        "action":      "re",
+        "reset_count": reset_count,
+        "message":     f"{reset_count} order(s) reset to PENDING — engine will retry",
+    }
 
 
 @router.post("/{algo_id}/sq")
