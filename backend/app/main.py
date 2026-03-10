@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.core.database import engine as db_engine, Base
 
 # ── API routers ────────────────────────────────────────────────────────────────
-from app.api.v1 import auth, accounts, algos, grid, orders, services, system
+from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports
 from app.engine.broker_reconnect   import broker_reconnect_manager
 
 # ── Engine imports ─────────────────────────────────────────────────────────────
@@ -180,6 +180,7 @@ app.include_router(grid.router,     prefix="/api/v1/grid",     tags=["grid"])
 app.include_router(orders.router,   prefix="/api/v1/orders",   tags=["orders"])
 app.include_router(services.router, prefix="/api/v1/services", tags=["services"])
 app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"])
+app.include_router(reports.router,  prefix="/api/v1/reports",  tags=["reports"])
 
 # ── WebSocket routes ───────────────────────────────────────────────────────────
 app.include_router(ws_routes.router, tags=["websocket"])

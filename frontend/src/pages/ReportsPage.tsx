@@ -1,4 +1,5 @@
 import { useStore } from '@/store'
+import { reportsAPI } from '@/services/api'
 import { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
@@ -98,6 +99,31 @@ export default function ReportsPage(){
   const [metricFilter,setMetricFilter]=useState('fy')
   const [metricFy,setMetricFy]=useState('2024-25')
   const [metricMonth,setMetricMonth]=useState('Apr')
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async (format: 'csv' | 'excel' = 'csv') => {
+    setDownloading(true)
+    try {
+      const response = await reportsAPI.download({ fy, format })
+      const blob = new Blob([response.data], {
+        type: format === 'excel'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `STAAX_trades_FY${fy}.${format === 'excel' ? 'xlsx' : 'csv'}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch {
+      alert('Download failed — no trades found for this FY')
+    } finally {
+      setDownloading(false)
+    }
+  }
   const [metricDate,setMetricDate]=useState('')
   const [metricFrom,setMetricFrom]=useState('')
   const [metricTo,setMetricTo]=useState('')
@@ -129,7 +155,10 @@ export default function ReportsPage(){
           <select className="staax-select" value={fy} onChange={e=>setFy(e.target.value)} style={{width:'120px'}}>
             <option value="2024-25">FY 2024–25</option><option value="2023-24">FY 2023–24</option>
           </select>
-          <button className="btn btn-ghost" style={{fontSize:'11px'}}>⬇ CSV</button>
+          <div style={{display:'flex',gap:'6px'}}>
+            <button className="btn btn-ghost" style={{fontSize:'11px'}} disabled={downloading} onClick={()=>handleDownload('csv')}>{downloading?'⏳':'⬇'} CSV</button>
+            <button className="btn btn-ghost" style={{fontSize:'11px'}} disabled={downloading} onClick={()=>handleDownload('excel')}>⬇ Excel</button>
+          </div>
         </div>
       </div>
 
@@ -230,7 +259,10 @@ export default function ReportsPage(){
             )}
             {/* CSV — consistent gap from inputs */}
             <div style={{width:'1px',height:'20px',background:'var(--bg-border)',marginLeft:'4px'}}/>
-            <button className="btn btn-ghost" style={{fontSize:'11px',height:'32px',padding:'0 12px'}}>⬇ CSV</button>
+            <div style={{display:'flex',gap:'6px'}}>
+              <button className="btn btn-ghost" style={{fontSize:'11px',height:'32px',padding:'0 12px'}} disabled={downloading} onClick={()=>handleDownload('csv')}>{downloading?'⏳':'⬇'} CSV</button>
+              <button className="btn btn-ghost" style={{fontSize:'11px',height:'32px',padding:'0 12px'}} disabled={downloading} onClick={()=>handleDownload('excel')}>⬇ Excel</button>
+            </div>
           </div>
         </div>
 
