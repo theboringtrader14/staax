@@ -48,7 +48,7 @@ def get_state() -> dict:
     }
 
 
-async def activate(db, broker_registry, websocket_manager=None) -> dict:
+async def activate(db, broker_registry, websocket_manager=None, account_ids: list = None) -> dict:
     """
     Activate the global kill switch.
 
@@ -77,7 +77,12 @@ async def activate(db, broker_registry, websocket_manager=None) -> dict:
     errors = []
 
     # ── Steps 1–4: Per broker account ─────────────────────────────────────────
-    for account_id, broker in broker_registry.items():
+    # Filter accounts if specific ones requested
+    accounts_to_kill = {
+        k: v for k, v in broker_registry.items()
+        if not account_ids or k in account_ids
+    }
+    for account_id, broker in accounts_to_kill.items():
         try:
             logger.critical(f"[KILL SWITCH] Processing account {account_id}")
 

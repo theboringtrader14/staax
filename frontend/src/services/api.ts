@@ -120,7 +120,7 @@ export const reportsAPI = {
 
 // ── System
 export const systemAPI = {
-  activateKillSwitch: () => api.post("/system/kill-switch"),
+  activateKillSwitch: (accountIds: string[] = []) => api.post('/system/kill-switch', { account_ids: accountIds }),
   killSwitchStatus:   () => api.get("/system/kill-switch/status"),
 }
 

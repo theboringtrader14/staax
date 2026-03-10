@@ -49,6 +49,7 @@ async def activate_kill_switch(db: AsyncSession = Depends(get_db)):
         logger.warning("[KILL SWITCH] No broker registry available — DB-only update")
 
     result = await global_kill_switch.activate(
+        account_ids=body.account_ids if body else [],
         db=db,
         broker_registry=registry,
         websocket_manager=None,   # TODO: wire WS manager in Phase 1F

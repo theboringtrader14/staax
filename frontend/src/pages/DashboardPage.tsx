@@ -48,7 +48,9 @@ export default function DashboardPage() {
   const [showKillConfirm, setShowKillConfirm]     = useState(false)
   const [killActivated, setKillActivated]         = useState(false)
   const [killLoading, setKillLoading]             = useState(false)
-  const [killResult, setKillResult]               = useState<{ positions_squared: number; orders_cancelled: number; errors: string[] } | null>(null)
+  const [killResult, setKillResult]               = useState<{ positions_squared: number; orders_cancelled: number; errors: string[]; per_account?: Record<string, { positions_squared: number; orders_cancelled: number }> } | null>(null)
+  const [selectedKillAccounts, setSelectedKillAccounts] = useState<string[]>([])
+  const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
 
   // Load accounts on mount
   useEffect(() => {
@@ -150,9 +152,10 @@ export default function DashboardPage() {
     setKillLoading(true)
     addLog("⚠️ KILL SWITCH ACTIVATED — fetching broker state...")
     try {
-      const res = await systemAPI.activateKillSwitch()
+      const res = await systemAPI.activateKillSwitch(selectedKillAccounts)
       const d = res.data
       setKillActivated(true)
+      setKilledAccountIds(selectedKillAccounts.length > 0 ? selectedKillAccounts : accounts.map((a: any) => a.id))
       setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
       addLog(`[CRITICAL] KILL SWITCH — ${d.positions_squared ?? 0} positions squared, ${d.orders_cancelled ?? 0} orders cancelled`)
       if (d.errors?.length) { d.errors.forEach((e: string) => addLog(`⚠️ ${e}`)) }
@@ -208,7 +211,10 @@ export default function DashboardPage() {
           <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
           <button
             className="btn"
-            onClick={() => setShowKillConfirm(true)}
+            onClick={() => {
+              setSelectedKillAccounts(accounts.map((a: any) => a.id))
+              setShowKillConfirm(true)
+            }}
             disabled={killActivated || killLoading}
             style={{
               background: killActivated ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.9)",
@@ -342,25 +348,58 @@ export default function DashboardPage() {
             borderRadius: '12px', padding: '28px 32px', maxWidth: '420px', width: '100%',
             boxShadow: '0 0 40px rgba(239,68,68,0.15)',
           }}>
-            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--red)', marginBottom: '8px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--red)', marginBottom: '4px' }}>
               ⚡ Kill Switch
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px', lineHeight: 1.6 }}>
-              This will <strong style={{ color: '#fff' }}>immediately</strong>:
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+              Select accounts to kill. Uncheck any you want to leave running.
             </div>
-            <ul style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '18px', marginBottom: '20px', lineHeight: 2 }}>
-              <li>Freeze all engine activity (Scheduler, ReEntry, RetryQueue)</li>
-              <li>Fetch ALL open positions + orders from broker</li>
-              <li>Cancel all pending broker orders</li>
-              <li>Square off all open positions at market price</li>
-              <li>Verify broker is flat, then update DB</li>
-            </ul>
+
+            {/* Account checkboxes */}
+            <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {accounts.map((acc: any) => {
+                const checked = selectedKillAccounts.includes(acc.id)
+                return (
+                  <label key={acc.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    background: checked ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${checked ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    borderRadius: '6px', padding: '8px 12px', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedKillAccounts(prev =>
+                          prev.includes(acc.id)
+                            ? prev.filter((id: string) => id !== acc.id)
+                            : [...prev, acc.id]
+                        )
+                      }}
+                      style={{ width: '14px', height: '14px', accentColor: 'var(--red)', cursor: 'pointer' }}
+                    />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{acc.nickname || acc.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'} · {acc.segment || 'F&O'}</div>
+                    </div>
+                    {checked && <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--red)', fontWeight: 700 }}>KILL</span>}
+                  </label>
+                )
+              })}
+              {accounts.length === 0 && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px' }}>
+                  No active accounts found
+                </div>
+              )}
+            </div>
+
             <div style={{
               background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-              borderRadius: '6px', padding: '10px 12px', marginBottom: '20px',
+              borderRadius: '6px', padding: '8px 12px', marginBottom: '16px',
               fontSize: '11px', color: 'var(--red)', fontWeight: 600,
             }}>
-              ⚠️ This action cannot be undone. All algos will be terminated for this session.
+              ⚠️ This will square off all positions + cancel all orders for selected accounts. Cannot be undone.
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="btn btn-ghost" onClick={() => setShowKillConfirm(false)} disabled={killLoading} style={{ height: "36px", padding: "0 20px" }}>
@@ -388,22 +427,21 @@ export default function DashboardPage() {
         <div style={{
           background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
           borderRadius: '8px', padding: '12px 16px', marginBottom: '12px',
-          display: 'flex', alignItems: 'center', gap: '12px',
         }}>
-          <span style={{ fontSize: '18px' }}>⚡</span>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <span style={{ fontSize: '16px' }}>⚡</span>
             <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '13px' }}>
-              Kill Switch Activated — Session terminated
+              Kill Switch Activated — {killedAccountIds.length} account(s) terminated
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {killResult.positions_squared} position(s) squared off &nbsp;·&nbsp;
-              {killResult.orders_cancelled} order(s) cancelled
-              {killResult.errors.length > 0 && (
-                <span style={{ color: 'var(--accent-amber)', marginLeft: '8px' }}>
-                  ⚠️ {killResult.errors.length} error(s) — check system log
-                </span>
-              )}
-            </div>
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {killResult.positions_squared} position(s) squared off &nbsp;·&nbsp;
+            {killResult.orders_cancelled} order(s) cancelled
+            {killResult.errors.length > 0 && (
+              <span style={{ color: 'var(--accent-amber)', marginLeft: '8px' }}>
+                ⚠️ {killResult.errors.length} error(s) — check system log
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -425,7 +463,16 @@ export default function DashboardPage() {
               <div key={acc.id} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '12px', borderLeft: `3px solid ${color}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '13px' }}>{acc.nickname}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px' }}>{acc.nickname}</div>
+                      {killedAccountIds.includes(acc.id) && (
+                        <span style={{
+                          fontSize: '9px', fontWeight: 700, color: 'var(--red)',
+                          background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+                          borderRadius: '4px', padding: '1px 5px', letterSpacing: '0.5px',
+                        }}>⚡ KILLED</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '1px' }}>{brokerLabel}</div>
                   </div>
                   <span style={{
