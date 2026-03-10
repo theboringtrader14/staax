@@ -2,7 +2,7 @@
 accounts.py — Accounts API
 Fully wired to PostgreSQL. Reads/writes real account data.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from pydantic import BaseModel
@@ -38,6 +38,11 @@ def _account_to_dict(acc: Account) -> dict:
         "global_tp":    acc.global_tp,
         "is_active":    acc.is_active,
         "token_generated_at": acc.token_generated_at.isoformat() if acc.token_generated_at else None,
+        "token_valid_today": (
+            acc.token_generated_at is not None and
+            acc.token_generated_at.date() == __import__('datetime').date.today() and
+            acc.status == AccountStatus.ACTIVE
+        ),
     }
 
 
@@ -180,6 +185,86 @@ async def zerodha_token_status(db: AsyncSession = Depends(get_db)):
         return {"connected": False, "message": "Login required"}
 
     # Token valid if generated today
+    token_date = account.token_generated_at.astimezone(timezone.utc).date()
+    today = date.today()
+    connected = (token_date == today) and (account.status == AccountStatus.ACTIVE)
+
+    return {
+        "connected": connected,
+        "message": "Connected today ✅" if connected else "Login required",
+        "token_generated_at": account.token_generated_at.isoformat() if connected else None,
+    }
+
+
+# ── Angel One Token Flow ──────────────────────────────────────────────────────
+
+@router.post("/angelone/{account_nickname}/login")
+async def angelone_login(
+    account_nickname: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Login to Angel One using TOTP (auto-generated from secret).
+    account_nickname: "mom" or "wife"
+    Saves token to DB and wires app.state.angelone_mom / angelone_wife.
+    """
+    from datetime import datetime, timezone
+    from app.core.config import settings
+
+    nickname_map = {"mom": "Mom", "wife": "Wife"}
+    state_key_map = {"mom": "angelone_mom", "wife": "angelone_wife"}
+    nickname = nickname_map.get(account_nickname.lower())
+    state_key = state_key_map.get(account_nickname.lower())
+
+    if not nickname:
+        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom' or 'wife'")
+
+    # Get broker from app.state
+    broker = getattr(request.app.state, state_key, None)
+    if not broker:
+        raise HTTPException(status_code=503, detail=f"Angel One broker ({account_nickname}) not initialised")
+
+    try:
+        result = await broker.login_with_totp()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Angel One login failed: {str(e)}")
+
+    # Save token to DB
+    result_db = await db.execute(select(Account).where(Account.nickname == nickname))
+    account = result_db.scalar_one_or_none()
+    if account:
+        account.access_token = result.get("jwtToken", "")
+        account.token_generated_at = datetime.now(timezone.utc)
+        account.status = AccountStatus.ACTIVE
+        await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"✅ Angel One ({nickname}) connected for today",
+        "token_generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/angelone/{account_nickname}/token-status")
+async def angelone_token_status(
+    account_nickname: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if today's Angel One token is valid for mom or wife."""
+    from datetime import datetime, timezone, date
+
+    nickname_map = {"mom": "Mom", "wife": "Wife"}
+    nickname = nickname_map.get(account_nickname.lower())
+    if not nickname:
+        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom' or 'wife'")
+
+    result = await db.execute(select(Account).where(Account.nickname == nickname))
+    account = result.scalar_one_or_none()
+
+    if not account or not account.token_generated_at:
+        return {"connected": False, "message": "Login required"}
+
     token_date = account.token_generated_at.astimezone(timezone.utc).date()
     today = date.today()
     connected = (token_date == today) and (account.status == AccountStatus.ACTIVE)

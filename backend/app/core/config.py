@@ -28,11 +28,13 @@ class Settings(BaseSettings):
     ANGELONE_MOM_API_KEY: str = ""
     ANGELONE_MOM_CLIENT_ID: str = ""
     ANGELONE_MOM_TOTP_SECRET: str = ""
+    ANGELONE_MOM_PIN: str = ""
 
     # Angel One — Wife (Phase 2)
     ANGELONE_WIFE_API_KEY: str = ""
     ANGELONE_WIFE_CLIENT_ID: str = ""
     ANGELONE_WIFE_TOTP_SECRET: str = ""
+    ANGELONE_WIFE_PIN: str = ""
 
     # JWT
     JWT_SECRET_KEY: str = "dev-jwt-secret"

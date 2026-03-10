@@ -22,6 +22,25 @@ export default function AccountsPage() {
   const [editTP,     setEditTP]     = useState<Record<string, string>>({})
   const [saved,      setSaved]      = useState<Record<string, string>>({})
   const [saving,     setSaving]     = useState<Record<string, boolean>>({})
+  const [tokenStatus, setTokenStatus] = useState<Record<string, boolean>>({})
+  const [logging,     setLogging]     = useState<Record<string, boolean>>({})
+
+  // Check token status for all accounts on mount
+  useEffect(() => {
+    const checkTokens = async () => {
+      try {
+        const zStatus = await accountsAPI.zerodhaTokenStatus()
+        const momStatus = await accountsAPI.angeloneTokenStatus('mom')
+        const wifeStatus = await accountsAPI.angeloneTokenStatus('wife')
+        setTokenStatus({
+          Karthik: zStatus.data?.connected ?? false,
+          Mom:     momStatus.data?.connected ?? false,
+          Wife:    wifeStatus.data?.connected ?? false,
+        })
+      } catch {}
+    }
+    checkTokens()
+  }, [])
 
   // Merge API accounts over fallback when store populates
   useEffect(() => {
@@ -77,6 +96,29 @@ export default function AccountsPage() {
     }
   }
 
+  const handleZerodhaLogin = async (acc: AccountLocal) => {
+    try {
+      const urlRes = await accountsAPI.zerodhaLoginUrl()
+      window.open(urlRes.data?.login_url, '_blank')
+    } catch {
+      showSaved(acc.id, '⚠️ Could not get login URL')
+    }
+  }
+
+  const handleAngeloneLogin = async (acc: AccountLocal) => {
+    const nickname = acc.name.toLowerCase() as 'mom' | 'wife'
+    setLogging(l => ({ ...l, [acc.id]: true }))
+    try {
+      await accountsAPI.angeloneLogin(nickname)
+      setTokenStatus(t => ({ ...t, [acc.name]: true }))
+      showSaved(acc.id, '✅ Angel One connected')
+    } catch (e: any) {
+      showSaved(acc.id, `⚠️ Login failed: ${e?.response?.data?.detail || 'Unknown error'}`)
+    } finally {
+      setLogging(l => ({ ...l, [acc.id]: false }))
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -124,18 +166,28 @@ export default function AccountsPage() {
               </div>
             </div>
 
-            {/* Token status */}
+            {/* Token status + Login */}
             <div style={{
               fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px',
-              padding: '7px 10px', background: 'var(--bg-secondary)', borderRadius: '5px',
+              padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: '5px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              API Token:&nbsp;
-              <span style={{
-                color: acc.token === 'active' ? 'var(--green)' : acc.token === 'pending' ? 'var(--accent-amber)' : 'var(--amber)',
-                fontWeight: 600,
-              }}>
-                {acc.token === 'active' ? '✅ Connected today' : acc.token === 'pending' ? '⏳ Phase 2 (MCX)' : '⚠️ Login required'}
+              <span>
+                API Token:&nbsp;
+                <span style={{ fontWeight: 600, color: tokenStatus[acc.name] ? 'var(--green)' : acc.broker === 'Angel One' && acc.type === 'MCX' ? 'var(--accent-amber)' : 'var(--red)' }}>
+                  {tokenStatus[acc.name] ? '✅ Connected' : acc.broker === 'Angel One' && acc.type === 'MCX' ? '⏳ Phase 2' : '⚠️ Login required'}
+                </span>
               </span>
+              {!tokenStatus[acc.name] && acc.type !== 'MCX' && (
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: '10px', padding: '3px 8px', height: '24px' }}
+                  disabled={logging[acc.id]}
+                  onClick={() => acc.broker === 'Zerodha' ? handleZerodhaLogin(acc) : handleAngeloneLogin(acc)}
+                >
+                  {logging[acc.id] ? '...' : acc.broker === 'Zerodha' ? '🔑 Login' : '🔄 Auto-Login'}
+                </button>
+              )}
             </div>
 
             {/* Edit controls — active accounts only */}
