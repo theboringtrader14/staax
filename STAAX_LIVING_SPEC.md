@@ -892,11 +892,14 @@ System boot
 - ✅ **algos.py wired** — CRUD + archive/unarchive reading real DB ← verified returning `[]` cleanly
 - ✅ **grid.py wired** — deploy/list/remove/setMode/promote-live real DB
 - ✅ **orders.py wired** — list/get/exit-price/sync/square-off real DB
-- ⬜ **AlgoConfig button label** — "Save Algo" on `/algo/new`, "Update Algo" on `/algo/:id` (frontend only)
-- ⬜ **SE-1: GlobalKillSwitch** — `engine/global_kill_switch.py` + `POST /api/v1/system/kill-switch` + Dashboard UI button
-- ⬜ **SE-2: OrderRetryQueue** — `engine/order_retry_queue.py` + wire RE button on Orders page
-- ⬜ **SE-3: BrokerReconnectManager** — `engine/broker_reconnect.py` + scheduler every 3s
-- ⬜ **Angel One broker** — complete SmartAPI adapter
+- ✅ **AlgoConfig button label** — "Save Algo" on `/algo/new`, "Update Algo" on `/algo/:id` (frontend only)
+- ✅ **SE-1: GlobalKillSwitch** — `engine/global_kill_switch.py` + `POST /api/v1/system/kill-switch` + Dashboard UI (button + modal + result banner)
+- ✅ **SE-2: OrderRetryQueue** — `engine/order_retry_queue.py` + RE endpoint wired + `retry_count`/`last_retry_time` DB columns (migration 0002)
+- ✅ **SE-3: BrokerReconnectManager** — `engine/broker_reconnect.py` + scheduler every 3s + module-level import fix
+- ✅ **Angel One broker** — complete SmartAPI implementation (login_with_totp, place_order, get_positions, get_margins, get_option_chain, cancel_order, get_order_book, get_profile)
+- ✅ **UI-2: Kill Switch button height** — uses `className="btn"` to inherit base height; modal Cancel/Activate matched
+- ✅ **UI-1: Global SL/TP in Accounts** — verified already working, not broken
+- ✅ **§24: Account-Level Kill Switch** — modal shows per-account checkboxes; selective kill; KILLED badge on account cards; partial re-kill supported; backend tracks killed_account_ids
 - ⬜ **F1** — Broker auto-login automation
 - ⬜ **F7** — Reports download: Excel + CSV
 - ⬜ **NR-3 (ticker bar)** — live instrument prices in sidebar
@@ -1009,3 +1012,215 @@ System boot
 ---
 
 *Update this document at the end of every phase before closing the session.*
+
+---
+
+## 23. Open UI / UX Issues
+
+### UI-1 — Margin Update, Global SL/TP hidden in Accounts page
+**Reported:** Phase 1E | **Status:** ⬜ Open
+**Problem:** The margin update, global SL, and global TP fields are no longer visible in the Accounts page.
+**Fix:** Restore FY margin input, global SL (₹), and global TP (₹) fields in Accounts page and ensure they save via `POST /api/v1/accounts/{id}/margin`.
+
+### UI-2 — Kill Switch button height mismatch on Dashboard
+**Reported:** Phase 1E | **Status:** ⬜ Open
+**Problem:** Kill Switch button is taller than Start Session / Stop All buttons. Cancel button in modal also has height mismatch.
+**Fix:** Ensure Kill Switch uses identical height (`height: "34px"`) and padding as `btn btn-primary`. Cancel button in modal should match `btn btn-ghost` height.
+
+---
+
+## 24. Account-Level Kill Switch
+
+**Spec status:** ✅ Complete — Phase 1E
+
+### Requirement
+The Kill Switch confirmation modal should list all active accounts with individual checkboxes, so Karthikeyan can selectively kill specific accounts while leaving others running.
+
+### Kill Switch Modal — Enhanced Flow
+```
+1. Click ⚡ Kill Switch
+2. Modal shows active accounts list with checkboxes (all checked by default)
+3. Karthikeyan unchecks accounts to exclude
+4. Clicks "Activate Kill Switch"
+5. Engine kills only selected accounts' positions + orders
+6. Result banner shows per-account breakdown
+```
+
+### Account Card Indication (Dashboard)
+After kill switch activated for an account → show ⚡ red "Kill Switch Active" badge on that account's card in Account Status section. Persists until next session start.
+
+### API Change
+`POST /api/v1/system/kill-switch` — add optional `account_ids: list[str]` body.
+- Empty → kill all (current behaviour)
+- Provided → kill only those accounts
+
+---
+
+## 25. Account-Level Manual Deactivation
+
+**Spec status:** ⬜ Phase 1F
+
+### Requirement
+Allow Karthikeyan to disable trading for a specific account for the day without invalidating the broker token. This is a planned "sit out today" action — distinct from the emergency Kill Switch.
+
+### Behaviour
+- Each account card in Dashboard gets a **"Deactivate for today"** button.
+- Deactivated: no new algo entries for that account for the rest of the day. Existing positions unaffected.
+- AlgoRunner skips deactivated accounts before placing any order.
+- Resets automatically at midnight / market open (09:00 IST via Scheduler).
+- Visual: account card shows grey "Inactive today" badge; Login button replaced with "Reactivate" button.
+
+### DB Change
+Add `is_deactivated_today: bool` (default False) + `deactivated_at: DateTime` to Account model.
+Scheduler resets both fields daily at 09:00 IST.
+
+### API
+- `POST /api/v1/accounts/{id}/deactivate` — set deactivated for today
+- `POST /api/v1/accounts/{id}/reactivate` — re-enable for today
+
+---
+
+## 26. Session Summary — Phase 1E (completed this session)
+
+### Commits this session
+| Hash | Description |
+|------|-------------|
+| `531a727` | Phase 1E PostgreSQL wiring (21 files) |
+| `01a649d` | AlgoConfig Save vs Update button |
+| `717608b` | orders.py wired to real DB |
+| `79ae80f` | SE-1: Global Kill Switch engine + Dashboard UI |
+| `eb39320` | SE-2: Order Retry Queue + Living Spec v2.6 |
+| `9756c04` | SE-3: Broker Reconnect Manager |
+| `b251a66` | UI-2: Kill Switch button height fixes |
+| `9a1cb01` | Angel One broker adapter (complete SmartAPI) |
+| `8cb54a1` | SE-1 enhancement: Account-Level Kill Switch |
+| `1c3ad59` | Fix: Kill Switch backend bugs + scheduler import |
+| `5f55eff` | Fix: Kill Switch modal state bugs (partial re-kill) |
+
+### Phase 1E status
+- ✅ SE-1 GlobalKillSwitch — engine + API + Dashboard UI + account-level modal
+- ✅ SE-2 OrderRetryQueue — engine + RE endpoint + DB columns
+- ✅ SE-3 BrokerReconnectManager — engine + scheduler 3s job
+- ✅ Angel One adapter — full SmartAPI implementation
+- ✅ UI-1 verified working, UI-2 button height fixed
+- ✅ §24 Account-Level Kill Switch — selective kill, KILLED badge, partial re-kill
+
+### Remaining Phase 1E
+- ⬜ F1: Broker auto-login automation
+- ⬜ F7: Reports download (Excel + CSV)
+- ⬜ NR-3: Ticker bar — live instrument prices in sidebar
+- ⬜ SYNC: Manual order sync
+- ⬜ Manual exit price correction
+- ⬜ TTP: Trailing Take Profit per leg
+- ⬜ Journey feature: multi-level re-entry config
+- ⬜ NotificationService: Twilio WhatsApp + AWS SES
+- ⬜ §25: Account-Level Manual Deactivation (Phase 1F)
+
+---
+
+## 27. Claude Code Setup & Continuity Guide
+
+### Purpose
+Claude Code replaces the copy-paste workflow. It runs directly on your Mac inside `~/STAXX/staax`, reads/writes files, runs commands, restarts servers — you approve each action with `y/n`.
+
+### Installation (one-time)
+
+```bash
+# Step 1: Verify Node 18+
+node --version   # must be v18 or higher
+
+# Step 2: Install Claude Code globally
+npm install -g @anthropic-ai/claude-code
+
+# Step 3: Verify install
+claude --version
+```
+
+### Security — restrict to STAXX only
+
+```bash
+# Step 4: Create safe launcher script
+cat > ~/launch-staax-claude.sh << 'EOF'
+#!/bin/bash
+cd ~/STAXX/staax
+claude --add-dir ~/STAXX/staax
+EOF
+chmod +x ~/launch-staax-claude.sh
+
+# Step 5: Create Claude Code project config
+mkdir -p ~/STAXX/staax/.claude
+cat > ~/STAXX/staax/.claude/settings.json << 'EOF'
+{
+  "allowedPaths": ["~/STAXX/staax"],
+  "projectName": "STAAX"
+}
+EOF
+```
+
+**Rule:** Always launch via `~/launch-staax-claude.sh` — never `claude` from any other directory.
+
+### First-session prompt (copy-paste this to Claude Code on first launch)
+
+```
+You are continuing development of STAAX — a personal F&O algo trading platform.
+
+Read the full project context from: backend/STAAX_LIVING_SPEC.md
+(or paste contents directly)
+
+Key facts:
+- Stack: FastAPI + PostgreSQL + Redis + React/Vite
+- DB: postgresql+asyncpg://staax:staax_password@localhost:5432/staax_db
+- Frontend: http://localhost:3000 | Backend: http://localhost:8000
+- Login: karthikeyan / staax2024 | Auth: POST /api/v1/login (form data)
+- GitHub: github.com/theboringtrader14/staax (always commit + push after each feature)
+- Accounts: Karthik (Zerodha), Mom (Angel One), Wife (Angel One)
+
+Current status: Phase 1E — see §26 in the spec for completed items and remaining backlog.
+Next item to build: [F1 — Broker auto-login automation] or whichever item I specify.
+
+Rules:
+- Always read the spec before starting any feature
+- Commit after every completed feature with a clear message
+- Ask me before any destructive DB operation
+- Never touch files outside ~/STAXX/staax
+```
+
+### Continuity between sessions
+
+The **Living Spec** (`STAAX_LIVING_SPEC.md`) is the memory. It lives at:
+- Local: `~/STAXX/staax/backend/STAAX_LIVING_SPEC.md` (copy it there — see below)
+- Backup: Claude.ai outputs folder
+
+At the start of every Claude Code session, paste this one-liner:
+```
+Read STAAX_LIVING_SPEC.md and tell me the current status and next item.
+```
+
+### Copy spec to repo (run once)
+
+```bash
+cp /path/to/STAAX_LIVING_SPEC.md ~/STAXX/staax/STAAX_LIVING_SPEC.md
+cd ~/STAXX/staax
+git add STAAX_LIVING_SPEC.md
+git commit -m "Add Living Spec to repo for Claude Code continuity"
+git push origin main
+```
+
+### Approval flow in Claude Code
+
+Every action Claude Code wants to take shows a prompt:
+```
+> Edit file backend/app/engine/order_retry_queue.py  [y/n]
+> Run: python3 -m uvicorn app.main:app --reload      [y/n]
+> Run: git commit -m "SE-2: Order Retry Queue"       [y/n]
+```
+You press `y` to approve, `n` to skip, or type a comment to redirect.
+
+### What stays in this Claude.ai chat
+
+Use this chat (or a new one with the extension) for:
+- Visual browser testing and UI review
+- Spec decisions and architecture questions  
+- Debugging when Claude Code gets stuck
+- Any feature requiring browser automation
+
