@@ -60,9 +60,18 @@ async def activate(db, broker_registry, websocket_manager=None, account_ids: lis
     Returns:
         dict with result summary
     """
-    if _state.activated:
-        logger.warning("[KILL SWITCH] Already activated — skipping duplicate call")
+    if _state.activated and not account_ids:
+        logger.warning("[KILL SWITCH] Already activated globally — skipping duplicate call")
         return get_state()
+    # Allow partial re-activation for specific accounts not yet killed
+    if _state.activated and account_ids:
+        already_killed = set(_state.killed_account_ids if hasattr(_state, 'killed_account_ids') else [])
+        new_accounts = [a for a in account_ids if a not in already_killed]
+        if not new_accounts:
+            logger.warning("[KILL SWITCH] All specified accounts already killed")
+            return get_state()
+        account_ids = new_accounts
+        logger.warning(f"[KILL SWITCH] Partial re-activation for accounts: {new_accounts}")
 
     logger.critical("[KILL SWITCH] ⚠️  GLOBAL KILL SWITCH ACTIVATION INITIATED")
 
@@ -71,6 +80,9 @@ async def activate(db, broker_registry, websocket_manager=None, account_ids: lis
     _state.activated_at = datetime.now(timezone.utc)
 
     _freeze_engine()
+
+    if not hasattr(_state, 'killed_account_ids'):
+        _state.killed_account_ids = []
 
     total_cancelled = 0
     total_squared = 0
@@ -197,6 +209,13 @@ async def activate(db, broker_registry, websocket_manager=None, account_ids: lis
     _state.orders_cancelled  = total_cancelled
     _state.positions_squared = total_squared
 
+    # Record which accounts were killed
+    for acc_id in accounts_to_kill.keys():
+        if not hasattr(_state, "killed_account_ids"):
+            _state.killed_account_ids = []
+        if acc_id not in _state.killed_account_ids:
+            _state.killed_account_ids.append(acc_id)
+
     # ── Step 5: Update DB (only after broker acted on) ─────────────────────────
     try:
         await _update_db(db)
@@ -285,9 +304,9 @@ async def _update_db(db):
     algo_states_result = await db.execute(
         select(AlgoState).where(
             AlgoState.status.in_([
-                AlgoRunStatus.RUNNING,
+                AlgoRunStatus.ACTIVE,
                 AlgoRunStatus.WAITING,
-                AlgoRunStatus.PENDING,
+                AlgoRunStatus.WAITING,
             ])
         )
     )

@@ -215,7 +215,7 @@ export default function DashboardPage() {
               setSelectedKillAccounts(accounts.map((a: any) => a.id))
               setShowKillConfirm(true)
             }}
-            disabled={killActivated || killLoading}
+            disabled={(killActivated && killedAccountIds.length >= accounts.length) || killLoading}
             style={{
               background: killActivated ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.9)",
               color:      killActivated ? "var(--red)" : "#fff",
@@ -224,7 +224,7 @@ export default function DashboardPage() {
               opacity:    killActivated || killLoading ? 0.75 : 1,
             }}
           >
-            {killActivated ? "⚡ Kill Switch Activated" : killLoading ? "Activating..." : "⚡ Kill Switch"}
+            {(killActivated && killedAccountIds.length >= accounts.length) ? "⚡ Kill Switch Activated" : killLoading ? "Activating..." : killedAccountIds.length > 0 ? `⚡ Kill Switch (${accounts.length - killedAccountIds.length} left)` : "⚡ Kill Switch"}
           </button>
         </div>
       </div>

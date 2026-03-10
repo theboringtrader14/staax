@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.core.database import AsyncSessionLocal
+from app.engine.broker_reconnect   import broker_reconnect_manager
 from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo, StrategyMode, EntryType
 from app.models.algo_state import AlgoState, AlgoRunStatus
