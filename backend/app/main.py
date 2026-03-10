@@ -35,6 +35,8 @@ from app.engine.order_placer       import OrderPlacer
 from app.engine.virtual_order_book import VirtualOrderBook
 from app.engine.sl_tp_monitor      import SLTPMonitor
 from app.engine.tsl_engine         import TSLEngine
+from app.engine.ttp_engine         import TTPEngine
+from app.engine.journey_engine     import JourneyEngine, journey_engine as journey_engine_singleton
 from app.engine.mtm_monitor        import MTMMonitor
 from app.engine.wt_evaluator       import WTEvaluator
 from app.engine.orb_tracker        import ORBTracker
@@ -108,6 +110,8 @@ async def lifespan(app: FastAPI):
     order_placer   = OrderPlacer(zerodha, virtual_book)
     sl_tp_monitor  = SLTPMonitor()
     tsl_engine_ins = TSLEngine(sl_tp_monitor)
+    ttp_engine_ins = TTPEngine(sl_tp_monitor)
+    journey_eng    = journey_engine_singleton
     mtm_monitor    = MTMMonitor()
     wt_evaluator   = WTEvaluator()
     orb_tracker    = ORBTracker()
@@ -120,6 +124,8 @@ async def lifespan(app: FastAPI):
         order_placer    = order_placer,
         sl_tp_monitor   = sl_tp_monitor,
         tsl_engine      = tsl_engine_ins,
+        ttp_engine      = ttp_engine_ins,
+        journey_engine  = journey_eng,
         mtm_monitor     = mtm_monitor,
         wt_evaluator    = wt_evaluator,
         orb_tracker     = orb_tracker,
@@ -137,6 +143,7 @@ async def lifespan(app: FastAPI):
     ltp_consumer.register_callback(orb_tracker.on_tick)
     ltp_consumer.register_callback(wt_evaluator.on_tick)
     ltp_consumer.register_callback(tsl_engine_ins.on_tick)
+    ltp_consumer.register_callback(ttp_engine_ins.on_tick)
     ltp_consumer.register_callback(sl_tp_monitor.on_tick)
     logger.info("✅ LTP callbacks registered")
 

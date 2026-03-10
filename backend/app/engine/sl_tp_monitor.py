@@ -108,6 +108,11 @@ class SLTPMonitor:
         if order_id in self._positions:
             self._positions[order_id].sl_actual = new_sl
 
+    def update_tp(self, order_id: str, new_tp: float):
+        """Called by TTPEngine when trailing."""
+        if order_id in self._positions:
+            self._positions[order_id].tp_level = new_tp
+
     def update_underlying_ltp(self, token: int, ltp: float):
         self._underlying_ltps[token] = ltp
 

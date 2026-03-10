@@ -44,6 +44,8 @@ from app.engine.strike_selector import StrikeSelector
 from app.engine.order_placer import OrderPlacer
 from app.engine.sl_tp_monitor import SLTPMonitor, PositionMonitor
 from app.engine.tsl_engine import TSLEngine, TSLState
+from app.engine.ttp_engine import TTPEngine, TTPState
+from app.engine.journey_engine import JourneyEngine
 from app.engine.mtm_monitor import MTMMonitor, AlgoMTMState
 from app.engine.wt_evaluator import WTEvaluator, WTWindow
 from app.engine.orb_tracker import ORBTracker, ORBWindow
@@ -66,6 +68,8 @@ class AlgoRunner:
         self._order_placer:    Optional[OrderPlacer]      = None
         self._sl_tp_monitor:   Optional[SLTPMonitor]      = None
         self._tsl_engine:      Optional[TSLEngine]        = None
+        self._ttp_engine:      Optional[TTPEngine]        = None
+        self._journey_engine:  Optional[JourneyEngine]    = None
         self._mtm_monitor:     Optional[MTMMonitor]       = None
         self._wt_evaluator:    Optional[WTEvaluator]      = None
         self._orb_tracker:     Optional[ORBTracker]       = None
@@ -79,6 +83,8 @@ class AlgoRunner:
         order_placer:    OrderPlacer,
         sl_tp_monitor:   SLTPMonitor,
         tsl_engine:      TSLEngine,
+        ttp_engine:      TTPEngine,
+        journey_engine:  JourneyEngine,
         mtm_monitor:     MTMMonitor,
         wt_evaluator:    WTEvaluator,
         orb_tracker:     ORBTracker,
@@ -91,6 +97,8 @@ class AlgoRunner:
         self._order_placer    = order_placer
         self._sl_tp_monitor   = sl_tp_monitor
         self._tsl_engine      = tsl_engine
+        self._ttp_engine      = ttp_engine
+        self._journey_engine  = journey_engine
         self._mtm_monitor     = mtm_monitor
         self._wt_evaluator    = wt_evaluator
         self._orb_tracker     = orb_tracker
@@ -441,6 +449,27 @@ class AlgoRunner:
             )
             self._tsl_engine.register(tsl_state)
 
+        # ── Register TTP ───────────────────────────────────────────────────────
+        ttp_enabled = getattr(leg, "ttp_enabled", False) or (leg.ttp_x and leg.ttp_y and leg.tp_value)
+        if self._ttp_engine and ttp_enabled and leg.ttp_x and leg.ttp_y:
+            # TTP requires TP to be set — initial current_tp from PositionMonitor
+            initial_tp = order.target or fill_price * 1.1
+            ttp_state = TTPState(
+                order_id=str(order.id),
+                direction=direction,
+                entry_price=fill_price,
+                current_tp=initial_tp,
+                ttp_x=leg.ttp_x,
+                ttp_y=leg.ttp_y,
+                ttp_unit=leg.ttp_unit or "pts",
+            )
+            self._ttp_engine.register(ttp_state)
+
+        # ── Register Journey ────────────────────────────────────────────────────
+        journey_cfg = getattr(leg, "journey_config", None)
+        if self._journey_engine and journey_cfg:
+            self._journey_engine.register(str(order.id), journey_cfg, depth=1)
+
         return order
 
     # ── Exit All ──────────────────────────────────────────────────────────────
@@ -548,6 +577,12 @@ class AlgoRunner:
         if self._tsl_engine:
             for order in orders:
                 self._tsl_engine.deregister(str(order.id))
+        if self._ttp_engine:
+            for order in orders:
+                self._ttp_engine.deregister(str(order.id))
+        if self._journey_engine:
+            for order in orders:
+                self._journey_engine.deregister(str(order.id))
         if self._mtm_monitor and algo:
             self._mtm_monitor._algos.pop(str(algo.id), None)
         if self._reentry_engine:
@@ -613,6 +648,12 @@ class AlgoRunner:
                     # Deregister
                     if self._tsl_engine:
                         self._tsl_engine.deregister(order_id)
+                    if self._ttp_engine:
+                        self._ttp_engine.deregister(order_id)
+
+                    # Journey: fire child leg before commit
+                    if self._journey_engine and order:
+                        await self._journey_engine.on_exit(db, order, "sl", self)
 
                     await db.commit()
 
@@ -659,6 +700,13 @@ class AlgoRunner:
                     await self._close_order(db, order, ltp, "tp")
                     if self._tsl_engine:
                         self._tsl_engine.deregister(order_id)
+                    if self._ttp_engine:
+                        self._ttp_engine.deregister(order_id)
+
+                    # Journey: fire child leg before commit
+                    if self._journey_engine and order:
+                        await self._journey_engine.on_exit(db, order, "tp", self)
+
                     await db.commit()
 
                     if self._ws_manager:
