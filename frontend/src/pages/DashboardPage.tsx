@@ -155,7 +155,7 @@ export default function DashboardPage() {
       const res = await systemAPI.activateKillSwitch(selectedKillAccounts)
       const d = res.data
       setKillActivated(true)
-      setKilledAccountIds(selectedKillAccounts.length > 0 ? selectedKillAccounts : accounts.map((a: any) => a.id))
+      setKilledAccountIds(prev => Array.from(new Set([...prev, ...(selectedKillAccounts.length > 0 ? selectedKillAccounts : accounts.map((a: any) => a.id))])))
       setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
       addLog(`[CRITICAL] KILL SWITCH — ${d.positions_squared ?? 0} positions squared, ${d.orders_cancelled ?? 0} orders cancelled`)
       if (d.errors?.length) { d.errors.forEach((e: string) => addLog(`⚠️ ${e}`)) }
@@ -212,7 +212,7 @@ export default function DashboardPage() {
           <button
             className="btn"
             onClick={() => {
-              setSelectedKillAccounts(accounts.map((a: any) => a.id))
+              setSelectedKillAccounts(accounts.map((a: any) => a.id).filter((id: string) => !killedAccountIds.includes(id)))
               setShowKillConfirm(true)
             }}
             disabled={(killActivated && killedAccountIds.length >= accounts.length) || killLoading}
@@ -362,28 +362,32 @@ export default function DashboardPage() {
                 return (
                   <label key={acc.id} style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
-                    background: checked ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${checked ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    background: killedAccountIds.includes(acc.id) ? 'rgba(239,68,68,0.06)' : checked ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${killedAccountIds.includes(acc.id) ? 'rgba(239,68,68,0.25)' : checked ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)'}`,
                     borderRadius: '6px', padding: '8px 12px', cursor: 'pointer',
                     transition: 'all 0.15s',
                   }}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedKillAccounts(prev =>
-                          prev.includes(acc.id)
-                            ? prev.filter((id: string) => id !== acc.id)
-                            : [...prev, acc.id]
-                        )
-                      }}
-                      style={{ width: '14px', height: '14px', accentColor: 'var(--red)', cursor: 'pointer' }}
-                    />
+                    {killedAccountIds.includes(acc.id) ? (
+                      <span style={{ fontSize: '12px', color: 'var(--red)', fontWeight: 700 }}>⚡</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setSelectedKillAccounts(prev =>
+                            prev.includes(acc.id)
+                              ? prev.filter((id: string) => id !== acc.id)
+                              : [...prev, acc.id]
+                          )
+                        }}
+                        style={{ width: '14px', height: '14px', accentColor: 'var(--red)', cursor: 'pointer' }}
+                      />
+                    )}
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{acc.nickname || acc.name}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'} · {acc.segment || 'F&O'}</div>
                     </div>
-                    {checked && <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--red)', fontWeight: 700 }}>KILL</span>}
+                    {killedAccountIds.includes(acc.id) ? <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--red)', fontWeight: 700, opacity: 0.6 }}>KILLED</span> : checked ? <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--red)', fontWeight: 700 }}>KILL</span> : null}
                   </label>
                 )
               })}
