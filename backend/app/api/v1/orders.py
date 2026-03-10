@@ -10,7 +10,7 @@ Endpoints:
   POST   /orders/{algo_id}/square-off   — square off all positions for an algo
   WS     /orders/ws/live                — push live order/MTM updates to frontend
 """
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from pydantic import BaseModel
@@ -31,15 +31,8 @@ class ExitPriceRequest(BaseModel):
 
 
 class SyncOrderRequest(BaseModel):
-    symbol:       str
-    exchange:     str
-    direction:    str          # "buy" | "sell"
-    lots:         int
-    quantity:     int
-    fill_price:   float
-    fill_time:    Optional[str] = None   # ISO datetime string
-    is_practix:   bool = False
-    is_overnight: bool = False
+    broker_order_id: str   # Order ID from broker platform (Zerodha: Order ID, Angel One: Broker Order No.)
+    account_id:      str   # which account this order belongs to (to pick correct broker)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -210,69 +203,72 @@ async def correct_exit_price(
 async def sync_order(
     algo_id: str,
     body: SyncOrderRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Manually sync an untracked broker position into the platform.
-    Creates an Order record marked as is_synced=True.
-    Used when a broker trade happened outside of STAAX (manual trade, etc.)
+    Re-link a broker order that got delinked from STAAX.
+    Fetches order details from broker using the Broker Order ID,
+    then links it to the matching unconfirmed Order in DB.
     """
-    # Validate algo exists
-    algo_result = await db.execute(select(Algo).where(Algo.id == algo_id))
-    algo = algo_result.scalar_one_or_none()
-    if not algo:
-        raise HTTPException(status_code=404, detail="Algo not found")
+    from app.models.account import Account, BrokerType
 
-    # Find today's grid entry for this algo
+    # 1. Get broker instance from app.state
+    acc_result = await db.execute(select(Account).where(Account.id == body.account_id))
+    account = acc_result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    broker = None
+    if account.broker == BrokerType.zerodha:
+        broker = getattr(request.app.state, "zerodha", None)
+    elif account.nickname == "Mom":
+        broker = getattr(request.app.state, "angelone_mom", None)
+    elif account.nickname == "Wife":
+        broker = getattr(request.app.state, "angelone_wife", None)
+
+    if not broker:
+        raise HTTPException(status_code=503, detail="Broker not connected — login first")
+
+    # 2. Fetch order details from broker
+    try:
+        broker_order = await broker.get_order_status(body.broker_order_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Broker fetch failed: {str(e)}")
+
+    if not broker_order:
+        raise HTTPException(status_code=404, detail="Order not found at broker")
+
+    # 3. Find unlinked order in DB for this algo today
+    # Match by algo_id + no broker_order_id yet (delinked) + today
     today = date.today()
-    grid_result = await db.execute(
-        select(GridEntry).where(
-            GridEntry.algo_id == algo_id,
-            GridEntry.trading_date == today,
-        )
+    orders_result = await db.execute(
+        select(Order).where(
+            Order.algo_id == algo_id,
+            Order.broker_order_id == None,
+            Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+        ).order_by(Order.created_at.desc())
     )
-    grid_entry = grid_result.scalar_one_or_none()
-    if not grid_entry:
+    unlinked = orders_result.scalars().first()
+
+    if unlinked:
+        # Re-link existing order
+        unlinked.broker_order_id = body.broker_order_id
+        unlinked.fill_price      = broker_order.get("fill_price") or broker_order.get("averageprice") or unlinked.fill_price
+        unlinked.status          = OrderStatus.OPEN
+        unlinked.is_synced       = True
+        await db.commit()
+        await db.refresh(unlinked)
+        return {
+            "status":  "ok",
+            "message": f"✅ Order re-linked — {unlinked.symbol}",
+            "order":   _order_to_dict(unlinked),
+        }
+    else:
         raise HTTPException(
             status_code=404,
-            detail="No grid entry found for this algo today — deploy it to the grid first"
+            detail="No unlinked order found for this algo today. The order may already be linked or doesn't exist in STAAX."
         )
-
-    fill_time = None
-    if body.fill_time:
-        try:
-            fill_time = datetime.fromisoformat(body.fill_time)
-        except ValueError:
-            fill_time = datetime.now(timezone.utc)
-
-    import uuid as uuid_lib
-    order = Order(
-        id=uuid_lib.uuid4(),
-        grid_entry_id=grid_entry.id,
-        algo_id=algo_id,
-        leg_id=uuid_lib.uuid4(),       # synthetic leg ID for synced orders
-        account_id=algo.account_id,
-        is_practix=body.is_practix,
-        is_synced=True,
-        is_overnight=body.is_overnight,
-        symbol=body.symbol,
-        exchange=body.exchange,
-        direction=body.direction,
-        lots=body.lots,
-        quantity=body.quantity,
-        fill_price=body.fill_price,
-        fill_time=fill_time or datetime.now(timezone.utc),
-        entry_type="sync",
-        status=OrderStatus.OPEN,
-    )
-    db.add(order)
-    await db.commit()
-    await db.refresh(order)
-    return {
-        "status":   "ok",
-        "message":  "Order synced",
-        "order":    _order_to_dict(order),
-    }
 
 
 @router.post("/{algo_id}/square-off")

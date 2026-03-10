@@ -48,7 +48,7 @@ const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
 const COLS = ['36px','66px','174px','66px','116px','54px','54px','76px','58px','88px','62px','82px']
 const HDRS = ['#','Status','Symbol','Lots','Entry / Ref','Fill','LTP','SL (A/O)','Target','Exit','Reason','P&L']
 
-function LegRow({ leg, isChild }: { leg: Leg; isChild: boolean }) {
+function LegRow({ leg, isChild, onEditExit }: { leg: Leg; isChild: boolean; onEditExit?: (orderId: string, price: number) => void }) {
   const st = STATUS_STYLE[leg.status]
   return (
     <tr style={{ background: isChild ? 'rgba(0,176,240,0.025)' : undefined }}>
@@ -75,7 +75,10 @@ function LegRow({ leg, isChild }: { leg: Leg; isChild: boolean }) {
       <td style={{ width: COLS[8], color: 'var(--text-muted)' }}>{leg.target ?? '—'}</td>
       <td style={{ width: COLS[9], fontSize: '11px' }}>
         {leg.exitPrice != null
-          ? <><div style={{ fontWeight: 600 }}>{leg.exitPrice}</div>{leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{leg.exitTime}</div>}</>
+          ? <div style={{ cursor: 'pointer' }} title="Click to correct exit price" onClick={() => leg.exitPrice != null && onEditExit && onEditExit(leg.id, leg.exitPrice)}>
+              <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)' }}>{leg.exitPrice}</div>
+              {leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{leg.exitTime}</div>}
+            </div>
           : '—'}
       </td>
       <td style={{ width: COLS[10] }}>
@@ -125,6 +128,11 @@ export default function OrdersPage() {
   const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
   const [sqChecked, setSqChecked]     = useState<Record<string, boolean>>({})
   const [loading, setLoading]         = useState<Record<string, boolean>>({})
+  const [showSync, setShowSync]       = useState<number | null>(null)   // algoIdx
+  const [syncForm, setSyncForm]       = useState({ broker_order_id: '', account_id: '' })
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [editExit, setEditExit]       = useState<{ orderId: string; value: string } | null>(null)
+  const [exitSaving, setExitSaving]   = useState(false)
 
   // Load today's orders from API
   useEffect(() => {
@@ -259,6 +267,51 @@ export default function OrdersPage() {
     return null
   }
 
+  const doSync = async (algoIdx: number) => {
+    const algoId = orders[algoIdx].algoId
+    if (!syncForm.broker_order_id.trim()) {
+      alert('Broker Order ID is required')
+      return
+    }
+    if (!syncForm.account_id) {
+      alert('Please select an account')
+      return
+    }
+    const ids = syncForm.broker_order_id.split(',').map(s => s.trim()).filter(Boolean)
+    setSyncLoading(true)
+    let succeeded = 0, failed = 0
+    for (const id of ids) {
+      try {
+        await ordersAPI.syncOrder(algoId, { broker_order_id: id, account_id: syncForm.account_id })
+        succeeded++
+      } catch {
+        failed++
+      }
+    }
+    setSyncLoading(false)
+    setShowSync(null)
+    setSyncForm({ broker_order_id: '', account_id: '' })
+    const msg = failed === 0
+      ? `✅ ${succeeded} order${succeeded > 1 ? 's' : ''} synced`
+      : `⚠️ ${succeeded} synced, ${failed} failed`
+    setInlineStatus(setOrders, algoIdx, msg, failed === 0 ? 'var(--green)' : 'var(--amber)', 5000)
+  }
+
+  const doCorrectExit = async () => {
+    if (!editExit) return
+    const price = parseFloat(editExit.value)
+    if (isNaN(price) || price <= 0) return
+    setExitSaving(true)
+    try {
+      await ordersAPI.correctExitPrice(editExit.orderId, price)
+      setEditExit(null)
+    } catch {
+      alert('Failed to save exit price')
+    } finally {
+      setExitSaving(false)
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -363,6 +416,7 @@ export default function OrdersPage() {
               {[
                 { label: 'RUN', color: '#00B0F0', action: () => setModal({ type: 'run', algoIdx: gi }), disabled: group.terminated },
                 { label: 'RE',  color: '#F59E0B', action: () => doRE(gi),                               disabled: group.terminated },
+              { label: 'SYNC', color: '#A78BFA', action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) }, disabled: group.terminated },
                 { label: 'SQ',  color: '#22C55E', action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) }, disabled: group.terminated || openLegs(gi).length === 0 },
                 { label: 'T',   color: '#EF4444', action: () => setModal({ type: 't', algoIdx: gi }),   disabled: group.terminated },
               ].map(btn => (
@@ -390,11 +444,75 @@ export default function OrdersPage() {
             <table className="staax-table">
               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
               <thead><tr>{HDRS.map(h => <th key={h}>{h}</th>)}</tr></thead>
-              <tbody>{buildRows(group.legs).map(({ leg, isChild }) => <LegRow key={leg.id} leg={leg} isChild={isChild} />)}</tbody>
+              <tbody>{buildRows(group.legs).map(({ leg, isChild }) => <LegRow key={leg.id} leg={leg} isChild={isChild} onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })} />)}</tbody>
             </table>
           </div>
         </div>
       ))}
+
+      {/* SYNC Modal */}
+      {showSync !== null && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: '380px' }}>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>🔗 Sync Order — {orders[showSync]?.algoName}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+              Re-link an order that got delinked from STAAX.<br/>
+              Find the <b>Order ID</b> in your broker platform (Zerodha: Order Book → Order ID · Angel One: Order Book → Broker Order No.)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Broker Order ID(s) * <span style={{ fontWeight: 400, textTransform: 'none' }}>(comma-separated for multiple)</span></div>
+                <textarea className="staax-input" style={{ width: '100%', fontSize: '13px', fontWeight: 600, resize: 'vertical', minHeight: '60px', fontFamily: 'monospace' }}
+                  placeholder="e.g. 1100000000123456, 1100000000123457"
+                  autoFocus
+                  value={syncForm.broker_order_id}
+                  onChange={e => setSyncForm(s => ({ ...s, broker_order_id: e.target.value }))} />
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '3px' }}>STAAX will fetch each order from broker and re-link automatically</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Account *</div>
+                <select className="staax-select" style={{ width: '100%', fontSize: '12px' }}
+                  value={syncForm.account_id}
+                  onChange={e => setSyncForm(s => ({ ...s, account_id: e.target.value }))}>
+                  <option value="">Select account...</option>
+                  {orders[showSync]?.account && <option value={orders[showSync].account}>{orders[showSync].account}</option>}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button className="btn btn-ghost" onClick={() => setShowSync(null)}>Cancel</button>
+              <button className="btn" style={{ background: '#A78BFA', color: '#fff' }}
+                disabled={syncLoading} onClick={() => doSync(showSync)}>
+                {syncLoading ? '🔄 Fetching from broker...' : '🔗 Sync Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exit Price Correction Modal */}
+      {editExit && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: '320px' }}>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>✏️ Correct Exit Price</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>Override the broker-reported exit price. Used when the broker reported a wrong fill.</div>
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Exit Price</div>
+              <input className="staax-input" type="number" style={{ width: '100%', fontSize: '14px', fontWeight: 700 }}
+                value={editExit.value}
+                onChange={e => setEditExit(ex => ex ? { ...ex, value: e.target.value } : null)}
+                autoFocus />
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button className="btn btn-ghost" onClick={() => setEditExit(null)}>Cancel</button>
+              <button className="btn" style={{ background: 'var(--accent-blue)', color: '#fff' }}
+                disabled={exitSaving} onClick={doCorrectExit}>
+                {exitSaving ? 'Saving...' : '✅ Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (() => {
         const mc = getModalContent()
