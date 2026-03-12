@@ -73,7 +73,7 @@ function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Parti
   const active = FEATURES.filter(f => leg.active[f.key])
   if (!active.length) return null
   const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
-  const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit' }
+  const cs = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
   const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} placeholder={ph} style={{ ...cs, width: w }} />
   const sel = (k: FeatureKey, sub: string, opts: [string, string][]) => <select value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} style={{ ...cs, cursor: 'pointer' }}>{opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
   return (
@@ -123,7 +123,8 @@ function JourneyChildPanel({ child, depth, onChange }: {
             <select className="staax-select" value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             <select className="staax-select" value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
             {child.strikeMode === 'leg' && <select className="staax-select" value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
-            {(child.strikeMode === 'premium' || child.strikeMode === 'straddle') && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...cs, width: '82px' }} />}
+            {child.strikeMode === 'premium' && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...cs, width: '82px' }} />}
+            {child.strikeMode === 'straddle' && <select className="staax-select" value={child.premiumVal || '20'} onChange={e => u('premiumVal', e.target.value)} style={{ ...cs, width: '72px' }}>{[5,10,15,20,25,30,35,40,45,50,55,60].map(v => <option key={v} value={String(v)}>{v}%</option>)}</select>}
           </>}
           <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...cs, width: '50px', textAlign: 'center' }} />
           <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>|</span>
@@ -233,7 +234,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   onBlockedClick: (msg: string) => void
 }) {
   const u = (k: keyof Leg, v: any) => onUpdate(leg.id, { [k]: v })
-  const s = { height: '28px', fontSize: '11px', fontFamily: 'inherit' }
+  const s = { height: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
 
   return (
     <div style={{ background: 'var(--bg-secondary)', border: `1px solid ${isDragging ? 'var(--accent-blue)' : 'var(--bg-border)'}`, borderRadius: '7px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'border-color 0.1s' }}>
@@ -246,9 +247,10 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
           <select className="staax-select" value={leg.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...s, width: '128px', color: leg.expiry === 'current_weekly' ? 'var(--text-muted)' : 'var(--text)' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-          <select className="staax-select" value={leg.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={{ ...s, color: leg.strikeMode === 'leg' ? 'var(--text-muted)' : 'var(--text)' }}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
+          <select className="staax-select" value={leg.strikeMode} onChange={e => { u('strikeMode', e.target.value); if (e.target.value === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} style={{ ...s, color: leg.strikeMode === 'leg' ? 'var(--text-muted)' : 'var(--text)' }}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
           {leg.strikeMode === 'leg' && <select className="staax-select" value={leg.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...s, width: '70px', color: leg.strikeType === 'atm' ? 'var(--text-muted)' : 'var(--text)' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
-          {(leg.strikeMode === 'premium' || leg.strikeMode === 'straddle') && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...s, width: '82px' }} />}
+          {leg.strikeMode === 'premium' && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...s, width: '82px' }} />}
+          {leg.strikeMode === 'straddle' && <select className="staax-select" value={leg.premiumVal || '20'} onChange={e => u('premiumVal', e.target.value)} style={{ ...s, width: '72px' }}>{[5,10,15,20,25,30,35,40,45,50,55,60].map(v => <option key={v} value={String(v)}>{v}%</option>)}</select>}
         </>}
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...s, width: '56px', textAlign: 'center', color: leg.lots === '1' ? 'var(--text-muted)' : 'var(--text)' }} />
         <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
