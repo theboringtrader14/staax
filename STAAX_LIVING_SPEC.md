@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 2.5 | **Last Updated:** March 2026 — SE-1 engine + hidden failures + arch improvements | **PRD Reference:** v1.2
+**Version:** 2.8 | **Last Updated:** March 2026 — Phase 1E complete (TTP + Journey + UI polish) | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -499,13 +499,13 @@ frontend/src/
 
 | Rule | Description | Status |
 |------|-------------|--------|
-| **F1** | Broker auto-login via scheduler | ⬜ Backlog Phase 1E |
+| **F1** | Broker auto-login via scheduler | ✅ Complete Phase 1E |
 | **F2** | Entry/Exit delay: BUY vs SELL scope dropdown | ✅ AlgoRunner `enter()` scopes delay |
 | **F3** | Green live indicator per algo on Orders page | ✅ Frontend wired (Phase 1D) |
 | **F4** | Active day marker on Orders page | ✅ Frontend wired (Phase 1D) |
 | **F5** | Edit lock on Algo Config when trade is live | ✅ Frontend wired (Phase 1D) |
 | **F6** | Warning when saving algo with today's GridEntry | ✅ Frontend wired (Phase 1D) |
-| **F7** | Reports download: Excel + CSV both options | ⬜ Backlog Phase 1E |
+| **F7** | Reports download: Excel + CSV both options | ✅ Complete Phase 1E |
 | **F8** | Start Session late warning (past 9 AM) | ✅ Frontend wired (Phase 1D) |
 | **F9** | SQ/T cancels broker SL orders | ✅ `_cancel_broker_sl()` in AlgoRunner |
 | **Flow 1** | Daily session start: Start Session → broker login → 9:15 activate | ✅ Dashboard + Scheduler |
@@ -900,13 +900,13 @@ System boot
 - ✅ **UI-2: Kill Switch button height** — uses `className="btn"` to inherit base height; modal Cancel/Activate matched
 - ✅ **UI-1: Global SL/TP in Accounts** — verified already working, not broken
 - ✅ **§24: Account-Level Kill Switch** — modal shows per-account checkboxes; selective kill; KILLED badge on account cards; partial re-kill supported; backend tracks killed_account_ids
-- ⬜ **F1** — Broker auto-login automation
-- ⬜ **F7** — Reports download: Excel + CSV
+- ✅ **F1** — Broker auto-login (Zerodha: browser login button; Angel One: TOTP auto-login; Wife: Phase 2 deferred)
+- ✅ **F7** — Reports download: CSV + Excel (FY filter, blob download, spinner, utf-8-sig encoding)
 - ⬜ **NR-3 (ticker bar)** — live instrument prices in sidebar
-- ⬜ **SYNC** — manual order sync
-- ⬜ **Manual exit price correction**
-- ⬜ **TTP** — Trailing Take Profit per leg
-- ⬜ **Journey feature** — multi-level re-entry config
+- ✅ **SYNC** — re-link delinked orders via Broker Order ID (comma-separated multi-ID, fetches from broker API)
+- ✅ **Manual exit price correction** — click dashed exit price on closed leg, modal saves via PATCH /orders/{id}/exit-price
+- ✅ **TTP** — Trailing Take Profit per leg (backend + frontend complete — commit `15f1f82`, `b85538e`)
+- ✅ **Journey feature** — multi-level child leg config (backend + frontend complete — commit `15f1f82`, `8869b67`)
 - ⬜ **NotificationService** — Twilio WhatsApp + AWS SES
 
 **Key fixes applied this session:**
@@ -1012,6 +1012,91 @@ System boot
 ---
 
 *Update this document at the end of every phase before closing the session.*
+
+---
+
+## 30. Phase 1E — Completed Features
+
+### §30.1 — TTP Engine (Trailing Take Profit)
+**File:** `backend/app/engine/ttp_engine.py`
+- Mirrors TSLEngine architecture — trails TP upward on every X pts/pct move
+- `update_tp()` method added to `sl_tp_monitor.py`
+- Wired in `algo_runner.py` via `wire_engines()`, registered in `_place_leg`, deregistered in `exit_all`
+- `ttp_engine_ins` instantiated in `main.py`, registered as LTP callback
+- DB columns: `ttp_x`, `ttp_y`, `ttp_unit` on `AlgoLeg`
+
+### §30.2 — Journey Engine (Multi-level Child Leg Firing)
+**File:** `backend/app/engine/journey_engine.py`
+- `SyntheticLeg` + `JourneyEngine` singleton — fires child leg on parent exit
+- Supports up to 3 levels: Child → Grandchild → Great-grandchild
+- `journey_config` JSON column on `AlgoLeg` (already existed)
+- Wired in `algo_runner.py` and `main.py`
+
+### §30.3 — AlgoPage.tsx TTP + Journey UI
+**Commits:** `b85538e`, `8869b67`, `943f845`, `910984e`, `0bb5baa`
+
+**TTP UI:**
+- Purple (`#A78BFA`) toggle chip per leg
+- X → Y pts/% inputs, wired to `buildPayload`
+- TSL guard: only activatable after SL is enabled AND has a value
+- TTP guard: only activatable after TP is enabled AND has a value
+- TSL auto-deactivates when SL is toggled off; TTP auto-deactivates when TP is toggled off
+
+**Journey UI:**
+- Collapsible `▸ JOURNEY` panel per leg
+- `● ACTIVE` label when child leg enabled
+- Child leg: full parity with parent — OP/FU, instrument, BUY/SELL, CE/PE, expiry, strikeMode, strike/premium, lots, all 6 feature toggles (W&T/SL/RE/TP/TSL/TTP) with value rows
+- Feature chips inline in Row 1 (same row as instrument config), separated by `|` divider
+- `buildJourneyConfig()` recursively serialises child config to JSON
+
+**Time inputs (Entry/Exit/ORB):**
+- Replaced native `<input type="time">` with a compact `TimeInput` component
+- Custom wrapper with clock SVG icon (blue, non-clickable) + transparent inner time input
+- `colorScheme: dark` to suppress white browser chrome
+- Clock picker icon hidden via CSS (`.staax-time-input::-webkit-calendar-picker-indicator`)
+- HH clamped to 09–15 on `onChange` + `onBlur`
+- MM/SS 00–59 (native browser handles)
+- Matches height (32px), background (`--bg-secondary`), border of all other inputs
+
+**Leg select dropdowns:**
+- All leg selects (instCode, expiry, strikeMode, strikeType) now use `className="staax-select"` for uniform chevron arrow
+- `s` const stripped to `{ height, fontSize, fontFamily }` only — no inline bg/border overrides that would clobber the class's SVG arrow
+- Active selection colour: instCode, expiry, strikeMode, strikeType, lots — dim (`--text-muted`) at default value, bright (`--text`) when user-changed
+
+**Save validation rules:**
+- All times must be within 09:15–15:30
+- Intraday: exit time must be after entry time
+- ORB: ORB end time must be after entry (ORB start) time
+- Violations surface as save error banner (existing toast mechanism)
+
+---
+
+## 31. Phase 1E — Pending Checklist
+
+All items below are pending implementation. Work through them in order unless instructed otherwise.
+
+### UI Fixes (AlgoPage.tsx)
+
+| # | Issue | Details |
+|---|-------|---------|
+| UI-A | **White input cells in LEGS** | W&T, SL, RE, TP, TSL, TTP value inputs (text/number inputs inside the feature value rows) are white. Must use `--bg-secondary` background matching all other inputs |
+| UI-B | **Premium input showing for Straddle** | When `strikeMode = straddle`, the premium input box should be hidden. Straddle has its own dedicated input (see UI-C) |
+| UI-C | **Straddle mode — dedicated % dropdown** | When `strikeMode = straddle`, show a dropdown with values 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 (multiples of 5, % of ATM straddle premium). Definition: algo selects strikes whose premium is close to X% of total ATM CE+PE premium. Store as `straddle_pct` on the leg payload |
+| UI-D | **Leg select arrow uniformity** | Verify chevron arrows are identical across all page sections after staax-select fix |
+
+### Business Logic / Validation
+
+| # | Issue | Details |
+|---|-------|---------|
+| BL-A | **W&T / SL / RE / TP values required when toggled on** | If a feature chip is active but its value field is empty, save should be blocked with a toast — same pattern as time validation |
+| BL-B | **TSL: SL must have a value** (not just be toggled on) | TSL guard already blocks activation if SL is off. Also block if SL is on but `sl.value` is empty |
+| BL-C | **TTP: TP must have a value** | Same as BL-B for TTP/TP |
+
+### Living Spec
+| # | Item |
+|---|------|
+| LS-A | Update §20 Flow 2 (Algo Creation) with Straddle % definition and new time input rules |
+| LS-B | Update §31 as items are checked off |
 
 ---
 
