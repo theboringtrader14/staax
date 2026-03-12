@@ -12,13 +12,14 @@ const EXPIRY_OPTIONS = [
 ]
 const STRIKE_OPTIONS = [...Array.from({ length: 10 }, (_, i) => `ITM${10 - i}`), 'ATM', ...Array.from({ length: 10 }, (_, i) => `OTM${i + 1}`)]
 
-type FeatureKey = 'wt' | 'sl' | 're' | 'tp' | 'tsl'
+type FeatureKey = 'wt' | 'sl' | 're' | 'tp' | 'tsl' | 'ttp'
 const FEATURES: { key: FeatureKey; label: string; color: string }[] = [
   { key: 'wt',  label: 'W&T', color: '#9CA3AF' },
   { key: 'sl',  label: 'SL',  color: '#EF4444' },
   { key: 're',  label: 'RE',  color: '#F59E0B' },
   { key: 'tp',  label: 'TP',  color: '#22C55E' },
   { key: 'tsl', label: 'TSL', color: '#00B0F0' },
+  { key: 'ttp', label: 'TTP', color: '#A78BFA' },
 ]
 
 interface LegVals {
@@ -27,21 +28,36 @@ interface LegVals {
   re:  { mode: string; trigger: string; count: string }
   tp:  { type: string; value: string }
   tsl: { x: string; y: string; unit: string }
+  ttp: { x: string; y: string; unit: string }
 }
+interface JourneyChild {
+  enabled: boolean
+  instCode: string; direction: string; optType: string; strikeType: string; lots: string; expiry: string
+  sl_type: string; sl_value: string; tp_type: string; tp_value: string
+  tsl_x: string; tsl_y: string; tsl_unit: string
+  ttp_x: string; ttp_y: string; ttp_unit: string
+  child?: JourneyChild
+}
+const mkJourneyChild = (): JourneyChild => ({
+  enabled: false, instCode: 'NF', direction: 'BUY', optType: 'CE', strikeType: 'atm', lots: '1', expiry: 'current_weekly',
+  sl_type: 'pts_instrument', sl_value: '', tp_type: 'pts_instrument', tp_value: '',
+  tsl_x: '', tsl_y: '', tsl_unit: 'pts', ttp_x: '', ttp_y: '', ttp_unit: 'pts',
+  child: undefined,
+})
 interface Leg {
   id: string; no: number; instType: string; instCode: string; direction: string; optType: string
   strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
-  active: Record<FeatureKey, boolean>; vals: LegVals
+  active: Record<FeatureKey, boolean>; vals: LegVals; journey?: JourneyChild
 }
 
 const mkLeg = (n: number): Leg => ({
   id: `leg-${Date.now()}-${n}`, no: n,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '1', expiry: 'current_weekly',
-  active: { wt: false, sl: false, re: false, tp: false, tsl: false },
-  vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' }, tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' } },
+  active: { wt: false, sl: false, re: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(),
+  vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' }, tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' } },
 })
-const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, re: { ...l.vals.re }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl } }, active: { ...l.active } })
+const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, re: { ...l.vals.re }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
 
 function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void }) {
   const active = FEATURES.filter(f => leg.active[f.key])
@@ -60,8 +76,69 @@ function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Parti
           {f.key === 're'  && <>{sel('re',  'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']])} {sel('re',  'trigger', [['sl','SL'],['tp','TP'],['any','Any']])} {sel('re', 'count', [['1','1×'],['2','2×'],['3','3×'],['4','4×'],['5','5×']])}</>}
           {f.key === 'tp'  && <>{sel('tp',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']])} {inp('tp',  'value', 'val')}</>}
           {f.key === 'tsl' && <>{inp('tsl', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('tsl', 'y', 'Y')} {sel('tsl', 'unit', [['pts','pts'],['pct','%']])}</>}
+        {f.key === 'ttp' && <>{inp('ttp', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('ttp', 'y', 'Y')} {sel('ttp', 'unit', [['pts','pts'],['pct','%']])}</>}
         </div>
       ))}
+    </div>
+  )
+}
+
+const TYPE_OPTS: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']]
+
+function JourneyChildPanel({ child, depth, onChange }: {
+  child: JourneyChild; depth: number; onChange: (c: JourneyChild) => void
+}) {
+  const cs = { height: '24px', background: 'var(--bg-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '0 6px', fontFamily: 'inherit' }
+  const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
+  const depthColor = depth === 1 ? '#A78BFA' : depth === 2 ? '#F59E0B' : '#22C55E'
+  const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
+  return (
+    <div style={{ marginTop: '8px', padding: '8px 10px', background: `${depthColor}08`, border: `1px solid ${depthColor}22`, borderRadius: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: depthColor, textTransform: 'uppercase' }}>L{depth} {depthLabel}</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}>
+          <input type="checkbox" checked={child.enabled} onChange={e => u('enabled', e.target.checked)} style={{ accentColor: depthColor }} />
+          Enable
+        </label>
+      </div>
+      {child.enabled && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
+          <select value={child.instCode} onChange={e => u('instCode', e.target.value)} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
+          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '24px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,197,94,0.3)', cursor: 'pointer' }}>{child.direction}</button>
+          <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '24px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>
+          <select value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>
+          <select value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+          <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="lots" style={{ ...cs, width: '50px' }} />
+          <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>|</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>SL:</span>
+          <select value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={cs}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <input value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...cs, width: '50px' }} />
+          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>TP:</span>
+          <select value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={cs}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <input value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...cs, width: '50px' }} />
+          {depth < 3 && (
+            <JourneyChildPanel child={child.child || mkJourneyChild()} depth={depth + 1} onChange={c => u('child', c)} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void }) {
+  const [open, setOpen] = useState(false)
+  const j = leg.journey || mkJourneyChild()
+  const hasJourney = j.enabled
+  return (
+    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(167,139,250,0.15)' }}>
+      <button onClick={() => setOpen((o: boolean) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: hasJourney ? '#A78BFA' : 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {open ? '▾' : '▸'} Journey {hasJourney ? '● Active' : ''}
+        </span>
+      </button>
+      {open && (
+        <JourneyChildPanel child={j} depth={1} onChange={c => onUpdate(leg.id, { journey: c })} />
+      )}
     </div>
   )
 }
@@ -104,6 +181,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps }
         </div>
       </div>
       <FeatVals leg={leg} onUpdate={onUpdate} />
+      <JourneyPanel leg={leg} onUpdate={onUpdate} />
     </div>
   )
 }
@@ -269,9 +347,32 @@ export default function AlgoPage() {
       sl_type:  l.active.sl ? l.vals.sl.type : undefined,  sl_value: l.active.sl ? parseFloat(l.vals.sl.value) : undefined,
       tp_type:  l.active.tp ? l.vals.tp.type : undefined,  tp_value: l.active.tp ? parseFloat(l.vals.tp.value) : undefined,
       tsl_enabled: l.active.tsl, tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
+      ttp_enabled: l.active.ttp, ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
       reentry_enabled: l.active.re, reentry_mode: l.vals.re.mode, reentry_max: parseInt(l.vals.re.count) || 0,
+      journey_config: buildJourneyConfig(l.journey),
     })),
   })
+
+  const buildJourneyConfig = (j?: JourneyChild, depth = 1): any => {
+    if (!j || !j.enabled || depth > 3) return undefined
+    return {
+      level: depth, trigger: 'any',
+      child: {
+        instrument: j.optType === 'FU' ? 'fu' : j.optType.toLowerCase(),
+        underlying: INST_CODES[j.instCode] || j.instCode,
+        direction: j.direction.toLowerCase(),
+        strike_type: j.strikeType, expiry: j.expiry,
+        lots: parseInt(j.lots) || 1,
+        sl_type: j.sl_value ? j.sl_type : undefined,
+        sl_value: parseFloat(j.sl_value) || undefined,
+        tp_type: j.tp_value ? j.tp_type : undefined,
+        tp_value: parseFloat(j.tp_value) || undefined,
+        tsl_x: parseFloat(j.tsl_x) || undefined, tsl_y: parseFloat(j.tsl_y) || undefined, tsl_unit: j.tsl_unit || 'pts',
+        ttp_x: parseFloat(j.ttp_x) || undefined, ttp_y: parseFloat(j.ttp_y) || undefined, ttp_unit: j.ttp_unit || 'pts',
+        journey_config: buildJourneyConfig(j.child, depth + 1),
+      }
+    }
+  }
 
   const handleSave = async () => {
     const err = validate()
@@ -454,7 +555,7 @@ export default function AlgoPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Legs</span>
-          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '3px', background: 'rgba(34,197,94,0.1)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · W&T · RE per leg</span>
+          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '3px', background: 'rgba(34,197,94,0.1)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · TTP · W&T · RE · Journey per leg</span>
           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{legs.length} leg{legs.length > 1 ? 's' : ''}</span>
         </div>
         <button className="btn btn-ghost" style={{ fontSize: '11px' }} onClick={addLeg}>+ Add Leg</button>
