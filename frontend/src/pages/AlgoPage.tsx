@@ -73,7 +73,7 @@ function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Parti
   const active = FEATURES.filter(f => leg.active[f.key])
   if (!active.length) return null
   const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
-  const cs = { height: '26px', background: 'var(--bg-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '0 6px', fontFamily: 'inherit' }
+  const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit' }
   const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} placeholder={ph} style={{ ...cs, width: w }} />
   const sel = (k: FeatureKey, sub: string, opts: [string, string][]) => <select value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} style={{ ...cs, cursor: 'pointer' }}>{opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
   return (
@@ -116,13 +116,13 @@ function JourneyChildPanel({ child, depth, onChange }: {
         {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
           <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: '1px solid rgba(0,176,240,0.3)', cursor: 'pointer' }}>{child.instType}</button>
-          <select value={child.instCode} onChange={e => u('instCode', e.target.value)} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
+          <select className="staax-select" value={child.instCode} onChange={e => u('instCode', e.target.value)} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
           <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,197,94,0.3)', cursor: 'pointer' }}>{child.direction}</button>
           {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>}
           {child.instType === 'OP' && <>
-            <select value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-            <select value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
-            {child.strikeMode === 'leg' && <select value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
+            <select className="staax-select" value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            <select className="staax-select" value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
+            {child.strikeMode === 'leg' && <select className="staax-select" value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
             {(child.strikeMode === 'premium' || child.strikeMode === 'straddle') && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...cs, width: '82px' }} />}
           </>}
           <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...cs, width: '50px', textAlign: 'center' }} />
@@ -233,23 +233,24 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   onBlockedClick: (msg: string) => void
 }) {
   const u = (k: keyof Leg, v: any) => onUpdate(leg.id, { [k]: v })
-  const s = { height: '28px', background: 'var(--bg-primary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', cursor: 'pointer' }
+  const s = { height: '28px', fontSize: '11px', fontFamily: 'inherit' }
+
   return (
     <div style={{ background: 'var(--bg-secondary)', border: `1px solid ${isDragging ? 'var(--accent-blue)' : 'var(--bg-border)'}`, borderRadius: '7px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'border-color 0.1s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
         <span {...dragHandleProps} title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-dim)', fontSize: '13px', flexShrink: 0, padding: '0 2px', userSelect: 'none' }}>⠿</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', minWidth: '20px', textAlign: 'center' }}>L{leg.no}</span>
         <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: leg.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: leg.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: `1px solid ${leg.instType === 'OP' ? 'rgba(0,176,240,0.3)' : 'rgba(215,123,18,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
-        <select value={leg.instCode} onChange={e => u('instCode', e.target.value)} style={s}>{Object.entries(INST_CODES).map(([c, n]) => <option key={c} value={c} title={n}>{c}</option>)}</select>
+        <select className="staax-select" value={leg.instCode} onChange={e => u('instCode', e.target.value)} style={{ ...s, color: leg.instCode ? 'var(--text)' : 'var(--text-muted)' }}>{Object.entries(INST_CODES).map(([c, n]) => <option key={c} value={c} title={n}>{c}</option>)}</select>
         <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: leg.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: leg.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: `1px solid ${leg.direction === 'BUY' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
         {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
-          <select value={leg.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...s, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-          <select value={leg.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={s}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
-          {leg.strikeMode === 'leg' && <select value={leg.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...s, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
+          <select className="staax-select" value={leg.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...s, width: '128px', color: leg.expiry === 'current_weekly' ? 'var(--text-muted)' : 'var(--text)' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+          <select className="staax-select" value={leg.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={{ ...s, color: leg.strikeMode === 'leg' ? 'var(--text-muted)' : 'var(--text)' }}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
+          {leg.strikeMode === 'leg' && <select className="staax-select" value={leg.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...s, width: '70px', color: leg.strikeType === 'atm' ? 'var(--text-muted)' : 'var(--text)' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
           {(leg.strikeMode === 'premium' || leg.strikeMode === 'straddle') && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...s, width: '82px' }} />}
         </>}
-        <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...s, width: '56px', textAlign: 'center' }} />
+        <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...s, width: '56px', textAlign: 'center', color: leg.lots === '1' ? 'var(--text-muted)' : 'var(--text)' }} />
         <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.map(f => {
           const blocked = (f.key === 'tsl' && !leg.active['sl']) || (f.key === 'ttp' && !leg.active['tp'])
@@ -280,7 +281,7 @@ function SubSection({ title }: { title: string }) {
   return <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', marginTop: '2px', paddingBottom: '5px', borderBottom: '1px solid var(--bg-border)' }}>{title}</div>
 }
 
-const timeInput = { background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', color: 'var(--text)', borderRadius: '5px', padding: '0 10px', height: '32px', fontSize: '12px', fontFamily: 'inherit', width: '106px', colorScheme: 'dark' }
+
 const TIME_MIN = '09:15:00'
 const TIME_MAX = '15:30:00'
 function TimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -291,30 +292,30 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
     return `${String(hh).padStart(2,'0')}:${m || '00'}:${s || '00'}`
   }
   return (
-    <input
-      type="time"
-      step="1"
-      value={value}
-      onChange={e => onChange(clamp(e.target.value))}
-      onBlur={e => onChange(clamp(e.target.value))}
-      className="staax-time-input"
-      style={{
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--bg-border)',
-        borderRadius: '5px',
-        color: 'var(--text)',
-        colorScheme: 'dark',
-        fontSize: '12px',
-        fontFamily: 'inherit',
-        height: '32px',
-        padding: '0 10px',
-        width: '112px',
-        outline: 'none',
-        cursor: 'pointer',
-        boxSizing: 'border-box',
-        lineHeight: '30px',
-      }}
-    />
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', height: '32px', padding: '0 7px', boxSizing: 'border-box' }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.7 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 12"/></svg>
+      <input
+        type="time"
+        step="1"
+        value={value}
+        onChange={e => onChange(clamp(e.target.value))}
+        onBlur={e => onChange(clamp(e.target.value))}
+        className="staax-time-input"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--text)',
+          colorScheme: 'dark',
+          fontSize: '12px',
+          fontFamily: 'inherit',
+          height: '100%',
+          padding: '0',
+          width: '58px',
+          outline: 'none',
+          cursor: 'pointer',
+        }}
+      />
+    </div>
   )
 }
 
@@ -566,6 +567,10 @@ export default function AlgoPage() {
         .staax-time-input::-webkit-datetime-edit-ampm-field { display: none !important; }
         .staax-time-input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
         .staax-time-input { line-height: 30px; }
+        .staax-input::placeholder { color: var(--text-muted) !important; }
+        .staax-select option { background: var(--bg-secondary); color: var(--text); }
+        .leg-select-dim { color: var(--text-muted) !important; }
+        .leg-select-active { color: var(--text) !important; }
       `}</style>
       <div className="page-header">
         <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
