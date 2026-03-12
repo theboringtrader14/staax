@@ -32,16 +32,26 @@ interface LegVals {
 }
 interface JourneyChild {
   enabled: boolean
-  instCode: string; direction: string; optType: string; strikeType: string; lots: string; expiry: string
-  sl_type: string; sl_value: string; tp_type: string; tp_value: string
-  tsl_x: string; tsl_y: string; tsl_unit: string
-  ttp_x: string; ttp_y: string; ttp_unit: string
+  instType: string; instCode: string; direction: string; optType: string
+  strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
+  wt_enabled: boolean; wt_direction: string; wt_value: string; wt_unit: string
+  sl_enabled: boolean; sl_type: string; sl_value: string
+  re_enabled: boolean; re_mode: string; re_trigger: string; re_count: string
+  tp_enabled: boolean; tp_type: string; tp_value: string
+  tsl_enabled: boolean; tsl_x: string; tsl_y: string; tsl_unit: string
+  ttp_enabled: boolean; ttp_x: string; ttp_y: string; ttp_unit: string
   child?: JourneyChild
 }
 const mkJourneyChild = (): JourneyChild => ({
-  enabled: false, instCode: 'NF', direction: 'BUY', optType: 'CE', strikeType: 'atm', lots: '1', expiry: 'current_weekly',
-  sl_type: 'pts_instrument', sl_value: '', tp_type: 'pts_instrument', tp_value: '',
-  tsl_x: '', tsl_y: '', tsl_unit: 'pts', ttp_x: '', ttp_y: '', ttp_unit: 'pts',
+  enabled: false,
+  instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
+  strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '1', expiry: 'current_weekly',
+  wt_enabled: false, wt_direction: 'up', wt_value: '', wt_unit: 'pts',
+  sl_enabled: false, sl_type: 'pts_instrument', sl_value: '',
+  re_enabled: false, re_mode: 'at_entry_price', re_trigger: 'sl', re_count: '1',
+  tp_enabled: false, tp_type: 'pts_instrument', tp_value: '',
+  tsl_enabled: false, tsl_x: '', tsl_y: '', tsl_unit: 'pts',
+  ttp_enabled: false, ttp_x: '', ttp_y: '', ttp_unit: 'pts',
   child: undefined,
 })
 interface Leg {
@@ -88,39 +98,108 @@ const TYPE_OPTS: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrume
 function JourneyChildPanel({ child, depth, onChange }: {
   child: JourneyChild; depth: number; onChange: (c: JourneyChild) => void
 }) {
-  const cs = { height: '24px', background: 'var(--bg-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '0 6px', fontFamily: 'inherit' }
+  const cs = { height: '26px', background: 'var(--bg-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '0 6px', fontFamily: 'inherit', cursor: 'pointer' }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
   const depthColor = depth === 1 ? '#A78BFA' : depth === 2 ? '#F59E0B' : '#22C55E'
   const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
+  const tslBlocked = !child.sl_enabled
+  const ttpBlocked = !child.tp_enabled
   return (
-    <div style={{ marginTop: '8px', padding: '8px 10px', background: `${depthColor}08`, border: `1px solid ${depthColor}22`, borderRadius: '6px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: depthColor, textTransform: 'uppercase' }}>L{depth} {depthLabel}</span>
+    <div style={{ marginTop: '8px', padding: '9px 10px', background: `${depthColor}08`, border: `1px solid ${depthColor}22`, borderRadius: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: depthColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>L{depth} {depthLabel}</span>
         <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}>
-          <input type="checkbox" checked={child.enabled} onChange={e => u('enabled', e.target.checked)} style={{ accentColor: depthColor }} />
-          Enable
+          <input type="checkbox" checked={child.enabled} onChange={e => u('enabled', e.target.checked)} style={{ accentColor: depthColor }} /> Enable
         </label>
       </div>
-      {child.enabled && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
+      {child.enabled && (<>
+        {/* Row 1 — instrument config */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
+          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: '1px solid rgba(0,176,240,0.3)', cursor: 'pointer' }}>{child.instType}</button>
           <select value={child.instCode} onChange={e => u('instCode', e.target.value)} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
-          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '24px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,197,94,0.3)', cursor: 'pointer' }}>{child.direction}</button>
-          <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '24px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>
-          <select value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>
-          <select value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-          <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="lots" style={{ ...cs, width: '50px' }} />
-          <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>|</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>SL:</span>
-          <select value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={cs}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
-          <input value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...cs, width: '50px' }} />
-          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>TP:</span>
-          <select value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={cs}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
-          <input value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...cs, width: '50px' }} />
-          {depth < 3 && (
-            <JourneyChildPanel child={child.child || mkJourneyChild()} depth={depth + 1} onChange={c => u('child', c)} />
+          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,197,94,0.3)', cursor: 'pointer' }}>{child.direction}</button>
+          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>}
+          {child.instType === 'OP' && <>
+            <select value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            <select value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
+            {child.strikeMode === 'leg' && <select value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
+            {(child.strikeMode === 'premium' || child.strikeMode === 'straddle') && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...cs, width: '82px' }} />}
+          </>}
+          <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...cs, width: '50px', textAlign: 'center' }} />
+        </div>
+        {/* Row 2 — feature toggles */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', marginBottom: '5px' }}>
+          {[
+            { key: 'wt_enabled', label: 'W&T', color: '#9CA3AF' },
+            { key: 'sl_enabled', label: 'SL',  color: '#EF4444' },
+            { key: 're_enabled', label: 'RE',  color: '#F59E0B' },
+            { key: 'tp_enabled', label: 'TP',  color: '#22C55E' },
+            { key: 'tsl_enabled',label: 'TSL', color: '#00B0F0', blocked: tslBlocked, blockMsg: 'Enable SL before TSL' },
+            { key: 'ttp_enabled',label: 'TTP', color: '#A78BFA', blocked: ttpBlocked, blockMsg: 'Enable TP before TTP' },
+          ].map(f => (
+            <button key={f.key} onClick={() => {
+              if (f.blocked) return
+              u(f.key as keyof JourneyChild, !(child[f.key as keyof JourneyChild]))
+            }} style={{ height: '24px', padding: '0 9px', borderRadius: '11px', fontSize: '10px', fontWeight: 600, cursor: f.blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', background: child[f.key as keyof JourneyChild] ? f.color : 'var(--bg-surface)', color: child[f.key as keyof JourneyChild] ? '#000' : f.blocked ? 'rgba(255,255,255,0.18)' : 'var(--text-dim)', opacity: f.blocked ? 0.4 : 1 }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {/* Row 3 — active feature values */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+          {child.wt_enabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(156,163,175,0.08)', border: '1px solid rgba(156,163,175,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 700, marginRight: '2px' }}>W&T:</span>
+              <select value={child.wt_direction} onChange={e => u('wt_direction', e.target.value)} style={{ ...cs, height: '22px' }}><option value="up">↑Up</option><option value="down">↓Dn</option></select>
+              <input value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...cs, width: '46px', height: '22px' }} />
+              <select value={child.wt_unit} onChange={e => u('wt_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
+            </div>
+          )}
+          {child.sl_enabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
+              <select value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+              <input value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...cs, width: '46px', height: '22px' }} />
+            </div>
+          )}
+          {child.re_enabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE:</span>
+              <select value={child.re_mode} onChange={e => u('re_mode', e.target.value)} style={{ ...cs, height: '22px' }}><option value="at_entry_price">@Entry</option><option value="immediate">Now</option><option value="at_cost">@Cost</option></select>
+              <select value={child.re_trigger} onChange={e => u('re_trigger', e.target.value)} style={{ ...cs, height: '22px' }}><option value="sl">SL</option><option value="tp">TP</option><option value="any">Any</option></select>
+              <select value={child.re_count} onChange={e => u('re_count', e.target.value)} style={{ ...cs, height: '22px' }}>{['1','2','3','4','5'].map(n => <option key={n} value={n}>{n}×</option>)}</select>
+            </div>
+          )}
+          {child.tp_enabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#22C55E', fontWeight: 700, marginRight: '2px' }}>TP:</span>
+              <select value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+              <input value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...cs, width: '46px', height: '22px' }} />
+            </div>
+          )}
+          {child.tsl_enabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(0,176,240,0.08)', border: '1px solid rgba(0,176,240,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#00B0F0', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
+              <input value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
+              <input value={child.tsl_y} onChange={e => u('tsl_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
+              <select value={child.tsl_unit} onChange={e => u('tsl_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
+            </div>
+          )}
+          {child.ttp_enabled && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#A78BFA', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
+              <input value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
+              <input value={child.ttp_y} onChange={e => u('ttp_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
+              <select value={child.ttp_unit} onChange={e => u('ttp_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
+            </div>
           )}
         </div>
-      )}
+        {depth < 3 && (
+          <JourneyChildPanel child={child.child || mkJourneyChild()} depth={depth + 1} onChange={c => u('child', c)} />
+        )}
+      </>)}
     </div>
   )
 }
@@ -143,12 +222,13 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   )
 }
 
-function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps }: {
+function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, onBlockedClick }: {
   leg: Leg; isDragging: boolean
   onUpdate: (id: string, u: Partial<Leg>) => void
   onRemove: (id: string) => void
   onCopy:   (id: string) => void
   dragHandleProps: any
+  onBlockedClick: (msg: string) => void
 }) {
   const u = (k: keyof Leg, v: any) => onUpdate(leg.id, { [k]: v })
   const s = { height: '28px', background: 'var(--bg-primary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', cursor: 'pointer' }
@@ -169,12 +249,17 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps }
         </>}
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...s, width: '56px', textAlign: 'center' }} />
         <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
-        {FEATURES.map(f => (
-          <button key={f.key} onClick={() => onUpdate(leg.id, { active: { ...leg.active, [f.key]: !leg.active[f.key] } })}
-            style={{ height: '28px', padding: '0 11px', borderRadius: '13px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: leg.active[f.key] ? f.color : 'var(--bg-surface)', color: leg.active[f.key] ? '#000' : 'var(--text-dim)' }}>
-            {f.label}
-          </button>
-        ))}
+        {FEATURES.map(f => {
+          const blocked = (f.key === 'tsl' && !leg.active['sl']) || (f.key === 'ttp' && !leg.active['tp'])
+          return (
+            <button key={f.key} onClick={() => {
+              if (blocked) { onBlockedClick(f.key === 'tsl' ? 'Enable SL before TSL' : 'Enable TP before TTP'); return }
+              onUpdate(leg.id, { active: { ...leg.active, [f.key]: !leg.active[f.key] } })
+            }} style={{ height: '28px', padding: '0 11px', borderRadius: '13px', fontSize: '11px', fontWeight: 600, cursor: blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: leg.active[f.key] ? f.color : 'var(--bg-surface)', color: leg.active[f.key] ? '#000' : blocked ? 'rgba(255,255,255,0.18)' : 'var(--text-dim)', opacity: blocked ? 0.4 : 1 }}>
+              {f.label}
+            </button>
+          )
+        })}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexShrink: 0 }}>
           <button onClick={() => onCopy(leg.id)} title="Copy leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '1px solid rgba(0,176,240,0.25)', color: 'var(--accent-blue)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>⧉</button>
           <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--red)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
@@ -227,6 +312,8 @@ export default function AlgoPage() {
   const [errorEntry, setErrorEntry] = useState(true)
 
   const [saving, setSaving]         = useState(false)
+  const [toast, setToast]           = useState('')
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500) }
   const [saveError, setSaveError]   = useState('')
   const [saved, setSaved]           = useState(false)
   const [showTomorrowWarn, setShowTomorrowWarn] = useState(false)  // F6
@@ -358,17 +445,17 @@ export default function AlgoPage() {
     return {
       level: depth, trigger: 'any',
       child: {
-        instrument: j.optType === 'FU' ? 'fu' : j.optType.toLowerCase(),
+        instrument: j.instType === 'FU' ? 'fu' : j.optType.toLowerCase(),
         underlying: INST_CODES[j.instCode] || j.instCode,
         direction: j.direction.toLowerCase(),
         strike_type: j.strikeType, expiry: j.expiry,
         lots: parseInt(j.lots) || 1,
-        sl_type: j.sl_value ? j.sl_type : undefined,
-        sl_value: parseFloat(j.sl_value) || undefined,
-        tp_type: j.tp_value ? j.tp_type : undefined,
-        tp_value: parseFloat(j.tp_value) || undefined,
-        tsl_x: parseFloat(j.tsl_x) || undefined, tsl_y: parseFloat(j.tsl_y) || undefined, tsl_unit: j.tsl_unit || 'pts',
-        ttp_x: parseFloat(j.ttp_x) || undefined, ttp_y: parseFloat(j.ttp_y) || undefined, ttp_unit: j.ttp_unit || 'pts',
+        wt_enabled: j.wt_enabled, wt_direction: j.wt_direction, wt_value: parseFloat(j.wt_value) || undefined, wt_unit: j.wt_unit,
+        sl_type: j.sl_enabled ? j.sl_type : undefined, sl_value: j.sl_enabled ? parseFloat(j.sl_value) || undefined : undefined,
+        tp_type: j.tp_enabled ? j.tp_type : undefined, tp_value: j.tp_enabled ? parseFloat(j.tp_value) || undefined : undefined,
+        tsl_enabled: j.tsl_enabled, tsl_x: parseFloat(j.tsl_x) || undefined, tsl_y: parseFloat(j.tsl_y) || undefined, tsl_unit: j.tsl_unit,
+        ttp_enabled: j.ttp_enabled, ttp_x: parseFloat(j.ttp_x) || undefined, ttp_y: parseFloat(j.ttp_y) || undefined, ttp_unit: j.ttp_unit,
+        reentry_enabled: j.re_enabled, reentry_mode: j.re_mode, reentry_max: parseInt(j.re_count) || 0,
         journey_config: buildJourneyConfig(j.child, depth + 1),
       }
     }
@@ -438,6 +525,11 @@ export default function AlgoPage() {
         </div>
       </div>
 
+      {toast && (
+        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(30,30,30,0.95)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '8px', padding: '10px 18px', fontSize: '12px', color: 'var(--red)', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+          ⚠ {toast}
+        </div>
+      )}
       {/* F6 — tomorrow warning */}
       {showTomorrowWarn && (
         <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '8px', padding: '14px 16px', marginBottom: '12px' }}>
@@ -564,7 +656,7 @@ export default function AlgoPage() {
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
           style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent-blue)' : 'none', borderRadius: '7px' }}>
-          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} />
+          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} />
         </div>
       ))}
 
