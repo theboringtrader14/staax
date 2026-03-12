@@ -113,7 +113,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
         </label>
       </div>
       {child.enabled && (<>
-        {/* Row 1 — instrument config */}
+        {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
           <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: '1px solid rgba(0,176,240,0.3)', cursor: 'pointer' }}>{child.instType}</button>
           <select value={child.instCode} onChange={e => u('instCode', e.target.value)} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
@@ -126,20 +126,22 @@ function JourneyChildPanel({ child, depth, onChange }: {
             {(child.strikeMode === 'premium' || child.strikeMode === 'straddle') && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...cs, width: '82px' }} />}
           </>}
           <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...cs, width: '50px', textAlign: 'center' }} />
-        </div>
-        {/* Row 2 — feature toggles */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', marginBottom: '5px' }}>
+          <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>|</span>
           {[
             { key: 'wt_enabled', label: 'W&T', color: '#9CA3AF' },
             { key: 'sl_enabled', label: 'SL',  color: '#EF4444' },
             { key: 're_enabled', label: 'RE',  color: '#F59E0B' },
             { key: 'tp_enabled', label: 'TP',  color: '#22C55E' },
-            { key: 'tsl_enabled',label: 'TSL', color: '#00B0F0', blocked: tslBlocked, blockMsg: 'Enable SL before TSL' },
-            { key: 'ttp_enabled',label: 'TTP', color: '#A78BFA', blocked: ttpBlocked, blockMsg: 'Enable TP before TTP' },
+            { key: 'tsl_enabled',label: 'TSL', color: '#00B0F0', blocked: tslBlocked },
+            { key: 'ttp_enabled',label: 'TTP', color: '#A78BFA', blocked: ttpBlocked },
           ].map(f => (
             <button key={f.key} onClick={() => {
               if (f.blocked) return
-              u(f.key as keyof JourneyChild, !(child[f.key as keyof JourneyChild]))
+              const newVal = !(child[f.key as keyof JourneyChild])
+              const patch: Partial<JourneyChild> = { [f.key]: newVal }
+              if (f.key === 'sl_enabled' && !newVal) patch.tsl_enabled = false
+              if (f.key === 'tp_enabled' && !newVal) patch.ttp_enabled = false
+              onChange({ ...child, ...patch })
             }} style={{ height: '24px', padding: '0 9px', borderRadius: '11px', fontSize: '10px', fontWeight: 600, cursor: f.blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', background: child[f.key as keyof JourneyChild] ? f.color : 'var(--bg-surface)', color: child[f.key as keyof JourneyChild] ? '#000' : f.blocked ? 'rgba(255,255,255,0.18)' : 'var(--text-dim)', opacity: f.blocked ? 0.4 : 1 }}>
               {f.label}
             </button>
@@ -254,7 +256,10 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           return (
             <button key={f.key} onClick={() => {
               if (blocked) { onBlockedClick(f.key === 'tsl' ? 'Enable SL before TSL' : 'Enable TP before TTP'); return }
-              onUpdate(leg.id, { active: { ...leg.active, [f.key]: !leg.active[f.key] } })
+              const newActive = { ...leg.active, [f.key]: !leg.active[f.key] }
+              if (f.key === 'sl' && leg.active['sl']) newActive['tsl'] = false
+              if (f.key === 'tp' && leg.active['tp']) newActive['ttp'] = false
+              onUpdate(leg.id, { active: newActive })
             }} style={{ height: '28px', padding: '0 11px', borderRadius: '13px', fontSize: '11px', fontWeight: 600, cursor: blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: leg.active[f.key] ? f.color : 'var(--bg-surface)', color: leg.active[f.key] ? '#000' : blocked ? 'rgba(255,255,255,0.18)' : 'var(--text-dim)', opacity: blocked ? 0.4 : 1 }}>
               {f.label}
             </button>
@@ -276,6 +281,19 @@ function SubSection({ title }: { title: string }) {
 }
 
 const timeInput = { background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', color: 'var(--text)', borderRadius: '5px', padding: '0 10px', height: '32px', fontSize: '12px', fontFamily: 'inherit', width: '106px', colorScheme: 'dark' }
+const TIME_MIN = '09:15'
+const TIME_MAX = '15:30'
+const TIME_OPTIONS: string[] = (() => {
+  const opts: string[] = []
+  for (let h = 9; h <= 15; h++) {
+    for (let m = 0; m < 60; m += 5) {
+      if (h === 9 && m < 15) continue
+      if (h === 15 && m > 30) break
+      opts.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`)
+    }
+  }
+  return opts
+})()
 
 export default function AlgoPage() {
   const navigate    = useNavigate()
@@ -294,8 +312,8 @@ export default function AlgoPage() {
   const [stratMode, setStratMode]   = useState('intraday')
   const [entryType, setEntryType]   = useState('direct')
   const [lotMult, setLotMult]       = useState('1')
-  const [entryTime, setEntryTime]   = useState('09:16')
-  const [orbEnd, setOrbEnd]         = useState('11:16')
+  const [entryTime, setEntryTime]   = useState('09:15')
+  const [orbEnd, setOrbEnd]         = useState('11:15')
   const [exitTime, setExitTime]     = useState('15:10')
   const [dte, setDte]               = useState('0')
   const [account, setAccount]       = useState('')
@@ -386,6 +404,10 @@ export default function AlgoPage() {
     if (!entryTime)                  return 'Entry time is required'
     if (!exitTime)                   return 'Exit time is required'
     if (entryType === 'orb' && !orbEnd) return 'ORB End time is required when entry type is ORB'
+    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return `Entry time must be between ${TIME_MIN} and ${TIME_MAX}`
+    if (exitTime  < TIME_MIN || exitTime  > TIME_MAX) return `Exit time must be between ${TIME_MIN} and ${TIME_MAX}`
+    if (stratMode === 'intraday' && exitTime <= entryTime) return 'Exit time must be after entry time for Intraday'
+    if (entryType === 'orb' && orbEnd <= entryTime) return 'ORB end time must be after ORB start (entry) time'
     if (stratMode === 'positional' && !dte) return 'DTE is required for Positional strategy'
     for (const leg of legs) {
       for (const feat of FEATURES) {
@@ -589,17 +611,17 @@ export default function AlgoPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Time</label>
-              <input type="time" value={entryTime} onChange={e => setEntryTime(e.target.value)} style={timeInput as any} />
+              <select value={entryTime} onChange={e => setEntryTime(e.target.value)} style={timeInput as any}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
             </div>
             {entryType === 'orb' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ORB End</label>
-                <input type="time" value={orbEnd} onChange={e => setOrbEnd(e.target.value)} style={timeInput as any} />
+                <select value={orbEnd} onChange={e => setOrbEnd(e.target.value)} style={timeInput as any}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exit Time</label>
-              <input type="time" value={exitTime} onChange={e => setExitTime(e.target.value)} style={timeInput as any} />
+              <select value={exitTime} onChange={e => setExitTime(e.target.value)} style={timeInput as any}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
             </div>
             {stratMode === 'positional' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
