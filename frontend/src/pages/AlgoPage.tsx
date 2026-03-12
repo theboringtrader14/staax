@@ -284,21 +284,37 @@ const timeInput = { background: 'var(--bg-secondary)', border: '1px solid var(--
 const TIME_MIN = '09:15:00'
 const TIME_MAX = '15:30:00'
 function TimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const parts = value.split(':')
-  const hh = parts[0] || '09'
-  const mm = parts[1] || '00'
-  const ss = parts[2] || '00'
-  const update = (h: string, m: string, s: string) => onChange(`${h}:${m}:${s}`)
-  const iSt = { width: '36px', height: '28px', background: 'var(--bg-primary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '12px', textAlign: 'center' as const, fontFamily: 'inherit', MozAppearance: 'textfield' as any }
-  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+  const clamp = (v: string) => {
+    if (!v) return v
+    const [h, m, s] = v.split(':')
+    const hh = Math.max(9, Math.min(15, parseInt(h) || 9))
+    return `${String(hh).padStart(2,'0')}:${m || '00'}:${s || '00'}`
+  }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', padding: '0 6px', height: '32px' }}>
-      <input type="number" value={hh} min={9} max={15} onChange={e => update(String(clamp(parseInt(e.target.value)||9,9,15)).padStart(2,'0'), mm, ss)} style={iSt} />
-      <span style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 700 }}>:</span>
-      <input type="number" value={mm} min={0} max={59} onChange={e => update(hh, String(clamp(parseInt(e.target.value)||0,0,59)).padStart(2,'0'), ss)} style={iSt} />
-      <span style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 700 }}>:</span>
-      <input type="number" value={ss} min={0} max={59} onChange={e => update(hh, mm, String(clamp(parseInt(e.target.value)||0,0,59)).padStart(2,'0'))} style={iSt} />
-    </div>
+    <input
+      type="time"
+      step="1"
+      value={value}
+      onChange={e => onChange(clamp(e.target.value))}
+      onBlur={e => onChange(clamp(e.target.value))}
+      className="staax-time-input"
+      style={{
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--bg-border)',
+        borderRadius: '5px',
+        color: 'var(--text)',
+        colorScheme: 'dark',
+        fontSize: '12px',
+        fontFamily: 'inherit',
+        height: '32px',
+        padding: '0 10px',
+        width: '112px',
+        outline: 'none',
+        cursor: 'pointer',
+        boxSizing: 'border-box',
+        lineHeight: '30px',
+      }}
+    />
   )
 }
 
@@ -544,6 +560,13 @@ export default function AlgoPage() {
 
   return (
     <div>
+      <style>{`
+        .staax-time-input::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
+        .staax-time-input::-webkit-inner-spin-button { display: none !important; }
+        .staax-time-input::-webkit-datetime-edit-ampm-field { display: none !important; }
+        .staax-time-input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+        .staax-time-input { line-height: 30px; }
+      `}</style>
       <div className="page-header">
         <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
         <div className="page-header-actions">
