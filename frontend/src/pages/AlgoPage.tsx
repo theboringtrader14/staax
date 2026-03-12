@@ -281,19 +281,26 @@ function SubSection({ title }: { title: string }) {
 }
 
 const timeInput = { background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', color: 'var(--text)', borderRadius: '5px', padding: '0 10px', height: '32px', fontSize: '12px', fontFamily: 'inherit', width: '106px', colorScheme: 'dark' }
-const TIME_MIN = '09:15'
-const TIME_MAX = '15:30'
-const TIME_OPTIONS: string[] = (() => {
-  const opts: string[] = []
-  for (let h = 9; h <= 15; h++) {
-    for (let m = 0; m < 60; m += 5) {
-      if (h === 9 && m < 15) continue
-      if (h === 15 && m > 30) break
-      opts.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`)
-    }
-  }
-  return opts
-})()
+const TIME_MIN = '09:15:00'
+const TIME_MAX = '15:30:00'
+function TimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parts = value.split(':')
+  const hh = parts[0] || '09'
+  const mm = parts[1] || '00'
+  const ss = parts[2] || '00'
+  const update = (h: string, m: string, s: string) => onChange(`${h}:${m}:${s}`)
+  const iSt = { width: '36px', height: '28px', background: 'var(--bg-primary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '12px', textAlign: 'center' as const, fontFamily: 'inherit', MozAppearance: 'textfield' as any }
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', padding: '0 6px', height: '32px' }}>
+      <input type="number" value={hh} min={9} max={15} onChange={e => update(String(clamp(parseInt(e.target.value)||9,9,15)).padStart(2,'0'), mm, ss)} style={iSt} />
+      <span style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 700 }}>:</span>
+      <input type="number" value={mm} min={0} max={59} onChange={e => update(hh, String(clamp(parseInt(e.target.value)||0,0,59)).padStart(2,'0'), ss)} style={iSt} />
+      <span style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 700 }}>:</span>
+      <input type="number" value={ss} min={0} max={59} onChange={e => update(hh, mm, String(clamp(parseInt(e.target.value)||0,0,59)).padStart(2,'0'))} style={iSt} />
+    </div>
+  )
+}
 
 export default function AlgoPage() {
   const navigate    = useNavigate()
@@ -312,9 +319,9 @@ export default function AlgoPage() {
   const [stratMode, setStratMode]   = useState('intraday')
   const [entryType, setEntryType]   = useState('direct')
   const [lotMult, setLotMult]       = useState('1')
-  const [entryTime, setEntryTime]   = useState('09:15')
-  const [orbEnd, setOrbEnd]         = useState('11:15')
-  const [exitTime, setExitTime]     = useState('15:10')
+  const [entryTime, setEntryTime]   = useState('09:15:00')
+  const [orbEnd, setOrbEnd]         = useState('11:15:00')
+  const [exitTime, setExitTime]     = useState('15:10:00')
   const [dte, setDte]               = useState('0')
   const [account, setAccount]       = useState('')
   const [mtmUnit, setMtmUnit]       = useState('amt')
@@ -404,8 +411,8 @@ export default function AlgoPage() {
     if (!entryTime)                  return 'Entry time is required'
     if (!exitTime)                   return 'Exit time is required'
     if (entryType === 'orb' && !orbEnd) return 'ORB End time is required when entry type is ORB'
-    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return `Entry time must be between ${TIME_MIN} and ${TIME_MAX}`
-    if (exitTime  < TIME_MIN || exitTime  > TIME_MAX) return `Exit time must be between ${TIME_MIN} and ${TIME_MAX}`
+    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return 'Entry time must be between 09:15 and 15:30'
+    if (exitTime  < TIME_MIN || exitTime  > TIME_MAX) return 'Exit time must be between 09:15 and 15:30'
     if (stratMode === 'intraday' && exitTime <= entryTime) return 'Exit time must be after entry time for Intraday'
     if (entryType === 'orb' && orbEnd <= entryTime) return 'ORB end time must be after ORB start (entry) time'
     if (stratMode === 'positional' && !dte) return 'DTE is required for Positional strategy'
@@ -611,17 +618,17 @@ export default function AlgoPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Time</label>
-              <select value={entryTime} onChange={e => setEntryTime(e.target.value)} style={timeInput as any}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+              <TimeInput value={entryTime} onChange={setEntryTime} />
             </div>
             {entryType === 'orb' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ORB End</label>
-                <select value={orbEnd} onChange={e => setOrbEnd(e.target.value)} style={timeInput as any}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                <TimeInput value={orbEnd} onChange={setOrbEnd} />
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exit Time</label>
-              <select value={exitTime} onChange={e => setExitTime(e.target.value)} style={timeInput as any}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+              <TimeInput value={exitTime} onChange={setExitTime} />
             </div>
             {stratMode === 'positional' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
