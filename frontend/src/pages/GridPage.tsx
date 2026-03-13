@@ -118,7 +118,7 @@ export default function GridPage() {
   const nav = useNavigate()
   const weekDates = getWeekDates()
 
-  const [algos,    setAlgos]    = useState<Algo[]>(DEMO_ALGOS)
+  const [algos,    setAlgos]    = useState<Algo[]>([])
   const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>(DEMO_GRID)
   const [loading,  setLoading]  = useState(true)
   const [wk,       setWk]       = useState(false)
@@ -146,16 +146,16 @@ export default function GridPage() {
       const apiAlgos: Algo[] = (algoRes.data || []).map((a: any) => ({
         id:      String(a.id),
         name:    a.name,
-        account: a.account_nickname || a.account_id || '',
+        account: a.account_nickname || '',
         legs:    (a.legs || []).map((l: any) => ({
-          i: (l.underlying || 'NF').slice(0, 2).toUpperCase(),
+          i: ({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'}[l.underlying] || (l.underlying||'NF').slice(0,2).toUpperCase()),
           d: l.direction === 'buy' ? 'B' : 'S',
         })),
         et:   a.entry_time || '09:16',
         xt:   a.exit_time  || '15:10',
         arch: a.is_archived || false,
       }))
-      if (apiAlgos.length > 0) setAlgos(apiAlgos)
+      setAlgos(apiAlgos)
 
       // Load grid entries for this week
       const weekStart = weekDates['MON']
@@ -387,14 +387,14 @@ export default function GridPage() {
           {opError && (
             <span style={{ fontSize:'11px', color:'var(--red)', fontWeight:600 }}>⚠ {opError}</span>
           )}
-          <button className="btn btn-ghost" style={{ fontSize:'11px', position:'relative' }} onClick={() => setShowArch(v => !v)}>
-            📦 Archive
-            {archived.length > 0 && <span style={{ position:'absolute', top:'5px', right:'5px', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
-          </button>
           <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'var(--text-muted)', cursor:'pointer' }}>
             <input type="checkbox" checked={wk} onChange={e => setWk(e.target.checked)} style={{ accentColor:'var(--accent-blue)' }}/>
             Show Weekends
           </label>
+          <button className="btn btn-ghost" style={{ position:'relative', fontSize:'12px', display:'flex', alignItems:'center', gap:'6px' }} onClick={() => setShowArch(v => !v)}>
+            <span style={{ fontSize:'14px' }}>📦</span> Archive
+            {archived.length > 0 && <span style={{ position:'absolute', top:'4px', right:'4px', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
+          </button>
           <button className="btn btn-primary" onClick={() => nav('/algo/new')}>+ New Algo</button>
         </div>
       </div>
@@ -538,7 +538,7 @@ export default function GridPage() {
                                         onBlur={() => { setM(algo.id, day, parseInt(ev) || 1); setEd(null) }}
                                         onKeyDown={e => e.key === 'Enter' && (setM(algo.id, day, parseInt(ev) || 1), setEd(null))}
                                         style={{ width:'44px', background:'var(--bg-primary)', border:'1px solid var(--accent-blue)', borderRadius:'2px', color:'var(--text)', fontSize:'10px', padding:'0 3px', fontFamily:'inherit' }}/>
-                                    : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }}
+                                    : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }} style={{ display:'block', width:'100%', textAlign:'center', cursor:'pointer', padding:'4px 0' }}
                                         style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-blue)', cursor:'text',
                                           textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.4)' }}>
                                         {cell.multiplier}

@@ -109,14 +109,21 @@ async def deploy_algo(body: DeployRequest, db: AsyncSession = Depends(get_db)):
     trading_date = datetime.strptime(body.trading_date, "%Y-%m-%d").date()
     day_str = _day_of_week(trading_date)
 
-    existing = await db.execute(
+    existing_result = await db.execute(
         select(GridEntry).where(
             GridEntry.algo_id == body.algo_id,
             GridEntry.trading_date == trading_date,
         )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Algo already deployed on this day")
+    existing_entry = existing_result.scalar_one_or_none()
+    if existing_entry:
+        # Already deployed — update multiplier and practix flag instead of rejecting
+        existing_entry.lot_multiplier = body.lot_multiplier
+        existing_entry.is_practix = body.is_practix
+        existing_entry.is_archived = False
+        await db.commit()
+        await db.refresh(existing_entry)
+        return _entry_to_dict(existing_entry)
 
     entry = GridEntry(
         id=uuid_lib.uuid4(),

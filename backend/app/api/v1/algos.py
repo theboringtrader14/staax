@@ -10,6 +10,7 @@ from typing import List, Optional
 import uuid as uuid_lib
 from app.core.database import get_db
 from app.models.algo import Algo, AlgoLeg, StrategyMode, EntryType, OrderType, ReentryMode
+from app.models.account import Account
 
 router = APIRouter()
 
@@ -114,11 +115,12 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
     }
 
 
-def _algo_to_dict(algo: Algo, legs: list = None) -> dict:
+def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -> dict:
     d = {
         "id":                    str(algo.id),
         "name":                  algo.name,
         "account_id":            str(algo.account_id),
+        "account_nickname":      account_nickname or str(algo.account_id),
         "strategy_mode":         algo.strategy_mode.value if algo.strategy_mode else None,
         "entry_type":            algo.entry_type.value if algo.entry_type else None,
         "order_type":            algo.order_type.value if algo.order_type else None,
@@ -189,11 +191,18 @@ async def list_algos(
     db: AsyncSession = Depends(get_db)
 ):
     """List all algos. Excludes archived by default."""
-    q = select(Algo).order_by(Algo.created_at)
+    q = select(Algo, Account).join(Account, Algo.account_id == Account.id).order_by(Algo.created_at)
     if not include_archived:
         q = q.where(Algo.is_archived == False)
     result = await db.execute(q)
-    return [_algo_to_dict(a) for a in result.scalars().all()]
+    rows = result.all()
+    out = []
+    for a, acc in rows:
+        legs_res = await db.execute(
+            select(AlgoLeg).where(AlgoLeg.algo_id == a.id).order_by(AlgoLeg.leg_number)
+        )
+        out.append(_algo_to_dict(a, legs=legs_res.scalars().all(), account_nickname=f"{acc.nickname} ({acc.broker.capitalize()})"))
+    return out
 
 
 @router.post("/")
