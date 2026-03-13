@@ -1079,18 +1079,18 @@ All items below are pending implementation. Work through them in order unless in
 
 | # | Issue | Details |
 |---|-------|---------|
-| UI-A | **White input cells in LEGS** | W&T, SL, RE, TP, TSL, TTP value inputs (text/number inputs inside the feature value rows) are white. Must use `--bg-secondary` background matching all other inputs |
-| UI-B | **Premium input showing for Straddle** | When `strikeMode = straddle`, the premium input box should be hidden. Straddle has its own dedicated input (see UI-C) |
-| UI-C | **Straddle mode — dedicated % dropdown** | When `strikeMode = straddle`, show a dropdown with values 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 (multiples of 5, % of ATM straddle premium). Definition: algo selects strikes whose premium is close to X% of total ATM CE+PE premium. Store as `straddle_pct` on the leg payload |
-| UI-D | **Leg select arrow uniformity** | Verify chevron arrows are identical across all page sections after staax-select fix |
+| ~~UI-A~~ | ~~**White input cells in LEGS**~~ | ✅ Fixed — `s`/`cs` consts restored with `--bg-secondary` bg. Commit `02649be` |
+| ~~UI-B~~ | ~~**Premium input showing for Straddle**~~ | ✅ Fixed — premium input hidden when `strikeMode = straddle`. Commit `02649be` |
+| ~~UI-C~~ | ~~**Straddle mode — dedicated % dropdown**~~ | ✅ Fixed — 5–60% dropdown (multiples of 5), defaults to 20%, applied to parent + child legs. Commit `02649be` |
+| ~~UI-D~~ | ~~**Leg select arrow uniformity**~~ | ✅ Fixed — all leg selects use `className="staax-select"`. Commit `0bb5baa` |
 
 ### Business Logic / Validation
 
 | # | Issue | Details |
 |---|-------|---------|
-| BL-A | **W&T / SL / RE / TP values required when toggled on** | If a feature chip is active but its value field is empty, save should be blocked with a toast — same pattern as time validation |
-| BL-B | **TSL: SL must have a value** (not just be toggled on) | TSL guard already blocks activation if SL is off. Also block if SL is on but `sl.value` is empty |
-| BL-C | **TTP: TP must have a value** | Same as BL-B for TTP/TP |
+| ~~BL-A~~ | ~~**W&T / SL / RE / TP values required when toggled on**~~ | ✅ Fixed — `validate()` blocks save if any active feature has empty values. Commit `0444347` |
+| ~~BL-B~~ | ~~**TSL: SL must have a value**~~ | ✅ Fixed — TSL chip blocked unless SL on AND value non-empty; save also validates. Commit `0444347` |
+| ~~BL-C~~ | ~~**TTP: TP must have a value**~~ | ✅ Fixed — same as BL-B for TTP/TP. Commit `0444347` |
 
 ### Living Spec
 | # | Item |
