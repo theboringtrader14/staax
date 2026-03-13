@@ -255,10 +255,12 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...s, width: '56px', textAlign: 'center', color: leg.lots === '1' ? 'var(--text-muted)' : 'var(--text)' }} />
         <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.map(f => {
-          const blocked = (f.key === 'tsl' && !leg.active['sl']) || (f.key === 'ttp' && !leg.active['tp'])
+          const slHasValue = !!(leg.vals.sl as any)?.value
+          const tpHasValue = !!(leg.vals.tp as any)?.value
+          const blocked = (f.key === 'tsl' && (!leg.active['sl'] || !slHasValue)) || (f.key === 'ttp' && (!leg.active['tp'] || !tpHasValue))
           return (
             <button key={f.key} onClick={() => {
-              if (blocked) { onBlockedClick(f.key === 'tsl' ? 'Enable SL before TSL' : 'Enable TP before TTP'); return }
+              if (blocked) { onBlockedClick(f.key === 'tsl' ? 'Enable SL and set a value before TSL' : 'Enable TP and set a value before TTP'); return }
               const newActive = { ...leg.active, [f.key]: !leg.active[f.key] }
               if (f.key === 'sl' && leg.active['sl']) newActive['tsl'] = false
               if (f.key === 'tp' && leg.active['tp']) newActive['ttp'] = false
@@ -442,6 +444,14 @@ export default function AlgoPage() {
           const hasValue = Object.values(vals).some((v: any) => v !== '' && v !== undefined)
           if (!hasValue) return `${feat.label} is enabled on Leg ${leg.no} but values are missing`
         }
+      }
+      // BL-B: TSL requires SL to have a value (not just be toggled on)
+      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) {
+        return `TSL on Leg ${leg.no} requires SL to be enabled with a value`
+      }
+      // BL-C: TTP requires TP to have a value (not just be toggled on)
+      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) {
+        return `TTP on Leg ${leg.no} requires TP to be enabled with a value`
       }
     }
     return ''
