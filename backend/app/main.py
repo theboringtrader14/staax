@@ -44,6 +44,9 @@ from app.engine.reentry_engine     import reentry_engine
 from app.engine.algo_runner        import algo_runner
 from app.engine.scheduler          import AlgoScheduler
 from app.engine.strike_selector    import StrikeSelector
+from app.engine.execution_manager  import execution_manager
+from app.engine.position_rebuilder import position_rebuilder
+from app.engine.order_reconciler   import order_reconciler
 
 # ── Brokers ────────────────────────────────────────────────────────────────────
 from app.brokers.zerodha  import ZerodhaBroker
@@ -134,7 +137,28 @@ async def lifespan(app: FastAPI):
         ws_manager      = ws_manager,
     )
 
-    # ── 8. Wire Scheduler ─────────────────────────────────────────────────────
+    # ── 8. Wire new Phase 1F engines ─────────────────────────────────────────
+    execution_manager.wire(order_placer)
+    app.state.execution_manager = execution_manager
+
+    position_rebuilder.wire(
+        sl_tp_monitor = sl_tp_monitor,
+        tsl_engine    = tsl_engine_ins,
+        ttp_engine    = ttp_engine_ins,
+        mtm_monitor   = mtm_monitor,
+        ltp_consumer  = ltp_consumer,
+        zerodha       = zerodha,
+    )
+
+    order_reconciler.wire(
+        sl_tp_monitor = sl_tp_monitor,
+        ltp_consumer  = ltp_consumer,
+        zerodha       = zerodha,
+        ws_manager    = ws_manager,
+    )
+    app.state.order_reconciler = order_reconciler
+
+    # ── 9. Wire Scheduler ─────────────────────────────────────────────────────
     scheduler = AlgoScheduler()
     scheduler.set_algo_runner(algo_runner)
     app.state.scheduler = scheduler
@@ -150,6 +174,13 @@ async def lifespan(app: FastAPI):
     # ── 10. Start scheduler ───────────────────────────────────────────────────
     scheduler.start()
     logger.info("✅ Scheduler started")
+
+    # ── 11. Add reconciler job (every 15s) ────────────────────────────────────
+    scheduler.add_reconciler_job(order_reconciler.run)
+    logger.info("✅ OrderReconciler scheduled (every 15s)")
+
+    # ── 12. Run PositionRebuilder (once at startup) ───────────────────────────
+    await position_rebuilder.run()
 
     logger.info("✅ STAAX engine operational — awaiting broker login to start LTP feed")
 
