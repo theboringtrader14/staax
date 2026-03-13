@@ -99,7 +99,8 @@ const TYPE_OPTS: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrume
 function JourneyChildPanel({ child, depth, onChange }: {
   child: JourneyChild; depth: number; onChange: (c: JourneyChild) => void
 }) {
-  const cs = { height: '26px', background: 'var(--bg-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '0 6px', fontFamily: 'inherit', cursor: 'pointer' }
+  const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)' }
+  const csSt = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
   const depthColor = depth === 1 ? '#A78BFA' : depth === 2 ? '#F59E0B' : '#22C55E'
   const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
@@ -124,10 +125,10 @@ function JourneyChildPanel({ child, depth, onChange }: {
             <select className="staax-select" value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             <select className="staax-select" value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
             {child.strikeMode === 'leg' && <select className="staax-select" value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
-            {child.strikeMode === 'premium' && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...cs, width: '82px' }} />}
+            {child.strikeMode === 'premium' && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...csSt, width: '82px' }} />}
             {child.strikeMode === 'straddle' && <select className="staax-select" value={child.premiumVal || '20'} onChange={e => u('premiumVal', e.target.value)} style={{ ...cs, width: '72px' }}>{[5,10,15,20,25,30,35,40,45,50,55,60].map(v => <option key={v} value={String(v)}>{v}%</option>)}</select>}
           </>}
-          <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...cs, width: '50px', textAlign: 'center' }} />
+          <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...csSt, width: '56px', textAlign: 'center' }} />
           <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>|</span>
           {[
             { key: 'wt_enabled', label: 'W&T', color: '#9CA3AF' },
@@ -154,31 +155,31 @@ function JourneyChildPanel({ child, depth, onChange }: {
           {child.wt_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(156,163,175,0.08)', border: '1px solid rgba(156,163,175,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 700, marginRight: '2px' }}>W&T:</span>
-              <select value={child.wt_direction} onChange={e => u('wt_direction', e.target.value)} style={{ ...cs, height: '22px' }}><option value="up">↑Up</option><option value="down">↓Dn</option></select>
-              <input value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...cs, width: '46px', height: '22px' }} />
-              <select value={child.wt_unit} onChange={e => u('wt_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
+              <select className="staax-select" value={child.wt_direction} onChange={e => u('wt_direction', e.target.value)} style={{ ...cs, height: '22px' }}><option value="up">↑Up</option><option value="down">↓Dn</option></select>
+              <input value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
+              <select className="staax-select" value={child.wt_unit} onChange={e => u('wt_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
             </div>
           )}
           {child.sl_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
-              <select value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
-              <input value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...cs, width: '46px', height: '22px' }} />
+              <select className="staax-select" value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+              <input value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.re_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE:</span>
-              <select value={child.re_mode} onChange={e => u('re_mode', e.target.value)} style={{ ...cs, height: '22px' }}><option value="at_entry_price">@Entry</option><option value="immediate">Now</option><option value="at_cost">@Cost</option></select>
-              <select value={child.re_trigger} onChange={e => u('re_trigger', e.target.value)} style={{ ...cs, height: '22px' }}><option value="sl">SL</option><option value="tp">TP</option><option value="any">Any</option></select>
-              <select value={child.re_count} onChange={e => u('re_count', e.target.value)} style={{ ...cs, height: '22px' }}>{['1','2','3','4','5'].map(n => <option key={n} value={n}>{n}×</option>)}</select>
+              <select className="staax-select" value={child.re_mode} onChange={e => u('re_mode', e.target.value)} style={{ ...cs, height: '22px' }}><option value="at_entry_price">@Entry</option><option value="immediate">Now</option><option value="at_cost">@Cost</option></select>
+              <select className="staax-select" value={child.re_trigger} onChange={e => u('re_trigger', e.target.value)} style={{ ...cs, height: '22px' }}><option value="sl">SL</option><option value="tp">TP</option><option value="any">Any</option></select>
+              <select className="staax-select" value={child.re_count} onChange={e => u('re_count', e.target.value)} style={{ ...cs, height: '22px' }}>{['1','2','3','4','5'].map(n => <option key={n} value={n}>{n}×</option>)}</select>
             </div>
           )}
           {child.tp_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#22C55E', fontWeight: 700, marginRight: '2px' }}>TP:</span>
-              <select value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
-              <input value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...cs, width: '46px', height: '22px' }} />
+              <select className="staax-select" value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+              <input value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.tsl_enabled && (
@@ -254,7 +255,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           {leg.strikeMode === 'premium' && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...sInp, width: '82px' }} />}
           {leg.strikeMode === 'straddle' && <select className="staax-select" value={leg.premiumVal || '20'} onChange={e => u('premiumVal', e.target.value)} style={{ ...s, width: '72px' }}>{[5,10,15,20,25,30,35,40,45,50,55,60].map(v => <option key={v} value={String(v)}>{v}%</option>)}</select>}
         </>}
-        <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} style={{ ...sInp, width: '56px', textAlign: 'center', color: leg.lots === '1' ? 'var(--text-muted)' : 'var(--text)' }} />
+        <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: leg.lots === '1' ? 'var(--text-muted)' : 'var(--text)' }} />
         <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.map(f => {
           const slHasValue = !!(leg.vals.sl as any)?.value
@@ -440,6 +441,7 @@ export default function AlgoPage() {
     if (entryType === 'orb' && orbEnd <= entryTime) return 'ORB end time must be after ORB start (entry) time'
     if (stratMode === 'positional' && !dte) return 'DTE is required for Positional strategy'
     for (const leg of legs) {
+      if (!leg.lots || parseInt(leg.lots) < 1) return `Lots is required on Leg ${leg.no}`
       for (const feat of FEATURES) {
         if (leg.active[feat.key]) {
           const vals = leg.vals[feat.key] as any
