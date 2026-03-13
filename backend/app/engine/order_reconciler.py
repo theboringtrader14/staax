@@ -91,7 +91,7 @@ class OrderReconciler:
         # ── Fetch pending/open orders from DB ─────────────────────────────────
         result = await db.execute(
             select(Order).where(
-                Order.status.in_([OrderStatus.pending, OrderStatus.open])
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN])
             )
         )
         db_orders = result.scalars().all()
@@ -139,11 +139,11 @@ class OrderReconciler:
         Returns True if a correction was made.
         """
         # Case 1: DB=OPEN, Broker=COMPLETE/FILLED → already open, ensure monitors wired
-        if order.status == OrderStatus.open and broker_status in ("COMPLETE", "FILLED"):
+        if order.status == OrderStatus.OPEN and broker_status in ("COMPLETE", "FILLED"):
             return False  # already consistent
 
         # Case 2: DB=OPEN, Broker=CANCELLED/REJECTED → mark ERROR
-        if order.status == OrderStatus.open and broker_status in ("CANCELLED", "REJECTED"):
+        if order.status == OrderStatus.OPEN and broker_status in ("CANCELLED", "REJECTED"):
             order.status = OrderStatus.error
             logger.warning(
                 "[RECON] Order mismatch detected — state corrected: order=%s DB=OPEN broker=%s → ERROR",
@@ -153,8 +153,8 @@ class OrderReconciler:
             return True
 
         # Case 3: DB=PENDING, Broker=COMPLETE/FILLED → mark OPEN + wire monitors
-        if order.status == OrderStatus.pending and broker_status in ("COMPLETE", "FILLED"):
-            order.status = OrderStatus.open
+        if order.status == OrderStatus.PENDING and broker_status in ("COMPLETE", "FILLED"):
+            order.status = OrderStatus.OPEN
             logger.info(
                 "[RECON] Order mismatch detected — state corrected: order=%s DB=PENDING broker=FILLED → OPEN",
                 order.id,

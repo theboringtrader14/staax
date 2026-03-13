@@ -430,33 +430,41 @@ export default function AlgoPage() {
   }
 
   const validate = (): string => {
-    if (!algoName.trim())            return 'Algo name is required'
-    if (!account)                    return 'Account is required'
-    if (!entryTime)                  return 'Entry time is required'
-    if (!exitTime)                   return 'Exit time is required'
-    if (entryType === 'orb' && !orbEnd) return 'ORB End time is required when entry type is ORB'
-    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return 'Entry time must be between 09:15 and 15:30'
-    if (exitTime  < TIME_MIN || exitTime  > TIME_MAX) return 'Exit time must be between 09:15 and 15:30'
-    if (stratMode === 'intraday' && exitTime <= entryTime) return 'Exit time must be after entry time for Intraday'
-    if (entryType === 'orb' && orbEnd <= entryTime) return 'ORB end time must be after ORB start (entry) time'
-    if (stratMode === 'positional' && !dte) return 'DTE is required for Positional strategy'
+    // ── Algo-level fields ─────────────────────────────────────────────────────
+    if (!algoName.trim())            return '❌ Algo name is required'
+    if (!account)                    return '❌ Account is required — select a broker account'
+    if (!lotMult || parseInt(lotMult) < 1) return '❌ Lot multiplier must be at least 1'
+    if (!entryTime)                  return '❌ Entry time is required'
+    if (!exitTime)                   return '❌ Exit time is required'
+    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return `❌ Entry time must be between 09:15 and 15:30 (got ${entryTime})`
+    if (exitTime  < TIME_MIN || exitTime  > TIME_MAX) return `❌ Exit time must be between 09:15 and 15:30 (got ${exitTime})`
+    if (stratMode === 'intraday' && exitTime <= entryTime) return '❌ Exit time must be after entry time for Intraday'
+    if (entryType === 'orb' && !orbEnd) return '❌ ORB End time is required when entry type is ORB'
+    if (entryType === 'orb' && orbEnd <= entryTime) return '❌ ORB end time must be after ORB start (entry) time'
+    if (stratMode === 'positional' && !dte) return '❌ DTE is required for Positional strategy'
+    if (legs.length === 0) return '❌ At least one leg is required'
+    // ── Leg-level fields ──────────────────────────────────────────────────────
     for (const leg of legs) {
-      if (!leg.lots || parseInt(leg.lots) < 1) return `Lots is required on Leg ${leg.no}`
+      const L = `Leg ${leg.no}`
+      if (!leg.lots || parseInt(leg.lots) < 1) return `❌ ${L}: Lots is required — enter number of lots`
+      if (leg.instType === 'OP') {
+        if (!leg.expiry)    return `❌ ${L}: Expiry is required`
+        if (!leg.strikeMode) return `❌ ${L}: Strike mode is required`
+        if (leg.strikeMode === 'premium' && !leg.premiumVal) return `❌ ${L}: Premium value is required when mode is Premium`
+        if (leg.strikeMode === 'straddle' && !leg.premiumVal) return `❌ ${L}: Straddle % is required when mode is Straddle`
+      }
       for (const feat of FEATURES) {
         if (leg.active[feat.key]) {
           const vals = leg.vals[feat.key] as any
           const hasValue = Object.values(vals).some((v: any) => v !== '' && v !== undefined)
-          if (!hasValue) return `${feat.label} is enabled on Leg ${leg.no} but values are missing`
+          if (!hasValue) return `❌ ${L}: ${feat.label} is enabled but values are missing`
         }
       }
-      // BL-B: TSL requires SL to have a value (not just be toggled on)
-      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) {
-        return `TSL on Leg ${leg.no} requires SL to be enabled with a value`
-      }
-      // BL-C: TTP requires TP to have a value (not just be toggled on)
-      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) {
-        return `TTP on Leg ${leg.no} requires TP to be enabled with a value`
-      }
+      if (leg.active['sl'] && !(leg.vals.sl as any).value) return `❌ ${L}: SL value is required when SL is enabled`
+      if (leg.active['tp'] && !(leg.vals.tp as any).value) return `❌ ${L}: TP value is required when TP is enabled`
+      if (leg.active['wt'] && !(leg.vals.wt as any).value) return `❌ ${L}: W&T value is required when W&T is enabled`
+      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return `❌ ${L}: TSL requires SL to be enabled with a value`
+      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return `❌ ${L}: TTP requires TP to be enabled with a value`
     }
     return ''
   }
@@ -484,8 +492,8 @@ export default function AlgoPage() {
     legs: legs.map(l => ({
       leg_number:      l.no,
       direction:       l.direction.toLowerCase(),
-      instrument_type: l.instType.toLowerCase(),
-      underlying:      l.instCode,
+      instrument:      l.instType === 'FU' ? 'fu' : l.optType.toLowerCase(),
+      underlying:      INST_CODES[l.instCode] || l.instCode,
       expiry:          l.expiry,
       strike_type:     l.strikeType,
       lots:            parseInt(l.lots) || 1,

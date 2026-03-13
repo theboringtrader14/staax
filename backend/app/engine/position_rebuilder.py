@@ -80,7 +80,7 @@ class PositionRebuilder:
             async with AsyncSessionLocal() as db:
                 # ── Fetch all open orders from DB ─────────────────────────────
                 result = await db.execute(
-                    select(Order).where(Order.status == OrderStatus.open)
+                    select(Order).where(Order.status == OrderStatus.OPEN)
                 )
                 open_orders = result.scalars().all()
 

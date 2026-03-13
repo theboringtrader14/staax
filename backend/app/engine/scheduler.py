@@ -177,6 +177,17 @@ class AlgoScheduler:
 
         self._per_algo_jobs[grid_entry_id] = jobs
 
+    def add_reconciler_job(self, coro_func):
+        """Register the OrderReconciler to run every 15 seconds."""
+        self._scheduler.add_job(
+            coro_func,
+            "interval",
+            seconds=15,
+            id="order_reconciler",
+            replace_existing=True,
+        )
+        logger.info("OrderReconciler job registered (every 15s)")
+
     def cancel_algo_jobs(self, grid_entry_id: str):
         """Cancel all scheduled jobs for one algo (called on terminate)."""
         for job_id in self._per_algo_jobs.pop(grid_entry_id, []):
