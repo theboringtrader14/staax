@@ -45,7 +45,7 @@ interface JourneyChild {
 const mkJourneyChild = (): JourneyChild => ({
   enabled: false,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
-  strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '1', expiry: 'current_weekly',
+  strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
   wt_enabled: false, wt_direction: 'up', wt_value: '', wt_unit: 'pts',
   sl_enabled: false, sl_type: 'pts_instrument', sl_value: '',
   re_enabled: false, re_mode: 'at_entry_price', re_trigger: 'sl', re_count: '1',
@@ -63,7 +63,7 @@ interface Leg {
 const mkLeg = (n: number): Leg => ({
   id: `leg-${Date.now()}-${n}`, no: n,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
-  strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '1', expiry: 'current_weekly',
+  strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
   active: { wt: false, sl: false, re: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(),
   vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' }, tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' } },
 })
@@ -255,7 +255,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           {leg.strikeMode === 'premium' && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...sInp, width: '82px' }} />}
           {leg.strikeMode === 'straddle' && <select className="staax-select" value={leg.premiumVal || '20'} onChange={e => u('premiumVal', e.target.value)} style={{ ...s, width: '72px' }}>{[5,10,15,20,25,30,35,40,45,50,55,60].map(v => <option key={v} value={String(v)}>{v}%</option>)}</select>}
         </>}
-        <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: leg.lots === '1' ? 'var(--text-muted)' : 'var(--text)' }} />
+        <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: 'var(--text)' }} />
         <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.map(f => {
           const slHasValue = !!(leg.vals.sl as any)?.value
