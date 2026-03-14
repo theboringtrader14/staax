@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 3.6 | **Last Updated:** 14 March 2026 — Indicator Systems + Light/Dark theme + full Phase 1F complete | **PRD Reference:** v1.2
+**Version:** 3.7 | **Last Updated:** 14 March 2026 — Indicator Bots complete + 5 UI fixes + PRAC/LIVE bots + account dropdown restricted | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
