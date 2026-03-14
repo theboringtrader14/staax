@@ -36,13 +36,16 @@ export default function Sidebar() {
       overflow: 'hidden',
     }}>
       {/* Logo row */}
-      <div style={{
+      <div onClick={() => toggle(!collapsed)}
+        style={{
         height: '52px',
         display: 'flex', alignItems: 'center',
         padding: collapsed ? '0' : '0 14px',
         justifyContent: collapsed ? 'center' : 'space-between',
         borderBottom: '1px solid var(--bg-border)',
         flexShrink: 0,
+        cursor: 'pointer',
+        userSelect: 'none',
       }}>
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -53,18 +56,8 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        {collapsed && (
-          <button onClick={() => toggle(false)} title="Click to expand"
-            style={{ background:'none', border:'none', cursor:'pointer', padding:'0', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <StaaxLogo size={28} />
-          </button>
-        )}
-        {!collapsed && (
-          <button onClick={() => toggle(true)} title="Collapse sidebar"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '16px', padding: '4px', lineHeight: 1, flexShrink: 0 }}>
-            ‹
-          </button>
-        )}
+        {collapsed && <StaaxLogo size={28} />}
+
       </div>
 
       {/* Nav links */}
@@ -78,16 +71,17 @@ export default function Sidebar() {
               textDecoration: 'none',
               color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
               background: isActive ? 'rgba(0,176,240,0.08)' : 'transparent',
-              borderLeft: isActive ? '2px solid var(--accent-blue)' : '2px solid transparent',
+              borderLeft: 'none',
+            boxShadow: isActive ? 'inset 2px 0 0 var(--accent-blue)' : 'none',
               fontSize: '13px',
               transition: 'all 0.12s',
               fontWeight: isActive ? '600' : '400',
               whiteSpace: 'nowrap',
             })}>
-            <span style={{ width: collapsed ? '56px' : '44px', textAlign: 'center', fontSize: '18px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ width: '44px', textAlign: 'center', fontSize: '22px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {item.icon}
             </span>
-            <span style={{ paddingRight: '16px', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>{item.label}</span>
+            <span style={{ paddingRight: collapsed ? 0 : '16px', maxWidth: collapsed ? 0 : '200px', opacity: collapsed ? 0 : 1, transition: 'opacity 0.15s ease, max-width 0.18s ease, padding 0.18s ease', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }}>{item.label}</span>
           </NavLink>
         ))}
       </div>
@@ -95,10 +89,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div style={{ padding: collapsed ? '14px 0' : '14px 20px', borderTop: '1px solid var(--bg-border)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
         <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>v0.1.0 · Phase 1F</div>
-        <button onClick={() => toggle(!collapsed)} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '16px', padding: '2px 4px', lineHeight: 1 }}>
-          {collapsed ? '›' : '‹'}
-        </button>
+
       </div>
     </nav>
   )
