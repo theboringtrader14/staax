@@ -445,6 +445,13 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
           </div>
         )}
 
+        {/* Promote to Live */}
+        {!bot.is_archived && (bot.is_practix ?? true) && (
+          <button className="btn btn-ghost" style={{ width: '100%', fontSize: '11px', marginBottom: '6px', color: 'var(--green)', borderColor: 'rgba(34,197,94,0.3)' }}
+            onClick={() => onUpdate(bot.id, { is_practix: false })}>
+            → Promote to LIVE
+          </button>
+        )}
         {/* Activate/Deactivate */}
         {!bot.is_archived && (
           <button className="btn btn-ghost" style={{ width: '100%', fontSize: '11px', marginBottom: orders.length > 0 ? '8px' : '0' }}
