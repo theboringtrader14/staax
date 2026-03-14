@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 3.0 | **Last Updated:** 14 March 2026 — Phase 1F continued: Grid fixes, Sidebar, Architecture Review absorbed | **PRD Reference:** v1.2
+**Version:** 3.1 | **Last Updated:** 14 March 2026 — Phase 1F: Zerodha token flow, persistence audit, WS-1+SQ-1 complete | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1239,14 +1239,72 @@ Scheduler resets both fields daily at 09:00 IST.
 - ✅ **STAAX logo** — hexagonal SVG logo in sidebar; logo-only when collapsed, logo + name when expanded
 - ✅ **Version footer** — updated to `v0.1.0 · Phase 1F`
 
+### Also completed 14 March 2026 (afternoon) ✅
+| Commit | Description |
+|--------|-------------|
+| `cb7fec2` | Zerodha token flow — callback page, route, Dashboard polling, Vite host |
+| `34aa1fe` | Persist Zerodha token + Kill Switch state across refresh |
+| `cacb2fc` | Full persistence — system_state DB, kill switch + Zerodha token survive restart |
+| `4eda91f` | Full persistence audit + Dashboard button order + duplicate KS removed |
+
+- ✅ **WS-1** — Kill Switch WebSocket broadcast wired (`ws_manager` from `app.state`)
+- ✅ **SQ-1** — Square-off wires real broker call via ExecutionManager + triggers post-event reconciliation
+- ✅ **Zerodha token flow** — full OAuth loop: Login → popup → Zerodha auth → `/zerodha/callback` backend → frontend `/zerodha-callback` → `postMessage` → Dashboard "Connected ✅"
+- ✅ **Zerodha redirect URL** — set to `http://localhost:8000/api/v1/accounts/zerodha/callback` in Zerodha developer console
+- ✅ **Persistence — system_state table** — migrations 0003 + 0004; stores `kill_switch_active`, `kill_switch_at`, `killed_account_ids`
+- ✅ **Persistence — kill switch** — `global_kill_switch.py` writes to DB on activate; `kill-switch/status` reads from DB and restores in-memory state on restart
+- ✅ **Persistence — Zerodha token** — Dashboard derives `zerodhaConnected` from `token_valid_today` on mount
+- ✅ **Persistence — killed account IDs** — loaded from DB on mount, stored as comma-separated string
+- ✅ **Persistence — Orders page** — init to `[]`, always replace from API (no DEMO_ORDERS on load)
+- ✅ **Persistence — Accounts page** — init to `[]` instead of FALLBACK
+- ✅ **Dashboard button order** — Kill Switch (left) | Stop All | Start Session (right)
+- ✅ **Duplicate Kill Switch button removed**
+
+### Persistence rule (applies to all future features)
+> Any state that must survive a refresh must be stored in the DB and loaded on mount. React state is the display layer only — never the source of truth.
+
+Checklist for every new stateful feature:
+1. Store in DB (model + migration if new table/column)
+2. Load on component mount via API call → set React state
+3. Never initialise React state with DEMO/FALLBACK/MOCK data
+
+### Services — Start Session wiring (pending)
+Currently `Start Session` button calls `servicesAPI.startAll()` but the backend services (PostgreSQL, Redis, Market Feed) are not actually started by this call — it only reflects their status. Full wiring requires:
+- PostgreSQL + Redis: system-level process management (out of scope for Phase 1F — these run as system services on the Mac/AWS)
+- Market Feed: wire `startAll` to actually start `ltp_consumer` / WebSocket feed
+- **Pragmatic approach:** On production (AWS), PostgreSQL + Redis run as daemons and are always up. `Start Session` should: (1) verify DB + Redis connectivity, (2) start Market Feed (LTP consumer), (3) trigger Zerodha token check
+- Add to Phase 1G backlog
+
+### QA Testing Milestone
+**All prerequisites now met:**
+1. ✅ Algo creation + Smart Grid deploy
+2. ✅ ExecutionManager + PositionRebuilder + OrderReconciler wired
+3. ✅ WS-1 — Kill Switch WebSocket broadcast
+4. ✅ SQ-1 — Real broker square-off via ExecutionManager
+5. ✅ Zerodha token flow (Dashboard login → token set → persists)
+
+**Ready for dry-run QA** on next trading day (Mon–Fri, 09:15–15:30 IST) with Karthik's Zerodha account.
+
+**QA test script:**
+1. Dashboard → Start Session → verify Backend API running
+2. Click Zerodha Login → complete auth in popup → verify "✅ Connected for today"
+3. Create a simple NF DIRECT algo (1 lot, SL 50pts, entry 09:20, exit 15:10)
+4. Deploy to today in Smart Grid (PRACTIX mode)
+5. Verify algo activates at 09:15, status → ACTIVE
+6. Verify entry fires at 09:20, status → PENDING → OPEN
+7. Verify SL monitor triggers on 50pt adverse move
+8. Verify P&L updates live in grid cell
+9. Click SQ button → verify square-off, status → CLOSED
+10. Verify Orders page shows correct state throughout
+11. Refresh page → verify all state persists (grid cells, token, kill switch)
+
 ### Remaining Phase 1F backlog
 | # | Item | Priority |
 |---|------|----------|
-| WS-1 | WebSocket wiring — Kill Switch broadcast to connected clients | High |
-| SQ-1 | orders.py square-off — wire real broker call via ExecutionManager | High |
 | AR-3 | ExecutionManager audit log — chronological execution trail per order | Medium |
 | AR-4 | OrderRetryQueue — smart retry filtering (don't retry margin/param errors) | Medium |
-| AR-5 | Post-event reconciliation — trigger OrderReconciler immediately after kill switch, SQ, T, manual sync | Medium |
+| AR-5 | Post-event reconciliation — already done for SQ; add for Kill Switch + T button | Medium |
+| SVC-1 | Start Session — wire Market Feed start + DB/Redis health check | Medium |
 | F1  | Broker auto-login automation | Medium |
 | F7  | Reports download — Excel + CSV | Medium |
 | NR-3 | Ticker bar — live instrument prices in sidebar | Low |
@@ -1254,28 +1312,6 @@ Scheduler resets both fields daily at 09:00 IST.
 | EXIT | Manual exit price correction | Low |
 | NOTIF | NotificationService — Twilio WhatsApp + AWS SES | Low |
 | §25 | Account-Level Manual Deactivation | Low |
-
-### QA Testing Milestone — when can we test end-to-end?
-**Prerequisite items before QA:**
-1. ✅ Algo creation + Smart Grid deploy
-2. ✅ ExecutionManager + PositionRebuilder + OrderReconciler wired
-3. ⬜ WS-1 — Kill Switch WebSocket broadcast
-4. ⬜ SQ-1 — Real broker square-off via ExecutionManager
-5. ⬜ Zerodha token flow working (Dashboard login → token set)
-
-**Target:** Once WS-1 and SQ-1 are complete, a dry-run QA session can be performed with Zerodha paper trading (sandbox). Full live QA requires a real market session (09:15–15:30 IST on a trading day) with Karthik's Zerodha account connected.
-
-**QA test script (to be built):**
-- Morning startup: Dashboard → Start Session → Zerodha token login
-- Algo creation: create a simple NF DIRECT algo with 1 lot, SL 50pts
-- Deploy to today in Smart Grid (PRACTIX mode)
-- Verify algo activates at 09:15
-- Verify entry fires at entry_time
-- Verify SL monitor triggers on price movement
-- Verify P&L updates live
-- Verify square-off via SQ button
-- Verify Orders page shows correct state
-- Verify grid cell updates to CLOSED
 
 ---
 
@@ -1411,7 +1447,7 @@ Key facts:
 - Accounts: Karthik (Zerodha), Mom (Angel One), Wife (Angel One)
 
 Current status: Phase 1F — see §27 in the spec for completed items and remaining backlog.
-Next item to build: [WS-1 — Kill Switch WebSocket broadcast] or whichever item I specify.
+Next item to build: [AR-3 — ExecutionManager audit log] or [SVC-1 — Start Session wiring] or whichever item I specify.
 
 Rules:
 - Always read the spec before starting any feature
