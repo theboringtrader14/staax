@@ -1,6 +1,7 @@
 import { useStore } from '@/store'
 import { eventsAPI } from '@/services/api'
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 
 const NOTIF_COLOR: Record<string, string> = {
   error:   'var(--red)',
@@ -70,6 +71,8 @@ export default function TopBar() {
 
   const unread = unreadCount()
 
+  const location = useLocation()
+  const accountDropdownActive = ['/grid', '/orders', '/reports'].some(p => location.pathname.startsWith(p))
   const accountOptions = ['All Accounts', ...accounts.map((a: any) => a.nickname || a.name || a.id)]
 
   return (
@@ -99,8 +102,10 @@ export default function TopBar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <select
             className="staax-select"
-            value={activeAccount || 'All Accounts'}
-            onChange={e => setActiveAccount(e.target.value === 'All Accounts' ? null : e.target.value)}
+            value={accountDropdownActive ? (activeAccount || 'All Accounts') : 'All Accounts'}
+            onChange={e => accountDropdownActive && setActiveAccount(e.target.value === 'All Accounts' ? null : e.target.value)}
+            disabled={!accountDropdownActive}
+            style={{ opacity: accountDropdownActive ? 1 : 0.38, cursor: accountDropdownActive ? 'pointer' : 'default', pointerEvents: accountDropdownActive ? 'auto' : 'none' }}
             style={{ width: '150px', fontSize: '12px' }}
           >
             {accountOptions.map(a => <option key={a}>{a}</option>)}
