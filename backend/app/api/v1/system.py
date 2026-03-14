@@ -69,7 +69,7 @@ async def activate_kill_switch(request: Request, body: KillSwitchRequest = None,
         account_ids=body.account_ids if body else [],
         db=db,
         broker_registry=registry,
-        websocket_manager=None,   # TODO: wire WS manager in Phase 1F
+        websocket_manager=request.app.state.ws_manager if hasattr(request.app.state, 'ws_manager') else None,
     )
 
     return {

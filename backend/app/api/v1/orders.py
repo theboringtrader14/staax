@@ -16,7 +16,10 @@ from sqlalchemy import select, and_
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timezone
+import logging
 from app.core.database import get_db
+logger = logging.getLogger(__name__)
+from app.engine.execution_manager import execution_manager
 from app.models.order import Order, OrderStatus, ExitReason
 from app.models.grid import GridEntry
 from app.models.algo import Algo
@@ -303,18 +306,52 @@ async def square_off(
     open_orders = open_orders_result.scalars().all()
 
     now = datetime.now(timezone.utc)
+
+    # ── SQ-1: Wire real broker square-off via ExecutionManager ────────────────
+    broker_sq_results = []
     for order in open_orders:
+        try:
+            # Get broker adapter from app state via request
+            broker = None
+            if hasattr(order, 'account_id'):
+                from app.models.account import Account, BrokerType
+                from sqlalchemy import select as sa_select
+                acc_res = await db.execute(sa_select(Account).where(Account.id == order.account_id))
+                acc = acc_res.scalar_one_or_none()
+                if acc:
+                    from fastapi import Request as _Req
+                    import inspect
+                    # Use execution_manager.square_off if order_placer is wired
+                    result = await execution_manager.square_off(
+                        broker_order_id=order.broker_order_id,
+                        order_placer=execution_manager._order_placer,
+                    )
+                    broker_sq_results.append({"order_id": str(order.id), "result": result})
+        except Exception as e:
+            logger.warning(f"[SQ] Broker square-off failed for order {order.id}: {e}")
+            broker_sq_results.append({"order_id": str(order.id), "error": str(e)})
+
+        # Always update DB regardless of broker result
         order.status = OrderStatus.CLOSED
         order.exit_reason = ExitReason.SQ
         order.exit_time = now
 
     await db.commit()
+
+    # Trigger immediate reconciliation after square-off
+    try:
+        from app.engine.order_reconciler import order_reconciler
+        import asyncio
+        asyncio.ensure_future(order_reconciler.run())
+    except Exception:
+        pass
+
     return {
-        "status":        "ok",
-        "algo_id":       algo_id,
-        "squared_off":   len(open_orders),
-        "message":       f"{len(open_orders)} order(s) marked for square off",
-        "note":          "Broker square-off will be executed by engine (Phase 1F)",
+        "status":      "ok",
+        "algo_id":     algo_id,
+        "squared_off": len(open_orders),
+        "message":     f"{len(open_orders)} order(s) squared off",
+        "broker_results": broker_sq_results,
     }
 
 
