@@ -1,22 +1,35 @@
 """
 EventLogger — persistent notification log.
 Writes every significant event to DB (event_log table) AND broadcasts via WebSocket.
-This ensures the notification bell survives page refresh.
+Lazy wiring — reads ws_manager from app.state on first use, no explicit wire() needed.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
-_ws_manager = None   # injected from main.py
+_ws_manager = None
 
-def wire(ws_manager):
+def wire(ws_manager) -> None:
+    """Optional explicit wiring. If not called, lazy wiring via _get_ws() is used."""
     global _ws_manager
     _ws_manager = ws_manager
-    logger.info("[EVENT] EventLogger wired")
+    logger.info("[EVENT] EventLogger wired to WebSocket manager")
+
+def _get_ws():
+    """Lazily get ws_manager from app state if not explicitly wired."""
+    global _ws_manager
+    if _ws_manager is not None:
+        return _ws_manager
+    try:
+        from app.main import app
+        _ws_manager = getattr(app.state, "ws_manager", None)
+    except Exception:
+        pass
+    return _ws_manager
 
 async def log(
     level: str,
@@ -27,17 +40,18 @@ async def log(
     source: str = "engine",
     details: str = "",
     db=None,
-):
+) -> None:
     """
     Log an event to DB + broadcast to notification WebSocket.
     level: info | warn | error | success
     """
     ts = datetime.now(IST)
 
-    # Broadcast to frontend bell
-    if _ws_manager:
+    # Broadcast to frontend notification bell
+    ws = _get_ws()
+    if ws:
         try:
-            await _ws_manager.notify(level, msg, algo_name)
+            await ws.notify(level, msg, algo_name)
         except Exception as e:
             logger.warning(f"[EVENT] WS broadcast failed: {e}")
 
@@ -62,8 +76,7 @@ async def log(
 
     logger.info(f"[{level.upper()}] {msg}")
 
-# Convenience helpers
-async def info(msg, **kw): await log("info", msg, **kw)
-async def warn(msg, **kw): await log("warn", msg, **kw)
-async def error(msg, **kw): await log("error", msg, **kw)
-async def success(msg, **kw): await log("success", msg, **kw)
+async def info(msg: str, **kw): await log("info", msg, **kw)
+async def warn(msg: str, **kw): await log("warn", msg, **kw)
+async def error(msg: str, **kw): await log("error", msg, **kw)
+async def success(msg: str, **kw): await log("success", msg, **kw)

@@ -47,6 +47,7 @@ from app.engine.strike_selector    import StrikeSelector
 from app.engine.execution_manager  import execution_manager
 from app.engine.position_rebuilder import position_rebuilder
 from app.engine.order_reconciler   import order_reconciler
+from app.engine import event_logger
 
 # ── Brokers ────────────────────────────────────────────────────────────────────
 from app.brokers.zerodha  import ZerodhaBroker
@@ -88,6 +89,7 @@ async def lifespan(app: FastAPI):
     # ── 3. WebSocket manager ──────────────────────────────────────────────────
     ws_manager = ConnectionManager()
     app.state.ws_manager = ws_manager
+    event_logger.wire(ws_manager)
     logger.info("✅ WebSocket manager ready")
 
     # ── 4. Broker clients (no token needed at init) ───────────────────────────
