@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 3.4 | **Last Updated:** 14 March 2026 — Phase 1F: Accounts brokerage, TV chart fix, GOLDM, Orders crash fixed | **PRD Reference:** v1.2
+**Version:** 3.5 | **Last Updated:** 14 March 2026 — Phase 1F: Notifications, event_log DB, export, brokerage, TV fix, GOLDM | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
