@@ -56,6 +56,18 @@ class ExecutionManager:
         self._order_placer = order_placer
         logger.info("[EM] Wired to OrderPlacer")
 
+    # ── Audit log ─────────────────────────────────────────────────────────────
+
+    def _audit(self, event: str, **kwargs) -> None:
+        """
+        Structured audit log entry. Every order decision is recorded here.
+        Events: REQUEST | RISK_PASS | RISK_BLOCK | ROUTED | BROKER_OK | BROKER_FAIL | SQ_REQUEST | SQ_OK | SQ_FAIL
+        """
+        parts = [f"[EXEC] {event}"]
+        for k, v in kwargs.items():
+            parts.append(f"{k}={v}")
+        logger.info(" | ".join(parts))
+
     # ── Risk gate ─────────────────────────────────────────────────────────────
 
     def _check_risk(self, algo_id: str, account_id: str) -> Optional[str]:
@@ -87,25 +99,29 @@ class ExecutionManager:
         Gate + route an order through RetryQueue → OrderPlacer.
         Returns broker_order_id on success, None on block or failure.
         """
-        # Audit log — every placement attempt recorded
-        logger.info(
-            "[EM] PLACE | algo=%s account=%s dir=%s qty=%d sym=%s tag=%s",
-            order.algo_id, account_id, direction, quantity,
-            instrument.get("symbol", "?"), tag,
-        )
+        # AR-3: Structured audit log
+        self._audit("REQUEST",
+            algo=order.algo_id, account=account_id,
+            dir=direction, qty=quantity,
+            sym=instrument.get("symbol", "?"), tag=tag)
 
         # Risk gate
         block_reason = self._check_risk(str(order.algo_id), account_id)
         if block_reason:
-            logger.warning(block_reason)
+            self._audit("RISK_BLOCK", reason=block_reason)
             return None
+
+        self._audit("RISK_PASS", algo=order.algo_id, account=account_id)
 
         if self._order_placer is None:
-            logger.error("[EM] OrderPlacer not wired — cannot place order")
+            self._audit("RISK_BLOCK", reason="OrderPlacer not wired")
+            logger.error("[EXEC] OrderPlacer not wired — cannot place order")
             return None
 
+        self._audit("ROUTED", algo=order.algo_id, queue="OrderRetryQueue")
+
         # Route through retry queue
-        return await order_retry_queue.place(
+        result = await order_retry_queue.place(
             order_placer=self._order_placer,
             order=order,
             db=db,
@@ -117,6 +133,11 @@ class ExecutionManager:
             product=product,
             tag=tag,
         )
+        if result:
+            self._audit("BROKER_OK", algo=order.algo_id, broker_order_id=result)
+        else:
+            self._audit("BROKER_FAIL", algo=order.algo_id, sym=instrument.get("symbol","?"))
+        return result
 
     # ── Square-off entry point (SQ / T actions from Orders page) ─────────────
 
@@ -135,20 +156,19 @@ class ExecutionManager:
         Bypasses kill switch check — square-off is always allowed.
         Bypasses market hours check — allow late SQ for safety.
         """
-        logger.info(
-            "[EM] SQUARE_OFF | algo=%s account=%s qty=%d sym=%s tag=%s",
-            order.algo_id, account_id, quantity,
-            instrument.get("symbol", "?"), tag,
-        )
+        self._audit("SQ_REQUEST",
+            algo=order.algo_id, account=account_id,
+            qty=quantity, sym=instrument.get("symbol","?"), tag=tag)
 
         if self._order_placer is None:
-            logger.error("[EM] OrderPlacer not wired — cannot square off")
+            self._audit("SQ_FAIL", reason="OrderPlacer not wired")
+            logger.error("[EXEC] OrderPlacer not wired — cannot square off")
             return None
 
         # Determine opposite direction for square-off
         sq_direction = "sell" if order.direction.lower() in ("buy", "b") else "buy"
 
-        return await order_retry_queue.place(
+        sq_result = await order_retry_queue.place(
             order_placer=self._order_placer,
             order=order,
             db=db,
@@ -160,6 +180,11 @@ class ExecutionManager:
             product="MIS",
             tag=tag,
         )
+        if sq_result:
+            self._audit("SQ_OK", algo=order.algo_id, broker_order_id=sq_result)
+        else:
+            self._audit("SQ_FAIL", algo=order.algo_id, sym=instrument.get("symbol","?"))
+        return sq_result
 
 
 # ── Singleton ──────────────────────────────────────────────────────────────────

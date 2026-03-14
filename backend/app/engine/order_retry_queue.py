@@ -27,6 +27,42 @@ logger = logging.getLogger(__name__)
 # ── Module-level disable flag (set by Kill Switch) ────────────────────────────
 disabled: bool = False
 
+# ── AR-4: Smart retry classifier ──────────────────────────────────────────────
+# Only retry temporary technical failures — never business-logic rejections.
+_NO_RETRY_PATTERNS = [
+    "insufficient margin",
+    "insufficient funds",
+    "margin",
+    "invalid order",
+    "invalid symbol",
+    "instrument not tradable",
+    "not tradable",
+    "market closed",
+    "outside market hours",
+    "scrip is not available",
+    "order quantity",
+    "lot size",
+    "freeze quantity",
+    "invalid price",
+    "order value",
+    "duplicate order",
+    "self trade",
+]
+
+def is_retryable(error: str) -> bool:
+    """
+    Returns True if the error is a temporary technical failure worth retrying.
+    Returns False for business-logic rejections (margin, invalid params, etc).
+    """
+    if not error:
+        return True
+    error_lower = error.lower()
+    for pattern in _NO_RETRY_PATTERNS:
+        if pattern in error_lower:
+            logger.warning(f"[RETRY] Non-retryable error detected ('{pattern}') — skipping retries: {error}")
+            return False
+    return True
+
 # ── Retry schedule: (attempt_number → delay_seconds_before_attempt) ──────────
 RETRY_DELAYS = {
     1: 0,   # Attempt 1 — immediate
@@ -138,6 +174,14 @@ async def place(
             order.retry_count     = attempt
             order.last_retry_time = datetime.now(timezone.utc)
             await db.commit()
+
+            # AR-4: Don't retry business-logic rejections
+            if not is_retryable(last_error):
+                logger.error(
+                    f"[RETRY QUEUE] ❌ Non-retryable error — aborting immediately. "
+                    f"order_id={order.id} error={last_error}"
+                )
+                break  # Exit retry loop — go straight to ERROR state
 
             if attempt == MAX_ATTEMPTS:
                 logger.error(
