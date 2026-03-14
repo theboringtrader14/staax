@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 3.1 | **Last Updated:** 14 March 2026 — Phase 1F: Zerodha token flow, persistence audit, WS-1+SQ-1 complete | **PRD Reference:** v1.2
+**Version:** 3.2 | **Last Updated:** 14 March 2026 — Phase 1F: SVC-1, AR-5, sidebar polish, persistence audit complete | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1298,13 +1298,30 @@ Currently `Start Session` button calls `servicesAPI.startAll()` but the backend 
 10. Verify Orders page shows correct state throughout
 11. Refresh page → verify all state persists (grid cells, token, kill switch)
 
+### Also completed 14 March 2026 (evening) ✅
+| Commit | Description |
+|--------|-------------|
+| `ec4cf00` | AR-3 ExecutionManager audit log + AR-4 smart retry filtering |
+| `89e7dae` | Sidebar: click logo to expand, persist collapse state to localStorage |
+| `f6a1073` | Sidebar: smooth fade transition on text during collapse/expand |
+| `d618bd9` | Sidebar: centre-align icons to full width when collapsed |
+| `cacb2fc` through `4eda91f` | Full persistence — system_state DB, kill switch, button order |
+| `2ec6660` | SVC-1 + AR-5 — real Start Session wiring + post-event reconciliation |
+| `various` | Sidebar: icon alignment fix, logo click to toggle, arrow removed |
+
+- ✅ **AR-3** — ExecutionManager structured audit log: `_audit()` helper, events REQUEST/RISK_PASS/RISK_BLOCK/ROUTED/BROKER_OK/BROKER_FAIL/SQ_REQUEST/SQ_OK/SQ_FAIL
+- ✅ **AR-4** — OrderRetryQueue smart retry: `is_retryable()` classifier, breaks immediately on margin/param/instrument errors
+- ✅ **AR-5** — Post-event reconciliation: Kill Switch + SQ both trigger `order_reconciler.run()` immediately
+- ✅ **SVC-1** — Start Session real wiring: DB health check (SELECT 1), Redis ping, Market Feed starts if Zerodha token available
+- ✅ **Sidebar** — collapse/expand persists to localStorage, logo row click to toggle, smooth fade on text/labels, icons centred, arrow removed
+- ✅ **Sidebar** — STAAX hexagonal SVG logo, icon-only collapsed view (56px), full view (216px)
+- ✅ **Persistence audit** — Orders/Accounts init to `[]`, kill switch + killed_account_ids loaded from DB on mount, Zerodha from `token_valid_today`
+- ✅ **Dashboard button order** — Kill Switch | Stop All | Start Session (left to right)
+- ✅ **system_state table** — migrations 0003+0004, persists kill_switch_active + killed_account_ids across restarts
+
 ### Remaining Phase 1F backlog
 | # | Item | Priority |
 |---|------|----------|
-| AR-3 | ExecutionManager audit log — chronological execution trail per order | Medium |
-| AR-4 | OrderRetryQueue — smart retry filtering (don't retry margin/param errors) | Medium |
-| AR-5 | Post-event reconciliation — already done for SQ; add for Kill Switch + T button | Medium |
-| SVC-1 | Start Session — wire Market Feed start + DB/Redis health check | Medium |
 | F1  | Broker auto-login automation | Medium |
 | F7  | Reports download — Excel + CSV | Medium |
 | NR-3 | Ticker bar — live instrument prices in sidebar | Low |
@@ -1312,6 +1329,17 @@ Currently `Start Session` button calls `servicesAPI.startAll()` but the backend 
 | EXIT | Manual exit price correction | Low |
 | NOTIF | NotificationService — Twilio WhatsApp + AWS SES | Low |
 | §25 | Account-Level Manual Deactivation | Low |
+
+**📋 UI debt (minor, non-blocking):**
+| # | Item |
+|---|------|
+| UI-1 | Accounts page — margin update, global SL/TP fields hidden |
+| UI-2 | Vite CSS warning — `@import` must precede `@tailwind` in global CSS |
+| UI-3 | GridPage duplicate `style` attribute warning (Vite) |
+| UI-4 | ReportsPage duplicate `marginBottom` warning (Vite) |
+
+### 🧪 QA Testing — READY
+All prerequisites met. Next trading day (Mon–Fri 09:15–15:30 IST) run the full QA test script from §27.
 
 ---
 
@@ -1447,7 +1475,8 @@ Key facts:
 - Accounts: Karthik (Zerodha), Mom (Angel One), Wife (Angel One)
 
 Current status: Phase 1F — see §27 in the spec for completed items and remaining backlog.
-Next item to build: [AR-3 — ExecutionManager audit log] or [SVC-1 — Start Session wiring] or whichever item I specify.
+Next item to build: [F1 — Broker auto-login] or [F7 — Reports download] or whichever item I specify.
+QA Testing is READY — run on next trading day (Mon–Fri 09:15–15:30 IST).
 
 Rules:
 - Always read the spec before starting any feature
