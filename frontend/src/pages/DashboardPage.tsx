@@ -67,7 +67,7 @@ export default function DashboardPage() {
   useEffect(() => {
     systemAPI.killSwitchStatus()
       .then(res => {
-        if (res.data?.activated) setKillActive(true)
+        if (res.data?.activated) setKillActivated(true)
         if (res.data?.killed_account_ids?.length) setKilledAccountIds(res.data.killed_account_ids)
       })
       .catch(() => {})
