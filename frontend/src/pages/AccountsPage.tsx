@@ -16,7 +16,7 @@ const FALLBACK: AccountLocal[] = [
 
 export default function AccountsPage() {
   const storeAccounts = useStore(s => s.accounts)
-  const [accounts, setAccounts] = useState<AccountLocal[]>(FALLBACK)
+  const [accounts, setAccounts] = useState<AccountLocal[]>([])
   const [editMargin, setEditMargin] = useState<Record<string, string>>({})
   const [editSL,     setEditSL]     = useState<Record<string, string>>({})
   const [editTP,     setEditTP]     = useState<Record<string, string>>({})

@@ -242,25 +242,13 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-primary" onClick={startAll} disabled={allRunning}>▶ Start Session</button>
-          <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
-          <button
-            className="btn"
-            onClick={() => {
-              setSelectedKillAccounts(accounts.map((a: any) => a.id).filter((id: string) => !killedAccountIds.includes(id)))
-              setShowKillConfirm(true)
-            }}
-            disabled={(killActivated && killedAccountIds.length >= accounts.length) || killLoading}
-            style={{
-              background: killActivated ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.9)",
-              color:      killActivated ? "var(--red)" : "#fff",
-              border:     "1px solid rgba(239,68,68,0.6)",
-              fontWeight: 700,
-              opacity:    killActivated || killLoading ? 0.75 : 1,
-            }}
-          >
-            {(killActivated && killedAccountIds.length >= accounts.length) ? "⚡ Kill Switch Activated" : killLoading ? "Activating..." : killedAccountIds.length > 0 ? `⚡ Kill Switch (${accounts.length - killedAccountIds.length} left)` : "⚡ Kill Switch"}
+          <button className="btn btn-danger" onClick={() => { setSelectedKillAccounts(accounts.map((a: any) => a.id).filter((id: string) => !killedAccountIds.includes(id))); setShowKillConfirm(true) }} disabled={(killActivated && killedAccountIds.length >= accounts.length) || killLoading}
+            style={{ fontSize:'12px', position:'relative', background: killActivated ? 'rgba(239,68,68,0.15)' : undefined, color: killActivated ? 'var(--red)' : undefined, border: killActivated ? '1px solid rgba(239,68,68,0.4)' : undefined }}>
+            ⚡ {(killActivated && killedAccountIds.length >= accounts.length) ? 'Kill Switch Activated' : killedAccountIds.length > 0 ? `Kill Switch (${accounts.length - killedAccountIds.length} left)` : 'Kill Switch'}
           </button>
+          <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
+          <button className="btn btn-primary" onClick={startAll} disabled={allRunning}>▶ Start Session</button>
+
         </div>
       </div>
 

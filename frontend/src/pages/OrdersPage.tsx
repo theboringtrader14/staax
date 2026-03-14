@@ -122,7 +122,7 @@ function todayDay(): string {
 
 export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
-  const [orders, setOrders]           = useState<AlgoGroup[]>(DEMO_ORDERS)
+  const [orders, setOrders]           = useState<AlgoGroup[]>([])
   const [activeDay, setActiveDay]     = useState(todayDay())
   const [showWeekends, setShowWeekends] = useState(false)
   const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
@@ -139,7 +139,7 @@ export default function OrdersPage() {
     const today = new Date().toISOString().slice(0, 10)
     ordersAPI.list(today)
       .then(res => {
-        if (res.data?.length > 0) setOrders(res.data)
+        setOrders(res.data || [])
       })
       .catch(() => {}) // keep demo data if API unreachable
   }, [])
