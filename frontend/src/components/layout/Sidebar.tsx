@@ -22,7 +22,8 @@ function StaaxLogo({ size = 32 }: { size?: number }) {
 }
 
 export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
+  const toggle = (v: boolean) => { setCollapsed(v); localStorage.setItem('sidebar_collapsed', String(v)) }
   const W = collapsed ? '56px' : '216px'
 
   return (
@@ -52,9 +53,14 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        {collapsed && <StaaxLogo size={28} />}
+        {collapsed && (
+          <button onClick={() => toggle(false)} title="Click to expand"
+            style={{ background:'none', border:'none', cursor:'pointer', padding:'0', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <StaaxLogo size={28} />
+          </button>
+        )}
         {!collapsed && (
-          <button onClick={() => setCollapsed(true)} title="Collapse sidebar"
+          <button onClick={() => toggle(true)} title="Collapse sidebar"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '16px', padding: '4px', lineHeight: 1, flexShrink: 0 }}>
             ‹
           </button>
@@ -89,7 +95,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div style={{ padding: collapsed ? '14px 0' : '14px 20px', borderTop: '1px solid var(--bg-border)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
         {!collapsed && <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>v0.1.0 · Phase 1F</div>}
-        <button onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        <button onClick={() => toggle(!collapsed)} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '16px', padding: '2px 4px', lineHeight: 1 }}>
           {collapsed ? '›' : '‹'}
         </button>
