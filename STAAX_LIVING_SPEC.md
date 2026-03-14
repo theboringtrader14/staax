@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 2.9 | **Last Updated:** 13 March 2026 — Phase 1F backend complete + Smart Grid fixes | **PRD Reference:** v1.2
+**Version:** 3.0 | **Last Updated:** 14 March 2026 — Phase 1F continued: Grid fixes, Sidebar, Architecture Review absorbed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1225,28 +1225,135 @@ Scheduler resets both fields daily at 09:00 IST.
 - ✅ **Smart Grid — no stale flash** — initialised to `[]` instead of `DEMO_ALGOS`
 - ✅ **Smart Grid — multiplier click area** — widened to full cell block
 
-### Open Issues — Phase 1F (next session)
-| # | Issue | Details |
-|---|-------|---------|
-| GR-1 | **Grid entries disappear on refresh** | Deployed cells (dragged algos to days) are lost on page refresh. GridPage loads algos but grid state (which algo is on which day) is fetched from backend — likely `loadData()` isn't re-fetching grid entries, or `setGrid` guard is dropping results. Debug `loadData()` → `gridAPI.list()` response vs `setGrid` population. |
-| GR-2 | **Multiplier click area still narrow** | Despite block display patch, the clickable span for editing the lot multiplier still requires precise clicking on the value. Widen to full cell padding area. |
-| GR-3 | **Date format in column headers** | Column headers show `MM-DD` (e.g. `03-13`). Should be `DD-MM` (e.g. `13-03`) per Indian convention. Fix the date slice/format in the day header render. |
+### Also completed 14 March 2026 ✅
+| Commit | Description |
+|--------|-------------|
+| `ab84f21` | GR-1/2/3 fixes + sidebar collapse + STAAX logo + active/archive guards |
+
+- ✅ **GR-1** — Grid entries persist on refresh: `DEMO_GRID` init replaced with `{}`, always rebuild from API, removed stale-data guard
+- ✅ **GR-2** — Multiplier click area widened: full block display with padding
+- ✅ **GR-3** — Date headers now `DD-MM` format (Indian convention)
+- ✅ **Active cell remove guard** — cells with status `algo_active`, `open`, or `order_pending` cannot be removed from grid (before 09:15 removal is allowed; from 09:15 onwards once status transitions to active it is blocked)
+- ✅ **Archive guard (correct rule)** — algo cannot be archived if ANY grid cell across the week has status `algo_active`, `open`, or `order_pending`. Rule: if Thursday has an open STBT position but Friday is inactive, archive is still blocked because Thursday is active. Archive is only allowed when ALL cells are in `no_trade`, `algo_closed`, or `error` state.
+- ✅ **Sidebar collapse/expand** — smooth 0.18s transition, icon-only (56px) when collapsed, full (216px) when expanded
+- ✅ **STAAX logo** — hexagonal SVG logo in sidebar; logo-only when collapsed, logo + name when expanded
+- ✅ **Version footer** — updated to `v0.1.0 · Phase 1F`
 
 ### Remaining Phase 1F backlog
-- ⬜ GR-1, GR-2, GR-3 (see Open Issues above)
-- ⬜ WebSocket wiring — Kill Switch broadcast to connected clients
-- ⬜ orders.py square-off — wire real broker call via ExecutionManager
-- ⬜ F1: Broker auto-login automation
-- ⬜ F7: Reports download (Excel + CSV)
-- ⬜ NR-3: Ticker bar — live instrument prices in sidebar
-- ⬜ SYNC: Manual order sync
-- ⬜ Manual exit price correction
-- ⬜ NotificationService: Twilio WhatsApp + AWS SES
-- ⬜ §25: Account-Level Manual Deactivation
+| # | Item | Priority |
+|---|------|----------|
+| WS-1 | WebSocket wiring — Kill Switch broadcast to connected clients | High |
+| SQ-1 | orders.py square-off — wire real broker call via ExecutionManager | High |
+| AR-3 | ExecutionManager audit log — chronological execution trail per order | Medium |
+| AR-4 | OrderRetryQueue — smart retry filtering (don't retry margin/param errors) | Medium |
+| AR-5 | Post-event reconciliation — trigger OrderReconciler immediately after kill switch, SQ, T, manual sync | Medium |
+| F1  | Broker auto-login automation | Medium |
+| F7  | Reports download — Excel + CSV | Medium |
+| NR-3 | Ticker bar — live instrument prices in sidebar | Low |
+| SYNC | Manual order sync | Low |
+| EXIT | Manual exit price correction | Low |
+| NOTIF | NotificationService — Twilio WhatsApp + AWS SES | Low |
+| §25 | Account-Level Manual Deactivation | Low |
+
+### QA Testing Milestone — when can we test end-to-end?
+**Prerequisite items before QA:**
+1. ✅ Algo creation + Smart Grid deploy
+2. ✅ ExecutionManager + PositionRebuilder + OrderReconciler wired
+3. ⬜ WS-1 — Kill Switch WebSocket broadcast
+4. ⬜ SQ-1 — Real broker square-off via ExecutionManager
+5. ⬜ Zerodha token flow working (Dashboard login → token set)
+
+**Target:** Once WS-1 and SQ-1 are complete, a dry-run QA session can be performed with Zerodha paper trading (sandbox). Full live QA requires a real market session (09:15–15:30 IST on a trading day) with Karthik's Zerodha account connected.
+
+**QA test script (to be built):**
+- Morning startup: Dashboard → Start Session → Zerodha token login
+- Algo creation: create a simple NF DIRECT algo with 1 lot, SL 50pts
+- Deploy to today in Smart Grid (PRACTIX mode)
+- Verify algo activates at 09:15
+- Verify entry fires at entry_time
+- Verify SL monitor triggers on price movement
+- Verify P&L updates live
+- Verify square-off via SQ button
+- Verify Orders page shows correct state
+- Verify grid cell updates to CLOSED
 
 ---
 
-## 28. Claude Code Setup & Continuity Guide
+## 28. Architecture Review — Recommendations (v3.0)
+
+These recommendations were reviewed and accepted on 14 March 2026. Items marked ⬜ are in the Phase 1F backlog above.
+
+### AR-1 — ExecutionManager Audit Log ⬜
+Every order decision should be logged chronologically for debugging and post-trade analysis.
+
+**Log flow:**
+```
+[EXEC] Order request received — algo_id, leg_no, direction, qty
+[EXEC] Risk checks passed — kill switch OFF, market hours OK
+[EXEC] Routed to OrderRetryQueue
+[EXEC] Broker response received — order_id, status
+[EXEC] Order status updated in DB
+```
+Implementation: add `_log(msg)` helper to `ExecutionManager` that writes to a rotating file log + broadcasts to WebSocket system log panel.
+
+### AR-2 — Kill Switch Enforced Through ExecutionManager ✅
+All order placement and square-off must go through `ExecutionManager`. No component interacts directly with `OrderRetryQueue` or `OrderPlacer`.
+
+```
+AlgoRunner → ExecutionManager → OrderRetryQueue → OrderPlacer
+```
+
+`ExecutionManager.place()` already enforces:
+```python
+if kill_switch_active:
+    raise ExecutionBlocked("Kill switch active")
+```
+`square_off()` bypasses the kill switch (always allowed — emergency exits must go through).
+
+### AR-3 — OrderRetryQueue Smart Retry Filtering ⬜
+Retry only for temporary technical failures. Never retry for business-logic rejections.
+
+| Retry ✅ | No Retry ❌ |
+|----------|------------|
+| Network timeout | Insufficient margin |
+| Broker gateway timeout | Invalid order parameters |
+| Temporary rate limit | Instrument not tradable |
+| Temporary exchange unavailability | Market closed |
+
+Implementation: inspect broker error code/message before enqueuing retry. Add `is_retryable(error)` classifier to `OrderRetryQueue`.
+
+### AR-4 — Post-Event Reconciliation ⬜
+Trigger `OrderReconciler.run()` immediately after:
+- Kill switch activation
+- Manual square-off (SQ button)
+- Terminate (T button)
+- Manual order sync
+
+This detects broker-platform mismatches immediately without waiting for the 15s cycle.
+
+### AR-5 — Execution Safety Monitoring ⬜ (logging)
+Standard log prefixes for all engine components:
+```
+[EXEC]  ExecutionManager decisions
+[RETRY] OrderRetryQueue attempts
+[RECON] OrderReconciler corrections
+[FEED]  WebSocket/LTP reconnect events
+[BUILD] PositionRebuilder startup recovery
+```
+
+### AR-6 — Tick Processing Safety ✅ (design principle)
+Tick pipeline must remain lightweight:
+```
+WebSocket Tick → ORB Tracker → W&T Evaluator → TSL Engine → SLTP Monitor
+```
+Rules (already followed in current implementation):
+- No DB writes inside tick handlers — only price comparisons
+- Trigger actions (SL hit, TSL update) are offloaded via `asyncio.ensure_future()`
+- Heavy logic (position rebuilding, reconciliation) runs in scheduler jobs, not tick path
+
+---
+
+## 29. Claude Code Setup & Continuity Guide
 
 ### Purpose
 Claude Code replaces the copy-paste workflow. It runs directly on your Mac inside `~/STAXX/staax`, reads/writes files, runs commands, restarts servers — you approve each action with `y/n`.
@@ -1304,7 +1411,7 @@ Key facts:
 - Accounts: Karthik (Zerodha), Mom (Angel One), Wife (Angel One)
 
 Current status: Phase 1F — see §27 in the spec for completed items and remaining backlog.
-Next item to build: [GR-1 — Grid entries disappear on refresh] or whichever item I specify.
+Next item to build: [WS-1 — Kill Switch WebSocket broadcast] or whichever item I specify.
 
 Rules:
 - Always read the spec before starting any feature
