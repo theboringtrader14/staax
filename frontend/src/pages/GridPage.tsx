@@ -119,7 +119,7 @@ export default function GridPage() {
   const weekDates = getWeekDates()
 
   const [algos,    setAlgos]    = useState<Algo[]>([])
-  const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>(DEMO_GRID)
+  const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>({})
   const [loading,  setLoading]  = useState(true)
   const [wk,       setWk]       = useState(false)
   const [ed,       setEd]       = useState<{id:string;day:string} | null>(null)
@@ -161,9 +161,9 @@ export default function GridPage() {
       const weekStart = weekDates['MON']
       const weekEnd   = weekDates['FRI']
       const gridRes = await gridAPI.list({ week_start: weekStart, week_end: weekEnd })
-      const entries: any[] = gridRes.data || []
+      const entries: any[] = gridRes.data?.entries || gridRes.data || []
 
-      if (entries.length > 0) {
+      if (true) {  // always rebuild grid from API
         const newGrid: Record<string, Record<string, Cell>> = {}
         for (const e of entries) {
           const algoId = String(e.algo_id)
@@ -245,6 +245,12 @@ export default function GridPage() {
   const rmCell = async (algoId: string, day: string) => {
     const cell = grid[algoId]?.[day]
 
+    // Block remove if cell is active or open
+    const cellStatus = grid[algoId]?.[day]?.status
+    if (cellStatus === 'algo_active' || cellStatus === 'open' || cellStatus === 'order_pending') {
+      flashError('Cannot remove an active algo from this day')
+      return
+    }
     // Optimistic remove
     setGrid(g => {
       const u = { ...g[algoId] }
@@ -319,6 +325,9 @@ export default function GridPage() {
 
   // ── Archive algo ──────────────────────────────────────────────────────────────
   const archAlgo = async (algoId: string) => {
+    const algoCells = Object.values(grid[algoId] || {})
+    const hasActive = algoCells.some(c => c.status === 'algo_active' || c.status === 'open' || c.status === 'order_pending')
+    if (hasActive) { flashError('Cannot archive — algo has active positions this week'); return }
     setAlgos(a => a.map(x => x.id === algoId ? { ...x, arch: true } : x))
     setGrid(g => { const n = { ...g }; delete n[algoId]; return n })
 
@@ -446,7 +455,7 @@ export default function GridPage() {
                 <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)' }}>
                   {d}
                   <div style={{ fontSize:'9px', color:'var(--text-dim)', fontWeight:400, marginTop:'1px' }}>
-                    {weekDates[d]?.slice(5)}
+                    {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}
                   </div>
                 </th>
               ))}
@@ -538,7 +547,7 @@ export default function GridPage() {
                                         onBlur={() => { setM(algo.id, day, parseInt(ev) || 1); setEd(null) }}
                                         onKeyDown={e => e.key === 'Enter' && (setM(algo.id, day, parseInt(ev) || 1), setEd(null))}
                                         style={{ width:'44px', background:'var(--bg-primary)', border:'1px solid var(--accent-blue)', borderRadius:'2px', color:'var(--text)', fontSize:'10px', padding:'0 3px', fontFamily:'inherit' }}/>
-                                    : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }} style={{ display:'block', width:'100%', textAlign:'center', cursor:'pointer', padding:'4px 0' }}
+                                    : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }} style={{ display:'block', width:'100%', textAlign:'center', cursor:'pointer', padding:'8px 12px', margin:'-8px -12px' }}
                                         style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-blue)', cursor:'text',
                                           textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.4)' }}>
                                         {cell.multiplier}
