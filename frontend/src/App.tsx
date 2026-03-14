@@ -19,6 +19,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Apply saved theme on mount
+  const theme = localStorage.getItem('staax_theme') || 'dark'
+  document.documentElement.setAttribute('data-theme', theme)
+
   return (
     <BrowserRouter>
       <Routes>

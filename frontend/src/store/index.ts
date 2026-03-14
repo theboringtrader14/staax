@@ -41,6 +41,10 @@ interface STAAXStore {
   livePnl:    number
   setLivePnl: (pnl: number) => void
 
+  // Theme
+  theme:      'dark' | 'light'
+  toggleTheme: () => void
+
   // Notifications (from WebSocket /ws/notifications)
   notifications:    Notification[]
   addNotification:  (n: Omit<Notification, 'id' | 'read'>) => void
@@ -101,6 +105,13 @@ export const useStore = create<STAAXStore>((set, get) => ({
   setLivePnl: (pnl) => set({ livePnl: pnl }),
 
   // ── Notifications ─────────────────────────────────────────────────────────
+  theme: (localStorage.getItem('staax_theme') as 'dark' | 'light') || 'dark',
+  toggleTheme: () => set(state => {
+    const next = state.theme === 'dark' ? 'light' : 'dark'
+    localStorage.setItem('staax_theme', next)
+    document.documentElement.setAttribute('data-theme', next)
+    return { theme: next }
+  }),
   notifications: [],
   addNotification: (n) =>
     set((state) => ({

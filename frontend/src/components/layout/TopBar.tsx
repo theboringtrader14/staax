@@ -15,6 +15,8 @@ export default function TopBar() {
   const livePnl           = useStore(s => s.livePnl)
   const notifications     = useStore(s => s.notifications)
   const markAllRead       = useStore(s => s.markAllRead)
+  const theme             = useStore(s => s.theme)
+  const toggleTheme       = useStore(s => s.toggleTheme)
   const unreadCount       = useStore(s => s.unreadCount)
   const rawAccounts       = useStore(s => s.accounts)
   const activeAccount     = useStore(s => s.activeAccount)
@@ -138,6 +140,20 @@ export default function TopBar() {
                 width: '7px', height: '7px', borderRadius: '50%', background: 'var(--red)',
               }} />
             )}
+          </button>
+
+          <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              background: 'transparent', border: '1px solid var(--bg-border)',
+              borderRadius: '5px', height: 'var(--btn-h)', width: 'var(--btn-h)',
+              cursor: 'pointer', color: 'var(--text-dim)', fontSize: '14px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+          >
+            {theme === 'dark' ? '☀' : '☾'}
           </button>
 
           <button
