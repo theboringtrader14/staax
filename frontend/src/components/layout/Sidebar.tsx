@@ -47,7 +47,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <StaaxLogo size={28} />
-            <div>
+            <div style={{ opacity: collapsed ? 0 : 1, transition: 'opacity 0.15s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>
               <div style={{ fontFamily:"'ADLaM Display', serif", fontSize: '20px', color: 'var(--accent-blue)', letterSpacing: '0.05em', lineHeight: 1 }}>STAAX</div>
               <div style={{ fontSize: '9px', color: 'var(--text-dim)', marginTop: '1px', letterSpacing: '0.14em' }}>ALGO TRADING</div>
             </div>
@@ -87,14 +87,14 @@ export default function Sidebar() {
             <span style={{ width: '44px', textAlign: 'center', fontSize: '18px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {item.icon}
             </span>
-            {!collapsed && <span style={{ paddingRight: '16px' }}>{item.label}</span>}
+            <span style={{ paddingRight: '16px', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>{item.label}</span>
           </NavLink>
         ))}
       </div>
 
       {/* Footer */}
       <div style={{ padding: collapsed ? '14px 0' : '14px 20px', borderTop: '1px solid var(--bg-border)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
-        {!collapsed && <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>v0.1.0 · Phase 1F</div>}
+        <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>v0.1.0 · Phase 1F</div>
         <button onClick={() => toggle(!collapsed)} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '16px', padding: '2px 4px', lineHeight: 1 }}>
           {collapsed ? '›' : '‹'}
