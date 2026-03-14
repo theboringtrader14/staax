@@ -84,7 +84,7 @@ export default function Sidebar() {
               fontWeight: isActive ? '600' : '400',
               whiteSpace: 'nowrap',
             })}>
-            <span style={{ width: '44px', textAlign: 'center', fontSize: '18px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ width: collapsed ? '56px' : '44px', textAlign: 'center', fontSize: '18px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {item.icon}
             </span>
             <span style={{ paddingRight: '16px', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>{item.label}</span>
