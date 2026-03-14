@@ -557,7 +557,7 @@ export default function IndicatorsPage() {
     <div className="page-content">
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: "'ADLaM Display', serif", fontSize: '22px', fontWeight: 400 }}>Indicator Systems</h1>
+          <h1 style={{ fontFamily: "'ADLaM Display', serif", fontSize: '22px', fontWeight: 400 }}>Indicator Bots</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
             {loading ? 'Loading...' : `${activeBots.filter(b => b.status !== 'inactive').length} running · ${activeBots.length} total`}
           </p>
