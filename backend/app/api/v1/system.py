@@ -72,6 +72,15 @@ async def activate_kill_switch(request: Request, body: KillSwitchRequest = None,
         websocket_manager=request.app.state.ws_manager if hasattr(request.app.state, 'ws_manager') else None,
     )
 
+    # AR-5: Trigger immediate reconciliation after kill switch
+    try:
+        from app.engine.order_reconciler import order_reconciler
+        import asyncio
+        asyncio.ensure_future(order_reconciler.run())
+        logger.info("[KILL SWITCH] Post-event reconciliation triggered")
+    except Exception as e:
+        logger.warning(f"[KILL SWITCH] Post-event reconciliation failed: {e}")
+
     return {
         "status":  "activated" if not result.get("errors") else "activated_with_errors",
         "message": result.get("summary"),

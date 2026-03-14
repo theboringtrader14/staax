@@ -17,10 +17,14 @@ Endpoints:
 These endpoints power the Dashboard Services panel.
 The frontend polls GET /services every 5 seconds to update the status dots.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Dict
 from enum import Enum
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -92,30 +96,95 @@ async def get_status():
 
 
 @router.post("/start-all")
-async def start_all():
+async def start_all(request: Request):
     """
     Start all services in dependency order: db → redis → backend → ws.
     Called by 'Start Session' button on Dashboard.
+    - db/redis: health check only (system daemons — always up in prod)
+    - backend: already running
+    - ws (Market Feed): starts LTP consumer if Zerodha token is available
     """
-    # TODO Phase 1C: actually start each service
-    # For now: mark all as running
-    for svc_id in START_ORDER:
-        _service_states[svc_id] = ServiceStatus.RUNNING
+    from sqlalchemy import text
+    from app.core.database import AsyncSessionLocal
+
+    # ── DB health check ───────────────────────────────────────────────────────
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        _service_states["db"] = ServiceStatus.RUNNING
+        logger.info("[SVC] PostgreSQL: healthy")
+    except Exception as e:
+        _service_states["db"] = ServiceStatus.ERROR
+        logger.error(f"[SVC] PostgreSQL health check failed: {e}")
+
+    # ── Redis health check ────────────────────────────────────────────────────
+    try:
+        redis = getattr(request.app.state, "redis", None)
+        if redis:
+            await redis.ping()
+            _service_states["redis"] = ServiceStatus.RUNNING
+            logger.info("[SVC] Redis: healthy")
+        else:
+            _service_states["redis"] = ServiceStatus.STOPPED
+    except Exception as e:
+        _service_states["redis"] = ServiceStatus.ERROR
+        logger.error(f"[SVC] Redis health check failed: {e}")
+
+    # ── Backend: always running ───────────────────────────────────────────────
+    _service_states["backend"] = ServiceStatus.RUNNING
+
+    # ── Market Feed: start LTP consumer if token available ───────────────────
+    try:
+        from app.models.account import Account, BrokerType
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Account).where(Account.broker == BrokerType.zerodha, Account.is_active == True)
+            )
+            zerodha_acc = result.scalar_one_or_none()
+
+        ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+        zerodha = getattr(request.app.state, "zerodha", None)
+
+        if zerodha_acc and zerodha_acc.access_token and ltp_consumer and zerodha:
+            # Load token into broker if not already loaded
+            if not zerodha._access_token:
+                await zerodha.load_token(zerodha_acc.access_token)
+            ticker = zerodha.get_ticker()
+            ltp_consumer.set_ticker(ticker)
+            _service_states["ws"] = ServiceStatus.RUNNING
+            logger.info("[SVC] Market Feed: started with Zerodha token")
+        else:
+            _service_states["ws"] = ServiceStatus.STOPPED
+            logger.warning("[SVC] Market Feed: no Zerodha token — skipping feed start")
+    except Exception as e:
+        _service_states["ws"] = ServiceStatus.ERROR
+        logger.error(f"[SVC] Market Feed start failed: {e}")
 
     return {
-        "message": "All services started",
+        "message": "Session started",
         "services": _build_status_response()["services"]
     }
 
 
 @router.post("/stop-all")
-async def stop_all():
+async def stop_all(request: Request):
     """
     Stop all services in reverse order: ws → backend → redis → db.
     Called by 'Stop All' button on Dashboard.
     """
+    # Stop Market Feed (LTP consumer)
+    try:
+        ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+        if ltp_consumer and hasattr(ltp_consumer, "stop"):
+            await ltp_consumer.stop()
+        _service_states["ws"] = ServiceStatus.STOPPED
+        logger.info("[SVC] Market Feed: stopped")
+    except Exception as e:
+        logger.error(f"[SVC] Market Feed stop failed: {e}")
+
     for svc_id in STOP_ORDER:
-        if svc_id != "backend":   # backend stops last — it's serving this request
+        if svc_id not in ("backend", "ws"):
             _service_states[svc_id] = ServiceStatus.STOPPED
 
     return {
@@ -136,12 +205,35 @@ async def start_service(service_id: str):
     if _service_states[service_id] == ServiceStatus.RUNNING:
         return {"message": f"{service_id} is already running"}
 
-    # TODO Phase 1C: actually start the service
-    _service_states[service_id] = ServiceStatus.RUNNING
+    # Delegate to start_all logic for individual services
+    from fastapi import Request as _Req
+    # For individual starts, just do a health check
+    if service_id == "db":
+        try:
+            from app.core.database import AsyncSessionLocal
+            from sqlalchemy import text
+            async with AsyncSessionLocal() as db:
+                await db.execute(text("SELECT 1"))
+            _service_states[service_id] = ServiceStatus.RUNNING
+        except Exception as e:
+            _service_states[service_id] = ServiceStatus.ERROR
+            raise HTTPException(status_code=503, detail=f"PostgreSQL not reachable: {e}")
+    elif service_id == "redis":
+        try:
+            import redis.asyncio as aioredis
+            r = aioredis.from_url("redis://localhost:6379")
+            await r.ping()
+            await r.aclose()
+            _service_states[service_id] = ServiceStatus.RUNNING
+        except Exception as e:
+            _service_states[service_id] = ServiceStatus.ERROR
+            raise HTTPException(status_code=503, detail=f"Redis not reachable: {e}")
+    else:
+        _service_states[service_id] = ServiceStatus.RUNNING
 
     return {
         "service_id": service_id,
-        "status": ServiceStatus.RUNNING,
+        "status": _service_states[service_id],
         "message": f"{_display_name(service_id)} started"
     }
 
