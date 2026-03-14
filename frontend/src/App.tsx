@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import ZerodhaCallbackPage from './pages/ZerodhaCallbackPage'
 import Layout from '@/components/layout/Layout'
 import LoginPage from '@/pages/LoginPage'
 import GridPage from '@/pages/GridPage'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="accounts"   element={<AccountsPage />} />
           <Route path="indicators" element={<IndicatorsPage />} />
         </Route>
+        <Route path="/zerodha-callback" element={<ZerodhaCallbackPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

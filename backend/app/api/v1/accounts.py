@@ -141,6 +141,16 @@ async def zerodha_login_url():
     broker = ZerodhaBroker()
     return {"login_url": broker.get_login_url()}
 
+@router.get("/zerodha/callback")
+async def zerodha_callback(request: Request):
+    """
+    Catch Zerodha OAuth redirect (http://127.0.0.1/?request_token=XXX).
+    Redirects to frontend callback page which completes token exchange.
+    """
+    from fastapi.responses import RedirectResponse
+    params = str(request.url.query)
+    return RedirectResponse(url=f"http://localhost:3000/zerodha-callback?{params}")
+
 
 @router.post("/zerodha/set-token")
 async def zerodha_set_token(

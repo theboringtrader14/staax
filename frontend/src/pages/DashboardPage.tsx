@@ -171,15 +171,36 @@ export default function DashboardPage() {
     accountsAPI.zerodhaLoginUrl()
       .then(res => {
         const url = res.data.login_url
-        // Open Zerodha login in new tab
-        window.open(url, '_blank', 'width=800,height=600')
-        addLog('🔑 Zerodha login window opened')
+        const popup = window.open(url, '_blank', 'width=800,height=600')
+        addLog('🔑 Zerodha login window opened — complete login in the popup')
+
+        // Listen for postMessage from callback page
+        const onMsg = (e: MessageEvent) => {
+          if (e.data?.type === 'ZERODHA_TOKEN_SET') {
+            setZerodhaConnected(true)
+            addLog('✅ Zerodha token set — connected for today')
+            window.removeEventListener('message', onMsg)
+            if (popup) popup.close()
+          }
+        }
+        window.addEventListener('message', onMsg)
+
+        // Fallback poll — check token status every 3s for up to 3 minutes
+        const poll = setInterval(async () => {
+          try {
+            const r = await accountsAPI.list()
+            const zerodha = (r.data || []).find((a: any) => a.broker === 'zerodha')
+            if (zerodha?.token_valid_today) {
+              setZerodhaConnected(true)
+              addLog('✅ Zerodha connected for today')
+              clearInterval(poll)
+              window.removeEventListener('message', onMsg)
+            }
+          } catch { /* ignore */ }
+        }, 3000)
+        setTimeout(() => clearInterval(poll), 180000)
       })
-      .catch(() => {
-        // Fallback — mark connected for demo
-        setZerodhaConnected(true)
-        addLog('✅ Zerodha token refreshed')
-      })
+      .catch(() => addLog('⚠️ Could not fetch Zerodha login URL — is backend running?'))
   }
 
   const allRunning = services.every(s => s.status === 'running')
