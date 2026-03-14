@@ -68,6 +68,7 @@ export default function DashboardPage() {
     systemAPI.killSwitchStatus()
       .then(res => {
         if (res.data?.activated) setKillActive(true)
+        if (res.data?.killed_account_ids?.length) setKilledAccountIds(res.data.killed_account_ids)
       })
       .catch(() => {})
   }, [])

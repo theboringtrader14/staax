@@ -80,6 +80,28 @@ async def activate_kill_switch(request: Request, body: KillSwitchRequest = None,
 
 
 @router.get("/kill-switch/status")
-async def kill_switch_status():
-    """Check current kill switch state."""
+async def kill_switch_status(db: AsyncSession = Depends(get_db)):
+    """Check current kill switch state — reads from DB for persistence across restarts."""
+    from app.models.system_state import SystemState
+    from sqlalchemy import select as sa_select
+    try:
+        result = await db.execute(sa_select(SystemState).where(SystemState.id == 1))
+        row = result.scalar_one_or_none()
+        if row and row.kill_switch_active and not global_kill_switch.is_activated():
+            # Restore in-memory state from DB on first read after restart
+            global_kill_switch._state.activated = True
+            global_kill_switch._state.activated_at = row.kill_switch_at
+            global_kill_switch._state.positions_squared = row.positions_squared or 0
+            global_kill_switch._state.orders_cancelled = row.orders_cancelled or 0
+        if row:
+            return {
+                "activated":          row.kill_switch_active,
+                "activated_at":       row.kill_switch_at.isoformat() if row.kill_switch_at else None,
+                "positions_squared":  row.positions_squared,
+                "orders_cancelled":   row.orders_cancelled,
+                "error":              row.kill_switch_error,
+                "killed_account_ids": row.killed_account_ids.split(',') if row.killed_account_ids else [],
+            }
+    except Exception:
+        pass
     return global_kill_switch.get_state()

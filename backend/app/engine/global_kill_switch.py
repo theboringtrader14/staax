@@ -78,6 +78,24 @@ async def activate(db, broker_registry, websocket_manager=None, account_ids: lis
     # ── Step 0: Freeze engine ─────────────────────────────────────────────────
     _state.activated = True
     _state.activated_at = datetime.now(timezone.utc)
+    # Persist to DB so state survives server restarts
+    try:
+        from app.models.system_state import SystemState
+        existing = await db.execute(__import__('sqlalchemy').select(SystemState).where(SystemState.id == 1))
+        sys_row = existing.scalar_one_or_none()
+        killed_ids = ','.join(account_ids) if account_ids else ''
+        if sys_row:
+            sys_row.kill_switch_active = True
+            sys_row.kill_switch_at = _state.activated_at
+            existing_ids = set(sys_row.killed_account_ids.split(',')) if sys_row.killed_account_ids else set()
+            if account_ids:
+                existing_ids.update(account_ids)
+            sys_row.killed_account_ids = ','.join(existing_ids) if existing_ids else None
+        else:
+            db.add(SystemState(id=1, kill_switch_active=True, kill_switch_at=_state.activated_at, killed_account_ids=killed_ids or None))
+        await db.commit()
+    except Exception as _e:
+        logger.warning(f"[KILL SWITCH] Failed to persist state to DB: {_e}")
 
     _freeze_engine()
 
