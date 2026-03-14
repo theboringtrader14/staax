@@ -1,4 +1,5 @@
 import { useStore } from '@/store'
+import { eventsAPI } from '@/services/api'
 import { useState, useEffect } from 'react'
 
 const NOTIF_COLOR: Record<string, string> = {
@@ -25,6 +26,31 @@ export default function TopBar() {
 
   const [time, setTime]           = useState(new Date())
   const [showNotif, setShowNotif] = useState(false)
+
+  // Load persisted events from DB on mount
+  useEffect(() => {
+    eventsAPI.list(50)
+      .then(res => {
+        const rows = res.data || []
+        rows.forEach((e: any) => addNotification({
+          type: e.level === 'success' ? 'success' : e.level === 'warn' ? 'warn' : e.level === 'error' ? 'error' : 'info',
+          title: e.algo_name || e.source || 'System',
+          message: e.msg,
+          time: e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
+        }))
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleExport = async () => {
+    try {
+      const res = await eventsAPI.export()
+      const url = URL.createObjectURL(new Blob([JSON.stringify(res.data, null, 2)]))
+      const a = document.createElement('a')
+      a.href = url; a.download = 'staax_event_log.json'; a.click()
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000)
@@ -137,10 +163,14 @@ export default function TopBar() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <span style={{ fontWeight: 700, fontSize: '13px' }}>Notifications</span>
-            <button onClick={() => setShowNotif(false)} style={{
+            <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+              <button onClick={handleExport} title="Export log for debugging"
+                style={{ background:'none', border:'1px solid var(--bg-border)', borderRadius:'4px', cursor:'pointer', color:'var(--text-dim)', fontSize:'10px', padding:'2px 6px' }}>↓ Export</button>
+              <button onClick={() => setShowNotif(false)} style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-muted)', fontSize: '14px',
             }}>✕</button>
+            </div>
           </div>
           <div style={{ padding: '8px 0' }}>
             {notifications.length === 0 && (

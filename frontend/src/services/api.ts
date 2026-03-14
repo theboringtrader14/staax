@@ -129,6 +129,11 @@ export const systemAPI = {
   ticker:             () => api.get("/system/ticker"),
 }
 
+export const eventsAPI = {
+  list:   (limit = 100) => api.get('/events/', { params: { limit } }),
+  export: () => api.get('/events/export', { responseType: 'blob' }),
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 export function createOrdersWebSocket(): WebSocket {
   const wsBase = API_BASE.replace('http', 'ws')
