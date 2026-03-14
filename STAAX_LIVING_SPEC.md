@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 2.8 | **Last Updated:** March 2026 — Phase 1E complete (TTP + Journey + UI polish) | **PRD Reference:** v1.2
+**Version:** 2.9 | **Last Updated:** 13 March 2026 — Phase 1F backend complete + Smart Grid fixes | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -15,7 +15,7 @@ A personal financial OS being built by Karthikeyan. Five modules planned, each i
 
 | Module | Full Name | Purpose | Status |
 |--------|-----------|---------|--------|
-| **STAAX** | Algo Trading Platform | F&O algo trading — automated strategies, order management, live P&L | 🔄 Phase 1E active |
+| **STAAX** | Algo Trading Platform | F&O algo trading — automated strategies, order management, live P&L | 🔄 Phase 1F active |
 | **INVEX** | Portfolio Manager | Fetches investments across all mapped accounts (Karthik, Mom, Wife). Fundamental + tech analysis dashboards. Quick insights to manage equity/MF portfolio. AI-assisted flagging and rebalancing. | 🔭 Future |
 | **BUDGEX** | Expense Tracker | Captures everyday expenditure, organises it, feeds structured data to FINEX and the AI Avatar for financial reasoning | 🔭 Future |
 | **FINEX** | Financial OS | Sits atop all modules. Consolidates data from STAAX + INVEX + BUDGEX. Tax planning, advance tax computation, networth view, financial independence status, expense management | 🔭 Future |
@@ -1165,9 +1165,9 @@ Scheduler resets both fields daily at 09:00 IST.
 
 ---
 
-## 26. Session Summary — Phase 1E (completed this session)
+## 26. Session Summary — Phase 1E (complete ✅)
 
-### Commits this session
+### Commits
 | Hash | Description |
 |------|-------------|
 | `531a727` | Phase 1E PostgreSQL wiring (21 files) |
@@ -1181,29 +1181,72 @@ Scheduler resets both fields daily at 09:00 IST.
 | `8cb54a1` | SE-1 enhancement: Account-Level Kill Switch |
 | `1c3ad59` | Fix: Kill Switch backend bugs + scheduler import |
 | `5f55eff` | Fix: Kill Switch modal state bugs (partial re-kill) |
+| `0bb5baa` | Phase 1E: UI polish — time input, leg select arrows, active colour dimming |
+| `02649be` | Phase 1E §31: UI-A white inputs, UI-B/C straddle % dropdown |
+| `0444347` | Phase 1E §31: BL-A/B/C validation — feature value guards + TSL/TTP value requirements |
+| `b2bc7a9` | Phase 1E §31: UI-D leg select arrows + feature value row styling |
+| `3914e64` | Phase 1E §31: Child leg style parity + Lots placeholder + blank lots validation |
+| `86ee5b8` | Phase 1E: Lots input defaults to empty — shows dimmed placeholder, blocks save if blank |
 
-### Phase 1E status
+### Phase 1E — All complete ✅
 - ✅ SE-1 GlobalKillSwitch — engine + API + Dashboard UI + account-level modal
 - ✅ SE-2 OrderRetryQueue — engine + RE endpoint + DB columns
 - ✅ SE-3 BrokerReconnectManager — engine + scheduler 3s job
 - ✅ Angel One adapter — full SmartAPI implementation
-- ✅ UI-1 verified working, UI-2 button height fixed
 - ✅ §24 Account-Level Kill Switch — selective kill, KILLED badge, partial re-kill
+- ✅ TTP engine — trailing take profit per leg
+- ✅ Journey engine — multi-level child leg firing (3 levels)
+- ✅ §31 UI polish — all UI-A/B/C/D + BL-A/B/C items complete
+- ✅ Lots input — blank default, dimmed placeholder, save blocked if empty
 
-### Remaining Phase 1E
+---
+
+## 27. Session Summary — Phase 1F (13 March 2026)
+
+### Commits
+| Hash | Description |
+|------|-------------|
+| `33c4272` | Phase 1F: AR-1 ExecutionManager, AR-2 PositionRebuilder, SE-4 OrderReconciler |
+| `1a9a6de` | Phase 1F: Fix save flow — leg payload fields, validation messages, scheduler + OrderStatus fix |
+| `5ba60f2` | Phase 1F: Smart Grid fixes — account nickname, leg chips, deploy upsert, Archive btn |
+
+### Completed this session ✅
+- ✅ **AR-1 ExecutionManager** — central order control layer, risk gate (kill switch + market hours), `place()` + `square_off()`, singleton wired in `main.py`
+- ✅ **AR-2 PositionRebuilder** — startup recovery: re-registers SLTPMonitor/TSL/TTP/MTM, re-subscribes LTP tokens
+- ✅ **SE-4 OrderReconciler** — every 15s: reconciles DB vs broker, corrects OPEN+CANCELLED→ERROR and PENDING+FILLED→OPEN, broadcasts via WebSocket
+- ✅ **AlgoScheduler.add_reconciler_job()** — added to scheduler.py, registers 15s interval job
+- ✅ **OrderStatus capitalisation fix** — `OrderStatus.OPEN` / `OrderStatus.PENDING` in position_rebuilder + order_reconciler
+- ✅ **Algo save fixed** — `buildPayload()` now sends `instrument` (ce/pe/fu) and correct `underlying` (full INST_CODES name)
+- ✅ **Validation messages** — comprehensive ❌ error messages for every missing field (algo-level + per-leg)
+- ✅ **Smart Grid — account nickname** — algos API joins Account table, returns `account_nickname`
+- ✅ **Smart Grid — leg chips** — list endpoint now includes legs; reverse-maps NIFTY→NF for chip display
+- ✅ **Smart Grid — deploy upsert** — re-deploying an algo on same day updates multiplier instead of 400 error
+- ✅ **Smart Grid — Archive button** — ghost style, larger icon, correct order: Show Weekends | Archive | + New Algo, aligned heights
+- ✅ **Smart Grid — no stale flash** — initialised to `[]` instead of `DEMO_ALGOS`
+- ✅ **Smart Grid — multiplier click area** — widened to full cell block
+
+### Open Issues — Phase 1F (next session)
+| # | Issue | Details |
+|---|-------|---------|
+| GR-1 | **Grid entries disappear on refresh** | Deployed cells (dragged algos to days) are lost on page refresh. GridPage loads algos but grid state (which algo is on which day) is fetched from backend — likely `loadData()` isn't re-fetching grid entries, or `setGrid` guard is dropping results. Debug `loadData()` → `gridAPI.list()` response vs `setGrid` population. |
+| GR-2 | **Multiplier click area still narrow** | Despite block display patch, the clickable span for editing the lot multiplier still requires precise clicking on the value. Widen to full cell padding area. |
+| GR-3 | **Date format in column headers** | Column headers show `MM-DD` (e.g. `03-13`). Should be `DD-MM` (e.g. `13-03`) per Indian convention. Fix the date slice/format in the day header render. |
+
+### Remaining Phase 1F backlog
+- ⬜ GR-1, GR-2, GR-3 (see Open Issues above)
+- ⬜ WebSocket wiring — Kill Switch broadcast to connected clients
+- ⬜ orders.py square-off — wire real broker call via ExecutionManager
 - ⬜ F1: Broker auto-login automation
 - ⬜ F7: Reports download (Excel + CSV)
 - ⬜ NR-3: Ticker bar — live instrument prices in sidebar
 - ⬜ SYNC: Manual order sync
 - ⬜ Manual exit price correction
-- ⬜ TTP: Trailing Take Profit per leg
-- ⬜ Journey feature: multi-level re-entry config
 - ⬜ NotificationService: Twilio WhatsApp + AWS SES
-- ⬜ §25: Account-Level Manual Deactivation (Phase 1F)
+- ⬜ §25: Account-Level Manual Deactivation
 
 ---
 
-## 27. Claude Code Setup & Continuity Guide
+## 28. Claude Code Setup & Continuity Guide
 
 ### Purpose
 Claude Code replaces the copy-paste workflow. It runs directly on your Mac inside `~/STAXX/staax`, reads/writes files, runs commands, restarts servers — you approve each action with `y/n`.
@@ -1260,8 +1303,8 @@ Key facts:
 - GitHub: github.com/theboringtrader14/staax (always commit + push after each feature)
 - Accounts: Karthik (Zerodha), Mom (Angel One), Wife (Angel One)
 
-Current status: Phase 1E — see §26 in the spec for completed items and remaining backlog.
-Next item to build: [F1 — Broker auto-login automation] or whichever item I specify.
+Current status: Phase 1F — see §27 in the spec for completed items and remaining backlog.
+Next item to build: [GR-1 — Grid entries disappear on refresh] or whichever item I specify.
 
 Rules:
 - Always read the spec before starting any feature
