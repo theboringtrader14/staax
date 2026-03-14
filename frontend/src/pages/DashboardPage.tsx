@@ -52,11 +52,24 @@ export default function DashboardPage() {
   const [selectedKillAccounts, setSelectedKillAccounts] = useState<string[]>([])
   const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
 
-  // Load accounts on mount
+  // Load accounts on mount + derive zerodha token state
   useEffect(() => {
     accountsAPI.list()
-      .then(res => setAccounts(res.data))
+      .then(res => {
+        setAccounts(res.data)
+        const zerodha = (res.data || []).find((a: any) => a.broker === 'zerodha')
+        if (zerodha?.token_valid_today) setZerodhaConnected(true)
+      })
       .catch(() => {}) // backend may not be up yet
+  }, [])
+
+  // Load kill switch state on mount
+  useEffect(() => {
+    systemAPI.killSwitchStatus()
+      .then(res => {
+        if (res.data?.activated) setKillActive(true)
+      })
+      .catch(() => {})
   }, [])
 
   // Poll service status every 5 seconds
