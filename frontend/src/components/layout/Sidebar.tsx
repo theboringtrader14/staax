@@ -3,12 +3,12 @@ import { useState, useEffect, useRef } from 'react'
 import { systemAPI } from '@/services/api'
 
 const nav = [
-  { path:'/dashboard',   label:'Dashboard',         icon:'⬡'  },
-  { path:'/grid',        label:'Smart Grid',         icon:'⊞'  },
-  { path:'/orders',      label:'Orders',             icon:'☰'  },
-  { path:'/reports',     label:'Reports',            icon:'◈'  },
-  { path:'/accounts',    label:'Accounts',           icon:'◉'  },
-  { path:'/indicators',  label:'Indicator Systems',  icon:'◧'  },
+  { path:'/dashboard',   label:'Dashboard',         icon:'⌂'  },
+  { path:'/grid',        label:'Smart Grid',         icon:'▦'  },
+  { path:'/orders',      label:'Orders',             icon:'⊟'  },
+  { path:'/reports',     label:'Reports',            icon:'⊞'  },
+  { path:'/accounts',    label:'Accounts',           icon:'⊕'  },
+  { path:'/indicators',  label:'Indicator Bots',     icon:'⬡'  },
 ]
 
 // TradingView symbol mapping

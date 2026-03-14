@@ -42,7 +42,7 @@ type Bot = {
   exchange: string; expiry: string; indicator: string
   timeframe_mins: number; lots: number
   channel_candles?: number; channel_tf?: string; tt_lookback?: number
-  status: string; is_archived: boolean
+  status: string; is_archived: boolean; is_practix?: boolean
 }
 type BotOrder = {
   id: string; direction: string; lots: number
@@ -373,6 +373,15 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
             {bot.status === 'live' && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite' }}/>}
             {bot.is_archived ? '📦 Archived' : bot.status}
           </span>
+          {!bot.is_archived && (
+            <button onClick={() => onUpdate(bot.id, { is_practix: !(bot.is_practix ?? true) })}
+              style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '3px',
+                border: 'none', cursor: 'pointer', letterSpacing: '0.06em',
+                background: (bot.is_practix ?? true) ? 'rgba(215,123,18,0.15)' : 'rgba(34,197,94,0.15)',
+                color: (bot.is_practix ?? true) ? 'var(--accent-amber)' : 'var(--green)' }}>
+              {(bot.is_practix ?? true) ? 'PRAC' : 'LIVE'}
+            </button>
+          )}
           <div style={{ display: 'flex', gap: '4px' }}>
             <button title="Edit" onClick={() => setShowEdit(true)}
               style={{ background: 'none', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '11px' }}>✎</button>
@@ -389,8 +398,12 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
 
         {/* Name + meta */}
         <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>{bot.name}</div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-          {bot.instrument} · {indLabel} · {tfLabel} · {accountName}
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span>{bot.instrument}</span><span>·</span><span>{indLabel}</span><span>·</span><span>{tfLabel}</span>
+          <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '20px',
+            background: 'var(--accent-blue-dim)', color: 'var(--accent-blue)', border: '1px solid rgba(0,176,240,0.2)' }}>
+            {accountName}
+          </span>
         </div>
 
         {/* Stats */}
