@@ -20,6 +20,7 @@ export default function AccountsPage() {
   const [editMargin, setEditMargin] = useState<Record<string, string>>({})
   const [editSL,     setEditSL]     = useState<Record<string, string>>({})
   const [editTP,     setEditTP]     = useState<Record<string, string>>({})
+  const [editBrok,   setEditBrok]   = useState<Record<string, string>>({})
   const [saved,      setSaved]      = useState<Record<string, string>>({})
   const [saving,     setSaving]     = useState<Record<string, boolean>>({})
   const [tokenStatus, setTokenStatus] = useState<Record<string, boolean>>({})
@@ -99,6 +100,17 @@ export default function AccountsPage() {
     } finally {
       setSaving(s => ({ ...s, [acc.id]: false }))
     }
+  }
+
+  const saveBrokerage = async (acc: AccountLocal) => {
+    const val = parseFloat(editBrok[acc.id] || String(acc.fyBrokerage || 0))
+    setSaving(s => ({ ...s, [acc.id]: true }))
+    try {
+      await accountsAPI.updateGlobalRisk(acc.id, { fy_brokerage: val })
+      setAccounts(a => a.map(x => x.id === acc.id ? { ...x, fyBrokerage: val } : x))
+      showSaved(acc.id, '✅ Brokerage saved')
+    } catch { showSaved(acc.id, '⚠️ Save failed') }
+    finally { setSaving(s => ({ ...s, [acc.id]: false })) }
   }
 
   const saveSettings = async (acc: AccountLocal) => {
@@ -247,6 +259,27 @@ export default function AccountsPage() {
                   onClick={() => saveSettings(acc)}>
                   {saving[acc.id] ? 'Saving...' : 'Save Settings'}
                 </button>
+              </div>
+
+              {/* FY Brokerage */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  FY Brokerage Expense
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input className="staax-input" type="number" placeholder="₹0"
+                    defaultValue={acc.fyBrokerage ?? ''}
+                    onChange={e => setEditBrok(m => ({ ...m, [acc.id]: e.target.value }))}
+                    style={{ flex: 1, fontSize: '12px' }} />
+                  <button className="btn btn-ghost" style={{ fontSize: '11px', flexShrink: 0 }}
+                    disabled={saving[acc.id]}
+                    onClick={() => saveBrokerage(acc)}>
+                    {saving[acc.id] ? '...' : 'Save'}
+                  </button>
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                  Used for adjusted ROI in Reports
+                </div>
               </div>
             </>}
 

@@ -13,14 +13,15 @@ const nav = [
 
 // TradingView symbol mapping
 const TV_SYMBOLS: Record<string, string> = {
-  NIFTY:      'NSE:NIFTY',
+  NIFTY:      'NSE:NIFTY50',
   BANKNIFTY:  'NSE:BANKNIFTY',
   SENSEX:     'BSE:SENSEX',
   FINNIFTY:   'NSE:FINNIFTY',
   MIDCPNIFTY: 'NSE:MIDCPNIFTY',
+  GOLDM:      'MCX:GOLDM1!',
 }
 
-const TICKER_NAMES = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
+const TICKER_NAMES = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY', 'GOLDM']
 
 function StaaxLogo({ size = 32 }: { size?: number }) {
   return (

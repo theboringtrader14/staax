@@ -125,6 +125,7 @@ TICKER_INSTRUMENTS = {
     "SENSEX":    265,
     "FINNIFTY":  257801,
     "MIDCPNIFTY": 288009,
+    "GOLDM":     58424839,   # MCX GOLDM continuous futures
 }
 
 @router.get("/ticker")

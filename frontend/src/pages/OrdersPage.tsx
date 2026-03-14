@@ -150,12 +150,13 @@ export default function OrdersPage() {
     ? [...ALL_DAYS, 'SAT', 'SUN']
     : [...ALL_DAYS, 'SAT', 'SUN']
 
-  const totalMTM = orders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
+  const safeOrders = Array.isArray(orders) ? orders : []
+  const totalMTM = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
-    for (const p of legs.filter(l => !l.parentId)) {
+    for (const p of (legs || []).filter(l => !l.parentId)) {
       r.push({ leg: p, isChild: false })
-      for (const c of legs.filter(l => l.parentId === p.id)) r.push({ leg: c, isChild: true })
+      for (const c of (legs || []).filter(l => l.parentId === p.id)) r.push({ leg: c, isChild: true })
     }
     return r
   }
