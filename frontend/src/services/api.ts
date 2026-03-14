@@ -126,6 +126,7 @@ export const reportsAPI = {
 export const systemAPI = {
   activateKillSwitch: (accountIds: string[] = []) => api.post('/system/kill-switch', { account_ids: accountIds }),
   killSwitchStatus:   () => api.get("/system/kill-switch/status"),
+  ticker:             () => api.get("/system/ticker"),
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────

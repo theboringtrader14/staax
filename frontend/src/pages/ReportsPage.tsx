@@ -163,7 +163,7 @@ export default function ReportsPage(){
       </div>
 
       {/* Widgets */}
-      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:'12px',marginBottom:'12px',marginBottom:'12px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:'12px',marginBottom:'12px'}}>
         <div className="card" style={{cursor:'pointer'}} onClick={()=>setChartModal(true)}>
           <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'4px'}}>
             FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--accent-blue)'}}>↗ expand</span>

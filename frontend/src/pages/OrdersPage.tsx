@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { algosAPI, ordersAPI } from '@/services/api'
 
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
-const WEEKEND_ACTIVE: Record<string, number> = { SAT: 2840 }
-const DAY_PNL: Record<string, number> = { MON: 4320, TUE: -800, WED: 1200, THU: 3100, FRI: 0 }
+const WEEKEND_ACTIVE: Record<string, string[]> = {}
+const DAY_PNL: Record<string, number> = {}
 
 type LegStatus = 'open' | 'closed' | 'error' | 'pending'
 interface Leg {
@@ -124,7 +124,7 @@ export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const [orders, setOrders]           = useState<AlgoGroup[]>([])
   const [activeDay, setActiveDay]     = useState(todayDay())
-  const [showWeekends, setShowWeekends] = useState(false)
+  const [showWeekends, setShowWeekends] = useState(() => localStorage.getItem('orders_show_weekends') === 'true')
   const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
   const [sqChecked, setSqChecked]     = useState<Record<string, boolean>>({})
   const [loading, setLoading]         = useState<Record<string, boolean>>({})
@@ -139,14 +139,16 @@ export default function OrdersPage() {
     const today = new Date().toISOString().slice(0, 10)
     ordersAPI.list(today)
       .then(res => {
-        setOrders(res.data || [])
+        const data = res.data
+        const arr = Array.isArray(data) ? data : (data?.orders || data?.groups || data?.algos || [])
+        setOrders(arr)
       })
       .catch(() => {}) // keep demo data if API unreachable
   }, [])
 
   const visibleDays = showWeekends
     ? [...ALL_DAYS, 'SAT', 'SUN']
-    : [...ALL_DAYS, ...Object.keys(WEEKEND_ACTIVE)]
+    : [...ALL_DAYS, 'SAT', 'SUN']
 
   const totalMTM = orders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
   const buildRows = (legs: Leg[]) => {
@@ -318,7 +320,7 @@ export default function OrdersPage() {
         <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
         <div className="page-header-actions">
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showWeekends} onChange={e => setShowWeekends(e.target.checked)} style={{ accentColor: 'var(--accent-blue)' }} />
+            <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--accent-blue)' }} />
             Show Weekends
           </label>
         </div>
@@ -330,7 +332,7 @@ export default function OrdersPage() {
           const isWeekend  = d === 'SAT' || d === 'SUN'
           const isToday    = d === todayDay()        // F4 — active day marker
           const isSelected = activeDay === d
-          const pnl = isWeekend ? WEEKEND_ACTIVE[d] : DAY_PNL[d]
+          const pnl = DAY_PNL[d] ?? null  // null = no data for this day
           return (
             <button key={d} onClick={() => setActiveDay(d)} style={{
               display: 'flex', alignItems: 'center', gap: '5px',

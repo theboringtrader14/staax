@@ -547,8 +547,9 @@ export default function GridPage() {
                                         onBlur={() => { setM(algo.id, day, parseInt(ev) || 1); setEd(null) }}
                                         onKeyDown={e => e.key === 'Enter' && (setM(algo.id, day, parseInt(ev) || 1), setEd(null))}
                                         style={{ width:'44px', background:'var(--bg-primary)', border:'1px solid var(--accent-blue)', borderRadius:'2px', color:'var(--text)', fontSize:'10px', padding:'0 3px', fontFamily:'inherit' }}/>
-                                    : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }} style={{ display:'block', width:'100%', textAlign:'center', cursor:'pointer', padding:'8px 12px', margin:'-8px -12px' }}
-                                        style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-blue)', cursor:'text',
+                                    : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }}
+                                        style={{ display:'block', width:'100%', textAlign:'center', cursor:'pointer', padding:'8px 12px', margin:'-8px -12px',
+                                          fontSize:'10px', fontWeight:700, color:'var(--accent-blue)',
                                           textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.4)' }}>
                                         {cell.multiplier}
                                       </span>}

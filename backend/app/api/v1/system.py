@@ -114,3 +114,38 @@ async def kill_switch_status(db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
     return global_kill_switch.get_state()
+
+
+# ── NR-3: Instrument ticker — live LTP for sidebar display ───────────────────
+
+# Zerodha instrument tokens for index instruments
+TICKER_INSTRUMENTS = {
+    "NIFTY":     256265,
+    "BANKNIFTY": 260105,
+    "SENSEX":    265,
+    "FINNIFTY":  257801,
+    "MIDCPNIFTY": 288009,
+}
+
+@router.get("/ticker")
+async def get_ticker(request: Request):
+    """
+    Returns live LTP for all tracked instruments.
+    Used by sidebar ticker bar (NR-3). Reads from LTP cache (Redis).
+    """
+    ltp_cache = getattr(request.app.state, "ltp_cache", None)
+    result = {}
+    if ltp_cache:
+        try:
+            prices = await ltp_cache.get_many(list(TICKER_INSTRUMENTS.values()))
+            for name, token in TICKER_INSTRUMENTS.items():
+                ltp = prices.get(token)
+                result[name] = float(ltp) if ltp else None
+        except Exception as e:
+            logger.warning(f"[TICKER] LTP cache read failed: {e}")
+            for name in TICKER_INSTRUMENTS:
+                result[name] = None
+    else:
+        for name in TICKER_INSTRUMENTS:
+            result[name] = None
+    return result

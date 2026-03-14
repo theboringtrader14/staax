@@ -25,6 +25,28 @@ export default function AccountsPage() {
   const [tokenStatus, setTokenStatus] = useState<Record<string, boolean>>({})
   const [logging,     setLogging]     = useState<Record<string, boolean>>({})
 
+  // Load accounts directly from API on mount (don't rely on store for initial render)
+  useEffect(() => {
+    accountsAPI.list()
+      .then(res => {
+        const data: any[] = res.data || []
+        if (data.length > 0) {
+          setAccounts(data.map((api: any) => ({
+            id:          api.id,
+            name:        api.nickname,
+            broker:      api.broker === 'zerodha' ? 'Zerodha' : 'Angel One',
+            status:      api.status === 'active' ? 'active' : 'pending',
+            globalSL:    api.global_sl ?? null,
+            globalTP:    api.global_tp ?? null,
+            fyBrokerage: api.fy_brokerage ?? null,
+            margin:      0,
+            segment:     'F&O',
+          })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Check token status for all accounts on mount
   useEffect(() => {
     const checkTokens = async () => {
@@ -42,22 +64,20 @@ export default function AccountsPage() {
     checkTokens()
   }, [])
 
-  // Merge API accounts over fallback when store populates
+  // Build accounts from API data
   useEffect(() => {
     if (storeAccounts.length > 0) {
-      setAccounts(prev => prev.map((fa, i) => {
-        const api = storeAccounts[i]
-        if (!api) return fa
-        return {
-          ...fa,
-          id:       api.id,
-          name:     api.nickname,
-          broker:   api.broker === 'zerodha' ? 'Zerodha' : 'Angel One',
-          status:   api.status === 'active' ? 'active' : 'pending',
-          globalSL: api.global_sl ?? fa.globalSL,
-          globalTP: api.global_tp ?? fa.globalTP,
-        }
-      }))
+      setAccounts(storeAccounts.map((api: any) => ({
+        id:          api.id,
+        name:        api.nickname,
+        broker:      api.broker === 'zerodha' ? 'Zerodha' : 'Angel One',
+        status:      api.status === 'active' ? 'active' : 'pending',
+        globalSL:    api.global_sl ?? null,
+        globalTP:    api.global_tp ?? null,
+        fyBrokerage: api.fy_brokerage ?? null,
+        margin:      0,
+        segment:     api.broker === 'zerodha' ? 'F&O' : 'F&O',
+      })))
     }
   }, [storeAccounts])
 

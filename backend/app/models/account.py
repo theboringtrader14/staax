@@ -35,6 +35,7 @@ class Account(Base):
     token_generated_at = Column(DateTime(timezone=True), nullable=True)
     status      = Column(Enum(AccountStatus, values_callable=lambda x: [e.value for e in x]), default=AccountStatus.DISCONNECTED)
     global_sl   = Column(Float, nullable=True)                     # account-level SL ₹
+    fy_brokerage = Column(Float, nullable=True)                     # FY brokerage expense ₹ (for adjusted ROI)
     global_tp   = Column(Float, nullable=True)                     # account-level TP ₹
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
