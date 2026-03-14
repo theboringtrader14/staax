@@ -1,0 +1,130 @@
+"""Bots API — Indicator Systems CRUD."""
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timezone
+from app.core.database import get_db
+from app.models.bot import Bot, BotOrder, IndicatorType
+import uuid as uuid_lib
+
+router = APIRouter()
+
+class BotCreate(BaseModel):
+    name:            str
+    account_id:      str
+    instrument:      str
+    exchange:        str = "MCX"
+    expiry:          str
+    indicator:       str
+    timeframe_mins:  int = 60
+    lots:            int = 1
+    channel_candles: Optional[int] = None
+    channel_tf:      Optional[str] = None
+    tt_lookback:     Optional[int] = None
+
+def _bot_dict(b: Bot) -> dict:
+    return {
+        "id":             str(b.id),
+        "name":           b.name,
+        "account_id":     str(b.account_id),
+        "instrument":     b.instrument,
+        "exchange":       b.exchange,
+        "expiry":         b.expiry,
+        "indicator": b.indicator,
+        "timeframe_mins": b.timeframe_mins,
+        "lots":           b.lots,
+        "channel_candles":b.channel_candles,
+        "channel_tf":     b.channel_tf,
+        "tt_lookback":    b.tt_lookback,
+        "status": b.status or "active",
+        "is_archived":    b.is_archived,
+        "created_at":     b.created_at.isoformat() if b.created_at else None,
+    }
+
+@router.get("/")
+async def list_bots(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Bot).where(Bot.is_archived == False).order_by(desc(Bot.created_at)))
+    return [_bot_dict(b) for b in result.scalars().all()]
+
+@router.post("/")
+async def create_bot(body: BotCreate, db: AsyncSession = Depends(get_db)):
+    bot = Bot(
+        id=uuid_lib.uuid4(),
+        name=body.name,
+        account_id=uuid_lib.UUID(body.account_id),
+        instrument=body.instrument,
+        exchange=body.exchange,
+        expiry=body.expiry,
+        indicator=body.indicator,
+        timeframe_mins=body.timeframe_mins,
+        lots=body.lots,
+        channel_candles=body.channel_candles,
+        channel_tf=body.channel_tf,
+        tt_lookback=body.tt_lookback,
+        status="active",
+        is_archived=False,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(bot)
+    await db.commit()
+    await db.refresh(bot)
+    # Wire to bot_runner
+    try:
+        from app.engine.bot_runner import bot_runner
+        bot_runner._bots.append(bot)
+        bot_runner._subscribe_bot(bot)
+    except Exception: pass
+    return _bot_dict(bot)
+
+@router.patch("/{bot_id}")
+async def update_bot(bot_id: str, body: dict, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Bot).where(Bot.id == bot_id))
+    bot = result.scalar_one_or_none()
+    if not bot: raise HTTPException(404, "Bot not found")
+    for k, v in body.items():
+        if hasattr(bot, k): setattr(bot, k, v)
+    bot.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _bot_dict(bot)
+
+@router.delete("/{bot_id}")
+async def delete_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Bot).where(Bot.id == bot_id))
+    bot = result.scalar_one_or_none()
+    if not bot: raise HTTPException(404, "Bot not found")
+    await db.delete(bot)
+    await db.commit()
+    return {"status": "deleted"}
+
+@router.post("/{bot_id}/archive")
+async def archive_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Bot).where(Bot.id == bot_id))
+    bot = result.scalar_one_or_none()
+    if not bot: raise HTTPException(404, "Bot not found")
+    bot.is_archived = True
+    bot.status = "inactive"
+    await db.commit()
+    return {"status": "archived"}
+
+@router.get("/{bot_id}/orders")
+async def list_bot_orders(bot_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(BotOrder).where(BotOrder.bot_id == bot_id).order_by(desc(BotOrder.entry_time))
+    )
+    orders = result.scalars().all()
+    return [{
+        "id":           str(o.id),
+        "direction":    o.direction,
+        "lots":         o.lots,
+        "entry_price":  o.entry_price,
+        "exit_price":   o.exit_price,
+        "entry_time":   o.entry_time.isoformat() if o.entry_time else None,
+        "exit_time":    o.exit_time.isoformat() if o.exit_time else None,
+        "pnl":          o.pnl,
+        "status":       o.status.value if o.status else "open",
+        "signal_type":  o.signal_type,
+        "expiry":       o.expiry,
+    } for o in orders]

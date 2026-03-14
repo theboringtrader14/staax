@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.core.database import engine as db_engine, Base
 
 # ── API routers ────────────────────────────────────────────────────────────────
-from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events
+from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots
 from app.engine.broker_reconnect   import broker_reconnect_manager
 
 # ── Engine imports ─────────────────────────────────────────────────────────────
@@ -47,6 +47,7 @@ from app.engine.strike_selector    import StrikeSelector
 from app.engine.execution_manager  import execution_manager
 from app.engine.position_rebuilder import position_rebuilder
 from app.engine.order_reconciler   import order_reconciler
+from app.engine.bot_runner         import bot_runner
 from app.engine import event_logger
 
 # ── Brokers ────────────────────────────────────────────────────────────────────
@@ -183,6 +184,11 @@ async def lifespan(app: FastAPI):
 
     # ── 12. Run PositionRebuilder (once at startup) ───────────────────────────
     await position_rebuilder.run()
+    # ── Bot runner ──────────────────────────────────────────────────────────
+    from app.core.database import AsyncSessionLocal as _ASL
+    bot_runner.wire(ltp_consumer, order_placer, ws_manager, _ASL)
+    await bot_runner.load_bots()
+    logger.info("✅ BotRunner started")
 
     logger.info("✅ STAAX engine operational — awaiting broker login to start LTP feed")
 
@@ -222,6 +228,7 @@ app.include_router(services.router, prefix="/api/v1/services", tags=["services"]
 app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"])
 app.include_router(reports.router,  prefix="/api/v1/reports",  tags=["reports"])
 app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"])
+app.include_router(bots.router,    prefix="/api/v1/bots",    tags=["bots"])
 
 # ── WebSocket routes ───────────────────────────────────────────────────────────
 app.include_router(ws_routes.router, tags=["websocket"])

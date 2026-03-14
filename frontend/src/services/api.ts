@@ -129,6 +129,15 @@ export const systemAPI = {
   ticker:             () => api.get("/system/ticker"),
 }
 
+export const botsAPI = {
+  list:    () => api.get('/bots/'),
+  create:  (data: any) => api.post('/bots/', data),
+  update:  (id: string, data: any) => api.patch(`/bots/${id}`, data),
+  archive: (id: string) => api.post(`/bots/${id}/archive`, {}),
+  delete:  (id: string) => api.delete(`/bots/${id}`),
+  orders:  (id: string) => api.get(`/bots/${id}/orders`),
+}
+
 export const eventsAPI = {
   list:   (limit = 100) => api.get('/events/', { params: { limit } }),
   export: () => api.get('/events/export', { responseType: 'blob' }),
