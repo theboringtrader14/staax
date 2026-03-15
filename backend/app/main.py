@@ -27,6 +27,7 @@ from app.core.database import engine as db_engine, Base
 
 # ── API routers ────────────────────────────────────────────────────────────────
 from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots
+from app.api.v1.system import daily_system_reset
 from app.engine.broker_reconnect   import broker_reconnect_manager
 
 # ── Engine imports ─────────────────────────────────────────────────────────────
@@ -180,6 +181,7 @@ async def lifespan(app: FastAPI):
 
     # ── 11. Add reconciler job (every 15s) ────────────────────────────────────
     scheduler.add_reconciler_job(order_reconciler.run)
+    scheduler.add_daily_reset_job(daily_system_reset)
     logger.info("✅ OrderReconciler scheduled (every 15s)")
 
     # ── 12. Run PositionRebuilder (once at startup) ───────────────────────────

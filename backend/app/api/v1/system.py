@@ -150,3 +150,28 @@ async def get_ticker(request: Request):
         for name in TICKER_INSTRUMENTS:
             result[name] = None
     return result
+
+
+async def daily_system_reset():
+    """
+    Called at 08:00 IST every day.
+    Resets kill switch and killed_account_ids so every trading day starts clean.
+    """
+    import logging
+    from app.core.database import AsyncSessionLocal
+    from app.models.system_state import SystemState
+    from sqlalchemy import select as sa_select
+    logger = logging.getLogger(__name__)
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(sa_select(SystemState).where(SystemState.id == 1))
+            row = result.scalar_one_or_none()
+            if row:
+                row.kill_switch_active = False
+                row.killed_account_ids = ""
+                await db.commit()
+                logger.info("[DAILY RESET] Kill switch cleared, all accounts reactivated")
+            else:
+                logger.info("[DAILY RESET] No system state found — nothing to reset")
+    except Exception as e:
+        logger.error(f"[DAILY RESET] Failed: {e}")

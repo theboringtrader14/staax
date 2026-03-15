@@ -177,6 +177,15 @@ class AlgoScheduler:
 
         self._per_algo_jobs[grid_entry_id] = jobs
 
+    def add_daily_reset_job(self, reset_fn):
+        """Run daily system reset at 08:00 IST — clears kill switch and killed accounts."""
+        self._scheduler.add_job(
+            reset_fn,
+            CronTrigger(hour=8, minute=0, timezone="Asia/Kolkata"),
+            id="daily_reset",
+            replace_existing=True,
+        )
+
     def add_reconciler_job(self, coro_func):
         """Register the OrderReconciler to run every 15 seconds."""
         self._scheduler.add_job(
