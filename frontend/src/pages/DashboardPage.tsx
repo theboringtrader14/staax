@@ -265,7 +265,7 @@ export default function DashboardPage() {
             The following algos have already passed their entry time and will NOT trigger today:
           </div>
           {lateAlgos.length === 0
-            ? <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>No algos affected.</div>
+            ? <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No algos affected.</div>
             : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
                 {lateAlgos.map(a => (
                   <span key={a.id} style={{
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                   }} />
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 600 }}>{svc.name}</div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '1px' }}>{svc.detail}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{svc.detail}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -500,7 +500,7 @@ export default function DashboardPage() {
                         }}>⚡ KILLED</span>
                       )}
                     </div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '1px' }}>{brokerLabel}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{brokerLabel}</div>
                   </div>
                   <span style={{
                     fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '3px',

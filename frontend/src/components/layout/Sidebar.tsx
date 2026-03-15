@@ -203,7 +203,7 @@ export default function Sidebar() {
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 12px', cursor: 'pointer', borderRadius: '3px', transition: 'background 0.1s' }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,176,240,0.07)'}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.04em' }}>{name}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.04em' }}>{name}</span>
                   <span style={{ fontSize: '11px', color: prices[name] ? 'var(--text)' : 'var(--text-dim)', fontWeight: 600, fontFamily: 'monospace' }}>{fmt(prices[name] ?? null)}</span>
                 </div>
               ))}
@@ -213,7 +213,7 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div style={{ padding: collapsed ? '10px 0' : '10px 20px', borderTop: '1px solid var(--bg-border)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-          <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>v0.1.0 · Phase 1F</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>v0.1.0 · Phase 1F</div>
         </div>
       </nav>
 

@@ -277,7 +277,7 @@ export default function AccountsPage() {
                     {saving[acc.id] ? '...' : 'Save'}
                   </button>
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
                   Used for adjusted ROI in Reports
                 </div>
               </div>

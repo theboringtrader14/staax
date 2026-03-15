@@ -90,7 +90,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
       <div className="modal-box" style={{ maxWidth: '420px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ fontWeight: 700, fontSize: '15px' }}>Edit Bot — {bot.name}</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '18px' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
@@ -181,7 +181,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
       <div className="modal-box" style={{ maxWidth: '480px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ fontWeight: 700, fontSize: '15px' }}>Create Bot</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '18px' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
         </div>
         {/* Progress */}
         <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>
@@ -383,8 +383,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
             </button>
           )}
           <div style={{ display: 'flex', gap: '4px' }}>
-            <button title="Edit" onClick={() => setShowEdit(true)}
-              style={{ background: 'none', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '11px' }}>✎</button>
+
             {bot.is_archived
               ? <button title="Unarchive" onClick={() => onUnarchive(bot.id)}
                   style={{ background: 'none', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--accent-amber)', fontSize: '11px' }}>↩ Restore</button>
@@ -397,7 +396,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
         </div>
 
         {/* Name + meta */}
-        <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>{bot.name}</div>
+        <div onClick={() => setShowEdit(true)} style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', cursor: 'pointer', transition: 'color 0.12s' }} onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--accent-blue)'} onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--text)'}>{bot.name}</div>
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span>{bot.instrument}</span><span>·</span><span>{indLabel}</span><span>·</span><span>{tfLabel}</span>
           <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '20px',
@@ -409,7 +408,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
           <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Lots</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Lots</div>
             {editLots ? (
               <div style={{ display: 'flex', gap: '3px' }}>
                 <input type="number" value={lotsVal} onChange={e => setLotsVal(e.target.value)}
@@ -425,13 +424,13 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
             )}
           </div>
           <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Live P&L</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Live P&L</div>
             <div style={{ fontWeight: 700, fontSize: '14px', color: openOrder?.pnl != null ? (openOrder.pnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)' }}>
               {openOrder?.pnl != null ? `${openOrder.pnl >= 0 ? '+' : ''}₹${openOrder.pnl.toLocaleString('en-IN')}` : '—'}
             </div>
           </div>
           <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Today</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Today</div>
             <div style={{ fontWeight: 700, fontSize: '14px', color: todayPnl !== 0 ? (todayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)' }}>
               {todayPnl !== 0 ? `${todayPnl >= 0 ? '+' : ''}₹${todayPnl.toLocaleString('en-IN')}` : '—'}
             </div>
@@ -581,7 +580,7 @@ export default function IndicatorsPage() {
 
       {/* Empty state */}
       {!loading && activeBots.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-dim)' }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: '32px', marginBottom: '12px' }}>◧</div>
           <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-muted)' }}>No bots yet</div>
           <div style={{ fontSize: '12px', marginBottom: '20px' }}>Create a bot to start running indicator-based strategies</div>

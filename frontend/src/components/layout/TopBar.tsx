@@ -158,21 +158,18 @@ export default function TopBar() {
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
           >
-            {theme === 'dark' ? '☀' : '☾'}
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{theme === 'dark' ? '☀' : '☾'}</span>
           </button>
 
-          <button
-            onClick={logout}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--bg-border)',
-              borderRadius: '5px', height: 'var(--btn-h)',
-              padding: '0 10px', cursor: 'pointer',
-              color: 'var(--text-dim)', fontSize: '11px',
-            }}
-            title="Logout"
-          >
-            ⏏
+          <button onClick={logout}
+            style={{ background: 'transparent', border: '1px solid var(--bg-border)',
+              borderRadius: '5px', height: 'var(--btn-h)', padding: '0 12px',
+              cursor: 'pointer', color: 'var(--text-muted)', fontSize: '11px',
+              fontWeight: 600, letterSpacing: '0.04em', transition: 'all 0.12s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--text-dim)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--bg-border)' }}
+            title="Logout">
+            Logout
           </button>
         </div>
       </header>

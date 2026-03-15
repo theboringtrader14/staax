@@ -63,7 +63,7 @@ function LegRow({ leg, isChild, onEditExit }: { leg: Leg; isChild: boolean; onEd
       <td style={{ width: COLS[3], color: 'var(--text-muted)', fontSize: '11px' }}>{leg.lots}</td>
       <td style={{ width: COLS[4], fontSize: '11px' }}>
         <div style={{ color: 'var(--text-muted)' }}>{leg.entryCondition}</div>
-        {leg.refPrice != null && <div style={{ color: 'var(--text-dim)', fontSize: '10px' }}>Ref: {leg.refPrice}</div>}
+        {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice}</div>}
       </td>
       <td style={{ width: COLS[5], fontWeight: 600 }}>{leg.fillPrice ?? '—'}</td>
       <td style={{ width: COLS[6], fontWeight: 600, color: leg.ltp != null && leg.fillPrice != null ? (leg.ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>{leg.ltp ?? '—'}</td>
@@ -77,7 +77,7 @@ function LegRow({ leg, isChild, onEditExit }: { leg: Leg; isChild: boolean; onEd
         {leg.exitPrice != null
           ? <div style={{ cursor: 'pointer' }} title="Click to correct exit price" onClick={() => leg.exitPrice != null && onEditExit && onEditExit(leg.id, leg.exitPrice)}>
               <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)' }}>{leg.exitPrice}</div>
-              {leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{leg.exitTime}</div>}
+              {leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{leg.exitTime}</div>}
             </div>
           : '—'}
       </td>
@@ -401,7 +401,7 @@ export default function OrdersPage() {
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '4px' }}>{group.account}</span>
 
             {!group.terminated && (group.mtmSL || group.mtmTP) && (
-              <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 SL: <span style={{ color: 'var(--red)' }}>₹{Math.abs(group.mtmSL).toLocaleString('en-IN')}</span>
                 &nbsp;·&nbsp;
                 TP: <span style={{ color: 'var(--green)' }}>₹{group.mtmTP.toLocaleString('en-IN')}</span>
@@ -470,7 +470,7 @@ export default function OrdersPage() {
                   autoFocus
                   value={syncForm.broker_order_id}
                   onChange={e => setSyncForm(s => ({ ...s, broker_order_id: e.target.value }))} />
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '3px' }}>STAAX will fetch each order from broker and re-link automatically</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>STAAX will fetch each order from broker and re-link automatically</div>
               </div>
               <div>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Account *</div>
