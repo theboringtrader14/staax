@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 3.8 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed, all pending UI items done | **PRD Reference:** v1.2
+**Version:** 3.9 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — post-QA: dark mode readability polish pending | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1524,3 +1524,7 @@ Use this chat (or a new one with the extension) for:
 - Debugging when Claude Code gets stuck
 - Any feature requiring browser automation
 
+
+
+### Post-QA Backlog
+- **Dark mode readability:** `--text-muted` and `--text-dim` need further brightness tuning after QA testing on a live trading day. Active selections show accent blue correctly. Body text is fine. Only secondary/dim text needs polish.
