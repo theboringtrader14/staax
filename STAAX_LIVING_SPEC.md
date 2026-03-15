@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 3.9 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — post-QA: dark mode readability polish pending | **PRD Reference:** v1.2
+**Version:** 4.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
