@@ -230,7 +230,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
         {step === 3 && (
           <div>
             <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Choose Timeframe</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: '8px' }}>
               {TIMEFRAMES.map(tf => (
                 <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
                   style={{ padding: '14px', borderRadius: 'var(--radius-md)',
@@ -406,7 +406,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
         </div>
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: '8px', marginBottom: '12px' }}>
           <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Lots</div>
             {editLots ? (
@@ -590,7 +590,7 @@ export default function IndicatorsPage() {
 
       {/* Active bots */}
       {activeBots.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginBottom: archivedBots.length > 0 && showArchived ? '24px' : '0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px', marginBottom: archivedBots.length > 0 && showArchived ? '24px' : '0' }}>
           {activeBots.map(bot => (
             <BotCard key={bot.id} bot={bot} accounts={accounts}
               onUpdate={handleUpdate} onArchive={handleArchive}
@@ -603,7 +603,7 @@ export default function IndicatorsPage() {
       {showArchived && archivedBots.length > 0 && (
         <>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>📦 Archived Bots</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
             {archivedBots.map(bot => (
               <BotCard key={bot.id} bot={bot} accounts={accounts}
                 onUpdate={handleUpdate} onArchive={handleArchive}
