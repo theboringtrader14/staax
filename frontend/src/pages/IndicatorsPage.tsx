@@ -429,12 +429,6 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
               {openOrder?.pnl != null ? `${openOrder.pnl >= 0 ? '+' : ''}₹${openOrder.pnl.toLocaleString('en-IN')}` : '—'}
             </div>
           </div>
-          <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Today</div>
-            <div style={{ fontWeight: 700, fontSize: '14px', color: todayPnl !== 0 ? (todayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)' }}>
-              {todayPnl !== 0 ? `${todayPnl >= 0 ? '+' : ''}₹${todayPnl.toLocaleString('en-IN')}` : '—'}
-            </div>
-          </div>
         </div>
 
         {/* Open position */}
