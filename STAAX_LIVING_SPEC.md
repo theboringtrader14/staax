@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.2 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1528,3 +1528,37 @@ Use this chat (or a new one with the extension) for:
 
 ### Post-QA Backlog
 - **Dark mode readability:** `--text-muted` and `--text-dim` need further brightness tuning after QA testing on a live trading day. Active selections show accent blue correctly. Body text is fine. Only secondary/dim text needs polish.
+
+## Session Notes — 16 March 2026
+
+### Completed this session
+- Daily reset at 08:00 IST now also resets all account statuses to disconnected
+- Theme toggle fixed — shows ☀️/🌙 emoji clearly
+- Logout button changed to proper text button
+- Text readability improved (--text-muted, --text-dim brighter)
+- Bot name clickable to edit (edit pencil button removed)
+- Promote to LIVE working in Indicator Bots
+- Indicator Bots: 4 cards per row (minmax 220px), TODAY stat box removed, stats grid 2-col (72px LOTS + LIVE P&L)
+- CORS updated to allow ports 3001, 3002
+
+### Pending (start of next session)
+- Page header alignment: Orders, Reports, Accounts pages h1 is at y=75.5 vs Smart Grid/Dashboard at y=72
+  - Root cause: these pages wrap content in `<div>` without `className="page-content"`
+  - Fix: add `className="page-content"` to outer div of Orders, Reports, Accounts
+  - CAUTION: Dashboard also needed this fix but adding it caused a scrollbar — investigate Layout.tsx first
+  - Smart Grid is the reference page (y=72, uses page-content correctly)
+- Indicator Bots page header alignment — needs investigation separately
+- INVEX UI feel to be backported to STAAX (glassmorphism hero cards, refined typography)
+- Dark mode readability polish (post-QA)
+
+### Key file locations
+- STAAX frontend: /Users/bjkarthi/STAXX/staax/frontend/src/
+- STAAX backend: /Users/bjkarthi/STAXX/staax/backend/app/
+- Layout.tsx: /Users/bjkarthi/STAXX/staax/frontend/src/components/layout/Layout.tsx
+- index.css: /Users/bjkarthi/STAXX/staax/frontend/src/index.css
+- page-content CSS: padding 20px 24px, defined in index.css
+- Smart Grid (reference page): GridPage.tsx uses page-content correctly
+
+### Design Principle
+Always use proper SVG icons — never Unicode characters or emoji for functional UI elements.
+Icons: 18px, stroke="currentColor", strokeWidth="1.8", strokeLinecap="round", strokeLinejoin="round"
