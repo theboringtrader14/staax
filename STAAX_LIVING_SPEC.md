@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.1 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1528,22 +1528,3 @@ Use this chat (or a new one with the extension) for:
 
 ### Post-QA Backlog
 - **Dark mode readability:** `--text-muted` and `--text-dim` need further brightness tuning after QA testing on a live trading day. Active selections show accent blue correctly. Body text is fine. Only secondary/dim text needs polish.
-
-## Post-Session Backlog (Monday)
-
-### UI Alignment (STAAX)
-- All page headers (Orders, Reports, Accounts) are lower than Dashboard/Smart Grid — fix top padding to match Dashboard
-- Indicator Bots page header and content completely misaligned — fix container padding to match rest of platform
-
-### Indicator Bots Card Redesign
-- Reduce bot card size — max 4 per row
-- Remove TODAY stat container from bot card
-- Reduce LOTS container width
-- Cards should be compact and consistent
-
-### UI Style Migration
-- INVEX UI feel (glassmorphism hero cards, refined typography) to be backported to STAAX — planned post-QA
-
-### Design Principle (both apps)
-- Always use proper SVG icons — never Unicode characters or emoji for functional UI elements
-- All icons: 18px, stroke="currentColor", strokeWidth="1.8", strokeLinecap="round", strokeLinejoin="round"
