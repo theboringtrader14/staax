@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     ZERODHA_USER_ID: str = ""
 
     # Angel One — Mom
+    ANGELONE_KARTHIK_CLIENT_ID: str = ""
+    ANGELONE_KARTHIK_PASSWORD: str = ""
+    ANGELONE_KARTHIK_API_KEY: str = ""
+    ANGELONE_KARTHIK_TOTP_SECRET: str = ""
     ANGELONE_MOM_API_KEY: str = ""
     ANGELONE_MOM_CLIENT_ID: str = ""
     ANGELONE_MOM_TOTP_SECRET: str = ""
