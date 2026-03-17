@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.6 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1901,3 +1901,14 @@ Frontend (Claude Code):
 - All known bugs fixed
 - Thursday 09:15: First clean trade execution expected
 - Use Thursday checklist in spec
+
+
+## Additional fixes — end of 17 Mar 2026
+
+### EOD cleanup (Claude Code)
+- POST /api/v1/grid/eod-cleanup — manual endpoint to close stale ACTIVE/WAITING/ERROR intraday states
+- Auto _job_eod_cleanup at 15:35 IST daily — safety net after market close
+- recover_today_jobs() on startup — re-registers exit jobs for today's active algos after backend restart
+- Files: api/v1/grid.py, engine/scheduler.py, main.py
+
+### Total bugs fixed today: 12 + 1 EOD = 13 fixes
