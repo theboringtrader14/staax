@@ -94,6 +94,14 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+        # 15:35 — EOD safety net: close any stale intraday algos
+        self._scheduler.add_job(
+            self._job_eod_cleanup,
+            CronTrigger(hour=15, minute=35, timezone=IST),
+            id="eod_cleanup",
+            replace_existing=True,
+        )
+
         # Broker reconnect check — every 3 seconds
         self._scheduler.add_job(
             self._job_broker_reconnect,
@@ -103,7 +111,7 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, activate_all, overnight_sl_check, broker_reconnect")
+        logger.info("Fixed daily jobs registered: token_refresh, activate_all, overnight_sl_check, eod_cleanup, broker_reconnect")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -398,3 +406,111 @@ class AlgoScheduler:
             await self._algo_runner.exit_all(grid_entry_id, reason="auto_sq")
         else:
             logger.error("AlgoRunner not wired into Scheduler — auto SQ skipped")
+
+    async def _job_eod_cleanup(self):
+        """
+        15:35 IST — safety net: force-close any intraday algos still ACTIVE/WAITING/ERROR.
+        Catches cases where per-algo exit jobs were lost due to a server restart.
+        """
+        logger.info("⏰ 15:35 — EOD intraday cleanup")
+        today = date.today()
+
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(
+                        and_(
+                            AlgoState.trading_date == str(today),
+                            Algo.strategy_mode == StrategyMode.INTRADAY,
+                            AlgoState.status.in_([
+                                AlgoRunStatus.ACTIVE,
+                                AlgoRunStatus.WAITING,
+                                AlgoRunStatus.ERROR,
+                            ])
+                        )
+                    )
+                )
+                rows = result.all()
+
+                if not rows:
+                    logger.info("EOD cleanup: nothing to close")
+                    return
+
+                active_ids = []
+                for algo_state, grid_entry, algo in rows:
+                    if algo_state.status == AlgoRunStatus.ACTIVE and self._algo_runner:
+                        active_ids.append(str(grid_entry.id))
+                    else:
+                        algo_state.status      = AlgoRunStatus.CLOSED
+                        algo_state.exit_reason = "eod_cleanup"
+                        algo_state.closed_at   = datetime.now(IST)
+                        grid_entry.status      = GridStatus.ALGO_CLOSED
+
+                await db.commit()
+
+                for geid in active_ids:
+                    await self._algo_runner.exit_all(geid, reason="auto_sq")
+
+                logger.info(f"✅ EOD cleanup: {len(rows)} algos closed ({len(active_ids)} via exit_all)")
+
+            except Exception as e:
+                await db.rollback()
+                logger.error(f"EOD cleanup job failed: {e}")
+
+    async def recover_today_jobs(self):
+        """
+        Called once at server startup — re-registers exit jobs for any today's
+        WAITING/ACTIVE intraday algos whose APScheduler jobs were lost on restart.
+        Only registers jobs whose exit_time is still in the future.
+        """
+        today = date.today()
+        now = datetime.now(IST)
+
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(
+                        and_(
+                            AlgoState.trading_date == str(today),
+                            Algo.strategy_mode == StrategyMode.INTRADAY,
+                            AlgoState.status.in_([
+                                AlgoRunStatus.WAITING,
+                                AlgoRunStatus.ACTIVE,
+                            ])
+                        )
+                    )
+                )
+                rows = result.all()
+
+                recovered = 0
+                for algo_state, grid_entry, algo in rows:
+                    if not algo.exit_time:
+                        continue
+                    h, m = map(int, algo.exit_time.split(":")[:2])
+                    exit_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                    if exit_dt <= now:
+                        continue  # already past — EOD cleanup job will handle it
+                    job_id = f"exit_{grid_entry.id}"
+                    if not self._scheduler.get_job(job_id):
+                        self._scheduler.add_job(
+                            self._job_auto_sq,
+                            DateTrigger(run_date=exit_dt, timezone=IST),
+                            args=[str(grid_entry.id)],
+                            id=job_id,
+                            replace_existing=True,
+                        )
+                        recovered += 1
+
+                if recovered:
+                    logger.info(f"✅ Recovered {recovered} exit jobs after restart")
+                else:
+                    logger.info("Job recovery: no exit jobs to re-register")
+
+            except Exception as e:
+                logger.error(f"Job recovery failed: {e}")

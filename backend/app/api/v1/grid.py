@@ -4,14 +4,18 @@ Fully wired to PostgreSQL.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, timedelta, datetime
+from zoneinfo import ZoneInfo
 import uuid as uuid_lib
 from app.core.database import get_db
 from app.models.grid import GridEntry, GridStatus
-from app.models.algo import Algo
+from app.models.algo import Algo, StrategyMode
+from app.models.algo_state import AlgoState, AlgoRunStatus
+
+IST = ZoneInfo("Asia/Kolkata")
 
 router = APIRouter()
 
@@ -282,3 +286,62 @@ async def promote_to_live(algo_id: str, db: AsyncSession = Depends(get_db)):
         entry.is_practix = False
     await db.commit()
     return {"status": "ok", "algo_id": algo_id, "updated": len(entries)}
+
+
+@router.post("/eod-cleanup")
+async def eod_cleanup(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Force-close all stale intraday AlgoStates for today.
+    Handles cases where per-algo exit jobs were lost (server restart).
+    Safe to call multiple times — only affects ACTIVE/WAITING/ERROR states.
+
+    Usage: curl -X POST http://localhost:8000/api/v1/grid/eod-cleanup
+    """
+    today = date.today()
+    algo_runner = getattr(request.app.state, "algo_runner", None)
+
+    result = await db.execute(
+        select(AlgoState, GridEntry, Algo)
+        .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .where(
+            and_(
+                AlgoState.trading_date == str(today),
+                Algo.strategy_mode == StrategyMode.INTRADAY,
+                AlgoState.status.in_([
+                    AlgoRunStatus.ACTIVE,
+                    AlgoRunStatus.WAITING,
+                    AlgoRunStatus.ERROR,
+                ])
+            )
+        )
+    )
+    rows = result.all()
+
+    if not rows:
+        return {"status": "ok", "closed": 0, "message": "No stale intraday algos found"}
+
+    active_ids = []
+    for algo_state, grid_entry, algo in rows:
+        if algo_state.status == AlgoRunStatus.ACTIVE and algo_runner:
+            # exit_all handles open orders + state update via its own DB session
+            active_ids.append(str(grid_entry.id))
+        else:
+            # WAITING / ERROR — no open orders; directly mark closed
+            algo_state.status     = AlgoRunStatus.CLOSED
+            algo_state.exit_reason = "eod_cleanup"
+            algo_state.closed_at  = datetime.now(IST)
+            grid_entry.status     = GridStatus.ALGO_CLOSED
+
+    await db.commit()
+
+    # Fire exit_all for ACTIVE algos after committing WAITING/ERROR closures
+    for geid in active_ids:
+        await algo_runner.exit_all(geid, reason="auto_sq")
+
+    return {
+        "status":  "ok",
+        "closed":  len(rows),
+        "active_exited": len(active_ids),
+        "date":    str(today),
+    }

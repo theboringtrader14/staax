@@ -184,6 +184,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_daily_reset_job(daily_system_reset)
     logger.info("✅ OrderReconciler scheduled (every 15s)")
 
+    # ── 11b. Re-register exit jobs for any today's algos that survived restart ─
+    await scheduler.recover_today_jobs()
+
     # ── 12. Run PositionRebuilder (once at startup) ───────────────────────────
     await position_rebuilder.run()
     # ── Bot runner ──────────────────────────────────────────────────────────
