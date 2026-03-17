@@ -1623,3 +1623,15 @@ Icons: 18px, stroke="currentColor", strokeWidth="1.8", strokeLinecap="round", st
 - The value shown is (LTP - prev_close) * qty for each holding
 - May appear large as it captures full day move not just today session
 - Review calculation accuracy post-market
+
+
+### Bug 15: Promote to LIVE — UI not refreshing after success
+- PATCH /api/v1/bots/:id returns 200 OK but card still shows PRAC badge
+- Root cause: onUpdate in IndicatorsPage updates bot in backend but does not re-fetch bot list
+- Fix: After successful PATCH, refresh bots list from API
+
+### Feature 16: Platform-wide soft notifications (CRITICAL UX)
+- Every action should show a toast/snackbar notification
+- Applies to STAAX, INVEX, and all future modules
+- Examples: Promote to LIVE, Kill switch, Algo fired, Order filled, SL triggered, Token refresh, Errors
+- Implementation: Global toast queue in Layout.tsx, bottom-right corner, auto-dismiss 3s, colour coded
