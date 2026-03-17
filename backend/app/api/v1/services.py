@@ -154,6 +154,23 @@ async def start_all(request: Request):
             ltp_consumer.set_ticker(ticker)
             _service_states["ws"] = ServiceStatus.RUNNING
             logger.info("[SVC] Market Feed: started with Zerodha token")
+
+            # Pre-load NFO instrument cache so StrikeSelector works at entry time
+            try:
+                instruments = zerodha.kite.instruments("NFO")
+                zerodha._nfo_cache = instruments
+                logger.info(f"[SVC] NFO instrument cache loaded: {len(instruments)} instruments")
+            except Exception as e:
+                logger.warning(f"[SVC] NFO cache load failed: {e}")
+
+            # Subscribe index tokens for ticker
+            try:
+                index_tokens = await zerodha.get_index_tokens()
+                if index_tokens:
+                    ltp_consumer.subscribe(list(index_tokens.values()))
+                    logger.info(f"[SVC] Subscribed {len(index_tokens)} index tokens")
+            except Exception as e:
+                logger.warning(f"[SVC] Index token subscription failed: {e}")
         else:
             _service_states["ws"] = ServiceStatus.STOPPED
             logger.warning("[SVC] Market Feed: no Zerodha token — skipping feed start")
