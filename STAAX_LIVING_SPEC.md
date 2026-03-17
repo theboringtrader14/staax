@@ -1912,3 +1912,96 @@ Frontend (Claude Code):
 - Files: api/v1/grid.py, engine/scheduler.py, main.py
 
 ### Total bugs fixed today: 12 + 1 EOD = 13 fixes
+
+
+## Critical Platform Updates — 17 Mar 2026
+
+### 1. Zerodha API Shutdown — Angel One as Primary Broker
+
+**Situation:** Zerodha is building their own proprietary algo platform.
+KiteConnect retail API will be discontinued — all retail algo users must migrate to Zerodha's platform.
+**This means STAAX cannot use KiteConnect for order placement going forward.**
+
+**Decision: Angel One SmartAPI becomes the primary broker for STAAX**
+
+**Migration plan:**
+
+| Phase | Scope | Priority |
+|-------|-------|----------|
+| Phase 1 | Add Angel One order placement in algo_runner | 🔴 Before next live session |
+| Phase 2 | Angel One WebSocket for market data + tickers | 🔴 Before live trading |
+| Phase 3 | Angel One instrument dump for strike selection | 🔴 Before live trading |
+| Phase 4 | Zerodha removed as dependency | 🟡 After Phase 1-3 stable |
+
+**What needs to change:**
+- `backend/app/brokers/angelone.py` — add full order placement (currently only holdings)
+- `backend/app/engine/algo_runner.py` — replace KiteConnect calls with Angel One
+- `backend/app/engine/ltp_consumer.py` — replace KiteTicker with Angel One WebSocket
+- `backend/app/engine/strike_selector.py` — replace kite.instruments() with Angel One instrument API
+- `backend/app/api/v1/services.py` — replace market feed with Angel One feed
+
+**Karthik's account:** Open Angel One account + create SmartAPI app
+(Currently only Mom + Wife have Angel One accounts)
+
+**Angel One SmartAPI key endpoints:**
+- Login: POST /rest/auth/angelbroking/user/v1/loginByPassword (already working in INVEX)
+- Place order: POST /rest/secure/angelbroking/order/v1/placeOrder
+- Market data WebSocket: wss://smartapisocket.angelone.in/smart-stream
+- Instrument master: GET /rest/secure/angelbroking/market/v1/getInstrumentData
+- LTP: POST /rest/secure/angelbroking/market/v1/getMarketData
+
+---
+
+### 2. Order Rate Limiting — Max 8 Orders/Second
+
+**SEBI requirement:** Max 10 orders/second per client
+**Platform limit:** Max 8 orders/second (2 buffer below SEBI limit)
+
+**Implementation:**
+- Add rate limiter in `execution_router.py` or `algo_runner.py`
+- Token bucket algorithm: 8 tokens/second, each order consumes 1 token
+- If rate exceeded: queue order with small delay, log warning
+- File: `backend/app/engine/algo_runner.py` — wrap `_place_leg()` with rate limiter
+```python
+# Token bucket rate limiter (pseudo-code)
+MAX_ORDERS_PER_SEC = 8
+# Use asyncio semaphore or token bucket
+# Reject/queue if limit exceeded
+```
+
+---
+
+### 3. Static IP Whitelisting
+
+**SEBI requirement:** API access only via static IP whitelisting per broker
+**Current status:** Not implemented
+
+**What this means:**
+- The machine running STAAX must have a static public IP
+- That IP must be registered with Angel One SmartAPI dashboard
+- Any request from unregistered IP will be rejected by broker API
+
+**Action items:**
+- Get static IP for the machine running STAAX (home router or VPS)
+- Register static IP in Angel One SmartAPI app settings
+- Document the IP in `.env` or config (for reference, not code use)
+- Consider: if running on Mac at home, home router needs static IP from ISP
+  OR deploy STAAX backend to a VPS (fixed IP)
+
+**Note:** This is currently not blocking local development but MUST be done before any live trading.
+
+---
+
+### Updated Priority List for Next Development Session
+
+**P0 — Must do before any live trading:**
+1. Angel One order placement in algo_runner (replaces Zerodha)
+2. Angel One WebSocket market feed (replaces KiteTicker)
+3. Angel One instrument dump for strike selection
+4. Order rate limiter — 8/sec max
+5. Static IP setup + registration with Angel One
+
+**P1 — Important:**
+6. Karthik Angel One account setup
+7. SEBI compliance: exchange order tagging
+8. 2FA for API access
