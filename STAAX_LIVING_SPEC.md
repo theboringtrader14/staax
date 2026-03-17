@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.3 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.4 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1755,3 +1755,107 @@ WAITING → (entry time hit) → PENDING → (order filled) → ACTIVE/OPEN → 
 - Root cause: Instrument cache (NFO chain) is only loaded when explicitly called
 - Fix: Load instrument cache on Market Feed start AND on Zerodha token refresh
 - The kite.instruments("NFO") call needs to populate a shared cache at startup
+
+
+## Claude Code Handoff — 17 Mar 2026
+
+### Current blocker (last thing to fix before trades execute)
+**UUID not JSON serializable in ws_manager._send()**
+- Error: `Object of type UUID is not JSON serializable`
+- Occurs in: `algo_runner.py` → `_set_error()` → `ws_manager.notify_error()`
+- The `notify_error` call has `str()` fix applied but error still occurs elsewhere
+- Likely location: `broadcast_algo_status()` call at line 259 or 604 passes UUID objects
+- Fix needed: Wrap ALL UUID values passed to ws_manager broadcast methods with `str()`
+- File: `/Users/bjkarthi/STAXX/staax/backend/app/engine/algo_runner.py`
+- Also check: `/Users/bjkarthi/STAXX/staax/backend/app/ws/routes.py` — `_send()` uses `json.dumps(message)`
+
+### What IS working after today's QA
+1. Bug 5 FIXED: Algos dragged after 09:15 get AlgoState=WAITING + scheduler job registered
+2. NFO instrument cache loads: 49,784 instruments via `curl -X POST /api/v1/services/ws/reload-cache`
+3. Scheduler fires at correct entry time (confirmed via DB error log)
+4. Runner correctly finds the NIFTY CE/PE instruments (error changed from "No CE instruments" to UUID error)
+
+### What needs fixing (priority order for Claude Code)
+
+**P0 — Must fix before next QA (Thursday)**
+1. UUID serialization in algo_runner.py broadcast calls
+   - Check ALL calls to: broadcast_algo_status, broadcast_order_update, notify_error
+   - Ensure all UUID fields are wrapped in str()
+   
+2. NFO cache auto-load on Market Feed start
+   - Currently requires manual: `curl -X POST http://localhost:8000/api/v1/services/ws/reload-cache`
+   - Add Dashboard button "Reload Instruments" OR auto-call after Market Feed start
+   - The `start_all` in services.py already has the code, but `start_service` (individual) doesn't work
+   - Proper fix: Add Request param to `start_service` endpoint OR call reload-cache from frontend
+
+3. Entry time display showing 09:16 in grid (Bug 17)
+   - Grid cell reads from AlgoState which doesn't store entry_time
+   - Fix: GridPage.tsx should read entry_time from algo.entry_time not from grid cell
+
+**P1 — Fix before next QA**
+4. Edit algo loads empty legs (Bug 21)
+   - AlgoPage.tsx: `useState<Leg[]>([mkLeg(1)])` not populated on edit
+   - Fix: On edit open, call `setLegs(algo.legs.map(l => mkLeg from l))`
+
+5. TimeInput only accepts 9 in HH field (Bug 19)
+   - Fix TimeInput component to allow free typing 00-23
+
+6. Promote to LIVE UI not refreshing (Bug 15)
+   - PATCH returns 200 but card doesn't reload
+   - Fix: After successful PATCH in IndicatorsPage, call fetchBots()
+
+**P2 — Important but not blocking**
+7. Delete first algo (Test Algo 1) fails (Bug 20)
+   - Likely FK constraint — cascade delete or show error
+   
+8. Ticker sidebar null (Bug 7)
+   - KiteTicker WebSocket not subscribing index instruments
+   - Need to call ltp_consumer.subscribe(tokens) after ticker starts
+
+9. Page header alignment — Orders/Reports/Accounts h1 at y=75.5 vs Grid/Dashboard y=72
+
+### Key file paths
+```
+Backend:  /Users/bjkarthi/STAXX/staax/backend/app/
+  engine/algo_runner.py     — main trading engine
+  engine/scheduler.py       — job scheduler
+  ws/routes.py              — WebSocket manager
+  api/v1/grid.py            — grid deploy + immediate activation (Bug 5 fix here)
+  api/v1/services.py        — service start/stop + NFO cache endpoint
+  brokers/zerodha.py        — KiteConnect wrapper + _nfo_cache
+
+Frontend: /Users/bjkarthi/STAXX/staax/frontend/src/
+  pages/GridPage.tsx         — Smart Grid display
+  pages/AlgoPage.tsx         — Algo create/edit (Bug 21, 19)
+  pages/IndicatorsPage.tsx   — Indicator bots (Bug 15)
+  pages/DashboardPage.tsx    — Dashboard + services
+  components/layout/Sidebar.tsx — Ticker display (Bug 7)
+```
+
+### Running the platform
+```bash
+# Terminal 1 — STAAX backend
+cd ~/STAXX/staax/backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 2 — STAAX frontend  
+cd ~/STAXX/staax/frontend && npm run dev  # runs on port 3000
+
+# Terminal 3 — INVEX backend
+cd ~/STAXX/invex/backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+
+# Terminal 4 — INVEX frontend
+cd ~/STAXX/invex/frontend && npm run dev  # runs on port 3001
+
+# After starting, in Dashboard: Start PostgreSQL, Redis, Market Feed
+# Then: curl -X POST http://localhost:8000/api/v1/services/ws/reload-cache
+```
+
+### DB credentials
+```
+postgresql+asyncpg://staax:staax_password@localhost:5432/staax_db
+Redis: localhost:6379
+```
+
+### Git repos
+- STAAX: github.com/theboringtrader14/staax
+- INVEX: github.com/theboringtrader14/invex
