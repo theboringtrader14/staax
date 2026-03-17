@@ -2,7 +2,7 @@
 Smart Grid API — manages algo deployments per trading day.
 Fully wired to PostgreSQL.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -100,7 +100,7 @@ async def get_week_grid(
 
 
 @router.post("/")
-async def deploy_algo(body: DeployRequest, db: AsyncSession = Depends(get_db)):
+async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Algo).where(Algo.id == body.algo_id))
     algo = result.scalar_one_or_none()
     if not algo:
@@ -183,6 +183,13 @@ async def deploy_algo(body: DeployRequest, db: AsyncSession = Depends(get_db)):
                     f"[GRID] Immediate activation: {algo.name} for {trading_date} "
                     f"(entry={algo.entry_time}, now={now_ist.strftime('%H:%M:%S')})"
                 )
+                # Schedule the entry time job immediately
+                scheduler = getattr(request.app.state, "scheduler", None)
+                if scheduler:
+                    scheduler.schedule_algo_jobs(str(entry.id), algo, trading_date)
+                    logging.getLogger(__name__).info(
+                        f"[GRID] Scheduled entry job for {algo.name} @ {algo.entry_time}"
+                    )
         else:
             # Entry time already passed — mark as no_trade
             import logging

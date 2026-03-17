@@ -216,7 +216,7 @@ class AlgoRunner:
                 logger.error(f"Leg {leg.leg_number} entry failed: {e}")
                 entry_error = True
 
-                if algo.on_entry_fail == "exit_all":
+                if algo.exit_on_entry_failure:
                     logger.warning(
                         f"on_entry_fail=exit_all — squaring off {len(placed_orders)} placed legs"
                     )
