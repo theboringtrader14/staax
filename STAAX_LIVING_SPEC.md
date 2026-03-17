@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.4 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1859,3 +1859,24 @@ Redis: localhost:6379
 ### Git repos
 - STAAX: github.com/theboringtrader14/staax
 - INVEX: github.com/theboringtrader14/invex
+
+
+## Claude Code fixes — 17 Mar 2026 (end of session)
+
+Applied to algo_runner.py:
+1. grid_entry_id=str(grid_entry_id) at lines 260 and 605 — UUID safe
+2. notify_trade: renamed fill_price→price, removed lots= kwarg
+3. notify_mtm_breach: renamed current_pnl→mtm, removed limit= kwarg
+
+These 4 fixes unblock the full order execution path.
+Next QA on Thursday — expect first clean trade execution.
+
+### Thursday morning checklist
+1. Start STAAX backend + frontend
+2. Start INVEX backend + frontend
+3. Login Zerodha in Dashboard
+4. Start PostgreSQL, Redis, Market Feed
+5. Run: curl -X POST http://localhost:8000/api/v1/services/ws/reload-cache
+6. Verify tickers load (or use NFO cache directly — StrikeSelector will work)
+7. Create test algo for 09:20, drag to Thursday grid
+8. Watch for first clean PENDING → OPEN transition 🎯
