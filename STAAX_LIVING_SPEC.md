@@ -1668,3 +1668,39 @@ Icons: 18px, stroke="currentColor", strokeWidth="1.8", strokeLinecap="round", st
 - After fix: Algo dragged to grid after 09:15 immediately shows ACTIVE with correct E/X times
 - Remaining issue: After page refresh, E/X reverts to 09:16 (Bug 17)
 - AlgoState WAITING is being created correctly — runner should now pick it up at entry time
+
+
+### Feature 22: Algo status visual overhaul (Smart Grid + Orders)
+
+**New status flow:**
+```
+WAITING → (entry time hit) → PENDING → (order filled) → ACTIVE/OPEN → (exit) → CLOSED
+```
+
+**Visual treatment per status:**
+- WAITING: Dimmed card, amber pulsing dot, inline label "⏳ Waiting for 13:00"
+- PENDING: Normal brightness, orange dot, "🔄 Order pending"  
+- ACTIVE/OPEN: Full brightness, green dot, P&L showing
+- CLOSED: Dimmed, grey, shows final P&L
+
+**Orders page:**
+- WAITING algos should appear in Orders page immediately after drag
+- Show as dimmed row with "Waiting — 13:00:00" label
+- Activates visually when order is placed
+
+**Grid cell:**
+- Map existing GridStatus values to new visual states
+- ALGO_ACTIVE = WAITING (before entry), OPEN = ACTIVE (after fill)
+- Pending = order sent but not yet confirmed fill
+
+**Applies to:** Smart Grid, Orders page, Dashboard active algos count
+
+
+### Feature 23: Input field validation — platform-wide
+- All numeric input fields must only accept numbers (no letters or special chars)
+- Time inputs (HH:MM): Allow full typing of all digits 0-9, not just 9
+- Percentage fields: only 0-100 allowed
+- Lot size: only positive integers
+- Price fields: only positive numbers with up to 2 decimal places
+- Applies to: AlgoPage, IndicatorsPage, AccountsPage, and all future modules in STAAX and INVEX
+- TimeInput component specifically: Allow free typing of HH (00-23) and MM (00-59)
