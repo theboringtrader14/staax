@@ -531,8 +531,8 @@ export default function IndicatorsPage() {
   }
 
   const handleUpdate = async (id: string, data: any) => {
-    const res = await apiPatch(`/bots/${id}`, data)
-    setBots(prev => prev.map(b => b.id === id ? res.data : b))
+    await apiPatch(`/bots/${id}`, data)
+    setBots(prev => prev.map(b => b.id === id ? { ...b, ...data } : b))
   }
 
   const handleArchive = async (id: string) => {
@@ -554,7 +554,7 @@ export default function IndicatorsPage() {
   const archivedBots = bots.filter(b => b.is_archived)
 
   return (
-    <div className="page-content">
+    <div>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: "'ADLaM Display', serif", fontSize: '22px', fontWeight: 400 }}>Indicator Bots</h1>

@@ -170,13 +170,14 @@ export default function GridPage() {
           const day    = dateToDay(e.trading_date, weekDates)
           if (!day) continue
           if (!newGrid[algoId]) newGrid[algoId] = {}
+          const algoMatch = apiAlgos.find(a => a.id === algoId)
           newGrid[algoId][day] = {
             gridEntryId: String(e.id),
             multiplier:  e.lot_multiplier || 1,
             status:      mapStatus(e.status || 'algo_active'),
             mode:        e.is_practix ? 'practix' : 'live',
-            entry:       e.entry_time  || '09:16',
-            exit:        e.exit_time   || '15:10',
+            entry:       e.entry_time  || algoMatch?.et || '09:16',
+            exit:        e.exit_time   || algoMatch?.xt || '15:10',
             pnl:         e.pnl ?? undefined,
           }
         }

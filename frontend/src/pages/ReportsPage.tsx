@@ -143,14 +143,18 @@ export default function ReportsPage(){
   return(
     <div>
       <div className="page-header">
-        <h1 style={{fontFamily:"'ADLaM Display',serif",fontSize:'22px',fontWeight:400}}>Reports</h1>
-        <span style={{fontSize:'10px',fontWeight:700,padding:'2px 8px',borderRadius:'4px',marginLeft:'10px',
-          background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',
-          color:isPractixMode?'var(--accent-amber)':'var(--green)',
-          border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)',
-          verticalAlign:'middle'}}>
-          {isPractixMode?'PRACTIX':'LIVE'}
-        </span>
+        <div>
+          <h1 style={{fontFamily:"'ADLaM Display',serif",fontSize:'22px',fontWeight:400}}>Reports</h1>
+          <p style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
+            Performance analytics ·{' '}
+            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',
+              background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',
+              color:isPractixMode?'var(--accent-amber)':'var(--green)',
+              border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
+              {isPractixMode?'PRACTIX':'LIVE'}
+            </span>
+          </p>
+        </div>
         <div className="page-header-actions">
           <select className="staax-select" value={fy} onChange={e=>setFy(e.target.value)} style={{width:'120px'}}>
             <option value="2024-25">FY 2024–25</option><option value="2023-24">FY 2023–24</option>

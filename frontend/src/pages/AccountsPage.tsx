@@ -154,7 +154,10 @@ export default function AccountsPage() {
   return (
     <div>
       <div className="page-header">
-        <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Accounts</h1>
+        <div>
+          <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Accounts</h1>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Broker accounts & API tokens</p>
+        </div>
         <div className="page-header-actions">
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             Broker login & token management is available in the{' '}

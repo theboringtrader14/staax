@@ -318,7 +318,10 @@ export default function OrdersPage() {
   return (
     <div>
       <div className="page-header">
-        <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
+        <div>
+          <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Trade history · P&L by week</p>
+        </div>
         <div className="page-header-actions">
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}>
             <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--accent-blue)' }} />

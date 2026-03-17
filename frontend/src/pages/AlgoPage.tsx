@@ -295,7 +295,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
   const clamp = (v: string) => {
     if (!v) return v
     const [h, m, s] = v.split(':')
-    const hh = Math.max(9, Math.min(15, parseInt(h) || 9))
+    const hh = Math.max(0, Math.min(23, parseInt(h) || 0))
     return `${String(hh).padStart(2,'0')}:${m || '00'}:${s || '00'}`
   }
   return (
@@ -305,7 +305,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
         type="time"
         step="1"
         value={value}
-        onChange={e => onChange(clamp(e.target.value))}
+        onChange={e => onChange(e.target.value)}
         onBlur={e => onChange(clamp(e.target.value))}
         className="staax-time-input"
         style={{
@@ -404,7 +404,46 @@ export default function AlgoPage() {
         setMtmSL(a.mtm_sl != null ? String(a.mtm_sl) : '')
         setMtmTP(a.mtm_tp != null ? String(a.mtm_tp) : '')
         setOrderType(a.order_type?.toUpperCase() || 'MARKET')
-        // TODO: map legs from API format to local Leg format
+        // Map API legs to local Leg format
+        const revCode: Record<string, string> = Object.fromEntries(
+          Object.entries(INST_CODES).map(([k, v]) => [v, k])
+        )
+        const mappedLegs: Leg[] = (a.legs || []).map((l: any, i: number) => {
+          const isFu      = l.instrument === 'fu'
+          const strikeMode = l.strike_type === 'premium' ? 'premium'
+            : l.strike_type === 'straddle_premium' ? 'straddle' : 'leg'
+          return {
+            id:         `leg-edit-${l.id || i}`,
+            no:         l.leg_number || i + 1,
+            instType:   isFu ? 'FU' : 'OP',
+            instCode:   revCode[l.underlying] || 'NF',
+            direction:  l.direction === 'buy' ? 'BUY' : 'SELL',
+            optType:    isFu ? 'CE' : (l.instrument || 'ce').toUpperCase(),
+            strikeMode,
+            strikeType: strikeMode === 'leg' ? (l.strike_type || 'atm') : 'atm',
+            premiumVal: l.strike_value != null ? String(l.strike_value) : '',
+            lots:       String(l.lots || 1),
+            expiry:     l.expiry || 'current_weekly',
+            active: {
+              wt:  !!l.wt_enabled,
+              sl:  !!(l.sl_type  && l.sl_value != null),
+              tp:  !!(l.tp_type  && l.tp_value != null),
+              tsl: !!(l.tsl_x   && l.tsl_y),
+              ttp: !!(l.ttp_x   && l.ttp_y),
+              re:  !!l.reentry_enabled,
+            },
+            vals: {
+              wt:  { direction: l.wt_direction || 'up', value: l.wt_value != null ? String(l.wt_value) : '', unit: l.wt_unit || 'pts' },
+              sl:  { type: l.sl_type || 'pts_instrument', value: l.sl_value != null ? String(l.sl_value) : '' },
+              tp:  { type: l.tp_type || 'pts_instrument', value: l.tp_value != null ? String(l.tp_value) : '' },
+              tsl: { x: l.tsl_x != null ? String(l.tsl_x) : '', y: l.tsl_y != null ? String(l.tsl_y) : '', unit: l.tsl_unit || 'pts' },
+              ttp: { x: l.ttp_x != null ? String(l.ttp_x) : '', y: l.ttp_y != null ? String(l.ttp_y) : '', unit: l.ttp_unit || 'pts' },
+              re:  { mode: l.reentry_mode || 'at_entry_price', trigger: 'sl', count: l.reentry_max ? String(l.reentry_max) : '1' },
+            },
+            journey: mkJourneyChild(),
+          }
+        })
+        if (mappedLegs.length > 0) setLegs(mappedLegs)
       })
       .catch(() => {})
 
