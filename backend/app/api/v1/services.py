@@ -258,6 +258,23 @@ async def start_service(service_id: str):
     }
 
 
+@router.post("/ws/reload-cache")
+async def reload_nfo_cache(request: Request):
+    """Reload NFO instrument cache. Call after Market Feed starts."""
+    import logging
+    logger = logging.getLogger(__name__)
+    zerodha = getattr(request.app.state, "zerodha", None)
+    if not zerodha:
+        return {"status": "error", "message": "Zerodha not initialized"}
+    try:
+        instruments = zerodha.kite.instruments("NFO")
+        zerodha._nfo_cache = instruments
+        logger.info(f"[SVC] NFO cache reloaded: {len(instruments)} instruments")
+        return {"status": "ok", "instruments": len(instruments)}
+    except Exception as e:
+        logger.error(f"[SVC] NFO cache reload failed: {e}")
+        return {"status": "error", "message": str(e)}
+
 @router.post("/{service_id}/stop")
 async def stop_service(service_id: str):
     """
