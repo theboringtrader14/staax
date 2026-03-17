@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.6 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1880,3 +1880,24 @@ Next QA on Thursday — expect first clean trade execution.
 6. Verify tickers load (or use NFO cache directly — StrikeSelector will work)
 7. Create test algo for 09:20, drag to Thursday grid
 8. Watch for first clean PENDING → OPEN transition 🎯
+
+
+## End of Day — 17 Mar 2026
+
+### All 12 bugs cleared this session ✅
+Backend (Claude Code + manual):
+- UUID serialization in algo_runner.py
+- NFO cache + index token subscription on Market Feed start
+- Cascade delete algos (FK-safe order)
+
+Frontend (Claude Code):
+- Entry/exit time display in grid (Bug 17)
+- Edit algo loads correct legs (Bug 21)
+- TimeInput accepts full HH range 00-23 (Bug 19)
+- Promote to LIVE refreshes card (Bug 15)
+- Page header alignment all pages match (CSS)
+
+### Platform status going into Thursday
+- All known bugs fixed
+- Thursday 09:15: First clean trade execution expected
+- Use Thursday checklist in spec
