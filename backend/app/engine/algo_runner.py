@@ -253,12 +253,11 @@ class AlgoRunner:
                     algo_name=algo.name,
                     symbol=order.symbol,
                     direction=order.direction,
-                    fill_price=order.fill_price or 0.0,
-                    lots=order.lots,
+                    price=order.fill_price or 0.0,
                 )
             await self._ws_manager.broadcast_algo_status(
                 algo_id=str(algo.id),
-                grid_entry_id=grid_entry_id,
+                grid_entry_id=str(grid_entry_id),
                 status="active",
                 reason="entry_complete",
             )
@@ -603,7 +602,7 @@ class AlgoRunner:
         if self._ws_manager and algo:
             await self._ws_manager.broadcast_algo_status(
                 algo_id=str(algo.id),
-                grid_entry_id=grid_entry_id,
+                grid_entry_id=str(grid_entry_id),
                 status=reason,
                 reason=reason,
             )
@@ -744,8 +743,7 @@ class AlgoRunner:
                 await self._ws_manager.notify_mtm_breach(
                     algo_name=algo_id,
                     breach_type=reason,
-                    current_pnl=total_pnl,
-                    limit=0.0,
+                    mtm=total_pnl,
                 )
             await self.exit_all(grid_entry_id, reason=reason)
 
