@@ -139,7 +139,7 @@ async def start_all(request: Request):
         from sqlalchemy import select
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(Account).where(Account.broker == BrokerType.zerodha, Account.is_active == True)
+                select(Account).where(Account.broker == BrokerType.ZERODHA, Account.is_active == True)
             )
             zerodha_acc = result.scalar_one_or_none()
 
@@ -252,7 +252,7 @@ async def start_service(service_id: str):
         from app.models.account import Account, BrokerType
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(Account).where(Account.broker == BrokerType.zerodha, Account.is_active == True)
+                select(Account).where(Account.broker == BrokerType.ZERODHA, Account.is_active == True)
             )
             zerodha_acc = result.scalar_one_or_none()
         import sys
