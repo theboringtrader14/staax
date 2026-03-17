@@ -1704,3 +1704,17 @@ WAITING → (entry time hit) → PENDING → (order filled) → ACTIVE/OPEN → 
 - Price fields: only positive numbers with up to 2 decimal places
 - Applies to: AlgoPage, IndicatorsPage, AccountsPage, and all future modules in STAAX and INVEX
 - TimeInput component specifically: Allow free typing of HH (00-23) and MM (00-59)
+
+
+### Feature 24: System Log improvements
+- System Log on Dashboard should persist across page refreshes (not reset)
+- Each log entry should show timestamp in IST (HH:MM:SS format)
+- Log should be stored in backend (last 100 entries) and fetched on page load
+- Events to log: session start/stop, token login, kill switch, algo fired, service start/stop
+- Log style: monospace font, colour coded by severity (info=dim, warn=amber, error=red)
+
+### Bug 25: Market Feed instrument cache not loading
+- After Zerodha token refresh, instruments() not called to populate cache
+- Runner fails with "No CE instruments for NIFTY current_weekly"
+- Fix: On market feed start, call kite.instruments("NFO") and cache results
+- Also needed: Re-load instruments after every Zerodha token refresh

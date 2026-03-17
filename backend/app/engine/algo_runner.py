@@ -223,7 +223,7 @@ class AlgoRunner:
                     for placed in placed_orders:
                         await self._close_order(db, placed, placed.ltp or 0.0, "entry_fail")
                     await self._set_error(
-                        db, algo_state, grid_entry, f"Leg {leg.leg_number} failed: {e}"
+                        db, algo_state, grid_entry, f"Leg {leg.leg_number} failed: {str(e)}"
                     )
                     await db.commit()
                     return
