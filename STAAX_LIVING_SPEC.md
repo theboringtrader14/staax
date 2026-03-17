@@ -1635,3 +1635,36 @@ Icons: 18px, stroke="currentColor", strokeWidth="1.8", strokeLinecap="round", st
 - Applies to STAAX, INVEX, and all future modules
 - Examples: Promote to LIVE, Kill switch, Algo fired, Order filled, SL triggered, Token refresh, Errors
 - Implementation: Global toast queue in Layout.tsx, bottom-right corner, auto-dismiss 3s, colour coded
+
+
+### Bug 17: Entry/Exit time display reverts to 09:16 after page refresh
+- After dragging algo to grid, E and X show correct times
+- After page refresh, E reverts to 09:16
+- Root cause: Grid cell reads entry_time from AlgoState not from Algo
+- AlgoState doesn't store entry_time — it reads from algo.entry_time
+- Fix: Grid cell display should always read from algo.entry_time, not algo_state
+
+### Bug 18: Entry/Exit time format should be HH:MM (not HH:MM:SS) in grid display
+- Grid currently shows 09:55:00 — should show 09:55
+- Fix: truncate seconds in display
+
+### Bug 19: TimeInput field only accepts 9 in HH section
+- Cannot type 1 or other digits in the hours field of TimeInput
+- Up/down arrow works but cannot directly type hours > 09
+- Fix: TimeInput component needs to allow free text entry for HH
+
+### Bug 20: Cannot delete Test Algo 1 (first algo created)
+- Delete button on Test Algo 1 shows no response
+- Need to investigate — possibly has grid_entries preventing deletion (FK constraint)
+- Fix: Allow deletion with cascade or show proper error message
+
+### Bug 21: Edit algo shows base settings (Bug 1 confirmed again)
+- Editing existing algo shows default/empty leg configuration
+- Does not load existing legs from DB
+- Root cause confirmed: useState<Leg[]>([mkLeg(1)]) not populated on edit open
+- Fix: On edit modal open, fetch algo.legs and setLegs(algo.legs)
+
+### Bug 5 — PARTIAL FIX CONFIRMED
+- After fix: Algo dragged to grid after 09:15 immediately shows ACTIVE with correct E/X times
+- Remaining issue: After page refresh, E/X reverts to 09:16 (Bug 17)
+- AlgoState WAITING is being created correctly — runner should now pick it up at entry time
