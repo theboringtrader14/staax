@@ -246,38 +246,7 @@ async def start_service(service_id: str):
             _service_states[service_id] = ServiceStatus.ERROR
             raise HTTPException(status_code=503, detail=f"Redis not reachable: {e}")
     elif service_id == "ws":
-        # Market Feed — same logic as start_all
-        from app.core.database import AsyncSessionLocal
-        from sqlalchemy import select
-        from app.models.account import Account, BrokerType
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(Account).where(Account.broker == BrokerType.ZERODHA, Account.is_active == True)
-            )
-            zerodha_acc = result.scalar_one_or_none()
-        import sys
-        app_state = None
-        # Get app state from request context if available
-        for name, module in sys.modules.items():
-            if hasattr(module, 'app') and hasattr(getattr(module, 'app', None), 'state'):
-                app_state = getattr(module, 'app').state
-                break
-        if zerodha_acc and zerodha_acc.access_token and app_state:
-            zerodha = getattr(app_state, 'zerodha', None)
-            ltp_consumer = getattr(app_state, 'ltp_consumer', None)
-            if zerodha and ltp_consumer:
-                if not zerodha._access_token:
-                    await zerodha.load_token(zerodha_acc.access_token)
-                ticker = zerodha.get_ticker()
-                ltp_consumer.set_ticker(ticker)
-                try:
-                    instruments = zerodha.kite.instruments("NFO")
-                    zerodha._nfo_cache = instruments
-                    import logging
-                    logging.getLogger(__name__).info(f"[SVC-WS] NFO cache loaded: {len(instruments)} instruments")
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"[SVC-WS] NFO cache failed: {e}")
+        # Market Feed — just mark as running, actual init happens via start_all or set-token
         _service_states[service_id] = ServiceStatus.RUNNING
     else:
         _service_states[service_id] = ServiceStatus.RUNNING
