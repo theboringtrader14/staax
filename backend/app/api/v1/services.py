@@ -23,6 +23,7 @@ from typing import Dict
 from enum import Enum
 import asyncio
 import logging
+from app.models.account import Account, BrokerType
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +173,63 @@ async def start_all(request: Request):
             except Exception as e:
                 logger.warning(f"[SVC] Index token subscription failed: {e}")
         else:
+            logger.warning("[SVC] Market Feed: no Zerodha token — checking Angel One...")
+
+        # ── Angel One Market Feed ─────────────────────────────────────────────
+        try:
+            from app.engine.ltp_consumer import AngelOneTickerAdapter
+            from sqlalchemy import select as _select
+            async with AsyncSessionLocal() as db:
+                ao_result = await db.execute(
+                    _select(Account).where(
+                        Account.broker == BrokerType.ANGELONE, Account.is_active == True
+                    )
+                )
+                ao_accounts = ao_result.scalars().all()
+
+            for ao_acc in ao_accounts:
+                if not ao_acc.access_token:
+                    continue
+                # Derive state key: "angelone_mom" or "angelone_wife" from nickname
+                broker_key = f"angelone_{ao_acc.nickname.lower()}"
+                ao_broker  = getattr(request.app.state, broker_key, None)
+                if not ao_broker:
+                    # Try generic fallback key
+                    ao_broker = getattr(request.app.state, "angelone_mom", None)
+
+                if ao_broker and ltp_consumer:
+                    feed_token = getattr(ao_broker, "_feed_token", "") or ""
+                    adapter = AngelOneTickerAdapter(
+                        auth_token=ao_acc.access_token,
+                        api_key=ao_acc.api_key or "",
+                        client_code=ao_acc.client_id,
+                        feed_token=feed_token,
+                    )
+                    ltp_consumer.set_angel_adapter(adapter)
+                    _service_states["ws"] = ServiceStatus.RUNNING
+                    logger.info(
+                        f"[SVC] Angel One Market Feed: started for {ao_acc.nickname}"
+                    )
+
+                    # Subscribe Angel One index tokens for sidebar tickers
+                    try:
+                        from app.engine.ltp_consumer import AngelOneTickerAdapter as _AOT
+                        index_tokens = [int(t) for t in _AOT.INDEX_TOKENS.values()]
+                        ltp_consumer.subscribe(index_tokens)
+                        logger.info(
+                            f"[SVC] AO index tokens subscribed: {len(index_tokens)}"
+                        )
+                    except Exception as ie:
+                        logger.warning(f"[SVC] AO index token subscription failed: {ie}")
+                    break  # one AO feed is enough
+
+        except Exception as e:
+            logger.error(f"[SVC] Angel One Market Feed start failed: {e}")
+
+        if _service_states["ws"] != ServiceStatus.RUNNING:
             _service_states["ws"] = ServiceStatus.STOPPED
-            logger.warning("[SVC] Market Feed: no Zerodha token — skipping feed start")
+            logger.warning("[SVC] Market Feed: no active broker token found")
+
     except Exception as e:
         _service_states["ws"] = ServiceStatus.ERROR
         logger.error(f"[SVC] Market Feed start failed: {e}")
@@ -281,8 +337,54 @@ async def start_service(service_id: str, request: Request):
                 except Exception as e:
                     logger.warning(f"[SVC] Index token subscription failed: {e}")
             else:
-                _service_states["ws"] = ServiceStatus.STOPPED
-                logger.warning("[SVC] Market Feed: no Zerodha token — skipping feed start")
+                logger.warning("[SVC] Market Feed: no Zerodha token — checking Angel One...")
+
+            # ── Angel One Market Feed ─────────────────────────────────────────
+            try:
+                from app.engine.ltp_consumer import AngelOneTickerAdapter
+                from sqlalchemy import select as _sel
+                from app.core.database import AsyncSessionLocal as _ASL
+                async with _ASL() as db:
+                    ao_result = await db.execute(
+                        _sel(Account).where(
+                            Account.broker == BrokerType.ANGELONE, Account.is_active == True
+                        )
+                    )
+                    ao_accounts = ao_result.scalars().all()
+
+                for ao_acc in ao_accounts:
+                    if not ao_acc.access_token:
+                        continue
+                    broker_key = f"angelone_{ao_acc.nickname.lower()}"
+                    ao_broker  = getattr(request.app.state, broker_key, None) or \
+                                 getattr(request.app.state, "angelone_mom", None)
+                    if ao_broker and ltp_consumer:
+                        feed_token = getattr(ao_broker, "_feed_token", "") or ""
+                        adapter = AngelOneTickerAdapter(
+                            auth_token=ao_acc.access_token,
+                            api_key=ao_acc.api_key or "",
+                            client_code=ao_acc.client_id,
+                            feed_token=feed_token,
+                        )
+                        ltp_consumer.set_angel_adapter(adapter)
+                        _service_states["ws"] = ServiceStatus.RUNNING
+                        logger.info(
+                            f"[SVC] Angel One Market Feed: started for {ao_acc.nickname}"
+                        )
+                        try:
+                            index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
+                            ltp_consumer.subscribe(index_tokens)
+                        except Exception as ie:
+                            logger.warning(f"[SVC] AO index token subscription failed: {ie}")
+                        break
+
+                if _service_states["ws"] != ServiceStatus.RUNNING:
+                    _service_states["ws"] = ServiceStatus.STOPPED
+                    logger.warning("[SVC] Market Feed: no active broker token found")
+
+            except Exception as e:
+                logger.error(f"[SVC] Angel One Market Feed start failed: {e}")
+
         except Exception as e:
             _service_states["ws"] = ServiceStatus.ERROR
             logger.error(f"[SVC] Market Feed start failed: {e}")

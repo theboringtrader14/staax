@@ -28,7 +28,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Dict
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,7 @@ from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo, AlgoLeg, StrategyMode, EntryType
 from app.models.algo_state import AlgoState, AlgoRunStatus
 from app.models.order import Order, OrderStatus
+from app.models.account import Account, BrokerType
 
 from app.engine.strike_selector import StrikeSelector
 from app.engine.order_placer import OrderPlacer
@@ -54,6 +55,40 @@ from app.engine.ltp_consumer import LTPConsumer
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
+
+
+class TokenBucketRateLimiter:
+    """
+    Asyncio token bucket rate limiter.
+    MAX_ORDERS_PER_SEC = 8 (SEBI limit is 10; we keep 2 as buffer).
+    Each _place_leg() call acquires one token before placing an order.
+    If the bucket is empty, the call waits the minimum time to refill one token.
+    """
+    MAX_ORDERS_PER_SEC = 8
+
+    def __init__(self, rate: int = 8):
+        self._rate       = rate
+        self._tokens     = float(rate)
+        self._last_refill = 0.0
+        self._lock       = asyncio.Lock()
+
+    async def acquire(self):
+        async with self._lock:
+            now     = asyncio.get_event_loop().time()
+            elapsed = now - self._last_refill
+            # Refill tokens based on elapsed time
+            self._tokens = min(self._rate, self._tokens + elapsed * self._rate)
+            self._last_refill = now
+            if self._tokens >= 1:
+                self._tokens -= 1
+                return
+            # Bucket empty — compute wait and release lock before sleeping
+            wait = (1 - self._tokens) / self._rate
+        logger.warning(
+            f"[RATE LIMIT] Order rate {self._rate}/s exceeded — "
+            f"queuing with delay={wait:.3f}s"
+        )
+        await asyncio.sleep(wait)
 
 
 class AlgoRunner:
@@ -77,6 +112,13 @@ class AlgoRunner:
         self._ltp_consumer:    Optional[LTPConsumer]      = None
         self._ws_manager       = None   # app.ws.connection_manager.ConnectionManager
 
+        # Broker references — keyed by broker client_id for multi-account routing
+        self._zerodha_broker   = None
+        self._angel_broker_map: Dict[str, object] = {}  # client_id → AngelOneBroker
+
+        # Rate limiter — 8 orders/sec (SEBI max is 10)
+        self._rate_limiter = TokenBucketRateLimiter(rate=8)
+
     def wire_engines(
         self,
         strike_selector: StrikeSelector,
@@ -91,6 +133,8 @@ class AlgoRunner:
         reentry_engine:  ReentryEngine,
         ltp_consumer:    LTPConsumer,
         ws_manager,
+        zerodha_broker=None,
+        angel_brokers=None,
     ):
         """Called once in main.py lifespan after all engines are initialised."""
         self._strike_selector = strike_selector
@@ -105,6 +149,13 @@ class AlgoRunner:
         self._reentry_engine  = reentry_engine
         self._ltp_consumer    = ltp_consumer
         self._ws_manager      = ws_manager
+
+        # Broker registry for per-account order routing
+        self._zerodha_broker  = zerodha_broker
+        if angel_brokers:
+            for b in angel_brokers:
+                self._angel_broker_map[b.client_id] = b
+
         logger.info("✅ AlgoRunner engines wired")
 
     # ── Entry ─────────────────────────────────────────────────────────────────
@@ -150,6 +201,14 @@ class AlgoRunner:
             return
 
         algo_state, grid_entry, algo = row
+
+        # ── 1b. Load account for broker routing ───────────────────────────────
+        account = None
+        if algo.account_id:
+            acc_result = await db.execute(
+                select(Account).where(Account.id == algo.account_id)
+            )
+            account = acc_result.scalar_one_or_none()
 
         # ── 2. Guard: only enter in WAITING (or ACTIVE for re-entry) ──────────
         allowed = {AlgoRunStatus.WAITING}
@@ -208,7 +267,8 @@ class AlgoRunner:
         for leg in legs:
             try:
                 order = await self._place_leg(
-                    db, leg, algo, algo_state, grid_entry, reentry, original_order
+                    db, leg, algo, algo_state, grid_entry, reentry, original_order,
+                    account=account,
                 )
                 if order:
                     placed_orders.append(order)
@@ -275,6 +335,7 @@ class AlgoRunner:
         grid_entry:     GridEntry,
         reentry:        bool,
         original_order: Optional[Order],
+        account:        Optional[Account] = None,
     ) -> Optional[Order]:
         """
         Resolve strike, apply W&T/delay, place order, register monitors.
@@ -302,6 +363,18 @@ class AlgoRunner:
                 logger.info(f"W&T registered for leg {leg.leg_number}: {algo.name}")
             return None  # deferred — order placed when W&T fires
 
+        # ── Resolve broker for this account ────────────────────────────────────
+        broker_type  = "zerodha"
+        account_broker = self._zerodha_broker   # default
+        if account and account.broker == BrokerType.ANGELONE:
+            broker_type    = "angelone"
+            account_broker = self._angel_broker_map.get(account.client_id)
+            if not account_broker:
+                logger.warning(
+                    f"[BROKER] No Angel One broker found for client_id={account.client_id} — "
+                    "falling back to order_placer default"
+                )
+
         # ── Strike selection ───────────────────────────────────────────────────
         instrument = None
         if leg.instrument == "fu":
@@ -324,6 +397,7 @@ class AlgoRunner:
                         expiry=leg.expiry or "current_weekly",
                         strike_type=leg.strike_type or "atm",
                         strike_value=leg.strike_value,
+                        broker=account_broker,
                     )
                 if not instrument:
                     raise ValueError(
@@ -351,6 +425,9 @@ class AlgoRunner:
         lot_size = instrument.get("lot_size", 1) if instrument else 1
         quantity = leg.lots * lot_size * grid_entry.lot_multiplier
 
+        # ── Rate limit (SEBI: max 10/s; we cap at 8) ──────────────────────────
+        await self._rate_limiter.acquire()
+
         # ── Place order ────────────────────────────────────────────────────────
         idempotency_key = f"{grid_entry.id}:{leg.id}:{algo_state.reentry_count}"
         order_id_str    = await self._order_placer.place(
@@ -364,6 +441,8 @@ class AlgoRunner:
             ltp=ltp,
             is_practix=grid_entry.is_practix,
             is_overnight=is_overnight,
+            broker_type=broker_type,
+            symbol_token=str(instrument_token),
         )
 
         if not order_id_str:
@@ -371,6 +450,13 @@ class AlgoRunner:
             return None
 
         fill_price = ltp  # MARKET fill at LTP; LIMIT would use limit_price
+
+        # ── Log exchange order ID (P2 SEBI compliance) ────────────────────────
+        if not grid_entry.is_practix:
+            logger.info(
+                f"[ORDER] Exchange order ID: {order_id_str} | "
+                f"{symbol} {direction.upper()} qty={quantity} broker={broker_type}"
+            )
 
         # ── Persist Order to DB ────────────────────────────────────────────────
         journey_level = (
@@ -400,6 +486,7 @@ class AlgoRunner:
             ltp=fill_price,
             status=OrderStatus.OPEN,
             journey_level=journey_level,
+            broker_order_id=order_id_str,            # exchange order ID (P2)
         )
 
         # SL/TP stored on order for display
@@ -529,6 +616,18 @@ class AlgoRunner:
         exit_delay_secs  = getattr(algo, "exit_delay_seconds",  0) or 0
         exit_delay_scope = getattr(algo, "exit_delay_scope",  "all") or "all"
 
+        # Load account for exit broker routing
+        exit_account = None
+        if algo and algo.account_id:
+            acc_res = await db.execute(
+                select(Account).where(Account.id == algo.account_id)
+            )
+            exit_account = acc_res.scalar_one_or_none()
+
+        exit_broker_type = "zerodha"
+        if exit_account and exit_account.broker == BrokerType.ANGELONE:
+            exit_broker_type = "angelone"
+
         for order in orders:
             try:
                 # Get current LTP
@@ -557,7 +656,9 @@ class AlgoRunner:
                     order_type="market",
                     ltp=ltp,
                     is_practix=order.is_practix,
-                    is_overnight=False,  # exit is always intraday
+                    is_overnight=False,           # exit is always intraday
+                    broker_type=exit_broker_type,
+                    symbol_token=str(order.instrument_token or ""),
                 )
 
                 # F9 — cancel broker SL orders
@@ -612,14 +713,28 @@ class AlgoRunner:
     async def _cancel_broker_sl(self, order: Order):
         """
         F9 — Cancel any pending SL orders at the broker for this position.
-        Zerodha places SL orders as LIMIT orders with trigger price.
-        We look up open SL orders by tag (order.id) and cancel them.
+        Routes to the correct broker based on the order's broker_order_id context.
         """
         try:
             broker_sl_order_id = getattr(order, "broker_sl_order_id", None)
-            if broker_sl_order_id and self._order_placer:
+            if not broker_sl_order_id or not self._order_placer:
+                return
+
+            # Determine which broker placed this order by loading account
+            async with AsyncSessionLocal() as db:
+                acc_res = await db.execute(
+                    select(Account).where(Account.id == order.account_id)
+                ) if getattr(order, "account_id", None) else None
+                account = acc_res.scalar_one_or_none() if acc_res else None
+
+            if account and account.broker == BrokerType.ANGELONE:
+                ao_broker = self._angel_broker_map.get(account.client_id)
+                if ao_broker:
+                    await ao_broker.cancel_order(broker_sl_order_id)
+                    logger.info(f"✅ F9: Angel One SL order cancelled: {broker_sl_order_id}")
+            else:
                 await self._order_placer.zerodha.cancel_order(broker_sl_order_id)
-                logger.info(f"✅ F9: Broker SL order cancelled: {broker_sl_order_id}")
+                logger.info(f"✅ F9: Zerodha SL order cancelled: {broker_sl_order_id}")
         except Exception as e:
             logger.warning(f"F9: SL cancel failed for {order.id}: {e}")
             # Non-fatal — position is already being closed

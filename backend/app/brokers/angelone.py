@@ -164,6 +164,28 @@ class AngelOneBroker(BaseBroker):
             )
         return self._access_token
 
+    # ── Underlying LTP (for StrikeSelector) ──────────────────────────────────
+
+    # Angel One NSE index tokens
+    _INDEX_TOKEN_MAP = {
+        "NIFTY":       ("NSE", "Nifty 50",          "99926000"),
+        "BANKNIFTY":   ("NSE", "Nifty Bank",         "99926009"),
+        "FINNIFTY":    ("NSE", "Nifty Fin Service",  "99926037"),
+        "MIDCAPNIFTY": ("NSE", "Nifty MidCap Select","99926014"),
+        "SENSEX":      ("BSE", "Sensex",             "99919000"),
+    }
+
+    async def get_underlying_ltp(self, underlying: str) -> float:
+        """
+        Get current spot price for an index underlying.
+        Uses Angel One ltpData with the known NSE/BSE index tokens.
+        """
+        info = self._INDEX_TOKEN_MAP.get(underlying.upper())
+        if not info:
+            raise ValueError(f"[ANGEL ONE] Unknown underlying: {underlying}")
+        exchange, symbol, token = info
+        return await self.get_ltp_by_token(exchange, symbol, token)
+
     # ── LTP ───────────────────────────────────────────────────────────────────
 
     async def get_ltp(self, symbols: List[str]) -> Dict[str, float]:

@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI):
     app.state.ltp_consumer = ltp_consumer
 
     # ── 6. Engine singletons ──────────────────────────────────────────────────
-    order_placer   = OrderPlacer(zerodha, virtual_book)
+    order_placer   = OrderPlacer(zerodha, virtual_book, angel_broker=angelone_mom)
     sl_tp_monitor  = SLTPMonitor()
     tsl_engine_ins = TSLEngine(sl_tp_monitor)
     ttp_engine_ins = TTPEngine(sl_tp_monitor)
@@ -139,6 +139,8 @@ async def lifespan(app: FastAPI):
         reentry_engine  = reentry_engine,
         ltp_consumer    = ltp_consumer,
         ws_manager      = ws_manager,
+        zerodha_broker  = zerodha,
+        angel_brokers   = [angelone_mom, angelone_wife],
     )
 
     # ── 8. Wire new Phase 1F engines ─────────────────────────────────────────
