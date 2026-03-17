@@ -2031,3 +2031,26 @@ MAX_ORDERS_PER_SEC = 8
 - Test Angel One order placement end-to-end
 - Test Angel One market data feed (tickers)
 - Once confirmed working: rename "Karthik AO" → "Karthik", archive Zerodha account
+
+
+## Claude Code Batch 2 — Next Session
+
+### Trading account rules
+- Karthik AO (PEAN1003): testing only — no live trades yet
+- Mom (KRAH1029): live trading ✅
+- Wife (KRAH1008): live trading ✅
+- Karthik Zerodha (ZN6179): fallback only — Zerodha API shutting down end of March
+
+### P0 — Before Thursday QA
+1. Account.feed_token column + migration (Angel One WebSocket needs feedToken)
+2. Angel One auto-login endpoint + AccountsPage button for Mom/Wife/Karthik AO
+3. Account dropdown in AlgoPage shows all 4 accounts correctly
+
+### P1 — Before live trading
+4. Dashboard account status shows real token validity not just DB status
+5. FY Margin save fix (currently shows Failed)
+6. Single Save button for account settings (Margin + SL/TP + Brokerage)
+
+### P2 — Nice to have
+7. Nickname edit on Accounts page
+8. Add new account flow
