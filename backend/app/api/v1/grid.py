@@ -140,6 +140,56 @@ async def deploy_algo(body: DeployRequest, db: AsyncSession = Depends(get_db)):
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+
+    # ── Immediate activation if dragged to today after 09:15 IST ──────────────
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
+    now_ist = datetime.now(IST)
+    today_ist = now_ist.date()
+    market_open = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+
+    if trading_date == today_ist and now_ist >= market_open:
+        # Parse algo entry time
+        try:
+            entry_h, entry_m, entry_s = map(int, (algo.entry_time or "09:15:00").split(":"))
+            entry_ist = now_ist.replace(hour=entry_h, minute=entry_m, second=entry_s, microsecond=0)
+        except Exception:
+            entry_ist = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+
+        if now_ist < entry_ist:
+            # Entry time not yet reached — activate immediately so runner can pick it up
+            from app.models.algo_state import AlgoState, AlgoRunStatus
+            import uuid as _uuid
+            existing_state = await db.execute(
+                select(AlgoState).where(
+                    AlgoState.grid_entry_id == entry.id
+                )
+            )
+            if not existing_state.scalar_one_or_none():
+                algo_state = AlgoState(
+                    id=_uuid.uuid4(),
+                    algo_id=algo.id,
+                    grid_entry_id=entry.id,
+                    account_id=algo.account_id,
+                    trading_date=str(trading_date),
+                    status=AlgoRunStatus.WAITING,
+                    is_practix=body.is_practix,
+                )
+                db.add(algo_state)
+                entry.status = GridStatus.ALGO_ACTIVE
+                await db.commit()
+                import logging
+                logging.getLogger(__name__).info(
+                    f"[GRID] Immediate activation: {algo.name} for {trading_date} "
+                    f"(entry={algo.entry_time}, now={now_ist.strftime('%H:%M:%S')})"
+                )
+        else:
+            # Entry time already passed — mark as no_trade
+            import logging
+            logging.getLogger(__name__).warning(
+                f"[GRID] Entry time {algo.entry_time} already passed for {algo.name} — no_trade"
+            )
+
     return _entry_to_dict(entry)
 
 
