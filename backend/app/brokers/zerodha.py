@@ -91,7 +91,9 @@ class ZerodhaBroker:
     async def get_option_chain(self, underlying: str, expiry: str) -> dict:
         """Fetch option chain for strike selection at entry time."""
         try:
-            instruments = self.kite.instruments("NFO")
+            instruments = getattr(self, '_nfo_cache', None) or self.kite.instruments("NFO")
+            if not getattr(self, '_nfo_cache', None):
+                self._nfo_cache = instruments
             chain = [
                 i for i in instruments
                 if i["name"] == underlying
