@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.2 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 4.3 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1718,3 +1718,27 @@ WAITING → (entry time hit) → PENDING → (order filled) → ACTIVE/OPEN → 
 - Runner fails with "No CE instruments for NIFTY current_weekly"
 - Fix: On market feed start, call kite.instruments("NFO") and cache results
 - Also needed: Re-load instruments after every Zerodha token refresh
+
+
+## QA Summary — 17 Mar 2026
+
+### What works ✅
+- Platform boots, all services start correctly
+- Zerodha token login works (after secret rotation)
+- Smart Grid drag and drop works
+- PRACTIX mode correct
+- Bug 5 FIXED: Algos dragged after 09:15 now get AlgoState=WAITING and scheduler job registered
+- Runner fires at correct entry time (confirmed via DB and error log)
+
+### What needs fixing before next live QA 🔴
+1. Bug 25: Instrument cache not loaded — "No CE instruments for NIFTY"
+   - Fix: Load instruments on Market Feed start AND after token refresh
+2. Bug 7: Ticker sidebar null — KiteTicker not subscribing instruments  
+3. Bug 17: Entry time display reverts to 09:16 after refresh
+4. Bug 21: Edit algo resets all legs
+5. Bug 19: TimeInput only accepts digit 9 for hours
+
+### Next QA session prerequisites
+- Instrument cache must load on startup
+- Market Feed must auto-start with token
+- Ticker subscription must work
