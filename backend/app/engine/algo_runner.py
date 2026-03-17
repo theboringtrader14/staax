@@ -909,7 +909,7 @@ class AlgoRunner:
         await db.commit()
         if self._ws_manager:
             await self._ws_manager.notify_error(
-                algo_name=getattr(algo_state, "algo_id", ""),
+                algo_name=str(getattr(algo_state, "algo_id", "")),
                 error=msg,
             )
 
