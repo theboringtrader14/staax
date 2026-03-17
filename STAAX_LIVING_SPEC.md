@@ -1562,3 +1562,64 @@ Use this chat (or a new one with the extension) for:
 ### Design Principle
 Always use proper SVG icons — never Unicode characters or emoji for functional UI elements.
 Icons: 18px, stroke="currentColor", strokeWidth="1.8", strokeLinecap="round", strokeLinejoin="round"
+
+
+## QA Bugs Found — 17 March 2026
+
+### Bug 1: Edit algo resets all legs
+- Steps: Open existing algo → click edit → all configured legs disappear, resets to single empty leg
+- Root cause: AlgoPage.tsx uses `useState<Leg[]>([mkLeg(1)])` — on edit open, legs not loaded from existing algo data
+- Fix: On edit open, populate legs state from existing algo.legs data
+- Severity: High — cannot edit algos
+
+### Bug 2: Algos dragged to grid after entry time show No Trade
+- Steps: Create algo with entry_time 9:35 → drag to today's grid at 9:34 → algo shows Active briefly then No Trade
+- Root cause: Runner evaluates entry_time on schedule — if dragged close to or after entry time, runner misses the window
+- Fix: Add grace period (e.g. 2 min) — if current time is within grace_period of entry_time, still fire
+- Severity: Medium — affects same-day late grid additions
+
+
+### Bug 5 (CRITICAL): Algos added after 09:15 never fire
+- Root cause: `_job_activate_all` in scheduler.py runs ONCE at 09:15 IST
+- It creates AlgoState(status=WAITING) for all today's grid entries at that moment
+- Any grid entry created after 09:15 never gets AlgoState created → runner never picks it up
+- ALL test algos (Test 1-4) failed because they were all dragged to grid after 09:15
+- Fix: In grid.py create_entry endpoint, if trading_date==today and current_time > 09:15 
+  and entry_time > current_time → immediately call activate_single_algo()
+- This is the #1 priority fix before next live QA session
+
+### Bug 3 (revised): Entry time display in Smart Grid
+- Entry time shows correctly when algo fires (Test 4 showed 09:55:00)
+- BUT after going to NO TRADE it reverts to showing 09:16
+- Likely the grid cell renders entry_time from AlgoState which defaults to 09:16
+- Fix: render entry_time from algo.entry_time not from grid_entry/algo_state
+
+### Summary of QA session — 17 March 2026
+- Platform boots correctly, all services start
+- Zerodha token login works after secret rotation
+- Market feed connects
+- Smart Grid drag-and-drop works
+- PRACTIX mode correct
+- Kill switch resets correctly
+- CRITICAL: No algos fire if added after 09:15 IST (Bug 5)
+- All other bugs secondary to Bug 5
+
+
+### Bug 6: STBT/BTST/Positional exit time logic
+- STBT: exit time should apply to NEXT trading day (not same day)
+- BTST: exit on next day morning
+- Positional: exit based on DTE (days to expiry) + exit time
+- Currently all strategy modes show only exit time with no day logic
+- Fix: AlgoPage wizard and runner need to handle multi-day exit scheduling
+
+### Bug 7: Sidebar tickers showing null/dash
+- Market Feed service running but all tickers (NIFTY/BN/SENSEX etc) show —
+- Backend /api/v1/system/ticker returns all null values
+- KiteTicker WebSocket likely not subscribing instruments after token refresh
+- Fix: On Zerodha token refresh, re-subscribe ticker instruments in market feed service
+
+### Note: INVEX Day P&L display
+- Day P&L showing in INVEX hero card — this is actually correct data from Zerodha
+- The value shown is (LTP - prev_close) * qty for each holding
+- May appear large as it captures full day move not just today session
+- Review calculation accuracy post-market
