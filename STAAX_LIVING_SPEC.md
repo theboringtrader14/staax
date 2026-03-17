@@ -1742,3 +1742,16 @@ WAITING → (entry time hit) → PENDING → (order filled) → ACTIVE/OPEN → 
 - Instrument cache must load on startup
 - Market Feed must auto-start with token
 - Ticker subscription must work
+
+
+### Bug 26: Service states reset on backend restart
+- When backend hot-reloads (code change), all service states reset to STOPPED
+- Services need to be manually restarted after every code change during development
+- Fix: Persist service states in Redis or DB so they survive restarts
+- Also: Add auto-restart for PostgreSQL and Redis on backend startup
+
+### Bug 27: StrikeSelector fails when instrument cache empty
+- Runner: "No CE instruments for NIFTY current_weekly"
+- Root cause: Instrument cache (NFO chain) is only loaded when explicitly called
+- Fix: Load instrument cache on Market Feed start AND on Zerodha token refresh
+- The kite.instruments("NFO") call needs to populate a shared cache at startup
