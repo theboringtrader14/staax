@@ -11,6 +11,10 @@ import uuid as uuid_lib
 from app.core.database import get_db
 from app.models.algo import Algo, AlgoLeg, StrategyMode, EntryType, OrderType, ReentryMode
 from app.models.account import Account
+from app.models.grid import GridEntry
+from app.models.algo_state import AlgoState
+from app.models.order import Order
+from app.models.trade import Trade
 
 router = APIRouter()
 
@@ -307,11 +311,25 @@ async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = 
 
 @router.delete("/{algo_id}")
 async def delete_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    """Delete an algo and all its legs permanently."""
+    """Delete an algo and all associated data permanently (cascade)."""
     result = await db.execute(select(Algo).where(Algo.id == algo_id))
     algo = result.scalar_one_or_none()
     if not algo:
         raise HTTPException(status_code=404, detail="Algo not found")
+
+    # Resolve grid_entry_ids for this algo (needed for AlgoState / Order FK)
+    ge_result = await db.execute(
+        select(GridEntry.id).where(GridEntry.algo_id == algo_id)
+    )
+    grid_entry_ids = [row[0] for row in ge_result.all()]
+
+    # Delete in FK-safe order
+    if grid_entry_ids:
+        await db.execute(delete(Order).where(Order.grid_entry_id.in_(grid_entry_ids)))
+        await db.execute(delete(AlgoState).where(AlgoState.grid_entry_id.in_(grid_entry_ids)))
+    await db.execute(delete(Order).where(Order.algo_id == algo_id))
+    await db.execute(delete(Trade).where(Trade.algo_id == algo_id))
+    await db.execute(delete(GridEntry).where(GridEntry.algo_id == algo_id))
     await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
     await db.delete(algo)
     await db.commit()

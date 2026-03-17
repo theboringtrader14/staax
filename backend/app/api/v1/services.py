@@ -211,7 +211,7 @@ async def stop_all(request: Request):
 
 
 @router.post("/{service_id}/start")
-async def start_service(service_id: str):
+async def start_service(service_id: str, request: Request):
     """
     Start a single service.
     Called by individual 'Start' buttons on Dashboard.
@@ -222,9 +222,6 @@ async def start_service(service_id: str):
     if _service_states[service_id] == ServiceStatus.RUNNING:
         return {"message": f"{service_id} is already running"}
 
-    # Delegate to start_all logic for individual services
-    from fastapi import Request as _Req
-    # For individual starts, just do a health check
     if service_id == "db":
         try:
             from app.core.database import AsyncSessionLocal
@@ -246,8 +243,49 @@ async def start_service(service_id: str):
             _service_states[service_id] = ServiceStatus.ERROR
             raise HTTPException(status_code=503, detail=f"Redis not reachable: {e}")
     elif service_id == "ws":
-        # Market Feed — just mark as running, actual init happens via start_all or set-token
-        _service_states[service_id] = ServiceStatus.RUNNING
+        try:
+            from app.models.account import Account, BrokerType
+            from sqlalchemy import select
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Account).where(Account.broker == BrokerType.ZERODHA, Account.is_active == True)
+                )
+                zerodha_acc = result.scalar_one_or_none()
+
+            ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+            zerodha = getattr(request.app.state, "zerodha", None)
+
+            if zerodha_acc and zerodha_acc.access_token and ltp_consumer and zerodha:
+                if not zerodha._access_token:
+                    await zerodha.load_token(zerodha_acc.access_token)
+                ticker = zerodha.get_ticker()
+                ltp_consumer.set_ticker(ticker)
+                _service_states["ws"] = ServiceStatus.RUNNING
+                logger.info("[SVC] Market Feed: started with Zerodha token")
+
+                # Load NFO instrument cache so StrikeSelector works at entry time
+                try:
+                    instruments = zerodha.kite.instruments("NFO")
+                    zerodha._nfo_cache = instruments
+                    logger.info(f"[SVC] NFO instrument cache loaded: {len(instruments)} instruments")
+                except Exception as e:
+                    logger.warning(f"[SVC] NFO cache load failed: {e}")
+
+                # Subscribe index tokens for ticker sidebar
+                try:
+                    index_tokens = await zerodha.get_index_tokens()
+                    if index_tokens:
+                        ltp_consumer.subscribe(list(index_tokens.values()))
+                        logger.info(f"[SVC] Subscribed {len(index_tokens)} index tokens")
+                except Exception as e:
+                    logger.warning(f"[SVC] Index token subscription failed: {e}")
+            else:
+                _service_states["ws"] = ServiceStatus.STOPPED
+                logger.warning("[SVC] Market Feed: no Zerodha token — skipping feed start")
+        except Exception as e:
+            _service_states["ws"] = ServiceStatus.ERROR
+            logger.error(f"[SVC] Market Feed start failed: {e}")
     else:
         _service_states[service_id] = ServiceStatus.RUNNING
 
