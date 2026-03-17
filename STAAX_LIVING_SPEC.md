@@ -2005,3 +2005,29 @@ MAX_ORDERS_PER_SEC = 8
 6. Karthik Angel One account setup
 7. SEBI compliance: exchange order tagging
 8. 2FA for API access
+
+
+## Angel One Migration Complete — 17 Mar 2026 (Claude Code)
+
+### 7 files changed — full broker-agnostic architecture
+
+| File | Change |
+|------|--------|
+| brokers/angelone.py | Added get_underlying_ltp() with Angel One index tokens |
+| engine/strike_selector.py | Now broker-agnostic — accepts any BaseBroker, normalizes both chain formats |
+| engine/order_placer.py | Routes orders to Angel One or Zerodha based on broker_type param |
+| engine/ltp_consumer.py | Added set_ticker(), AngelOneTickerAdapter, dual-feed support |
+| engine/algo_runner.py | TokenBucketRateLimiter (8/sec), broker routing per account, stores broker_order_id |
+| api/v1/services.py | Starts Angel One market feed alongside Zerodha |
+| main.py | Wires angel_broker into OrderPlacer and AlgoRunner |
+
+### Thursday QA — test with Karthik AO account
+- Create test algo → assign to "Karthik AO" account
+- This will route orders via Angel One SmartAPI
+- Zerodha remains as fallback for "Karthik" account
+
+### Remaining before full Zerodha cutover
+- Account.feed_token column migration (needed for Angel One WebSocket auth)
+- Test Angel One order placement end-to-end
+- Test Angel One market data feed (tickers)
+- Once confirmed working: rename "Karthik AO" → "Karthik", archive Zerodha account
