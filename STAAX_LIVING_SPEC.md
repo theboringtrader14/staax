@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 5.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 5.6 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2164,3 +2164,26 @@ backend/app/agents/
   health_reporter.py   — daily trading health summary
 ```
 Simple Python scripts. Manual trigger. No autonomous execution.
+
+
+## Claude Code Batch 2 — Execution Summary
+
+### Pre-existing bugs found during analysis
+1. accounts.py angelone_login: missing password arg + wrong key "jwtToken" vs "jwt_token" + feed_token never saved
+2. api.ts updateMargin: sends {margin: val} but backend expects {financial_year, margin_amount} — root cause of Bug 12
+
+### 9 files changed (11 changes total)
+
+| Priority | File | Change |
+|----------|------|--------|
+| P0 | models/account.py | Add feed_token column |
+| P0 | alembic/versions/0009_add_feed_token.py | New migration |
+| P0 | brokers/angelone.py | Add "karthik" account branch |
+| P0 | main.py | Add angelone_karthik to app.state |
+| P0 | api/v1/accounts.py | Fix login bugs + add /auto-login endpoint |
+| P0 | api/v1/services.py | Read feed_token from DB column |
+| P0 | services/api.ts | Add angeloneAutoLogin function |
+| P0 | pages/AccountsPage.tsx | Fix slug mapping + wire Auto-Login + single Save + margin fix |
+| P0 | pages/AlgoPage.tsx | Clear hardcoded account fallback |
+| P1 | pages/DashboardPage.tsx | Bug 8: use token_valid_today |
+| P1 | pages/AccountsPage.tsx | Bug 12: correct margin payload, Feature 13: single Save |
