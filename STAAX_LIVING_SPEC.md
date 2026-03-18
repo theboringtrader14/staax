@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 4.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 5.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2054,3 +2054,112 @@ MAX_ORDERS_PER_SEC = 8
 ### P2 — Nice to have
 7. Nickname edit on Accounts page
 8. Add new account flow
+
+
+## AI-Assisted Engineering System — STAAX Ecosystem
+
+### Philosophy
+Personal platform — one person, family accounts. Keep it simple, cost-efficient, human-controlled.
+
+- Manual trigger only — no continuous AI loops
+- Human approval before any execution
+- Claude (chat + Claude Code) is the AI system — no custom agent framework needed
+- Critical trading logic always uses Claude, never cheaper models
+
+---
+
+### v1 — Manual AI Assist (CURRENT — active)
+**Trigger:** You ask  
+**Tools:** This chat (planning, review, visual QA) + Claude Code (implementation)  
+**Workflow:**
+```
+Issue / feature needed
+→ Discuss + plan in this chat
+→ Claude Code implements (batched tasks)
+→ Review here + visual check in browser
+→ Commit if approved
+→ Update Living Spec
+```
+No agent files. No custom framework. Works today.
+
+---
+
+### v2 — Structured Debugging (after INVEX complete)
+**Trigger:** Manual  
+**Add:**
+- Backend writes structured errors to log file
+- `/api/v1/debug/snapshot` endpoint — dumps current system state (algo states, open orders, service status)
+- Claude reads snapshot or log paste → diagnoses issue → proposes fix
+- Still manual — you share the snapshot or error
+
+---
+
+### v3 — Log Intelligence + Observability (after BUDGEX complete)
+**Trigger:** Manual — run when needed  
+**Add two lightweight Python utility scripts (not autonomous agents):**
+
+`backend/app/agents/log_analyzer.py`
+- Reads structured JSON logs from `~/STAXX/logs/`
+- Detects: order execution failures, retry spikes, broker/API error patterns
+- Output: plain text summary of anomalies with timestamps
+
+`backend/app/agents/health_reporter.py`
+- Daily health snapshot: orders placed, errors, MTM, reconciliation status
+- Detects: reconciliation mismatches, stale positions, missed exits
+- Output: summary report (print to terminal or write to file)
+
+**Trading observability coverage:**
+- Order failures (placement, partial fills, rejections)
+- Retry queue behaviour (spikes, loops, cancel rate)
+- Broker/API error patterns (Angel One throttling, auth failures)
+- Reconciliation mismatches (orders in DB vs broker book)
+- Missed exits (positions open after 15:30)
+
+**Structured log format (backend writes this):**
+```json
+{
+  "ts": "2026-03-17T09:20:01+05:30",
+  "level": "ERROR",
+  "module": "algo_runner",
+  "event": "order_failed",
+  "algo": "Test New 8",
+  "account": "Mom",
+  "reason": "Insufficient margin",
+  "broker_code": "AMO_REJECTED"
+}
+```
+
+---
+
+### v4 — Approval-gated Automation (after FINEX complete)
+**Trigger:** Manual  
+- Claude Code proposes and stages changes automatically based on log analysis
+- You review diff → approve → deploy
+- Never auto-deploys
+- User approval required at every step
+
+---
+
+### v5 — Not applicable for personal platform
+Autonomous self-healing is not appropriate for a live trading system with real money.
+
+---
+
+### AI Model Rules
+- **Claude (chat + Claude Code):** all trading logic, architecture, execution engine, risk
+- **Cheaper models (optional):** UI copy, documentation only — never trading logic
+- **Rule:** Any code touching orders, risk, or financial data = Claude only
+
+### Cost Control
+1. Claude Code only during active work sessions
+2. Batch tasks — not individual API calls per bug
+3. No background agents or continuous loops
+4. Log-based observability — not real-time AI monitoring
+
+### Future agent directory (v3 onwards)
+```
+backend/app/agents/
+  log_analyzer.py      — anomaly detection from structured logs
+  health_reporter.py   — daily trading health summary
+```
+Simple Python scripts. Manual trigger. No autonomous execution.
