@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 5.3 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 5.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2056,6 +2056,7 @@ MAX_ORDERS_PER_SEC = 8
 8. Add new account flow
 
 
+
 ## AI-Assisted Engineering System — STAAX Ecosystem
 
 ### Philosophy
@@ -2163,74 +2164,3 @@ backend/app/agents/
   health_reporter.py   — daily trading health summary
 ```
 Simple Python scripts. Manual trigger. No autonomous execution.
-
-
-## SEBI Compliance + Execution Layer Design — 17 Mar 2026
-
-### Execution Flow (target architecture)
-```
-AlgoRunner
-    ↓
-ExecutionManager          ← single control point, validates kill switch + algo_tag + rate
-    ↓
-ExecutionSignature        ← micro-delay, burst smoothing, human-like pattern
-    ↓
-OrderRetryQueue           ← retry with randomized delays, cancel rate guard
-    ↓
-OrderPlacer               ← routes to Angel One or Zerodha per account
-```
-
-### 1. Algo Tagging (CRITICAL — SEBI mandatory)
-Format: `STAAX_<account>_<algo_id>_<leg_id>_<timestamp_ms>`
-Example: `STAAX_MOM_ORB_12_L1_1710672312345`
-- Add to every order placed via OrderPlacer
-- Validate in ExecutionManager — block if missing
-- Store algo_tag in Order model and execution_logs
-
-### 2. Execution Audit Log table
-```sql
-CREATE TABLE execution_logs (
-  id UUID PRIMARY KEY,
-  timestamp TIMESTAMPTZ,
-  account_id UUID,
-  algo_id UUID,
-  order_id UUID,
-  algo_tag TEXT,
-  action TEXT,          -- place/cancel/retry/block
-  status TEXT,          -- ok/failed/blocked/queued
-  reason TEXT
-)
-```
-
-### 3. Algo Registry table
-```sql
-CREATE TABLE algorithms_registry (
-  algo_id UUID PRIMARY KEY,
-  name TEXT,
-  strategy_type TEXT,   -- white_box / black_box
-  version TEXT,
-  registered_at TIMESTAMPTZ,
-  exchange_ref TEXT      -- exchange registration ID when empaneled
-)
-```
-
-### 4. ExecutionSignature module (engine/execution_signature.py)
-- Micro delay before every order: `random.uniform(0.05, 0.25)` seconds
-- Retry delay randomization: first retry 2-3s, second retry 5-7s
-- Burst control: if >3 orders in last second → queue and space
-- Cancel rate guard: max 10 cancels/min
-- Logging: [EXEC_SIG] prefix for all signature actions
-
-### 5. Rate limiter — 8 orders/sec (already built, keep)
-- SEBI limit is 10/sec — we use 8 as buffer
-- TokenBucketRateLimiter already in algo_runner.py
-
-### 6. Static IP
-- Deploy STAAX backend on AWS EC2 with Elastic IP
-- Register static IP with Angel One SmartAPI dashboard
-- Local development: use ngrok or VPN with fixed exit IP
-
-### 7. ExecutionManager rules
-- No direct calls to OrderPlacer allowed from AlgoRunner
-- All orders must pass through: ExecutionManager → ExecutionSignature → OrderRetryQueue → OrderPlacer
-- ExecutionManager validates: kill switch, algo_tag, rate limit, account status
