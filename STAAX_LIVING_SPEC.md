@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 5.6 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 5.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2187,3 +2187,107 @@ Simple Python scripts. Manual trigger. No autonomous execution.
 | P0 | pages/AlgoPage.tsx | Clear hardcoded account fallback |
 | P1 | pages/DashboardPage.tsx | Bug 8: use token_valid_today |
 | P1 | pages/AccountsPage.tsx | Bug 12: correct margin payload, Feature 13: single Save |
+
+
+## Health Module — WHOOP Integration
+**Status:** Planned | **Module:** STAAX (later migrates to FINEX)
+**Trigger:** After core STAAX trading engine is stable and tested
+
+### Objective
+Integrate WHOOP health data to provide decision support for trading.
+Health data never blocks trading — it informs, not controls.
+Manual override always available.
+
+### DB Schema
+```sql
+CREATE TABLE health_daily_metrics (
+    id UUID PRIMARY KEY,
+    account_id UUID NOT NULL,
+    date DATE NOT NULL,
+    recovery_score INT,        -- 0-100, WHOOP recovery
+    strain_score FLOAT,        -- 0-21, WHOOP strain
+    sleep_score INT,           -- 0-100, WHOOP sleep
+    sleep_hours FLOAT,
+    sleep_efficiency FLOAT,    -- %
+    resting_hr INT,
+    hrv FLOAT,
+    calories_burned INT,
+    source VARCHAR(20) DEFAULT 'whoop',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(account_id, date)
+);
+
+CREATE TABLE health_insights (
+    id UUID PRIMARY KEY,
+    account_id UUID,
+    date DATE,
+    insight_type VARCHAR(50),  -- recovery/sleep/hrv/strain
+    message TEXT,
+    severity VARCHAR(10),      -- low/medium/high
+    suggested_action TEXT,     -- e.g. "reduce lot size 50%"
+    applied BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Backend Structure
+```
+backend/app/health/
+    whoop_loader.py     — OAuth2 token management + WHOOP API calls + upsert to DB
+    health_engine.py    — rules engine, generates insights
+    routes.py           — API endpoints
+```
+
+### WHOOP OAuth2
+- WHOOP uses OAuth2 — need to store whoop_access_token + whoop_refresh_token per user
+- Add whoop_access_token, whoop_refresh_token columns to accounts table (or separate whoop_credentials table)
+- Token refresh: WHOOP tokens expire — auto-refresh before fetching data
+
+### Health Engine Rules
+Default thresholds (personalise over time):
+- recovery_score < 33 → HIGH RISK — suggest: "Consider skipping high-risk trades today"
+- recovery_score 33-66 → MEDIUM — suggest: "Reduce position size by 25%"
+- recovery_score > 66 → GOOD — normal trading
+- sleep_hours < 6 → "Reduced focus likely — avoid complex multi-leg strategies"
+- hrv < personal_baseline × 0.8 → "HRV below baseline — reduce exposure"
+- strain_score > 18 → "High physical strain — monitor emotional discipline"
+
+Personal baseline: computed from 30-day rolling average of hrv
+
+### API Endpoints
+```
+GET  /api/v1/health/daily?date=YYYY-MM-DD     — today's metrics
+POST /api/v1/health/whoop/fetch               — trigger WHOOP data fetch
+POST /api/v1/health/run-daily-analysis        — generate insights for today
+GET  /api/v1/health/insights?date=YYYY-MM-DD  — today's insights
+```
+
+### Scheduler (runs before market open)
+- 08:00 IST: whoop_loader — fetch yesterday's final + today's current data
+- 08:05 IST: health_engine — run analysis, generate insights
+- Insights available on Dashboard before 09:15 trading start
+
+### Dashboard Integration
+- Show recovery score + sleep hours in Dashboard header or widget
+- Color coded: green (>66), amber (33-66), red (<33)
+- Click to see full insights
+- "Override" button — dismiss all health warnings for the day
+
+### Future: STAAX Risk Engine Integration
+- health_insights feeds into algo_runner
+- Low recovery → auto-reduce lot_multiplier for algos (e.g. 50% reduction)
+- User sets preferences: "At recovery < 33, reduce all lots by 50%"
+- Still requires user to set the preference — not fully autonomous
+
+### Constraints
+- Never block trading due to health data
+- Missing WHOOP data = normal trading (fail open, not fail closed)
+- Manual override always available
+- Insights are suggestions, not commands
+
+### Build Phase
+- Phase 1 (after STAAX stable): whoop_loader + health_daily_metrics table
+- Phase 2: health_engine + insights + Dashboard widget
+- Phase 3: STAAX risk engine integration (lot size adjustment)
+- Phase 4: Migrate to FINEX as a shared module
