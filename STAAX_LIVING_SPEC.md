@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 6.3 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 6.4 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2493,3 +2493,34 @@ P2 — Pending from backlog:
 - Mom/Wife .env credentials fixed ✅
 - Every trade still failing due to token loss on hot-reload ❌
 - Sidebar tickers still not showing ❌
+
+
+## 🎉 FIRST PRACTIX TRADE — 19 Mar 2026
+
+**Time:** 15:09 IST  
+**Account:** Karthik AO (Angel One, PEAN1003)  
+**Strategy:** NIFTY Short Straddle  
+**Legs:** NIFTY24MAR2622950CE SELL + NIFTY24MAR2622950PE SELL  
+**Entry:** 15:09 | **Exit:** 15:12 | **Mode:** PRACTIX
+
+This marks the first successful end-to-end algo trade on STAAX.
+
+### Bugs fixed today to get here (19 Mar QA session)
+- Token loading on startup (_load_all_broker_tokens)
+- Order model fields: removed algo_name, account_nickname, instrument_token
+- fill_time string → datetime
+- account_id null → algo.account_id
+- tsl_enabled missing → getattr with default
+- notify_trade missing algo_name arg
+- Angel One instrument master for option chain (IP-blocked API workaround)
+- EXPIRY_WEEKDAY: NIFTY=Tuesday (NSE Nov 2024 change)
+- is_activated() wrong kwarg in execution_manager
+
+### Pending for Batch 9
+- P0: Orders page crash (legs undefined)
+- P0: ZerodhaBroker missing get_orders (RECON errors)
+- P1: Sidebar tickers (Angel One WebSocket)
+- P1: fill_price = 0.0 in PRACTIX mode (correct), needs real LTP in LIVE mode
+- P1: broker_order_id not stored from Angel One response
+- P2: Orders page legs/P&L display
+- P2: Start Session reliability
