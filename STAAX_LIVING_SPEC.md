@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 5.9 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 6.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2330,3 +2330,55 @@ GET  /api/v1/health/insights?date=YYYY-MM-DD  — today's insights
 - Market Feed: auto-recover needed (Batch 5 fix)
 - AO-NF1/NF2: stuck ACTIVE after missed entry (Batch 5 fix)
 - AO-NF3 (10:15): first clean test pending
+
+
+## QA Status — 19 Mar 2026 (Thursday)
+
+### What is CONFIRMED WORKING ✅
+- Scheduler fires at exact entry time (confirmed at 10:15:09)
+- Bug 5 fixed: algos dragged after 09:15 get activated immediately
+- Bug B fixed: WAITING algos past entry time → NO TRADE on restart
+- AO-NF3 entry triggered correctly at 10:15
+- Karthik AO auto-login working
+- NFO cache loads (52,308 instruments)
+- Entry/exit time display correct in grid
+- Page alignment fixed
+- Promote to LIVE UI fix
+- Edit algo loads correct legs
+- EOD cleanup at 15:35 IST
+- Cascade delete algos
+
+### What is FAILING ❌
+1. **Strike selection fails for Angel One** — root cause of every ERROR
+   - Error: "Strike selection failed for leg 1: NIFTY ce atm"
+   - Root cause: AngelOneBroker.get_option_chain() returns different format than Zerodha
+   - StrikeSelector._normalize_chain() added in Batch 3 but not working correctly
+   - Angel One format: {strike_price: {"CE": {...}, "PE": {...}}}
+   - Expected after normalization: [{instrument_type, strike, tradingsymbol, instrument_token, ...}]
+   - Also: get_underlying_ltp() needs to return correct NIFTY spot for ATM calculation
+
+2. **Mom/Wife Angel One auto-login failing**
+   - Error: "Invalid clientcode parameter name" — persists despite direct POST fix
+   - Karthik AO works (PEAN1003) but Mom (KRAH1029) and Wife (KRAH1008) fail
+   - Possible: Mom/Wife API keys need regeneration or are wrong
+   - Credentials: Mom API_KEY=dt2aDQm4, Wife API_KEY=CAXbaPcv
+   - Need to verify credentials manually and check Angel One dashboard
+
+3. **Market Feed ERROR after restart**
+   - get_index_tokens added but Market Feed still shows ERROR
+   - Need to verify auto-start in main.py lifespan is working
+
+### Claude Code Batch 6 — Priority Tasks
+
+P0 — Critical (blocks every trade):
+1. Fix StrikeSelector for Angel One option chain format
+2. Verify/fix AngelOneBroker.get_underlying_ltp() returns correct spot price
+3. Debug Mom/Wife auto-login — test credentials directly
+
+P1 — Important:
+4. Market Feed auto-start on startup — verify and fix
+5. Orders page WAITING rows still showing NO TRADE algos — filter fix
+
+P2 — Pending from backlog:
+6. STBT/BTST exit time logic
+7. Soft notifications (Feature 16)
