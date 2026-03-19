@@ -25,13 +25,23 @@ STRIKE_MULTIPLES = {
     "FINNIFTY":    50,
 }
 
-# Weekday of weekly expiry for each underlying (Monday=0, Sunday=6)
+# Weekday of (weekly) expiry for each underlying (Monday=0, Sunday=6).
+# Used by _resolve_expiry() to produce an approximate ISO date.
+# Angel One's get_option_chain() has a nearest-future-expiry fallback,
+# so this only needs to be approximately correct.
+#
+# NSE changed expiry days in Nov 2024:
+#   NIFTY weekly    → Tuesday
+#   BANKNIFTY       → monthly only (last Tuesday of month)
+#   FINNIFTY        → monthly only (last Tuesday of month)
+#   MIDCAPNIFTY     → monthly only (last Monday of month)
+#   SENSEX (BSE)    → Thursday
 EXPIRY_WEEKDAY = {
-    "NIFTY":       3,  # Thursday
-    "BANKNIFTY":   2,  # Wednesday
-    "FINNIFTY":    1,  # Tuesday
-    "MIDCAPNIFTY": 0,  # Monday
-    "SENSEX":      4,  # Friday
+    "NIFTY":       1,  # Tuesday
+    "BANKNIFTY":   1,  # Tuesday (monthly — fallback handles this)
+    "FINNIFTY":    1,  # Tuesday (monthly — fallback handles this)
+    "MIDCAPNIFTY": 0,  # Monday  (monthly — fallback handles this)
+    "SENSEX":      3,  # Thursday
 }
 
 

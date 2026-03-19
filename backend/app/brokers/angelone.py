@@ -29,6 +29,7 @@ Order types:
 """
 import asyncio
 import logging
+from datetime import date as _date, datetime as _dt
 from typing import Optional, Dict, List
 
 from app.brokers.base import BaseBroker
@@ -45,6 +46,27 @@ class AngelOneBroker(BaseBroker):
     EXCHANGE_MCX  = "MCX"
     PRODUCT_INTRADAY = "INTRADAY"
     PRODUCT_CARRYFORWARD = "CARRYFORWARD"
+
+    # ── Instrument master (public, no auth — bypasses IP-blocked option chain API) ──
+    _INSTRUMENT_MASTER_URL = (
+        "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+    )
+    # Class-level cache shared across all instances (mom / wife / karthik use same file)
+    _master_cache: Optional[List[dict]] = None
+    _master_date:  Optional[_date]      = None
+
+    # 'name' field in master differs from our underlying names in two cases
+    UNDERLYING_TO_MASTER_NAME: Dict[str, str] = {
+        "NIFTY":       "NIFTY",
+        "BANKNIFTY":   "BANKNIFTY",
+        "FINNIFTY":    "FINNIFTY",
+        "MIDCAPNIFTY": "MIDCPNIFTY",   # AO master uses MIDCPNIFTY
+        "SENSEX":      "SENSEX",
+    }
+    # SENSEX trades on BSE's derivative segment (BFO), everything else on NFO
+    UNDERLYING_TO_EXCHANGE: Dict[str, str] = {
+        "SENSEX": "BFO",
+    }
 
     def __init__(self, account: str = "mom"):
         """
@@ -333,102 +355,146 @@ class AngelOneBroker(BaseBroker):
 
     # ── Option chain ──────────────────────────────────────────────────────────
 
+    async def get_instrument_master(self) -> List[dict]:
+        """
+        Download and cache the Angel One instrument master JSON.
+
+        Public URL — no authentication required. ~40MB, 209k instruments.
+        Cached as a class variable so all broker instances share one copy per day.
+        """
+        if AngelOneBroker._master_cache and AngelOneBroker._master_date == _date.today():
+            logger.debug("[AO master] Using cached instrument master")
+            return AngelOneBroker._master_cache
+
+        logger.info(f"[AO master] Downloading instrument master from {self._INSTRUMENT_MASTER_URL}")
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as http:
+                resp = await http.get(self._INSTRUMENT_MASTER_URL)
+            data: List[dict] = resp.json()
+            AngelOneBroker._master_cache = data
+            AngelOneBroker._master_date  = _date.today()
+            logger.info(f"[AO master] ✅ Cached {len(data):,} instruments")
+            return data
+        except Exception as e:
+            logger.error(f"[AO master] Download failed: {e}")
+            return AngelOneBroker._master_cache or []
+
     async def get_option_chain(self, underlying: str, expiry: str) -> dict:
         """
-        Get option chain for strike selection.
+        Get option chain for strike selection using the instrument master file.
 
-        underlying: "NIFTY" | "BANKNIFTY" | "FINNIFTY"
-        expiry: ISO format "YYYY-MM-DD" (resolved by StrikeSelector) or "DDMMMYYYY"
+        underlying: "NIFTY" | "BANKNIFTY" | "FINNIFTY" | "MIDCAPNIFTY" | "SENSEX"
+        expiry: ISO "YYYY-MM-DD" (resolved by StrikeSelector) or "DDMMMYYYY"
 
-        Uses searchScrip to find option tokens.
-        Returns dict keyed by strike: { 24500: { CE: {...}, PE: {...} } }
+        Returns: { strike_int: { "CE": {...}, "PE": {...} } }
+
+        Note: The Angel One option chain REST API is IP-blocked for non-static IPs.
+        This implementation uses the public instrument master file instead.
+
+        Strike note: master stores strike × 100 (e.g. 30000 → "3000000.000000")
         """
-        client = self._get_client()
-        loop = asyncio.get_event_loop()
+        master      = await self.get_instrument_master()
+        master_name = self.UNDERLYING_TO_MASTER_NAME.get(underlying.upper(), underlying.upper())
+        exchange    = self.UNDERLYING_TO_EXCHANGE.get(underlying.upper(), "NFO")
 
-        # Convert ISO expiry "2026-03-27" → Angel One format "27MAR2026" for symbol search
+        # Convert ISO expiry "2026-03-24" → AO master format "24MAR2026"
         if expiry and "-" in expiry:
-            from datetime import datetime as _dt
             expiry_ao = _dt.strptime(expiry, "%Y-%m-%d").strftime("%d%b%Y").upper()
         else:
-            expiry_ao = expiry  # already in DDMMMYYYY format
+            expiry_ao = expiry
 
-        search_term = f"{underlying}{expiry_ao}"
-        logger.info(f"[ANGEL ONE] get_option_chain: searchScrip NFO '{search_term}'")
+        logger.info(
+            f"[AO master] get_option_chain: {underlying} expiry={expiry_ao} "
+            f"master_name={master_name} exchange={exchange}"
+        )
 
-        try:
-            data = await loop.run_in_executor(
-                None,
-                lambda: client.searchScrip("NFO", search_term)
+        # Filter master for this underlying + exact expiry
+        candidates = [
+            x for x in master
+            if x["name"] == master_name
+            and x["exch_seg"] == exchange
+            and x["instrumenttype"] == "OPTIDX"
+            and x["expiry"] == expiry_ao
+        ]
+
+        # Fallback: find nearest future expiry in master
+        # (handles holiday shifts, and monthly-only underlyings like BANKNIFTY)
+        if not candidates:
+            logger.warning(
+                f"[AO master] No instruments for {underlying} {expiry_ao} — "
+                f"searching for nearest future expiry"
             )
+            try:
+                target_dt = _dt.strptime(expiry_ao, "%d%b%Y")
+            except ValueError:
+                target_dt = _dt.today()
 
-            raw_status = data.get("status") if data else None
-            search_ok  = raw_status is True or str(raw_status).lower() == "true"
-
-            if not data or not search_ok:
-                logger.warning(
-                    f"[ANGEL ONE] searchScrip returned no results for '{search_term}': {data}"
-                )
-                return {}
-
-            scrips = data.get("data") or []
-            logger.info(f"[ANGEL ONE] searchScrip returned {len(scrips)} instruments for '{search_term}'")
-
-            chain = {}
-            for scrip in scrips:
-                name = scrip.get("tradingsymbol", "")
-                try:
-                    # Determine option type from symbol name
-                    if name.endswith("CE"):
-                        opt_type = "CE"
-                    elif name.endswith("PE"):
-                        opt_type = "PE"
-                    else:
-                        continue
-
-                    # Use strike field directly if provided by API
-                    strike_raw = scrip.get("strike")
-                    if strike_raw is not None:
-                        try:
-                            strike = int(float(strike_raw))
-                        except (ValueError, TypeError):
-                            strike = None
-                    else:
-                        strike = None
-
-                    # Fall back to parsing from symbol name
-                    if not strike:
-                        suffix = name.split(expiry_ao)[-1] if expiry_ao in name else name[-10:]
-                        strike_str = "".join(filter(str.isdigit, suffix))
-                        if not strike_str:
-                            continue
-                        strike = int(strike_str)
-
-                    if strike not in chain:
-                        chain[strike] = {}
-
-                    chain[strike][opt_type] = {
-                        "symbol":   name,
-                        "token":    scrip.get("symboltoken", ""),
-                        "exchange": "NFO",
-                        "expiry":   expiry,
-                        "strike":   strike,
-                    }
-
-                except (ValueError, IndexError) as e:
-                    logger.debug(f"[ANGEL ONE] Skipping scrip {name!r}: {e}")
-                    continue
-
-            logger.info(
-                f"[ANGEL ONE] Option chain built: {len(chain)} strikes "
-                f"for {underlying} expiry={expiry_ao}"
-                + (f", sample={next(iter(chain.items()))}" if chain else "")
+            all_expiries = sorted(
+                {
+                    (_dt.strptime(x["expiry"], "%d%b%Y"), x["expiry"])
+                    for x in master
+                    if x["name"] == master_name
+                    and x["exch_seg"] == exchange
+                    and x["instrumenttype"] == "OPTIDX"
+                    and x["expiry"]
+                },
+                key=lambda t: t[0],
             )
-            return chain
+            next_exp = next((ao for dt, ao in all_expiries if dt >= target_dt), None)
+            if next_exp:
+                logger.info(f"[AO master] Using nearest available expiry: {next_exp}")
+                candidates = [
+                    x for x in master
+                    if x["name"] == master_name
+                    and x["exch_seg"] == exchange
+                    and x["instrumenttype"] == "OPTIDX"
+                    and x["expiry"] == next_exp
+                ]
+                expiry_ao = next_exp  # update for logging
 
-        except Exception as e:
-            logger.error(f"[ANGEL ONE] Option chain error for {underlying} {expiry_ao}: {e}")
+        if not candidates:
+            logger.error(
+                f"[AO master] No instruments found for {underlying} — "
+                f"master has {len(master):,} total records. "
+                f"Check master_name={master_name!r} exchange={exchange!r}"
+            )
             return {}
+
+        logger.info(f"[AO master] {len(candidates)} raw instruments for {underlying} {expiry_ao}")
+
+        chain: dict = {}
+        for scrip in candidates:
+            sym = scrip.get("symbol", "")
+            if sym.endswith("CE"):
+                opt_type = "CE"
+            elif sym.endswith("PE"):
+                opt_type = "PE"
+            else:
+                continue
+
+            # Master stores strike × 100 — convert to actual strike
+            try:
+                strike = int(float(scrip["strike"]) / 100)
+            except (ValueError, TypeError, KeyError):
+                continue
+
+            if strike not in chain:
+                chain[strike] = {}
+
+            chain[strike][opt_type] = {
+                "symbol":   sym,
+                "token":    scrip.get("token", ""),
+                "exchange": exchange,
+                "expiry":   expiry,
+                "strike":   strike,
+            }
+
+        logger.info(
+            f"[AO master] ✅ Option chain built: {len(chain)} strikes for {underlying} {expiry_ao}"
+            + (f" — sample strike: {next(iter(chain))}" if chain else "")
+        )
+        return chain
 
     # ── Order placement ───────────────────────────────────────────────────────
 

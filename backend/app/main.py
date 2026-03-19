@@ -105,6 +105,15 @@ async def lifespan(app: FastAPI):
     app.state.angelone_karthik = angelone_karthik
     logger.info("✅ Broker clients initialised (no token yet)")
 
+    # ── 4b. Pre-warm Angel One instrument master (public URL, ~40MB) ──────────
+    # Downloaded once per day, cached as class var shared across all AO instances.
+    # Non-fatal if it fails — will be retried on first trade attempt.
+    try:
+        await angelone_karthik.get_instrument_master()
+        logger.info("✅ Angel One instrument master pre-warmed")
+    except Exception as _e:
+        logger.warning(f"Angel One instrument master pre-warm failed (non-fatal): {_e}")
+
     # ── 5. LTP infrastructure (ticker created lazily after broker login) ───────
     ltp_cache    = LTPCache(redis_client)
     virtual_book = VirtualOrderBook()
