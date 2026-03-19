@@ -209,7 +209,10 @@ async def lifespan(app: FastAPI):
     await bot_runner.load_bots()
     logger.info("✅ BotRunner started")
 
-    # ── 13. Auto-start Market Feed if broker token exists in DB ──────────────
+    # ── 13. Load all broker tokens from DB (independent of market feed) ─────
+    await _load_all_broker_tokens(app)
+
+    # ── 14. Auto-start Market Feed if broker token exists in DB ──────────────
     await _auto_start_market_feed(app)
 
     logger.info("✅ STAAX engine operational — awaiting broker login to start LTP feed")
@@ -223,6 +226,95 @@ async def lifespan(app: FastAPI):
         ltp_consumer.stop()
     await redis_client.aclose()
     logger.info("✅ Clean shutdown complete")
+
+
+async def _load_all_broker_tokens(app: "FastAPI") -> None:
+    """
+    Loads today's broker tokens from DB into broker instances on app.state.
+    Runs at startup BEFORE _auto_start_market_feed so tokens are available for
+    order placement even if market feed startup fails or takes a different path.
+
+    Each account is wrapped in its own try/except — one failure never blocks others.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.account import Account, BrokerType
+    from sqlalchemy import select
+    from datetime import date, timezone
+
+    _NICKNAME_TO_BROKER_KEY = {
+        "Mom":        "angelone_mom",
+        "Wife":       "angelone_wife",
+        "Karthik AO": "angelone_karthik",
+    }
+
+    logger.info("[STARTUP] Loading broker tokens from DB...")
+
+    # ── Zerodha ───────────────────────────────────────────────────────────────
+    try:
+        async with AsyncSessionLocal() as db:
+            z_result = await db.execute(
+                select(Account).where(
+                    Account.broker == BrokerType.ZERODHA,
+                    Account.is_active == True,
+                )
+            )
+            zerodha_acc = z_result.scalar_one_or_none()
+
+        if zerodha_acc and zerodha_acc.access_token and zerodha_acc.token_generated_at:
+            token_date = zerodha_acc.token_generated_at.astimezone(timezone.utc).date()
+            if token_date == date.today():
+                zerodha = getattr(app.state, "zerodha", None)
+                if zerodha and not zerodha._access_token:
+                    await zerodha.load_token(zerodha_acc.access_token)
+                logger.info(f"[STARTUP] Loaded token for {zerodha_acc.nickname} (Zerodha)")
+            else:
+                logger.info(f"[STARTUP] No token for {zerodha_acc.nickname} (Zerodha) — token date {token_date} is not today")
+        else:
+            logger.info("[STARTUP] No token for Zerodha — account missing or no token set")
+    except Exception as e:
+        logger.warning(f"[STARTUP] Zerodha token load failed: {e}")
+
+    # ── Angel One ─────────────────────────────────────────────────────────────
+    try:
+        async with AsyncSessionLocal() as db:
+            ao_result = await db.execute(
+                select(Account).where(
+                    Account.broker == BrokerType.ANGELONE,
+                    Account.is_active == True,
+                )
+            )
+            ao_accounts = ao_result.scalars().all()
+    except Exception as e:
+        logger.warning(f"[STARTUP] Failed to query Angel One accounts: {e}")
+        return
+
+    for ao_acc in ao_accounts:
+        try:
+            if not ao_acc.access_token or not ao_acc.token_generated_at:
+                logger.info(f"[STARTUP] No token for {ao_acc.nickname} — access_token or timestamp missing")
+                continue
+
+            token_date = ao_acc.token_generated_at.astimezone(timezone.utc).date()
+            if token_date != date.today():
+                logger.info(f"[STARTUP] No token for {ao_acc.nickname} — token date {token_date} is not today")
+                continue
+
+            broker_key = _NICKNAME_TO_BROKER_KEY.get(ao_acc.nickname)
+            if not broker_key:
+                logger.warning(f"[STARTUP] Unknown nickname {ao_acc.nickname!r} — skipping")
+                continue
+
+            ao_broker = getattr(app.state, broker_key, None)
+            if not ao_broker:
+                logger.warning(f"[STARTUP] No broker instance for {ao_acc.nickname} (key={broker_key})")
+                continue
+
+            feed_token    = ao_acc.feed_token or ""
+            refresh_token = getattr(ao_acc, "refresh_token", "") or ""
+            await ao_broker.load_token(ao_acc.access_token, feed_token, refresh_token)
+            logger.info(f"[STARTUP] Loaded token for {ao_acc.nickname}")
+        except Exception as e:
+            logger.warning(f"[STARTUP] Token load failed for {ao_acc.nickname}: {e}")
 
 
 async def _auto_start_market_feed(app: "FastAPI") -> None:

@@ -245,14 +245,23 @@ export default function AccountsPage() {
                     {tokenConnected ? '✅ Connected' : isWife ? '⏳ Phase 2' : '⚠️ Login required'}
                   </span>
                 </span>
-                {!tokenConnected && (
+                {isAO ? (
                   <button
                     className="btn btn-ghost"
                     style={{ fontSize: '10px', padding: '3px 8px', height: '24px' }}
                     disabled={logging[acc.id]}
-                    onClick={() => isAO ? handleAngeloneLogin(acc) : handleZerodhaLogin(acc)}
+                    onClick={() => handleAngeloneLogin(acc)}
                   >
-                    {logging[acc.id] ? '...' : isAO ? '🔄 Auto-Login' : '🔑 Login'}
+                    {logging[acc.id] ? '...' : tokenConnected ? '🔄 Re-Login' : '🔄 Auto-Login'}
+                  </button>
+                ) : !tokenConnected && (
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: '10px', padding: '3px 8px', height: '24px' }}
+                    disabled={logging[acc.id]}
+                    onClick={() => handleZerodhaLogin(acc)}
+                  >
+                    {logging[acc.id] ? '...' : '🔑 Login'}
                   </button>
                 )}
               </div>

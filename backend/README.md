@@ -21,6 +21,13 @@ cp ../.env.example ../.env
 uvicorn main:app --reload
 ```
 
+> **WARNING — `--reload` kills broker tokens.**
+> `uvicorn --reload` restarts the Python process on every file change, re-running
+> lifespan startup from scratch. In-memory broker state is lost. **Do not use
+> `--reload` in production.** The startup token loader (`_load_all_broker_tokens`)
+> re-hydrates tokens from DB on every restart, so a clean restart (no `--reload`)
+> is safe. For local dev, restart the process manually when needed.
+
 API docs available at: http://localhost:8000/docs
 
 ## Phase Status
