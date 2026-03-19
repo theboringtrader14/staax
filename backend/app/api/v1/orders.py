@@ -12,7 +12,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, exists as sa_exists
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timezone
@@ -192,7 +192,8 @@ async def get_waiting_algos(
     )
     activated_rows = activated_result.all()
 
-    # Pre-09:15: GridEntry still in NO_TRADE (scheduler hasn't run yet today)
+    # Pre-09:15: GridEntry still in NO_TRADE with no AlgoState record yet
+    # Exclude entries already processed by recover_today_jobs (they have an AlgoState)
     notrade_result = await db.execute(
         select(GridEntry, Algo, Account)
         .join(Algo, GridEntry.algo_id == Algo.id)
@@ -202,6 +203,7 @@ async def get_waiting_algos(
             GridEntry.status == GridStatus.NO_TRADE,
             GridEntry.is_archived == False,
             GridEntry.is_enabled == True,
+            ~sa_exists().where(AlgoState.grid_entry_id == GridEntry.id),
         )
         .order_by(Algo.entry_time)
     )

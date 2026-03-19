@@ -9,7 +9,9 @@ Strike multiples: NIFTY=50, BANKNIFTY=100, SENSEX=100,
 Broker-agnostic: accepts any BaseBroker (Zerodha or Angel One).
 Normalises both broker option chain formats into a flat instrument list.
 """
+import calendar
 import logging
+from datetime import date, timedelta
 from typing import Optional, List, Dict
 from app.brokers.base import BaseBroker
 
@@ -23,6 +25,15 @@ STRIKE_MULTIPLES = {
     "FINNIFTY":    50,
 }
 
+# Weekday of weekly expiry for each underlying (Monday=0, Sunday=6)
+EXPIRY_WEEKDAY = {
+    "NIFTY":       3,  # Thursday
+    "BANKNIFTY":   2,  # Wednesday
+    "FINNIFTY":    1,  # Tuesday
+    "MIDCAPNIFTY": 0,  # Monday
+    "SENSEX":      4,  # Friday
+}
+
 
 class StrikeSelector:
 
@@ -33,7 +44,7 @@ class StrikeSelector:
         self,
         underlying: str,
         instrument_type: str,        # "ce" or "pe"
-        expiry: str,                 # "2024-02-29"
+        expiry: str,                 # "current_weekly" | "next_weekly" | "current_monthly" | "next_monthly" | "YYYY-MM-DD"
         strike_type: str,            # "atm", "itm3", "otm2", "premium", "straddle_premium"
         strike_value: Optional[float] = None,
         broker: Optional[BaseBroker] = None,
@@ -46,16 +57,41 @@ class StrikeSelector:
                 correct option chain and LTP source is used.
         """
         active_broker = broker or self.broker
+
+        # Resolve logical expiry labels ("current_weekly" etc.) to ISO date "YYYY-MM-DD"
+        expiry_resolved = self._resolve_expiry(underlying, expiry)
+
         spot     = await active_broker.get_underlying_ltp(underlying)
         multiple = STRIKE_MULTIPLES.get(underlying.upper(), 50)
 
-        raw_chain   = await active_broker.get_option_chain(underlying, expiry)
+        logger.info(
+            f"[STRIKE] select start — underlying={underlying} type={instrument_type.upper()} "
+            f"expiry_label={expiry} expiry_resolved={expiry_resolved} "
+            f"strike_type={strike_type} spot={spot}"
+        )
+
+        if spot == 0.0:
+            logger.error(
+                f"[STRIKE] Underlying LTP is 0 for {underlying} — broker may not be logged in"
+            )
+            return None
+
+        raw_chain   = await active_broker.get_option_chain(underlying, expiry_resolved)
         instruments = self._normalize_chain(raw_chain)
         opt_type    = instrument_type.upper()  # "CE" or "PE"
         filtered    = [i for i in instruments if i["instrument_type"] == opt_type]
 
+        logger.info(
+            f"[STRIKE] chain={len(instruments)} instruments, "
+            f"filtered {opt_type}={len(filtered)}"
+            + (f", sample={instruments[0]}" if instruments else "")
+        )
+
         if not filtered:
-            logger.error(f"No {opt_type} instruments for {underlying} {expiry}")
+            logger.error(
+                f"[STRIKE] No {opt_type} instruments for {underlying} expiry={expiry_resolved} "
+                f"(raw chain keys={len(raw_chain)})"
+            )
             return None
 
         atm_strike = round(spot / multiple) * multiple
@@ -85,8 +121,52 @@ class StrikeSelector:
 
         match = next((i for i in filtered if i["strike"] == target), None)
         if not match:
-            logger.error(f"No instrument at strike {target}")
+            logger.error(
+                f"[STRIKE] No instrument at strike {target} for {underlying} {opt_type} "
+                f"expiry={expiry_resolved} — available strikes: "
+                f"{sorted({i['strike'] for i in filtered})[:10]}"
+            )
+        else:
+            logger.info(f"[STRIKE] ✅ Selected {match['tradingsymbol']} strike={target}")
         return match
+
+    @staticmethod
+    def _resolve_expiry(underlying: str, expiry: str) -> str:
+        """
+        Convert logical expiry labels to ISO date strings.
+
+        Labels: "current_weekly", "next_weekly", "current_monthly", "next_monthly"
+        Passthrough: ISO dates like "2026-03-27" or unknown strings.
+        """
+        if expiry not in ("current_weekly", "next_weekly", "current_monthly", "next_monthly"):
+            return expiry
+
+        today = date.today()
+        wd = EXPIRY_WEEKDAY.get(underlying.upper(), 3)  # default Thursday
+
+        days_ahead = (wd - today.weekday()) % 7
+
+        if expiry == "current_weekly":
+            return (today + timedelta(days=days_ahead)).isoformat()
+
+        if expiry == "next_weekly":
+            return (today + timedelta(days=days_ahead + 7)).isoformat()
+
+        if expiry == "current_monthly":
+            return StrikeSelector._last_weekday_of_month(today.year, today.month, wd)
+
+        # next_monthly
+        if today.month == 12:
+            return StrikeSelector._last_weekday_of_month(today.year + 1, 1, wd)
+        return StrikeSelector._last_weekday_of_month(today.year, today.month + 1, wd)
+
+    @staticmethod
+    def _last_weekday_of_month(year: int, month: int, weekday: int) -> str:
+        """Return ISO date of the last occurrence of <weekday> in <year>/<month>."""
+        last_day  = calendar.monthrange(year, month)[1]
+        last_date = date(year, month, last_day)
+        days_back = (last_date.weekday() - weekday) % 7
+        return (last_date - timedelta(days=days_back)).isoformat()
 
     @staticmethod
     def _normalize_chain(raw_chain: dict) -> List[Dict]:

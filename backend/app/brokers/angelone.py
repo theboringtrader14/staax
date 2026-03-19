@@ -156,12 +156,15 @@ class AngelOneBroker(BaseBroker):
 
         logger.info(
             f"[ANGEL ONE] Login response body — account={self.account} "
-            f"status={raw_status!r} message={data.get('message')!r}"
+            f"status={raw_status!r} message={data.get('message')!r} "
+            f"errorcode={data.get('errorcode')!r} "
+            f"data_keys={list((data.get('data') or {}).keys())}"
         )
 
         if not login_ok:
             msg = data.get("message", "Unknown error")
-            raise RuntimeError(f"Angel One login failed: {msg}")
+            err = data.get("errorcode", "")
+            raise RuntimeError(f"Angel One login failed [{err}]: {msg}")
 
         tokens = data.get("data", {})
         self._access_token  = tokens.get("jwtToken")
@@ -242,7 +245,19 @@ class AngelOneBroker(BaseBroker):
         if not info:
             raise ValueError(f"[ANGEL ONE] Unknown underlying: {underlying}")
         exchange, symbol, token = info
-        return await self.get_ltp_by_token(exchange, symbol, token)
+        logger.info(
+            f"[ANGEL ONE] get_underlying_ltp: {underlying} → "
+            f"exchange={exchange} symbol={symbol!r} token={token}"
+        )
+        result = await self.get_ltp_by_token(exchange, symbol, token)
+        if result == 0.0:
+            logger.error(
+                f"[ANGEL ONE] LTP returned 0.0 for {underlying} ({exchange}:{symbol} token={token}) "
+                f"— broker may not be logged in or token may be wrong"
+            )
+        else:
+            logger.info(f"[ANGEL ONE] {underlying} spot LTP = {result}")
+        return result
 
     # ── LTP ───────────────────────────────────────────────────────────────────
 
@@ -292,7 +307,7 @@ class AngelOneBroker(BaseBroker):
     async def get_ltp_by_token(self, exchange: str, symbol: str, token: str) -> float:
         """
         Get LTP using symbol token — preferred method for accuracy.
-        token: Angel One instrument token (e.g. "26000" for NIFTY)
+        token: Angel One instrument token (e.g. "99926000" for NIFTY 50)
         """
         client = self._get_client()
         loop = asyncio.get_event_loop()
@@ -302,10 +317,17 @@ class AngelOneBroker(BaseBroker):
                 None,
                 lambda: client.ltpData(exchange, symbol, token)
             )
-            if data and data.get("status"):
+            raw_status = data.get("status") if data else None
+            ok = raw_status is True or str(raw_status).lower() == "true"
+            if data and ok:
                 return float(data.get("data", {}).get("ltp", 0.0))
+            else:
+                logger.warning(
+                    f"[ANGEL ONE] ltpData failed for {exchange}:{symbol} token={token}: "
+                    f"status={raw_status!r} message={data.get('message') if data else None!r}"
+                )
         except Exception as e:
-            logger.error(f"[ANGEL ONE] LTP by token error {exchange}:{symbol}: {e}")
+            logger.error(f"[ANGEL ONE] LTP by token error {exchange}:{symbol} token={token}: {e}")
 
         return 0.0
 
@@ -316,47 +338,71 @@ class AngelOneBroker(BaseBroker):
         Get option chain for strike selection.
 
         underlying: "NIFTY" | "BANKNIFTY" | "FINNIFTY"
-        expiry: "DDMMMYYYY" format e.g. "26DEC2024"
+        expiry: ISO format "YYYY-MM-DD" (resolved by StrikeSelector) or "DDMMMYYYY"
 
         Uses searchScrip to find option tokens.
         Returns dict keyed by strike: { 24500: { CE: {...}, PE: {...} } }
-
-        Note: Angel One does not have a single option chain endpoint like Zerodha.
-        Full option chain requires iterating strikes via searchScrip or
-        using the instruments CSV download.
         """
         client = self._get_client()
         loop = asyncio.get_event_loop()
 
+        # Convert ISO expiry "2026-03-27" → Angel One format "27MAR2026" for symbol search
+        if expiry and "-" in expiry:
+            from datetime import datetime as _dt
+            expiry_ao = _dt.strptime(expiry, "%Y-%m-%d").strftime("%d%b%Y").upper()
+        else:
+            expiry_ao = expiry  # already in DDMMMYYYY format
+
+        search_term = f"{underlying}{expiry_ao}"
+        logger.info(f"[ANGEL ONE] get_option_chain: searchScrip NFO '{search_term}'")
+
         try:
-            # Search for all options for this underlying + expiry
             data = await loop.run_in_executor(
                 None,
-                lambda: client.searchScrip("NFO", f"{underlying}{expiry}")
+                lambda: client.searchScrip("NFO", search_term)
             )
 
-            if not data or not data.get("status"):
-                logger.warning(f"[ANGEL ONE] Option chain search failed: {data}")
+            raw_status = data.get("status") if data else None
+            search_ok  = raw_status is True or str(raw_status).lower() == "true"
+
+            if not data or not search_ok:
+                logger.warning(
+                    f"[ANGEL ONE] searchScrip returned no results for '{search_term}': {data}"
+                )
                 return {}
 
+            scrips = data.get("data") or []
+            logger.info(f"[ANGEL ONE] searchScrip returned {len(scrips)} instruments for '{search_term}'")
+
             chain = {}
-            for scrip in data.get("data", []):
+            for scrip in scrips:
                 name = scrip.get("tradingsymbol", "")
-                # Parse strike and option type from symbol name
-                # e.g. "NIFTY26DEC2024C24500" or "NIFTY26DEC2024P24500"
                 try:
-                    if name.endswith("CE") or "C" in name[-7:]:
+                    # Determine option type from symbol name
+                    if name.endswith("CE"):
                         opt_type = "CE"
-                    elif name.endswith("PE") or "P" in name[-7:]:
+                    elif name.endswith("PE"):
                         opt_type = "PE"
                     else:
                         continue
 
-                    # Extract strike — last numeric portion before CE/PE
-                    strike_str = "".join(filter(str.isdigit, name.split(expiry)[-1]))
-                    if not strike_str:
-                        continue
-                    strike = int(strike_str)
+                    # Use strike field directly if provided by API
+                    strike_raw = scrip.get("strike")
+                    if strike_raw is not None:
+                        try:
+                            strike = int(float(strike_raw))
+                        except (ValueError, TypeError):
+                            strike = None
+                    else:
+                        strike = None
+
+                    # Fall back to parsing from symbol name
+                    if not strike:
+                        suffix = name.split(expiry_ao)[-1] if expiry_ao in name else name[-10:]
+                        strike_str = "".join(filter(str.isdigit, suffix))
+                        if not strike_str:
+                            continue
+                        strike = int(strike_str)
 
                     if strike not in chain:
                         chain[strike] = {}
@@ -369,13 +415,19 @@ class AngelOneBroker(BaseBroker):
                         "strike":   strike,
                     }
 
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
+                    logger.debug(f"[ANGEL ONE] Skipping scrip {name!r}: {e}")
                     continue
 
+            logger.info(
+                f"[ANGEL ONE] Option chain built: {len(chain)} strikes "
+                f"for {underlying} expiry={expiry_ao}"
+                + (f", sample={next(iter(chain.items()))}" if chain else "")
+            )
             return chain
 
         except Exception as e:
-            logger.error(f"[ANGEL ONE] Option chain error: {e}")
+            logger.error(f"[ANGEL ONE] Option chain error for {underlying} {expiry_ao}: {e}")
             return {}
 
     # ── Order placement ───────────────────────────────────────────────────────

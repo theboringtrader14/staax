@@ -231,7 +231,10 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
     ltp_consumer = getattr(app.state, "ltp_consumer", None)
     if not ltp_consumer:
+        logger.warning("[STARTUP MF] ltp_consumer not found on app.state — skipping")
         return
+
+    logger.info("[STARTUP MF] Checking for valid broker token in DB...")
 
     try:
         async with AsyncSessionLocal() as db:
@@ -241,8 +244,18 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             )
             zerodha_acc = z_result.scalar_one_or_none()
 
+        logger.info(
+            f"[STARTUP MF] Zerodha account: {zerodha_acc.nickname if zerodha_acc else None} "
+            f"has_token={bool(zerodha_acc and zerodha_acc.access_token)} "
+            f"token_generated_at={zerodha_acc.token_generated_at if zerodha_acc else None}"
+        )
+
         if zerodha_acc and zerodha_acc.access_token and zerodha_acc.token_generated_at:
             token_date = zerodha_acc.token_generated_at.astimezone(timezone.utc).date()
+            logger.info(
+                f"[STARTUP MF] Zerodha token_date={token_date} today={date.today()} "
+                f"valid={token_date == date.today()}"
+            )
             if token_date == date.today():
                 zerodha = getattr(app.state, "zerodha", None)
                 if zerodha:
@@ -251,23 +264,27 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     ticker = zerodha.get_ticker()
                     ltp_consumer.set_ticker(ticker)
                     _service_states["ws"] = ServiceStatus.RUNNING
-                    logger.info("[STARTUP] Market Feed auto-started with Zerodha token")
+                    logger.info("[STARTUP MF] ✅ Market Feed auto-started with Zerodha token")
 
                     try:
                         instruments = zerodha.kite.instruments("NFO")
                         zerodha._nfo_cache = instruments
-                        logger.info(f"[STARTUP] NFO cache loaded: {len(instruments)} instruments")
+                        logger.info(f"[STARTUP MF] NFO cache loaded: {len(instruments)} instruments")
                     except Exception as e:
-                        logger.warning(f"[STARTUP] NFO cache load failed: {e}")
+                        logger.warning(f"[STARTUP MF] NFO cache load failed: {e}")
 
                     try:
                         index_tokens = await zerodha.get_index_tokens()
                         if index_tokens:
                             ltp_consumer.subscribe(list(index_tokens.values()))
                     except Exception as e:
-                        logger.warning(f"[STARTUP] Index token subscription failed: {e}")
+                        logger.warning(f"[STARTUP MF] Index token subscription failed: {e}")
 
                     return  # Zerodha feed started — done
+            else:
+                logger.info("[STARTUP MF] Zerodha token is from a previous day — not using")
+        else:
+            logger.info("[STARTUP MF] No valid Zerodha token found — checking Angel One...")
 
         # ── Fall back to Angel One ─────────────────────────────────────────────
         from app.engine.ltp_consumer import AngelOneTickerAdapter
@@ -278,16 +295,29 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             )
             ao_accounts = ao_result.scalars().all()
 
+        logger.info(f"[STARTUP MF] Found {len(ao_accounts)} active Angel One account(s)")
+
         for ao_acc in ao_accounts:
+            has_token = bool(ao_acc.access_token)
+            has_ts    = bool(ao_acc.token_generated_at)
+            logger.info(
+                f"[STARTUP MF] AO account={ao_acc.nickname} has_token={has_token} "
+                f"has_ts={has_ts} token_generated_at={ao_acc.token_generated_at}"
+            )
             if not ao_acc.access_token or not ao_acc.token_generated_at:
                 continue
             token_date = ao_acc.token_generated_at.astimezone(timezone.utc).date()
+            logger.info(
+                f"[STARTUP MF] AO {ao_acc.nickname}: token_date={token_date} "
+                f"today={date.today()} valid={token_date == date.today()}"
+            )
             if token_date != date.today():
                 continue
 
             broker_key = f"angelone_{ao_acc.nickname.lower()}"
             ao_broker  = getattr(app.state, broker_key, None) or getattr(app.state, "angelone_mom", None)
             if not ao_broker:
+                logger.warning(f"[STARTUP MF] No broker instance for key={broker_key}")
                 continue
 
             feed_token = ao_acc.feed_token or getattr(ao_broker, "_feed_token", "") or ""
@@ -299,17 +329,19 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             )
             ltp_consumer.set_angel_adapter(adapter)
             _service_states["ws"] = ServiceStatus.RUNNING
-            logger.info(f"[STARTUP] Market Feed auto-started with Angel One token ({ao_acc.nickname})")
+            logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
 
             try:
                 index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
                 ltp_consumer.subscribe(index_tokens)
             except Exception as e:
-                logger.warning(f"[STARTUP] AO index token subscription failed: {e}")
+                logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
             break
+        else:
+            logger.info("[STARTUP MF] No valid Angel One token found — Market Feed will start after manual login")
 
     except Exception as e:
-        logger.warning(f"[STARTUP] Market Feed auto-start failed (non-fatal): {e}")
+        logger.warning(f"[STARTUP MF] Market Feed auto-start failed (non-fatal): {e}")
 
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────
