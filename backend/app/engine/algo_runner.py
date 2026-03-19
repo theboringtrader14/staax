@@ -395,7 +395,7 @@ class AlgoRunner:
             if reentry and original_order and leg.reentry_mode in ("at_entry_price", "at_cost"):
                 # Same strike/expiry as original for these modes
                 symbol           = original_order.symbol
-                instrument_token = original_order.instrument_token or 0
+                instrument_token = getattr(original_order, "instrument_token", None) or 0
                 ltp              = original_order.fill_price or 0.0
             else:
                 if self._strike_selector:

@@ -139,7 +139,7 @@ class PositionRebuilder:
         logger.info("[STARTUP] Recovering order %s sym=%s algo=%s", order.id, symbol, order.algo_id)
 
         # Re-subscribe LTP token
-        if self._ltp_consumer and order.instrument_token:
+        if self._ltp_consumer and getattr(order, "instrument_token", None):
             self._ltp_consumer.subscribe(int(order.instrument_token))
 
         # Re-register SL/TP monitor
