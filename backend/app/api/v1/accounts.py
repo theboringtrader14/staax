@@ -183,6 +183,8 @@ async def zerodha_set_token(
         account.status = AccountStatus.ACTIVE
         await db.commit()
 
+    from app.engine import event_logger as _ev
+    await _ev.success("Zerodha token set", source="auth")
     return {"status": "success", "message": "✅ Zerodha connected for today"}
 
 
@@ -250,12 +252,24 @@ async def angelone_login(
 
     result_db = await db.execute(select(Account).where(Account.nickname == nickname))
     account = result_db.scalar_one_or_none()
+    jwt_token     = result.get("jwt_token", "")
+    feed_token    = result.get("feed_token", "")
+    refresh_token = result.get("refresh_token", "")
     if account:
-        account.access_token       = result.get("jwt_token", "")
-        account.feed_token         = result.get("feed_token", "")
+        account.access_token       = jwt_token
+        account.feed_token         = feed_token
         account.token_generated_at = datetime.now(timezone.utc)
         account.status             = AccountStatus.ACTIVE
         await db.commit()
+
+    # Explicitly reload token into broker instance (belt-and-suspenders:
+    # login_with_totp() already sets it, but this ensures load_token() is
+    # called if any future code path writes to DB without going through login_with_totp)
+    if jwt_token:
+        await broker.load_token(jwt_token, feed_token, refresh_token)
+
+    from app.engine import event_logger as _ev
+    await _ev.success(f"Angel One ({nickname}) connected", source="auth")
 
     return {
         "status": "success",

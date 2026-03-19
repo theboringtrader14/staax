@@ -5,7 +5,7 @@ import { algosAPI, gridAPI } from '@/services/api'
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS    = ['MON','TUE','WED','THU','FRI']
 const WEEKENDS = ['SAT','SUN']
-type CS = 'no_trade'|'algo_active'|'order_pending'|'open'|'algo_closed'|'error'
+type CS = 'no_trade'|'waiting'|'algo_active'|'order_pending'|'open'|'algo_closed'|'error'
 type CM = 'practix'|'live'
 
 interface Cell {
@@ -30,6 +30,7 @@ interface Algo {
 // ── Status config ──────────────────────────────────────────────────────────────
 const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
   no_trade:     {label:'No Trade',col:'#6B7280',bg:'rgba(107,114,128,0.12)',pct:0},
+  waiting:      {label:'Waiting', col:'#F59E0B',bg:'rgba(245,158,11,0.10)',pct:15},
   algo_active:  {label:'Active',  col:'#00B0F0',bg:'rgba(0,176,240,0.12)', pct:30},
   order_pending:{label:'Pending', col:'#F59E0B',bg:'rgba(245,158,11,0.12)',pct:50},
   open:         {label:'Open',    col:'#22C55E',bg:'rgba(34,197,94,0.12)', pct:75},
@@ -82,7 +83,7 @@ function mapStatus(s: string): CS {
     algo_closed:   'algo_closed',
     no_trade:      'no_trade',
     error:         'error',
-    waiting:       'algo_active',
+    waiting:       'waiting',
     active:        'open',
     closed:        'algo_closed',
     terminated:    'algo_closed',
@@ -108,7 +109,7 @@ function Pie({ s }: { s: CS }) {
 function worstStatus(cells: Record<string, Cell> | undefined): CS {
   if (!cells) return 'no_trade'
   const v = Object.values(cells).map(c => c.status)
-  for (const s of ['error','open','algo_active','order_pending','algo_closed'] as CS[])
+  for (const s of ['error','open','order_pending','algo_active','waiting','algo_closed'] as CS[])
     if (v.includes(s)) return s
   return 'no_trade'
 }
@@ -248,7 +249,7 @@ export default function GridPage() {
 
     // Block remove if cell is active or open
     const cellStatus = grid[algoId]?.[day]?.status
-    if (cellStatus === 'algo_active' || cellStatus === 'open' || cellStatus === 'order_pending') {
+    if (cellStatus === 'algo_active' || cellStatus === 'waiting' || cellStatus === 'open' || cellStatus === 'order_pending') {
       flashError('Cannot remove an active algo from this day')
       return
     }
@@ -327,7 +328,7 @@ export default function GridPage() {
   // ── Archive algo ──────────────────────────────────────────────────────────────
   const archAlgo = async (algoId: string) => {
     const algoCells = Object.values(grid[algoId] || {})
-    const hasActive = algoCells.some(c => c.status === 'algo_active' || c.status === 'open' || c.status === 'order_pending')
+    const hasActive = algoCells.some(c => c.status === 'algo_active' || c.status === 'waiting' || c.status === 'open' || c.status === 'order_pending')
     if (hasActive) { flashError('Cannot archive — algo has active positions this week'); return }
     setAlgos(a => a.map(x => x.id === algoId ? { ...x, arch: true } : x))
     setGrid(g => { const n = { ...g }; delete n[algoId]; return n })

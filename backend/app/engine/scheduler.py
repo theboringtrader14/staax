@@ -364,6 +364,13 @@ class AlgoScheduler:
                 # Only fire directly for DIRECT entry type
                 # ORB and W&T are driven entirely by LTP callbacks
                 if algo.entry_type == EntryType.DIRECT:
+                    from app.engine import event_logger as _ev
+                    await _ev.info(
+                        f"Entry fired: {algo.name}",
+                        source="scheduler",
+                        algo_name=algo.name,
+                        algo_id=str(algo.id),
+                    )
                     if self._algo_runner:
                         await self._algo_runner.enter(grid_entry_id)
                     else:

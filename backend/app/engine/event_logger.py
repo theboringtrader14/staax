@@ -55,8 +55,18 @@ async def log(
         except Exception as e:
             logger.warning(f"[EVENT] WS broadcast failed: {e}")
 
-    # Persist to DB
-    if db:
+    # Persist to DB — auto-create session if none provided
+    target_db  = db
+    own_session = False
+    if not target_db:
+        try:
+            from app.core.database import AsyncSessionLocal
+            target_db  = AsyncSessionLocal()
+            own_session = True
+        except Exception:
+            pass
+
+    if target_db:
         try:
             from app.models.event_log import EventLog
             entry = EventLog(
@@ -69,10 +79,13 @@ async def log(
                 source=source,
                 details=details or None,
             )
-            db.add(entry)
-            await db.commit()
+            target_db.add(entry)
+            await target_db.commit()
         except Exception as e:
             logger.warning(f"[EVENT] DB persist failed: {e}")
+        finally:
+            if own_session:
+                await target_db.aclose()
 
     logger.info(f"[{level.upper()}] {msg}")
 

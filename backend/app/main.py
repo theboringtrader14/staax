@@ -298,6 +298,13 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
         # ── Fall back to Angel One ─────────────────────────────────────────────
         from app.engine.ltp_consumer import AngelOneTickerAdapter
 
+        # Explicit DB-nickname → app.state key mapping (avoids space/casing issues)
+        _NICKNAME_TO_BROKER_KEY = {
+            "Mom":        "angelone_mom",
+            "Wife":       "angelone_wife",
+            "Karthik AO": "angelone_karthik",
+        }
+
         async with AsyncSessionLocal() as db:
             ao_result = await db.execute(
                 select(Account).where(Account.broker == BrokerType.ANGELONE, Account.is_active == True)
@@ -306,6 +313,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
         logger.info(f"[STARTUP MF] Found {len(ao_accounts)} active Angel One account(s)")
 
+        market_feed_started = False
         for ao_acc in ao_accounts:
             has_token = bool(ao_acc.access_token)
             has_ts    = bool(ao_acc.token_generated_at)
@@ -323,30 +331,42 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             if token_date != date.today():
                 continue
 
-            broker_key = f"angelone_{ao_acc.nickname.lower()}"
-            ao_broker  = getattr(app.state, broker_key, None) or getattr(app.state, "angelone_mom", None)
+            broker_key = _NICKNAME_TO_BROKER_KEY.get(ao_acc.nickname)
+            if not broker_key:
+                logger.warning(f"[STARTUP MF] Unknown nickname {ao_acc.nickname!r} — skipping")
+                continue
+            ao_broker = getattr(app.state, broker_key, None)
             if not ao_broker:
                 logger.warning(f"[STARTUP MF] No broker instance for key={broker_key}")
                 continue
 
-            feed_token = ao_acc.feed_token or getattr(ao_broker, "_feed_token", "") or ""
-            adapter = AngelOneTickerAdapter(
-                auth_token=ao_acc.access_token,
-                api_key=ao_acc.api_key or "",
-                client_code=ao_acc.client_id,
-                feed_token=feed_token,
-            )
-            ltp_consumer.set_angel_adapter(adapter)
-            _service_states["ws"] = ServiceStatus.RUNNING
-            logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
+            # Load JWT token into broker instance so LTP + order calls work
+            feed_token    = ao_acc.feed_token or ""
+            refresh_token = ao_acc.refresh_token if hasattr(ao_acc, "refresh_token") else ""
+            await ao_broker.load_token(ao_acc.access_token, feed_token, refresh_token or "")
+            logger.info(f"[STARTUP MF] Token loaded into {broker_key}")
 
-            try:
-                index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
-                ltp_consumer.subscribe(index_tokens)
-            except Exception as e:
-                logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
-            break
-        else:
+            # Start market feed with the first valid account
+            if not market_feed_started:
+                adapter = AngelOneTickerAdapter(
+                    auth_token=ao_acc.access_token,
+                    api_key=ao_acc.api_key or "",
+                    client_code=ao_acc.client_id,
+                    feed_token=feed_token,
+                )
+                ltp_consumer.set_angel_adapter(adapter)
+                _service_states["ws"] = ServiceStatus.RUNNING
+                logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
+
+                try:
+                    index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
+                    ltp_consumer.subscribe(index_tokens)
+                except Exception as e:
+                    logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
+
+                market_feed_started = True
+
+        if not market_feed_started:
             logger.info("[STARTUP MF] No valid Angel One token found — Market Feed will start after manual login")
 
     except Exception as e:

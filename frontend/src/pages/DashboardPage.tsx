@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { servicesAPI, accountsAPI, systemAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -69,6 +69,27 @@ export default function DashboardPage() {
     systemAPI.stats()
       .then(res => setStats(res.data))
       .catch(() => {})
+  }, [])
+
+  // Pre-populate System Log from persisted event_log on mount
+  useEffect(() => {
+    eventsAPI.list(50)
+      .then(res => {
+        const entries: any[] = res.data || []
+        // API returns newest-first; reverse to get oldest-first for the prepended lines
+        const lines = [...entries].reverse().map((e: any) => {
+          const ts  = e.ts
+            ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+            : '--:--:--'
+          const src = e.source ? `[${e.source}] ` : ''
+          const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
+          return `[${ts}] ${icon} ${src}${e.msg}`
+        })
+        if (lines.length > 0) {
+          setLog(prev => [...lines, ...prev])
+        }
+      })
+      .catch(() => {}) // non-fatal — in-memory log still works
   }, [])
 
   // Load kill switch state on mount

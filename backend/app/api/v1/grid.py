@@ -41,7 +41,16 @@ class SetModeRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _entry_to_dict(entry: GridEntry) -> dict:
+def _entry_to_dict(entry: GridEntry, algo_state: "AlgoState | None" = None) -> dict:
+    status = entry.status.value if entry.status else "no_trade"
+    # Show "waiting" when AlgoState is WAITING but GridEntry is already ALGO_ACTIVE
+    # (entry time not yet reached — activated at 09:15 but order not placed yet)
+    if (
+        algo_state is not None
+        and algo_state.status == AlgoRunStatus.WAITING
+        and status == "algo_active"
+    ):
+        status = "waiting"
     return {
         "id":             str(entry.id),
         "algo_id":        str(entry.algo_id),
@@ -52,7 +61,7 @@ def _entry_to_dict(entry: GridEntry) -> dict:
         "is_enabled":     entry.is_enabled,
         "is_practix":     entry.is_practix,
         "is_archived":    entry.is_archived,
-        "status":         entry.status.value if entry.status else "no_trade",
+        "status":         status,
     }
 
 
@@ -88,17 +97,27 @@ async def get_week_grid(
     )
     entries = result.scalars().all()
 
+    # Bulk-fetch AlgoStates for today's entries so we can show WAITING status
+    today = date.today()
+    today_ids = [e.id for e in entries if e.trading_date == today]
+    states: dict = {}
+    if today_ids:
+        states_result = await db.execute(
+            select(AlgoState).where(AlgoState.grid_entry_id.in_(today_ids))
+        )
+        states = {str(s.grid_entry_id): s for s in states_result.scalars().all()}
+
     by_algo: dict = {}
     for entry in entries:
         algo_id = str(entry.algo_id)
         if algo_id not in by_algo:
             by_algo[algo_id] = []
-        by_algo[algo_id].append(_entry_to_dict(entry))
+        by_algo[algo_id].append(_entry_to_dict(entry, states.get(str(entry.id))))
 
     return {
         "week_start": monday.isoformat(),
         "week_end":   friday.isoformat(),
-        "entries":    [_entry_to_dict(e) for e in entries],
+        "entries":    [_entry_to_dict(e, states.get(str(e.id))) for e in entries],
         "by_algo":    by_algo,
     }
 

@@ -263,6 +263,11 @@ class AngelOneBroker(BaseBroker):
         Get current spot price for an index underlying.
         Uses Angel One ltpData with the known NSE/BSE index tokens.
         """
+        if not self.is_token_set():
+            raise RuntimeError(
+                f"[ANGEL ONE] Broker ({self.account}) is not logged in — "
+                "call auto-login before trading"
+            )
         info = self._INDEX_TOKEN_MAP.get(underlying.upper())
         if not info:
             raise ValueError(f"[ANGEL ONE] Unknown underlying: {underlying}")
