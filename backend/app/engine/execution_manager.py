@@ -124,7 +124,7 @@ class ExecutionManager:
         is_practix: bool,
     ) -> Optional[str]:
         """Returns a block reason string if the order should be rejected, else None."""
-        if kill_switch_active(account_id=account_id):
+        if kill_switch_active():
             return f"Kill switch active for account={account_id}"
         if not _is_market_open():
             return f"Outside market hours for algo={algo_id}"

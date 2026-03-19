@@ -77,7 +77,7 @@ export default function DashboardPage() {
       .then(res => {
         const entries: any[] = res.data || []
         // API returns newest-first; reverse to get oldest-first for the prepended lines
-        const lines = [...entries].reverse().map((e: any) => {
+        const lines = [...entries].map((e: any) => {
           const ts  = e.ts
             ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
             : '--:--:--'
@@ -86,7 +86,7 @@ export default function DashboardPage() {
           return `[${ts}] ${icon} ${src}${e.msg}`
         })
         if (lines.length > 0) {
-          setLog(prev => [...lines, ...prev])
+          setLog(prev => [...lines.reverse(), ...prev])
         }
       })
       .catch(() => {}) // non-fatal — in-memory log still works
