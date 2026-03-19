@@ -2516,11 +2516,29 @@ This marks the first successful end-to-end algo trade on STAAX.
 - EXPIRY_WEEKDAY: NIFTY=Tuesday (NSE Nov 2024 change)
 - is_activated() wrong kwarg in execution_manager
 
-### Pending for Batch 9
-- P0: Orders page crash (legs undefined)
-- P0: ZerodhaBroker missing get_orders (RECON errors)
+## Claude Code Batch 9 — Orders page fix, RECON fix, LIVE fill_price
+
+### Fixed (19 Mar 2026)
+- P0: Orders page crash — `group.mtm.toLocaleString` on undefined
+  - Root cause: API returned flat Order dicts; frontend expected AlgoGroup objects
+  - Fix: `list_orders` now joins Algo+Account and returns `groups` array in AlgoGroup shape
+  - Fix: Frontend transforms `data.groups` → `AlgoGroup[]` with Leg field mapping
+  - Fix: Null-guarded `g.legs.map` in doSQ and doTerminate
+- P0: ZerodhaBroker.get_orders() added — resolves RECON errors every 30s
+  - Wraps `self.kite.orders()` with error guard, returns `[]` on failure
+- P1: Mom/Wife API keys — already correct in .env (PDoWMhNz / aWzOhIkY)
+  - AngelOneBroker reads from settings (not DB), so no SQL needed
+- P1: broker_order_id — code at algo_runner:533 already stores it correctly
+  - PRACTIX: stores virtual_book ID; LIVE: stores real broker order ID
+  - ⚠️ Gap: OrderPlacer wired with only angelone_mom; Wife LIVE orders would use Mom's broker
+    → Must fix before Wife goes LIVE (add angel_broker_map to OrderPlacer)
+- P1: fill_price=0.0 for Angel One LIVE orders
+  - Root cause: Angel One instrument master has no `last_price` field
+  - Fix: algo_runner._place_leg() fetches live LTP via get_ltp_by_token() after strike selection
+    (only when ltp==0.0 and is_practix=False and broker_type=="angelone")
+
+### Pending for Batch 10
+- P1: OrderPlacer multi-account Angel One routing (Wife LIVE orders use Mom's broker)
 - P1: Sidebar tickers (Angel One WebSocket)
-- P1: fill_price = 0.0 in PRACTIX mode (correct), needs real LTP in LIVE mode
-- P1: broker_order_id not stored from Angel One response
-- P2: Orders page legs/P&L display
+- P2: Orders page live MTM (currently shows sum of closed P&L, not live MTM)
 - P2: Start Session reliability

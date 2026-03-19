@@ -416,6 +416,19 @@ class AlgoRunner:
                 instrument_token = instrument.get("instrument_token", 0)
                 ltp              = instrument.get("last_price", 0.0)
 
+                # Angel One instrument master has no live prices — fetch LTP for LIVE orders
+                if ltp == 0.0 and not grid_entry.is_practix and broker_type == "angelone" and account_broker:
+                    ao_token = instrument.get("token", "") or str(instrument_token)
+                    ao_exch  = instrument.get("exchange", "NFO")
+                    if ao_token:
+                        try:
+                            ltp = await account_broker.get_ltp_by_token(
+                                exchange=ao_exch, symbol=symbol, token=ao_token
+                            )
+                            logger.info(f"[ALGO RUNNER] Angel One live LTP for {symbol}: {ltp}")
+                        except Exception as _e:
+                            logger.warning(f"[ALGO RUNNER] LTP fetch failed for {symbol}: {_e}")
+
         # ── Entry delay ────────────────────────────────────────────────────────
         delay_secs = getattr(algo, "entry_delay_seconds", 0) or 0
         delay_scope = getattr(algo, "entry_delay_scope", "all") or "all"

@@ -179,6 +179,14 @@ class ZerodhaBroker:
             logger.error(f"Cancel order failed: {e}")
             return False
 
+    async def get_orders(self) -> list:
+        """Return all orders for today from Kite (used by order reconciler)."""
+        try:
+            return self.kite.orders() or []
+        except Exception as e:
+            logger.error(f"get_orders failed: {e}")
+            return []
+
     async def get_order_status(self, order_id: str) -> dict:
         """Check status of a placed order."""
         try:

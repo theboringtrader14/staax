@@ -256,7 +256,7 @@ export default function OrdersPage() {
       await algosAPI.terminate(algoId)
       setOrders(o => o.map((g, i) => i !== idx ? g : {
         ...g, terminated: true,
-        legs: g.legs.map(l => l.status === 'open'
+        legs: (g.legs ?? []).map(l => l.status === 'open'
           ? { ...l, status: 'closed' as LegStatus, exitPrice: l.ltp, exitTime: new Date().toLocaleTimeString('en-IN', { hour12: false }), exitReason: 'Terminated' }
           : l),
       }))
