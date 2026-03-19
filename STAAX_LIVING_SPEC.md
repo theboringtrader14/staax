@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 5.8 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 5.9 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2303,3 +2303,30 @@ GET  /api/v1/health/insights?date=YYYY-MM-DD  — today's insights
 - Phase 2: health_engine + retrospective insights (weekly/monthly patterns)
 - Phase 3: Migrate to FINEX as shared wellness module
 - No Phase for risk engine integration — by design
+
+
+## Claude Code Batch 4+5 — 19 Mar 2026 (Thursday QA)
+
+### Batch 4 completed
+- Angel One direct POST login (bypasses SDK bug)
+- Market Feed auto-recover on startup
+- Orders page WAITING algos rows
+- Dashboard Active Algos count
+- get_ticker alias fix
+- WAITING→NO_TRADE transition after missed entry
+
+### Batch 5 in progress
+- get_index_tokens() added to ZerodhaBroker
+- Angel One login debug logging + status check fix
+- Wife Auto-Login button (was hidden by !isWife guard)
+- recover_today_jobs: immediate NO_TRADE for past-entry WAITING algos
+- /orders/waiting query fix (join AlgoState not GridEntry status)
+- Numeric-only inputs in AlgoPage.tsx
+
+### QA findings today
+- Karthik AO auto-login: working ✅
+- Mom auto-login: still failing (Angel One API rejecting clientcode)
+- Wife auto-login: no button (Batch 5 fix)
+- Market Feed: auto-recover needed (Batch 5 fix)
+- AO-NF1/NF2: stuck ACTIVE after missed entry (Batch 5 fix)
+- AO-NF3 (10:15): first clean test pending
