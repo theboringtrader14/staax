@@ -52,12 +52,13 @@ class Order(Base):
     # is_overnight=True: BTST/STBT orders use PRODUCT_NRML instead of MIS at broker
 
     # ── Instrument ────────────────────────────────────────────────────────────
-    symbol       = Column(String(50), nullable=False)    # e.g. NIFTY22000CE
-    exchange     = Column(String(10), nullable=False)    # NFO, MCX
-    expiry_date  = Column(String(20), nullable=True)
-    direction    = Column(String(4), nullable=False)     # "buy" or "sell"
-    lots         = Column(Integer, nullable=False)
-    quantity     = Column(Integer, nullable=False)
+    symbol           = Column(String(50), nullable=False)    # e.g. NIFTY22000CE
+    exchange         = Column(String(10), nullable=False)    # NFO, MCX
+    expiry_date      = Column(String(20), nullable=True)
+    instrument_token = Column(Integer, nullable=True)        # broker token for LTP lookup
+    direction        = Column(String(4), nullable=False)     # "buy" or "sell"
+    lots             = Column(Integer, nullable=False)
+    quantity         = Column(Integer, nullable=False)
 
     # ── Entry ─────────────────────────────────────────────────────────────────
     entry_type      = Column(String(20), nullable=True)   # "direct", "orb", "wt"

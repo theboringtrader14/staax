@@ -416,8 +416,8 @@ class AlgoRunner:
                 instrument_token = instrument.get("instrument_token", 0)
                 ltp              = instrument.get("last_price", 0.0)
 
-                # Angel One instrument master has no live prices — fetch LTP for LIVE orders
-                if ltp == 0.0 and not grid_entry.is_practix and broker_type == "angelone" and account_broker:
+                # Angel One instrument master has no live prices — fetch LTP for ALL orders
+                if ltp == 0.0 and broker_type == "angelone" and account_broker:
                     ao_token = instrument.get("token", "") or str(instrument_token)
                     ao_exch  = instrument.get("exchange", "NFO")
                     if ao_token:
@@ -546,6 +546,9 @@ class AlgoRunner:
             journey_level=journey_level,
             broker_order_id=order_id_str,            # exchange order ID (P2)
         )
+
+        # Instrument token — stored for LTP lookup at exit and reconciliation
+        order.instrument_token = instrument_token
 
         # SL/TP stored on order for display
         order.sl_original = leg.sl_value
@@ -687,8 +690,22 @@ class AlgoRunner:
 
         for order in orders:
             try:
-                # Get current LTP
+                # Get current LTP — for PRACTIX fetch real market price so exit_price is meaningful
                 ltp = order.ltp or order.fill_price or 0.0
+
+                if order.is_practix and exit_broker_type == "angelone" and exit_account:
+                    ao_broker = self._angel_broker_map.get(exit_account.client_id)
+                    token = getattr(order, "instrument_token", None)
+                    if ao_broker and token:
+                        try:
+                            ltp = await ao_broker.get_ltp_by_token(
+                                exchange=order.exchange or "NFO",
+                                symbol=order.symbol,
+                                token=str(token),
+                            )
+                            logger.info(f"[PRACTIX EXIT] Live LTP for {order.symbol}: {ltp}")
+                        except Exception as _e:
+                            logger.warning(f"[PRACTIX EXIT] LTP fetch failed for {order.symbol}: {_e}")
 
                 # Apply exit delay (scoped to BUY/SELL)
                 if exit_delay_secs > 0:
@@ -1091,6 +1108,7 @@ class AlgoRunner:
     ):
         """Update Order to CLOSED in DB and compute P&L."""
         order.status      = OrderStatus.CLOSED
+        order.ltp         = exit_price   # snapshot LTP at close
         order.exit_price  = exit_price
         order.exit_time   = datetime.now(IST)        # datetime, not isoformat() string
         order.exit_reason = self._resolve_exit_reason(reason)
