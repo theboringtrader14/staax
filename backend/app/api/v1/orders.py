@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timezone
 import logging
+import uuid as _uuid
 from app.core.database import get_db
 logger = logging.getLogger(__name__)
 from app.engine.execution_manager import execution_manager
@@ -150,10 +151,46 @@ async def list_orders(
             by_algo[aid] = []
         by_algo[aid].append(o)
 
+    # Build groups: AlgoGroup-shaped list for the Orders page
+    groups = []
+    if by_algo:
+        try:
+            algo_uuid_ids = [_uuid.UUID(aid) for aid in by_algo.keys()]
+            algo_result = await db.execute(
+                select(Algo, Account)
+                .join(Account, Algo.account_id == Account.id, isouter=True)
+                .where(Algo.id.in_(algo_uuid_ids))
+            )
+            algo_meta: dict = {}
+            for a, acc in algo_result.all():
+                algo_meta[str(a.id)] = {
+                    "algo_name": a.name,
+                    "account":   acc.nickname if acc else "",
+                    "mtm_sl":    a.mtm_sl or 0,
+                    "mtm_tp":    a.mtm_tp or 0,
+                }
+        except Exception as e:
+            logger.warning(f"[orders] groups metadata fetch failed: {e}")
+            algo_meta = {}
+
+        for aid, group_orders in by_algo.items():
+            meta = algo_meta.get(aid, {})
+            mtm  = round(sum((o.get("pnl") or 0.0) for o in group_orders), 2)
+            groups.append({
+                "algo_id":   aid,
+                "algo_name": meta.get("algo_name", ""),
+                "account":   meta.get("account", ""),
+                "mtm":       mtm,
+                "mtm_sl":    meta.get("mtm_sl", 0),
+                "mtm_tp":    meta.get("mtm_tp", 0),
+                "orders":    group_orders,
+            })
+
     return {
         "trading_date": target_date.isoformat(),
         "orders":       orders_list,
         "by_algo":      by_algo,
+        "groups":       groups,
         "total":        len(orders_list),
     }
 

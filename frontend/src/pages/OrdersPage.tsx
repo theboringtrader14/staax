@@ -146,8 +146,33 @@ export default function OrdersPage() {
     ordersAPI.list(today)
       .then(res => {
         const data = res.data
-        const arr = Array.isArray(data) ? data : (data?.orders || data?.groups || data?.algos || [])
-        setOrders(arr)
+        const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
+        setOrders(raw.map((g: any): AlgoGroup => ({
+          algoId:   g.algo_id,
+          algoName: g.algo_name || g.algo_id,
+          account:  g.account || '',
+          mtm:      g.mtm ?? 0,
+          mtmSL:    g.mtm_sl ?? 0,
+          mtmTP:    g.mtm_tp ?? 0,
+          legs: (g.orders || []).map((o: any): Leg => ({
+            id:             o.id,
+            journeyLevel:   o.journey_level || '1',
+            status:         (o.status ?? 'pending') as LegStatus,
+            symbol:         o.symbol || '',
+            dir:            ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
+            lots:           String(o.lots ?? ''),
+            entryCondition: o.entry_type || '',
+            fillPrice:      o.fill_price ?? undefined,
+            ltp:            o.ltp ?? undefined,
+            slOrig:         o.sl_original ?? undefined,
+            slActual:       o.sl_actual ?? undefined,
+            target:         o.target ?? undefined,
+            exitPrice:      o.exit_price ?? undefined,
+            exitTime:       o.exit_time ? o.exit_time.slice(11, 19) : undefined,
+            exitReason:     o.exit_reason ?? undefined,
+            pnl:            o.pnl ?? undefined,
+          })),
+        })))
       })
       .catch(() => {}) // keep demo data if API unreachable
 
@@ -210,7 +235,7 @@ export default function OrdersPage() {
       // Optimistically update leg statuses
       setOrders(o => o.map((g, i) => i !== idx ? g : {
         ...g,
-        legs: g.legs.map(l => selected.includes(l.id)
+        legs: (g.legs ?? []).map(l => selected.includes(l.id)
           ? { ...l, status: 'closed' as LegStatus, exitPrice: l.ltp, exitTime: new Date().toLocaleTimeString('en-IN', { hour12: false }), exitReason: 'Manual SQ' }
           : l),
       }))
