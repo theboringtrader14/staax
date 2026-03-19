@@ -318,8 +318,7 @@ class AlgoRunner:
         if self._ws_manager:
             for order in placed_orders:
                 await self._ws_manager.notify_trade(
-                    algo_name=algo.name,
-                    symbol=order.symbol,
+                            symbol=order.symbol,
                     direction=order.direction,
                     price=order.fill_price or 0.0,
                 )
@@ -515,20 +514,18 @@ class AlgoRunner:
             algo_id=algo.id,
             grid_entry_id=grid_entry.id,
             leg_id=leg.id,
-            algo_name=algo.name,
-            account_nickname=str(algo.account_id),  # resolved by AccountService
+            account_id=algo.account_id,
             algo_tag=algo_tag,
             symbol=symbol,
             exchange="NFO",
             direction=direction,
             lots=leg.lots * grid_entry.lot_multiplier,
             quantity=quantity,
-            instrument_token=instrument_token,
             is_practix=grid_entry.is_practix,
             is_overnight=is_overnight,
             entry_type=algo.entry_type,
             fill_price=fill_price,
-            fill_time=datetime.now(IST).isoformat(),
+            fill_time=datetime.now(IST),
             ltp=fill_price,
             status=OrderStatus.OPEN,
             journey_level=journey_level,
@@ -554,8 +551,7 @@ class AlgoRunner:
                 grid_entry_id=str(grid_entry.id),
                 algo_id=str(algo.id),
                 direction=direction,
-                instrument_token=instrument_token,
-                underlying_token=underlying_token,
+                    underlying_token=underlying_token,
                 entry_price=fill_price,
                 sl_type=leg.sl_type,
                 sl_value=leg.sl_value,
