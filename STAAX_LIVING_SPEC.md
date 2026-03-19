@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 5.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 5.8 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2281,13 +2281,25 @@ GET  /api/v1/health/insights?date=YYYY-MM-DD  — today's insights
 - Still requires user to set the preference — not fully autonomous
 
 ### Constraints
-- Never block trading due to health data
+- Never block trading due to health data — trading is fully automated and systematic
+- Health data is observational only — never influences order placement or lot sizing
 - Missing WHOOP data = normal trading (fail open, not fail closed)
-- Manual override always available
-- Insights are suggestions, not commands
+- No risk engine integration — STAAX is rules-based, not biased by daily state
+- Health module is for personal awareness and journaling, not trading decisions
 
-### Build Phase
-- Phase 1 (after STAAX stable): whoop_loader + health_daily_metrics table
-- Phase 2: health_engine + insights + Dashboard widget
-- Phase 3: STAAX risk engine integration (lot size adjustment)
-- Phase 4: Migrate to FINEX as a shared module
+### What it IS for
+- Personal health tracking alongside trading performance
+- Correlation analysis: "How did I trade on high vs low recovery days?" (retrospective)
+- Journaling: understand patterns over time without acting on them in real-time
+- Future FINEX integration: health as one lens in overall financial wellness view
+
+### What it is NOT for
+- Reducing lot sizes based on recovery score
+- Blocking or modifying algos based on health state
+- Any real-time intervention in the trading engine
+
+### Build Phase (deferred — start after BUDGEX)
+- Phase 1: whoop_loader + health_daily_metrics table + Dashboard widget (view only)
+- Phase 2: health_engine + retrospective insights (weekly/monthly patterns)
+- Phase 3: Migrate to FINEX as shared wellness module
+- No Phase for risk engine integration — by design
