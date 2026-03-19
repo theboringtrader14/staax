@@ -170,7 +170,7 @@ export default function OrdersPage() {
     }
     return r
   }
-  const openLegs = (idx: number) => orders[idx].legs.filter(l => l.status === 'open')
+  const openLegs = (idx: number) => (orders[idx]?.legs || []).filter(l => l.status === 'open')
 
   // ── Actions wired to API ──────────────────────────────────────────────────
 
