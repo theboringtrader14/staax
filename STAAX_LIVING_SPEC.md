@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 6.1 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 6.2 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2396,3 +2396,72 @@ P2 — Pending from backlog:
 - Angel One option chain API (/market/v1/optionChain) is IP-blocked — returns HTML rejection
 - Solution: use instrument master JSON instead of option chain API
 - Cache once per day as class-level cache shared across all broker instances
+
+
+## Claude Code Batch 7 — Token Loading + UX + Logging + Reports
+
+### P0 — Critical (every trade fails):
+
+1. Angel One broker token not loaded into app.state after auto-login
+   - auto-login saves token to DB but app.state.angelone_karthik has no token
+   - algo_runner uses app.state broker object → "Invalid Token" error
+   - Fix: after auto-login saves token to DB, also call broker.load_token() on app.state instance
+   - Also: on startup, if DB has valid token for today → load into broker instance
+   - Files: api/v1/accounts.py (auto-login endpoint), main.py (_auto_start_market_feed)
+
+2. LTP fails silently when broker token is not loaded
+   - get_underlying_ltp() returns 0.0 → strike selection fails → no error surfaced to user
+   - Fix: raise explicit error when broker.is_token_set() is False before LTP call
+   - Files: brokers/angelone.py
+
+### P1 — UX and observability:
+
+3. Smart Grid — show WAITING status (Feature 22 part 2)
+   - Currently shows ACTIVE for algos with AlgoState=WAITING
+   - Should show WAITING (dimmed, amber dot) when entry time not yet reached
+   - ACTIVE/OPEN only after order is filled
+   - Status: WAITING → PENDING → OPEN → CLOSED
+   - File: frontend/src/pages/GridPage.tsx
+
+4. System Log — persistent with timestamps (Feature 24)
+   - Resets on every page refresh
+   - Add system_logs table: id, timestamp, level, message, source
+   - Backend: write to system_logs on all key events
+   - Frontend: fetch on load, append via WebSocket, persist all day
+   - Files: new model, new migration, ws/routes.py, DashboardPage.tsx
+
+5. Platform errors in System Log
+   - Errors only visible in backend terminal
+   - Write to system_logs table with level=ERROR
+   - Show in red in System Log panel
+   - Notification bell shows count of today's errors
+
+6. Account nickname edit (Feature 10)
+   - Inline edit on Accounts page
+   - PATCH /accounts/{id} with {nickname}
+   - Updates everywhere: Grid, Orders, Reports, Algo dropdown
+   - Files: backend/app/api/v1/accounts.py, frontend/src/pages/AccountsPage.tsx
+
+7. Indicator Bots signal observability
+   - No way to see if bot is scanning
+   - Add signal_log table: bot_id, timestamp, signal_type, value
+   - Bot runner writes on every scan
+   - Frontend: last 10 signals per bot on IndicatorsPage
+
+8. Start Session — auto-start all services reliably
+   - Currently Start Session sometimes partially fails
+   - Should: start services in sequence with retry
+   - Auto reload NFO cache after Market Feed starts
+   - File: frontend/src/pages/DashboardPage.tsx
+
+### P2 — Reports page:
+
+9. Reports page — build it
+   - Weekly P&L summary by account
+   - Trade history table: date, algo, account, entry, exit, P&L
+   - Filters: date range, account
+   - Data: orders table + execution_logs
+
+### Bug from today:
+- Mom/Wife auto-login: "Invalid clientcode" — needs fresh API keys from Angel One dashboard
+  (Business action: regenerate API keys for KRAH1029 and KRAH1008)
