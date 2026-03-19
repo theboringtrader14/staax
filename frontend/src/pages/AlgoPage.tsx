@@ -75,7 +75,7 @@ function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Parti
   const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
   const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)' }
   const inpSt = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
-  const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} placeholder={ph} style={{ ...inpSt, width: w }} />
+  const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input type="number" min="0" value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} placeholder={ph} style={{ ...inpSt, width: w }} />
   const sel = (k: FeatureKey, sub: string, opts: [string, string][]) => <select className="staax-select" value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} style={{ ...cs }}>{opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
   return (
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
@@ -156,7 +156,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(156,163,175,0.08)', border: '1px solid rgba(156,163,175,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 700, marginRight: '2px' }}>W&T:</span>
               <select className="staax-select" value={child.wt_direction} onChange={e => u('wt_direction', e.target.value)} style={{ ...cs, height: '22px' }}><option value="up">↑Up</option><option value="down">↓Dn</option></select>
-              <input value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
+              <input type="number" min="0" value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
               <select className="staax-select" value={child.wt_unit} onChange={e => u('wt_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
             </div>
           )}
@@ -164,7 +164,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
               <select className="staax-select" value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
-              <input value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
+              <input type="number" min="0" value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.re_enabled && (
@@ -179,24 +179,24 @@ function JourneyChildPanel({ child, depth, onChange }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#22C55E', fontWeight: 700, marginRight: '2px' }}>TP:</span>
               <select className="staax-select" value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
-              <input value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
+              <input type="number" min="0" value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.tsl_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(0,176,240,0.08)', border: '1px solid rgba(0,176,240,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#00B0F0', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
-              <input value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
+              <input type="number" min="0" value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
-              <input value={child.tsl_y} onChange={e => u('tsl_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
+              <input type="number" min="0" value={child.tsl_y} onChange={e => u('tsl_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
               <select value={child.tsl_unit} onChange={e => u('tsl_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
             </div>
           )}
           {child.ttp_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#A78BFA', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
-              <input value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
+              <input type="number" min="0" value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
-              <input value={child.ttp_y} onChange={e => u('ttp_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
+              <input type="number" min="0" value={child.ttp_y} onChange={e => u('ttp_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
               <select value={child.ttp_unit} onChange={e => u('ttp_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
             </div>
           )}

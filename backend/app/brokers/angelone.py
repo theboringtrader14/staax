@@ -129,9 +129,19 @@ class AngelOneBroker(BaseBroker):
             "totp":       totp,
         }
 
+        logger.info(
+            f"[ANGEL ONE] Login attempt — account={self.account} "
+            f"client_id={self.client_id} url={self._LOGIN_URL}"
+        )
+
         import httpx
         async with httpx.AsyncClient(timeout=15.0) as http:
             resp = await http.post(self._LOGIN_URL, json=payload, headers=headers)
+
+        logger.info(
+            f"[ANGEL ONE] Login response — account={self.account} "
+            f"http_status={resp.status_code}"
+        )
 
         try:
             data = resp.json()
@@ -140,7 +150,16 @@ class AngelOneBroker(BaseBroker):
                 f"Angel One login: invalid JSON response (status={resp.status_code})"
             )
 
-        if not data.get("status") or data.get("status") is False:
+        # Angel One returns status as bool True or string "true" — handle both
+        raw_status = data.get("status")
+        login_ok = raw_status is True or str(raw_status).lower() == "true"
+
+        logger.info(
+            f"[ANGEL ONE] Login response body — account={self.account} "
+            f"status={raw_status!r} message={data.get('message')!r}"
+        )
+
+        if not login_ok:
             msg = data.get("message", "Unknown error")
             raise RuntimeError(f"Angel One login failed: {msg}")
 

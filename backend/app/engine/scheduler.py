@@ -372,8 +372,7 @@ class AlgoScheduler:
             except Exception as e:
                 logger.error(f"Entry job failed for {grid_entry_id}: {e}")
 
-        # Schedule expiry check regardless of outcome — cleans up WAITING → NO_TRADE
-        # if no order was placed within 5 minutes of entry time.
+        # Schedule expiry check — cleans up WAITING → NO_TRADE if no order placed
         expiry_time = datetime.now(IST) + timedelta(minutes=5)
         self._scheduler.add_job(
             self._job_entry_expiry,
@@ -382,6 +381,7 @@ class AlgoScheduler:
             id=f"entry_expiry_{grid_entry_id}",
             replace_existing=True,
         )
+        logger.info(f"Entry expiry scheduled at {expiry_time.strftime('%H:%M:%S')} for {grid_entry_id}")
 
     async def _job_entry_expiry(self, grid_entry_id: str):
         """
@@ -514,9 +514,19 @@ class AlgoScheduler:
 
     async def recover_today_jobs(self):
         """
-        Called once at server startup — re-registers exit jobs for any today's
-        WAITING/ACTIVE intraday algos whose APScheduler jobs were lost on restart.
-        Only registers jobs whose exit_time is still in the future.
+        Called once at server startup — recovers APScheduler jobs lost on restart.
+
+        Three cases handled for today's WAITING/ACTIVE intraday algos:
+
+        1. WAITING + entry_time already passed by >5 min → mark NO_TRADE immediately.
+           (The entry job fired before restart but _job_entry_expiry was never scheduled,
+           or the entry job itself never fired. Either way the trade window is gone.)
+
+        2. WAITING + entry_time still in the future → re-register _job_entry so the
+           algo can still enter at the right time.
+
+        3. WAITING or ACTIVE + exit_time still in the future → re-register _job_auto_sq
+           (existing logic, unchanged).
         """
         today = date.today()
         now = datetime.now(IST)
@@ -540,29 +550,78 @@ class AlgoScheduler:
                 )
                 rows = result.all()
 
-                recovered = 0
+                recovered_exits   = 0
+                recovered_entries = 0
+                immediate_notrade = 0
+
                 for algo_state, grid_entry, algo in rows:
+                    geid = str(grid_entry.id)
+
+                    # ── Case 1 & 2: WAITING algos — handle entry recovery ──────
+                    if algo_state.status == AlgoRunStatus.WAITING and algo.entry_time:
+                        h, m = map(int, algo.entry_time.split(":")[:2])
+                        entry_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                        entry_cutoff = entry_dt + timedelta(minutes=5)
+
+                        if now >= entry_cutoff:
+                            # Case 1: entry window expired — mark NO_TRADE immediately
+                            algo_state.status    = AlgoRunStatus.NO_TRADE
+                            algo_state.closed_at = now
+                            grid_entry.status    = GridStatus.NO_TRADE
+                            immediate_notrade += 1
+                            logger.info(
+                                f"[RECOVERY] Entry expired → NO_TRADE: {algo.name} "
+                                f"(entry was {algo.entry_time})"
+                            )
+                            continue  # no jobs to register
+
+                        elif now < entry_dt:
+                            # Case 2: entry time still in future — re-register entry job
+                            job_id = f"entry_{geid}"
+                            if not self._scheduler.get_job(job_id):
+                                self._scheduler.add_job(
+                                    self._job_entry,
+                                    DateTrigger(run_date=entry_dt, timezone=IST),
+                                    args=[geid],
+                                    id=job_id,
+                                    replace_existing=True,
+                                )
+                                recovered_entries += 1
+                                logger.info(
+                                    f"[RECOVERY] Re-registered entry job: {algo.name} "
+                                    f"@ {algo.entry_time}"
+                                )
+                        # else: entry fired but <5min ago — _job_entry_expiry will fire soon,
+                        # nothing to do
+
+                    # ── Case 3: re-register exit job if still in future ────────
                     if not algo.exit_time:
                         continue
                     h, m = map(int, algo.exit_time.split(":")[:2])
                     exit_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
                     if exit_dt <= now:
-                        continue  # already past — EOD cleanup job will handle it
-                    job_id = f"exit_{grid_entry.id}"
+                        continue  # already past — EOD cleanup will handle it
+                    job_id = f"exit_{geid}"
                     if not self._scheduler.get_job(job_id):
                         self._scheduler.add_job(
                             self._job_auto_sq,
                             DateTrigger(run_date=exit_dt, timezone=IST),
-                            args=[str(grid_entry.id)],
+                            args=[geid],
                             id=job_id,
                             replace_existing=True,
                         )
-                        recovered += 1
+                        recovered_exits += 1
 
-                if recovered:
-                    logger.info(f"✅ Recovered {recovered} exit jobs after restart")
-                else:
-                    logger.info("Job recovery: no exit jobs to re-register")
+                if immediate_notrade:
+                    await db.commit()
+
+                logger.info(
+                    f"✅ Job recovery complete — "
+                    f"{immediate_notrade} NO_TRADE, "
+                    f"{recovered_entries} entry jobs, "
+                    f"{recovered_exits} exit jobs"
+                )
 
             except Exception as e:
+                await db.rollback()
                 logger.error(f"Job recovery failed: {e}")

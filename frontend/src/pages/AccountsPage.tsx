@@ -245,7 +245,7 @@ export default function AccountsPage() {
                     {tokenConnected ? '✅ Connected' : isWife ? '⏳ Phase 2' : '⚠️ Login required'}
                   </span>
                 </span>
-                {!tokenConnected && !isWife && (
+                {!tokenConnected && (
                   <button
                     className="btn btn-ghost"
                     style={{ fontSize: '10px', padding: '3px 8px', height: '24px' }}

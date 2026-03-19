@@ -209,3 +209,22 @@ class ZerodhaBroker:
     def get_ticker(self) -> KiteTicker:
         """Alias for create_ticker() — used by services.py and main.py."""
         return self.create_ticker()
+
+    # ── Index tokens ──────────────────────────────────────────────────────────
+
+    # Zerodha instrument tokens for NSE/BSE index instruments
+    _INDEX_TOKENS: Dict[str, int] = {
+        "NIFTY":       256265,
+        "BANKNIFTY":   260105,
+        "FINNIFTY":    257801,
+        "MIDCAPNIFTY": 288009,
+        "SENSEX":      265,
+    }
+
+    async def get_index_tokens(self) -> Dict[str, int]:
+        """
+        Return instrument token map for NSE/BSE indices.
+        Used by services.py and main.py to subscribe live index ticks.
+        Returns: { "NIFTY": 256265, "BANKNIFTY": 260105, ... }
+        """
+        return dict(self._INDEX_TOKENS)

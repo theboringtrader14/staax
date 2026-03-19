@@ -24,6 +24,7 @@ from app.models.order import Order, OrderStatus, ExitReason
 from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo
 from app.models.account import Account
+from app.models.algo_state import AlgoState, AlgoRunStatus
 
 router = APIRouter()
 
@@ -163,12 +164,36 @@ async def get_waiting_algos(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Return algos scheduled for today that have not yet placed any orders (status=NO_TRADE).
-    Used by the Orders page to show WAITING rows before entry time is reached.
+    Return algos scheduled for today that have not yet placed any orders.
+
+    Two cases:
+    - Before 09:15: GridEntry.status=NO_TRADE (not yet activated by scheduler)
+    - After 09:15:  GridEntry.status=ALGO_ACTIVE with AlgoState.status=WAITING
+                    (activated but entry time not yet reached / no order placed)
+
+    Both are shown as WAITING rows in the Orders page.
     """
     target_date = _parse_date(trading_date) or date.today()
 
-    result = await db.execute(
+    # Post-09:15: ALGO_ACTIVE grid entries with a WAITING AlgoState
+    activated_result = await db.execute(
+        select(GridEntry, Algo, Account, AlgoState)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .join(Account, GridEntry.account_id == Account.id)
+        .join(AlgoState, AlgoState.grid_entry_id == GridEntry.id)
+        .where(
+            GridEntry.trading_date == target_date,
+            GridEntry.status == GridStatus.ALGO_ACTIVE,
+            GridEntry.is_archived == False,
+            GridEntry.is_enabled == True,
+            AlgoState.status == AlgoRunStatus.WAITING,
+        )
+        .order_by(Algo.entry_time)
+    )
+    activated_rows = activated_result.all()
+
+    # Pre-09:15: GridEntry still in NO_TRADE (scheduler hasn't run yet today)
+    notrade_result = await db.execute(
         select(GridEntry, Algo, Account)
         .join(Algo, GridEntry.algo_id == Algo.id)
         .join(Account, GridEntry.account_id == Account.id)
@@ -180,24 +205,44 @@ async def get_waiting_algos(
         )
         .order_by(Algo.entry_time)
     )
-    rows = result.all()
+    notrade_rows = notrade_result.all()
+
+    waiting = []
+
+    for ge, a, acc, _state in activated_rows:
+        waiting.append({
+            "grid_entry_id":  str(ge.id),
+            "algo_id":        str(a.id),
+            "algo_name":      a.name,
+            "account_id":     str(acc.id),
+            "account_name":   acc.nickname,
+            "entry_time":     a.entry_time,
+            "exit_time":      a.exit_time,
+            "is_practix":     ge.is_practix,
+            "lot_multiplier": ge.lot_multiplier,
+            "phase":          "activated",   # post-09:15, waiting for entry_time
+        })
+
+    for ge, a, acc in notrade_rows:
+        waiting.append({
+            "grid_entry_id":  str(ge.id),
+            "algo_id":        str(a.id),
+            "algo_name":      a.name,
+            "account_id":     str(acc.id),
+            "account_name":   acc.nickname,
+            "entry_time":     a.entry_time,
+            "exit_time":      a.exit_time,
+            "is_practix":     ge.is_practix,
+            "lot_multiplier": ge.lot_multiplier,
+            "phase":          "pending",     # pre-09:15, not yet activated
+        })
+
+    # Sort combined list by entry_time
+    waiting.sort(key=lambda x: x["entry_time"] or "")
 
     return {
         "trading_date": target_date.isoformat(),
-        "waiting": [
-            {
-                "grid_entry_id":  str(ge.id),
-                "algo_id":        str(a.id),
-                "algo_name":      a.name,
-                "account_id":     str(acc.id),
-                "account_name":   acc.nickname,
-                "entry_time":     a.entry_time,
-                "exit_time":      a.exit_time,
-                "is_practix":     ge.is_practix,
-                "lot_multiplier": ge.lot_multiplier,
-            }
-            for ge, a, acc in rows
-        ],
+        "waiting":      waiting,
     }
 
 
