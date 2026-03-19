@@ -205,3 +205,7 @@ class ZerodhaBroker:
         if not self._access_token:
             raise ValueError("Access token required to create ticker")
         return KiteTicker(self.api_key, self._access_token)
+
+    def get_ticker(self) -> KiteTicker:
+        """Alias for create_ticker() — used by services.py and main.py."""
+        return self.create_ticker()

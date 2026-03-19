@@ -19,6 +19,11 @@ interface AlgoGroup {
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
   isLive?: boolean   // F3 — true after 09:15 AM activation
 }
+interface WaitingAlgo {
+  grid_entry_id: string; algo_id: string; algo_name: string
+  account_name: string; entry_time: string | null; exit_time: string | null
+  is_practix: boolean
+}
 
 // Demo data — replaced by API data when available
 const DEMO_ORDERS: AlgoGroup[] = [
@@ -123,6 +128,7 @@ function todayDay(): string {
 export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const [orders, setOrders]           = useState<AlgoGroup[]>([])
+  const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
   const [activeDay, setActiveDay]     = useState(todayDay())
   const [showWeekends, setShowWeekends] = useState(() => localStorage.getItem('orders_show_weekends') === 'true')
   const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
@@ -134,7 +140,7 @@ export default function OrdersPage() {
   const [editExit, setEditExit]       = useState<{ orderId: string; value: string } | null>(null)
   const [exitSaving, setExitSaving]   = useState(false)
 
-  // Load today's orders from API
+  // Load today's orders + waiting algos from API
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
     ordersAPI.list(today)
@@ -144,6 +150,10 @@ export default function OrdersPage() {
         setOrders(arr)
       })
       .catch(() => {}) // keep demo data if API unreachable
+
+    ordersAPI.waiting(today)
+      .then(res => setWaitingAlgos(res.data?.waiting || []))
+      .catch(() => {})
   }, [])
 
   const visibleDays = showWeekends
@@ -372,6 +382,47 @@ export default function OrdersPage() {
           </span>
         </div>
       </div>
+
+      {/* WAITING algos — entry time not yet reached */}
+      {waitingAlgos.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          {waitingAlgos.map(w => (
+            <div key={w.grid_entry_id} style={{
+              marginBottom: '6px', opacity: 0.55,
+              background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
+              borderRadius: '7px', padding: '8px 14px',
+              display: 'flex', alignItems: 'center', gap: '12px',
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>
+                {w.algo_name}
+              </span>
+              <span style={{
+                fontSize: '10px', color: 'var(--text-muted)',
+                background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '4px',
+              }}>{w.account_name}</span>
+              <span style={{
+                fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                color: '#F59E0B', background: 'rgba(245,158,11,0.1)',
+                border: '1px solid rgba(245,158,11,0.25)',
+              }}>WAITING</span>
+              {w.entry_time && (
+                <span style={{ fontSize: '11px', color: 'var(--accent-blue)' }}>
+                  E: {w.entry_time.slice(0, 5)}
+                </span>
+              )}
+              {w.exit_time && (
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  X: {w.exit_time.slice(0, 5)}
+                </span>
+              )}
+              <span style={{
+                marginLeft: 'auto', fontSize: '10px', fontWeight: 600,
+                color: w.is_practix ? 'var(--accent-amber)' : 'var(--accent-blue)',
+              }}>{w.is_practix ? 'PRACTIX' : 'LIVE'}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Algo groups */}
       {orders.map((group, gi) => (

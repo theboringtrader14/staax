@@ -100,9 +100,11 @@ export const gridAPI = {
 // ── Orders ────────────────────────────────────────────────────────────────────
 export const ordersAPI = {
   list: (date?: string) =>
-    api.get('/orders/', { params: date ? { date } : {} }),
+    api.get('/orders/', { params: date ? { trading_date: date } : {} }),
+  waiting: (date?: string) =>
+    api.get('/orders/waiting', { params: date ? { trading_date: date } : {} }),
   correctExitPrice: (orderId: string, price: number) =>
-    api.patch(`/orders/${orderId}/exit-price`, { price }),
+    api.patch(`/orders/${orderId}/exit-price`, { exit_price: price }),
   syncOrder: (algoId: string, data: object) =>
     api.post(`/orders/${algoId}/sync`, data),
 }
@@ -129,6 +131,7 @@ export const systemAPI = {
   activateKillSwitch: (accountIds: string[] = []) => api.post('/system/kill-switch', { account_ids: accountIds }),
   killSwitchStatus:   () => api.get("/system/kill-switch/status"),
   ticker:             () => api.get("/system/ticker"),
+  stats:              () => api.get("/system/stats"),
 }
 
 export const botsAPI = {

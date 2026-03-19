@@ -337,6 +337,9 @@ class AlgoScheduler:
         For Direct algos: fire AlgoRunner.enter() immediately.
         For ORB algos: ORBTracker handles entry via LTP callback — no action here.
         For W&T algos: WTEvaluator handles entry via LTP callback — no action here.
+
+        Always schedules _job_entry_expiry at +5 minutes so that if the entry
+        didn't place any order the AlgoState transitions to NO_TRADE cleanly.
         """
         logger.info(f"⏰ Entry time: {grid_entry_id}")
         async with AsyncSessionLocal() as db:
@@ -368,6 +371,48 @@ class AlgoScheduler:
 
             except Exception as e:
                 logger.error(f"Entry job failed for {grid_entry_id}: {e}")
+
+        # Schedule expiry check regardless of outcome — cleans up WAITING → NO_TRADE
+        # if no order was placed within 5 minutes of entry time.
+        expiry_time = datetime.now(IST) + timedelta(minutes=5)
+        self._scheduler.add_job(
+            self._job_entry_expiry,
+            DateTrigger(run_date=expiry_time, timezone=IST),
+            args=[grid_entry_id],
+            id=f"entry_expiry_{grid_entry_id}",
+            replace_existing=True,
+        )
+
+    async def _job_entry_expiry(self, grid_entry_id: str):
+        """
+        Fires 5 minutes after entry_time.
+        If the algo is still WAITING (no order was placed), mark it NO_TRADE.
+        Handles cases where algo_runner.enter() silently failed or market
+        conditions prevented entry (ORB no-breakout is handled by _job_orb_end,
+        but this acts as a safety net for DIRECT algos too).
+        """
+        logger.info(f"⏰ Entry expiry check: {grid_entry_id}")
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(AlgoState, GridEntry)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .where(AlgoState.grid_entry_id == grid_entry_id)
+                )
+                row = result.one_or_none()
+                if not row:
+                    return
+                algo_state, grid_entry = row
+
+                if algo_state.status == AlgoRunStatus.WAITING:
+                    algo_state.status = AlgoRunStatus.NO_TRADE
+                    grid_entry.status = GridStatus.NO_TRADE
+                    await db.commit()
+                    logger.info(f"Entry expired → NO_TRADE: {grid_entry_id}")
+
+            except Exception as e:
+                await db.rollback()
+                logger.error(f"Entry expiry job failed for {grid_entry_id}: {e}")
 
     async def _job_orb_end(self, grid_entry_id: str):
         """
@@ -442,8 +487,15 @@ class AlgoScheduler:
                 active_ids = []
                 for algo_state, grid_entry, algo in rows:
                     if algo_state.status == AlgoRunStatus.ACTIVE and self._algo_runner:
+                        # Has open positions — hand off to exit_all
                         active_ids.append(str(grid_entry.id))
+                    elif algo_state.status == AlgoRunStatus.WAITING:
+                        # Never entered — no order was placed, correct status is NO_TRADE
+                        algo_state.status    = AlgoRunStatus.NO_TRADE
+                        algo_state.closed_at = datetime.now(IST)
+                        grid_entry.status    = GridStatus.NO_TRADE
                     else:
+                        # ERROR or other stale state — mark closed
                         algo_state.status      = AlgoRunStatus.CLOSED
                         algo_state.exit_reason = "eod_cleanup"
                         algo_state.closed_at   = datetime.now(IST)

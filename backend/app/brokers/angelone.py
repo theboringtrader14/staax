@@ -85,11 +85,18 @@ class AngelOneBroker(BaseBroker):
 
     # ── Auth ──────────────────────────────────────────────────────────────────
 
+    # Angel One login URL — bypass SDK to avoid clientCode/clientcode casing bug
+    _LOGIN_URL = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
+
     async def login_with_totp(self, password: str) -> dict:
         """
         Full login using TOTP. Called once per day after market open.
 
         Returns: { jwt_token, refresh_token, feed_token, client_code }
+
+        Uses direct HTTP POST instead of SDK's generateSession() to avoid
+        the SDK sending "clientCode" (camelCase) when Angel One API expects
+        "clientcode" (lowercase). This matches the working approach for all accounts.
 
         Requires:
           - ANGELONE_{ACCOUNT}_TOTP_SECRET in .env (base32 secret from Angel One app)
@@ -105,17 +112,36 @@ class AngelOneBroker(BaseBroker):
             )
 
         totp = pyotp.TOTP(self.totp_secret).now()
-        client = self._get_client()
 
-        # Run blocking SmartAPI call in thread pool
-        loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(
-            None,
-            lambda: client.generateSession(self.client_id, password, totp)
-        )
+        headers = {
+            "Content-Type":     "application/json",
+            "Accept":           "application/json",
+            "X-UserType":       "USER",
+            "X-SourceID":       "WEB",
+            "X-ClientLocalIP":  "127.0.0.1",
+            "X-ClientPublicIP": "127.0.0.1",
+            "X-MACAddress":     "00:00:00:00:00:00",
+            "X-PrivateKey":     self.api_key,
+        }
+        payload = {
+            "clientcode": self.client_id,
+            "password":   password,
+            "totp":       totp,
+        }
 
-        if not data or data.get("status") is False:
-            msg = data.get("message", "Unknown error") if data else "No response"
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            resp = await http.post(self._LOGIN_URL, json=payload, headers=headers)
+
+        try:
+            data = resp.json()
+        except Exception:
+            raise RuntimeError(
+                f"Angel One login: invalid JSON response (status={resp.status_code})"
+            )
+
+        if not data.get("status") or data.get("status") is False:
+            msg = data.get("message", "Unknown error")
             raise RuntimeError(f"Angel One login failed: {msg}")
 
         tokens = data.get("data", {})
@@ -123,9 +149,18 @@ class AngelOneBroker(BaseBroker):
         self._refresh_token = tokens.get("refreshToken")
         self._feed_token    = tokens.get("feedToken")
 
+        if not self._access_token:
+            raise RuntimeError(
+                f"Angel One login returned no jwtToken — response: {data}"
+            )
+
+        # Keep SDK instance in sync so subsequent API calls (orders, LTP) work
+        client = self._get_client()
         client.setAccessToken(self._access_token)
-        client.setFeedToken(self._feed_token)
-        client.setRefreshToken(self._refresh_token)
+        if self._feed_token:
+            client.setFeedToken(self._feed_token)
+        if self._refresh_token:
+            client.setRefreshToken(self._refresh_token)
 
         logger.info(
             f"[ANGEL ONE] ✅ Login successful for account={self.account} "

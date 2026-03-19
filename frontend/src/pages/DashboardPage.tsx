@@ -21,11 +21,11 @@ const STATUS_BG: Record<ServiceStatus, string> = {
   starting: 'rgba(245,158,11,0.12)', stopping: 'rgba(245,158,11,0.12)',
 }
 
-const STATS = [
-  { label: 'Active Algos',   value: '—',  color: 'var(--accent-blue)' },
-  { label: 'Open Positions', value: '—',  color: 'var(--green)'       },
-  { label: 'Today P&L',      value: '—',  color: 'var(--green)'       },
-  { label: 'FY P&L',         value: '—',  color: 'var(--green)'       },
+const STAT_DEFS = [
+  { label: 'Active Algos',   key: 'active_algos',   color: 'var(--accent-blue)', format: (v: number) => String(v) },
+  { label: 'Open Positions', key: 'open_positions',  color: 'var(--green)',       format: (v: number) => String(v) },
+  { label: 'Today P&L',      key: 'today_pnl',       color: 'var(--green)',       format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+  { label: 'FY P&L',         key: 'fy_pnl',          color: 'var(--green)',       format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
 ]
 
 /** Returns true if current IST time is past 09:00 */
@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const setAccounts   = useStore(s => s.setAccounts)
 
   const [services, setServices]               = useState<Service[]>(INIT_SERVICES)
+  const [stats, setStats]                     = useState<Record<string, number>>({})
   const [log, setLog]                         = useState<string[]>(['STAAX Dashboard ready.'])
   const [zerodhaConnected, setZerodhaConnected] = useState(false)
   const [showLateWarning, setShowLateWarning] = useState(false)
@@ -61,6 +62,13 @@ export default function DashboardPage() {
         if (zerodha?.token_valid_today) setZerodhaConnected(true)
       })
       .catch(() => {}) // backend may not be up yet
+  }, [])
+
+  // Load dashboard stats on mount (active algos, open positions, P&L)
+  useEffect(() => {
+    systemAPI.stats()
+      .then(res => setStats(res.data))
+      .catch(() => {})
   }, [])
 
   // Load kill switch state on mount
@@ -288,12 +296,19 @@ export default function DashboardPage() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '12px' }}>
-        {STATS.map(s => (
-          <div key={s.label} className="card">
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{s.label}</div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
+        {STAT_DEFS.map(s => {
+          const raw = stats[s.key]
+          const display = raw != null ? s.format(raw) : '—'
+          const color = (s.key === 'today_pnl' || s.key === 'fy_pnl') && raw != null
+            ? (raw >= 0 ? 'var(--green)' : 'var(--red)')
+            : s.color
+          return (
+            <div key={s.label} className="card">
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{s.label}</div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color }}>{display}</div>
+            </div>
+          )
+        })}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>

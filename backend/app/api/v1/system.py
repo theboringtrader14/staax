@@ -116,6 +116,74 @@ async def kill_switch_status(db: AsyncSession = Depends(get_db)):
     return global_kill_switch.get_state()
 
 
+# ── Dashboard stats ───────────────────────────────────────────────────────────
+
+@router.get("/stats")
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Returns stat card values for the Dashboard:
+      active_algos    — grid entries today that have been triggered (not NO_TRADE/ERROR/CLOSED)
+      open_positions  — orders with status=OPEN for today
+      today_pnl       — sum of closed-order P&L for today
+      fy_pnl          — sum of all closed-order P&L in the current financial year
+    """
+    from datetime import date as _date
+    from sqlalchemy import func, select as sa_select
+    from app.models.grid import GridEntry, GridStatus
+    from app.models.order import Order, OrderStatus
+
+    today = _date.today()
+
+    # ── Active algos: entries today that are past NO_TRADE (triggered or open) ──
+    active_statuses = [GridStatus.ALGO_ACTIVE, GridStatus.ORDER_PENDING, GridStatus.OPEN]
+    active_result = await db.execute(
+        sa_select(func.count(GridEntry.id)).where(
+            GridEntry.trading_date == today,
+            GridEntry.status.in_(active_statuses),
+            GridEntry.is_archived == False,
+        )
+    )
+    active_algos = active_result.scalar() or 0
+
+    # ── Open positions: orders with status OPEN today ──────────────────────────
+    open_result = await db.execute(
+        sa_select(func.count(Order.id)).where(
+            Order.status == OrderStatus.OPEN,
+        )
+    )
+    open_positions = open_result.scalar() or 0
+
+    # ── Today P&L: sum of pnl for closed orders with fill today ───────────────
+    today_pnl_result = await db.execute(
+        sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
+            Order.status == OrderStatus.CLOSED,
+            func.date(Order.exit_time) == today,
+        )
+    )
+    today_pnl = float(today_pnl_result.scalar() or 0)
+
+    # ── FY P&L: April 1 of current financial year to today ────────────────────
+    # Indian FY: Apr 1 – Mar 31
+    fy_start_year = today.year if today.month >= 4 else today.year - 1
+    from datetime import datetime as _dt, timezone as _tz
+    fy_start = _dt(fy_start_year, 4, 1, tzinfo=_tz.utc)
+
+    fy_pnl_result = await db.execute(
+        sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
+            Order.status == OrderStatus.CLOSED,
+            Order.exit_time >= fy_start,
+        )
+    )
+    fy_pnl = float(fy_pnl_result.scalar() or 0)
+
+    return {
+        "active_algos":   active_algos,
+        "open_positions": open_positions,
+        "today_pnl":      today_pnl,
+        "fy_pnl":         fy_pnl,
+    }
+
+
 # ── NR-3: Instrument ticker — live LTP for sidebar display ───────────────────
 
 # Zerodha instrument tokens for index instruments

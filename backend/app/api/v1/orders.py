@@ -21,8 +21,9 @@ from app.core.database import get_db
 logger = logging.getLogger(__name__)
 from app.engine.execution_manager import execution_manager
 from app.models.order import Order, OrderStatus, ExitReason
-from app.models.grid import GridEntry
+from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo
+from app.models.account import Account
 
 router = APIRouter()
 
@@ -153,6 +154,50 @@ async def list_orders(
         "orders":       orders_list,
         "by_algo":      by_algo,
         "total":        len(orders_list),
+    }
+
+
+@router.get("/waiting")
+async def get_waiting_algos(
+    trading_date: Optional[str] = Query(None, description="YYYY-MM-DD, defaults to today"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return algos scheduled for today that have not yet placed any orders (status=NO_TRADE).
+    Used by the Orders page to show WAITING rows before entry time is reached.
+    """
+    target_date = _parse_date(trading_date) or date.today()
+
+    result = await db.execute(
+        select(GridEntry, Algo, Account)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .join(Account, GridEntry.account_id == Account.id)
+        .where(
+            GridEntry.trading_date == target_date,
+            GridEntry.status == GridStatus.NO_TRADE,
+            GridEntry.is_archived == False,
+            GridEntry.is_enabled == True,
+        )
+        .order_by(Algo.entry_time)
+    )
+    rows = result.all()
+
+    return {
+        "trading_date": target_date.isoformat(),
+        "waiting": [
+            {
+                "grid_entry_id":  str(ge.id),
+                "algo_id":        str(a.id),
+                "algo_name":      a.name,
+                "account_id":     str(acc.id),
+                "account_name":   acc.nickname,
+                "entry_time":     a.entry_time,
+                "exit_time":      a.exit_time,
+                "is_practix":     ge.is_practix,
+                "lot_multiplier": ge.lot_multiplier,
+            }
+            for ge, a, acc in rows
+        ],
     }
 
 
