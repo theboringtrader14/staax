@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 6.2 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 6.3 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2465,3 +2465,31 @@ P2 — Pending from backlog:
 ### Bug from today:
 - Mom/Wife auto-login: "Invalid clientcode" — needs fresh API keys from Angel One dashboard
   (Business action: regenerate API keys for KRAH1029 and KRAH1008)
+
+
+## Claude Code Batch 8 — Token Loading + Re-Login
+
+### Root cause of all trade failures today
+- uvicorn --reload restarts Python process on file change
+- In-memory broker token is wiped on every hot-reload
+- _auto_start_market_feed() runs but may fail silently for some accounts
+- Result: broker.is_token_set() = False → every trade fails
+
+### Fix
+1. New _load_all_broker_tokens(app) in main.py
+   - Runs BEFORE _auto_start_market_feed
+   - Loads ALL accounts with valid today token into broker instances
+   - Each account in own try/except
+   - Clear logging per account
+2. AccountsPage — always show Auto-Login/Re-Login button
+   - Connected: shows "Re-Login" (allows refresh after hot-reload)
+   - Not connected: shows "Auto-Login"
+
+### Today's QA results
+- Scheduler fires at exact entry time ✅
+- WAITING status in grid ✅
+- System Log persistent with timestamps ✅
+- All 3 Angel One accounts can login ✅
+- Mom/Wife .env credentials fixed ✅
+- Every trade still failing due to token loss on hot-reload ❌
+- Sidebar tickers still not showing ❌
