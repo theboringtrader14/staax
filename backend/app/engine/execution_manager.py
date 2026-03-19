@@ -199,6 +199,7 @@ class ExecutionManager:
             broker_type     = broker_type,
             symbol_token    = symbol_token,
             algo_tag        = algo_tag,
+            account_id      = account_id,
         )
 
         if result:

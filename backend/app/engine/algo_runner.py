@@ -500,6 +500,7 @@ class AlgoRunner:
                 broker_type     = broker_type,
                 symbol_token    = str(instrument_token),
                 algo_tag        = algo_tag,
+                account_id      = str(algo.account_id),
             )
 
         if not order_id_str:
@@ -714,7 +715,8 @@ class AlgoRunner:
                     is_practix=order.is_practix,
                     is_overnight=False,           # exit is always intraday
                     broker_type=exit_broker_type,
-                    symbol_token=str(order.instrument_token or ""),
+                    symbol_token=str(getattr(order, "instrument_token", None) or ""),
+                    account_id=str(order.account_id),
                 )
 
                 # F9 — cancel broker SL orders
@@ -1046,15 +1048,53 @@ class AlgoRunner:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    # Maps raw reason strings → ExitReason enum.
+    # Reasons NOT in ExitReason (e.g. "terminate", "overnight_sl") must be
+    # mapped here or SQLAlchemy will fail the commit.
+    _REASON_TO_EXIT: dict = {}   # populated lazily on first use
+
+    @classmethod
+    def _resolve_exit_reason(cls, reason: str):
+        """Return the ExitReason enum member for a raw reason string."""
+        if not cls._REASON_TO_EXIT:
+            from app.models.order import ExitReason as _ER
+            cls._REASON_TO_EXIT = {
+                "sl":              _ER.SL,
+                "tp":              _ER.TP,
+                "tsl":             _ER.TSL,
+                "mtm_sl":          _ER.MTM_SL,
+                "mtm_tp":          _ER.MTM_TP,
+                "global_sl":       _ER.GLOBAL_SL,
+                "sq":              _ER.SQ,
+                "auto_sq":         _ER.AUTO_SQ,
+                "terminate":       _ER.SQ,        # T button — treat as manual SQ
+                "overnight_sl":    _ER.SL,
+                "entry_fail":      _ER.ERROR,
+                "error":           _ER.ERROR,
+                "all_legs_closed": _ER.AUTO_SQ,
+                "btst_exit":       _ER.BTST_EXIT,
+                "stbt_exit":       _ER.STBT_EXIT,
+            }
+        mapped = cls._REASON_TO_EXIT.get(reason)
+        if mapped is not None:
+            return mapped
+        # Direct enum lookup for any enum value string not in the map
+        from app.models.order import ExitReason as _ER
+        try:
+            return _ER(reason)
+        except ValueError:
+            logger.warning(f"[_close_order] Unknown exit reason {reason!r} — storing as AUTO_SQ")
+            return _ER.AUTO_SQ
+
     async def _close_order(
         self, db: AsyncSession, order: Order, exit_price: float, reason: str
     ):
         """Update Order to CLOSED in DB and compute P&L."""
-        order.status       = OrderStatus.CLOSED
-        order.exit_price   = exit_price
-        order.exit_time    = datetime.now(IST).isoformat()
-        order.exit_reason  = reason
-        order.pnl          = self._compute_pnl(order, exit_price)
+        order.status      = OrderStatus.CLOSED
+        order.exit_price  = exit_price
+        order.exit_time   = datetime.now(IST)        # datetime, not isoformat() string
+        order.exit_reason = self._resolve_exit_reason(reason)
+        order.pnl         = self._compute_pnl(order, exit_price)
 
     def _compute_pnl(self, order: Order, exit_price: float) -> float:
         if not order.fill_price:

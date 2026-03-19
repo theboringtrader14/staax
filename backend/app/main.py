@@ -212,6 +212,9 @@ async def lifespan(app: FastAPI):
     # ── 13. Load all broker tokens from DB (independent of market feed) ─────
     await _load_all_broker_tokens(app)
 
+    # ── 13b. Build Angel One broker map for per-account order routing ────────
+    await _build_angel_broker_map(app, order_placer)
+
     # ── 14. Auto-start Market Feed if broker token exists in DB ──────────────
     await _auto_start_market_feed(app)
 
@@ -315,6 +318,49 @@ async def _load_all_broker_tokens(app: "FastAPI") -> None:
             logger.info(f"[STARTUP] Loaded token for {ao_acc.nickname}")
         except Exception as e:
             logger.warning(f"[STARTUP] Token load failed for {ao_acc.nickname}: {e}")
+
+
+async def _build_angel_broker_map(app: "FastAPI", order_placer) -> None:
+    """
+    Build OrderPlacer.angel_broker_map: { account_id_str → AngelOneBroker }.
+    Allows per-account Angel One order routing (Mom, Wife, Karthik AO).
+    Called after _load_all_broker_tokens so broker instances are ready.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.account import Account, BrokerType
+    from sqlalchemy import select
+
+    _NICKNAME_TO_BROKER_KEY = {
+        "Mom":        "angelone_mom",
+        "Wife":       "angelone_wife",
+        "Karthik AO": "angelone_karthik",
+    }
+
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Account).where(
+                    Account.broker == BrokerType.ANGELONE,
+                    Account.is_active == True,
+                )
+            )
+            accounts = result.scalars().all()
+
+        for acc in accounts:
+            broker_key = _NICKNAME_TO_BROKER_KEY.get(acc.nickname)
+            if not broker_key:
+                continue
+            broker = getattr(app.state, broker_key, None)
+            if broker:
+                order_placer.angel_broker_map[str(acc.id)] = broker
+
+        logger.info(
+            f"[STARTUP] Angel broker map built — "
+            f"{len(order_placer.angel_broker_map)} account(s): "
+            f"{list(order_placer.angel_broker_map.keys())}"
+        )
+    except Exception as e:
+        logger.warning(f"[STARTUP] _build_angel_broker_map failed (non-fatal): {e}")
 
 
 async def _auto_start_market_feed(app: "FastAPI") -> None:

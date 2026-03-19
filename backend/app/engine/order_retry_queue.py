@@ -82,6 +82,7 @@ async def place(
     broker_type:     str   = "zerodha",
     symbol_token:    str   = "",
     algo_tag:        str   = "",
+    account_id:      str   = "",
     # Legacy db/order params kept for callers that pass them — ignored here
     # (order persistence is handled by AlgoRunner, not retry queue)
     db               = None,
@@ -144,6 +145,7 @@ async def place(
                 broker_type     = broker_type,
                 symbol_token    = symbol_token,
                 algo_tag        = algo_tag,
+                account_id      = account_id,
             )
 
             logger.info(
@@ -194,6 +196,7 @@ async def retry_order(
     broker_type:     str  = "zerodha",
     symbol_token:    str  = "",
     algo_tag:        str  = "",
+    account_id:      str  = "",
 ) -> Optional[str]:
     """
     Manual retry — called from POST /api/v1/algos/{id}/re (RE button).
@@ -225,6 +228,7 @@ async def retry_order(
         broker_type     = broker_type,
         symbol_token    = symbol_token,
         algo_tag        = algo_tag,
+        account_id      = account_id,
     )
 
 

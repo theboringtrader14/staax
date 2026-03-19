@@ -121,6 +121,7 @@ async def list_orders(
             "trading_date": target_date.isoformat(),
             "orders":       [],
             "by_algo":      {},
+            "groups":       [],
             "total":        0,
         }
 

@@ -2537,8 +2537,36 @@ This marks the first successful end-to-end algo trade on STAAX.
   - Fix: algo_runner._place_leg() fetches live LTP via get_ltp_by_token() after strike selection
     (only when ltp==0.0 and is_practix=False and broker_type=="angelone")
 
-### Pending for Batch 10
-- P1: OrderPlacer multi-account Angel One routing (Wife LIVE orders use Mom's broker)
+## Claude Code Batch 10 — Exit flow fix, Orders display, Multi-account routing
+
+### Fixed
+- P0: Exit flow not updating Order records
+  - Root cause: `_close_order()` assigned `datetime.now(IST).isoformat()` (string) to a
+    `DateTime(timezone=True)` column → asyncpg TypeError → entire transaction rolled back
+    → orders stayed `status='open'` with NULL exit fields forever
+  - Fix: `order.exit_time = datetime.now(IST)` (datetime object, not string)
+  - Fix: Added `_resolve_exit_reason()` classmethod — maps raw strings like `"terminate"`,
+    `"overnight_sl"`, `"entry_fail"` to valid `ExitReason` enum members. SQLAlchemy
+    previously rejected these at commit time causing the same rollback.
+  - ⚠️ Existing bad data (2 PRACTIX orders from 19 Mar): run this SQL once after deploy:
+    ```sql
+    UPDATE orders
+    SET status = 'closed', exit_price = fill_price,
+        exit_time = NOW(), exit_reason = 'auto_sq', pnl = 0.0
+    WHERE status = 'open' AND is_practix = true
+      AND DATE(created_at AT TIME ZONE 'Asia/Kolkata') = '2026-03-19';
+    ```
+- P0: Orders page early return lacked `"groups": []` key — added
+- P0: Dashboard open positions = 2 — auto-fixed by exit flow fix above
+- P1: OrderPlacer multi-account Angel One routing
+  - `OrderPlacer` now holds `angel_broker_map: Dict[str, AngelOneBroker]` keyed by account DB UUID
+  - `place()` accepts `account_id` and routes to the correct broker instance
+  - `account_id` threaded through: `execution_manager → order_retry_queue → order_placer`
+  - `algo_runner._exit_all_with_db` passes `account_id=str(order.account_id)` on exit
+  - `main.py` builds the map at startup via `_build_angel_broker_map()` after `_load_all_broker_tokens`
+  - Fallback: if `account_id` not in map, uses `self.angel_broker` (angelone_mom) — safe
+
+### Pending for Batch 11
 - P1: Sidebar tickers (Angel One WebSocket)
 - P2: Orders page live MTM (currently shows sum of closed P&L, not live MTM)
 - P2: Start Session reliability

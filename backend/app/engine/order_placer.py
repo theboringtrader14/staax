@@ -9,7 +9,7 @@ Broker routing:
   is_practix=False + angelone → AngelOneBroker.place_order()
 """
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from app.brokers.zerodha import ZerodhaBroker
 from app.engine.virtual_order_book import VirtualOrderBook
 
@@ -27,10 +27,11 @@ class OrderPlacer:
         virtual_book: VirtualOrderBook,
         angel_broker: Optional["AngelOneBroker"] = None,
     ):
-        self.zerodha      = zerodha
-        self.virtual_book = virtual_book
-        self.angel_broker = angel_broker        # primary AO account (mom by default)
-        self._placed: set = set()               # idempotency tracking
+        self.zerodha           = zerodha
+        self.virtual_book      = virtual_book
+        self.angel_broker      = angel_broker        # fallback AO broker (mom)
+        self.angel_broker_map: Dict[str, Any] = {}   # account_id (DB UUID str) → AngelOneBroker
+        self._placed: set = set()                    # idempotency tracking
 
     async def place(
         self,
@@ -48,6 +49,7 @@ class OrderPlacer:
         broker_type: str = "zerodha",
         symbol_token: str = "",
         algo_tag: str = "",
+        account_id: str = "",
     ) -> Optional[str]:
         """
         Place an order.
@@ -79,8 +81,11 @@ class OrderPlacer:
                     ltp=ltp, order_type=order_type, limit_price=limit_price,
                 )
 
-            elif broker_type == "angelone" and self.angel_broker:
-                order_id = await self.angel_broker.place_order(
+            elif broker_type == "angelone":
+                ao = self.angel_broker_map.get(account_id) or self.angel_broker
+                if not ao:
+                    raise ValueError(f"No Angel One broker for account_id={account_id!r}")
+                order_id = await ao.place_order(
                     symbol=symbol,
                     exchange=exchange,
                     direction=direction,
