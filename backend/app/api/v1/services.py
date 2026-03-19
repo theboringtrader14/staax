@@ -198,7 +198,7 @@ async def start_all(request: Request):
                     ao_broker = getattr(request.app.state, "angelone_mom", None)
 
                 if ao_broker and ltp_consumer:
-                    feed_token = getattr(ao_broker, "_feed_token", "") or ""
+                    feed_token = ao_acc.feed_token or getattr(ao_broker, "_feed_token", "") or ""
                     adapter = AngelOneTickerAdapter(
                         auth_token=ao_acc.access_token,
                         api_key=ao_acc.api_key or "",
@@ -359,7 +359,7 @@ async def start_service(service_id: str, request: Request):
                     ao_broker  = getattr(request.app.state, broker_key, None) or \
                                  getattr(request.app.state, "angelone_mom", None)
                     if ao_broker and ltp_consumer:
-                        feed_token = getattr(ao_broker, "_feed_token", "") or ""
+                        feed_token = ao_acc.feed_token or getattr(ao_broker, "_feed_token", "") or ""
                         adapter = AngelOneTickerAdapter(
                             auth_token=ao_acc.access_token,
                             api_key=ao_acc.api_key or "",

@@ -332,11 +332,8 @@ export default function AlgoPage() {
   const isEdit      = !!id
   const storeAlgos  = useStore(s => s.algos)
 
-  // Account list from store (populated by accountsAPI)
-  const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([
-    { id: 'karthik', label: 'Karthik (Zerodha)' },
-    { id: 'mom',     label: 'Mom (Angel One)'   },
-  ])
+  // Account list — populated from API on mount
+  const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([])
 
   const [legs, setLegs]             = useState<Leg[]>([mkLeg(1)])
   const [algoName, setAlgoName]     = useState('')

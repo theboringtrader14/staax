@@ -45,6 +45,7 @@ class Order(Base):
 
     # ── Broker details ────────────────────────────────────────────────────────
     broker_order_id = Column(String(100), nullable=True)   # ID from broker API
+    algo_tag        = Column(String(150), nullable=True)   # SEBI audit tag: STAAX_{account}_{algo}_{leg}_{ts}
     is_practix     = Column(Boolean, default=True)
     is_synced      = Column(Boolean, default=False)        # manually synced order
     is_overnight   = Column(Boolean, default=False)

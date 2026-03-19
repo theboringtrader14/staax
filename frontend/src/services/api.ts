@@ -29,9 +29,11 @@ export const accountsAPI = {
     api.post(`/accounts/${id}/margin`, data),
   updateGlobalRisk: (id: string, data: { global_sl?: number; global_tp?: number }) =>
     api.post(`/accounts/${id}/global-risk`, data),
-  angeloneLogin: (account: 'mom' | 'wife') =>
+  angeloneLogin: (account: string) =>
     api.post(`/accounts/angelone/${account}/login`),
-  angeloneTokenStatus: (account: 'mom' | 'wife') =>
+  angeloneAutoLogin: (account: string) =>
+    api.post(`/accounts/angelone/${account}/auto-login`),
+  angeloneTokenStatus: (account: string) =>
     api.get(`/accounts/angelone/${account}/token-status`),
 
   // Zerodha token flow

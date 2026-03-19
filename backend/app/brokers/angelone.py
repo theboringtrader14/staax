@@ -56,6 +56,10 @@ class AngelOneBroker(BaseBroker):
             self.api_key      = settings.ANGELONE_MOM_API_KEY
             self.client_id    = settings.ANGELONE_MOM_CLIENT_ID
             self.totp_secret  = settings.ANGELONE_MOM_TOTP_SECRET
+        elif account == "karthik":
+            self.api_key      = settings.ANGELONE_KARTHIK_API_KEY
+            self.client_id    = settings.ANGELONE_KARTHIK_CLIENT_ID
+            self.totp_secret  = settings.ANGELONE_KARTHIK_TOTP_SECRET
         else:
             self.api_key      = settings.ANGELONE_WIFE_API_KEY
             self.client_id    = settings.ANGELONE_WIFE_CLIENT_ID
@@ -332,6 +336,7 @@ class AngelOneBroker(BaseBroker):
         price: Optional[float] = None,
         product: str = "INTRADAY",
         symbol_token: str = "",
+        tag: str = "",       # SEBI algo_tag — passed as Angel One order tag
     ) -> str:
         """
         Place an order on Angel One.
@@ -372,6 +377,7 @@ class AngelOneBroker(BaseBroker):
             "squareoff":        "0",
             "stoploss":         "0",
             "quantity":         str(quantity),
+            "ordertag":         tag,   # SEBI algo_tag — Angel One ordertag field
         }
 
         try:

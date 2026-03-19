@@ -95,12 +95,14 @@ async def lifespan(app: FastAPI):
     logger.info("✅ WebSocket manager ready")
 
     # ── 4. Broker clients (no token needed at init) ───────────────────────────
-    zerodha       = ZerodhaBroker()
-    angelone_mom  = AngelOneBroker(account="mom")
-    angelone_wife = AngelOneBroker(account="wife")
-    app.state.zerodha       = zerodha
-    app.state.angelone_mom  = angelone_mom
-    app.state.angelone_wife = angelone_wife
+    zerodha            = ZerodhaBroker()
+    angelone_mom       = AngelOneBroker(account="mom")
+    angelone_wife      = AngelOneBroker(account="wife")
+    angelone_karthik   = AngelOneBroker(account="karthik")
+    app.state.zerodha          = zerodha
+    app.state.angelone_mom     = angelone_mom
+    app.state.angelone_wife    = angelone_wife
+    app.state.angelone_karthik = angelone_karthik
     logger.info("✅ Broker clients initialised (no token yet)")
 
     # ── 5. LTP infrastructure (ticker created lazily after broker login) ───────
@@ -127,20 +129,21 @@ async def lifespan(app: FastAPI):
     # ── 7. Wire AlgoRunner ────────────────────────────────────────────────────
     broker_reconnect_manager.wire(ltp_consumer)
     algo_runner.wire_engines(
-        strike_selector = strike_sel,
-        order_placer    = order_placer,
-        sl_tp_monitor   = sl_tp_monitor,
-        tsl_engine      = tsl_engine_ins,
-        ttp_engine      = ttp_engine_ins,
-        journey_engine  = journey_eng,
-        mtm_monitor     = mtm_monitor,
-        wt_evaluator    = wt_evaluator,
-        orb_tracker     = orb_tracker,
-        reentry_engine  = reentry_engine,
-        ltp_consumer    = ltp_consumer,
-        ws_manager      = ws_manager,
-        zerodha_broker  = zerodha,
-        angel_brokers   = [angelone_mom, angelone_wife],
+        strike_selector   = strike_sel,
+        order_placer      = order_placer,
+        sl_tp_monitor     = sl_tp_monitor,
+        tsl_engine        = tsl_engine_ins,
+        ttp_engine        = ttp_engine_ins,
+        journey_engine    = journey_eng,
+        mtm_monitor       = mtm_monitor,
+        wt_evaluator      = wt_evaluator,
+        orb_tracker       = orb_tracker,
+        reentry_engine    = reentry_engine,
+        ltp_consumer      = ltp_consumer,
+        ws_manager        = ws_manager,
+        zerodha_broker    = zerodha,
+        angel_brokers     = [angelone_mom, angelone_wife, angelone_karthik],
+        execution_manager = execution_manager,
     )
 
     # ── 8. Wire new Phase 1F engines ─────────────────────────────────────────

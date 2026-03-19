@@ -47,6 +47,7 @@ class OrderPlacer:
         limit_price: Optional[float] = None,
         broker_type: str = "zerodha",
         symbol_token: str = "",
+        algo_tag: str = "",
     ) -> Optional[str]:
         """
         Place an order.
@@ -59,6 +60,14 @@ class OrderPlacer:
         if idempotency_key in self._placed:
             logger.warning(f"Duplicate order blocked: {idempotency_key}")
             return None
+
+        # SEBI: every live order must carry an algo_tag
+        if not is_practix and not algo_tag:
+            logger.error(
+                f"[ORDER PLACER] BLOCKED — algo_tag missing for live order "
+                f"idempotency_key={idempotency_key} symbol={symbol}"
+            )
+            raise ValueError(f"algo_tag required for live orders (symbol={symbol})")
 
         self._placed.add(idempotency_key)
 
@@ -79,6 +88,7 @@ class OrderPlacer:
                     order_type=order_type.upper(),
                     price=limit_price,
                     symbol_token=symbol_token,
+                    tag=algo_tag,
                 )
 
             else:

@@ -29,6 +29,12 @@ class StrategyMode(str, enum.Enum):
     POSITIONAL = "positional"
 
 
+class StrategyType(str, enum.Enum):
+    """SEBI algo classification — required for algorithm registration."""
+    WHITE_BOX = "white_box"   # rule-based, fully auditable
+    BLACK_BOX = "black_box"   # model-based / proprietary
+
+
 class EntryType(str, enum.Enum):
     """
     Entry type is set at algo level.
@@ -98,6 +104,12 @@ class Algo(Base):
     # ── Lot sizing ────────────────────────────────────────────────────────────
     base_lot_multiplier = Column(Integer, default=1)
     # Per-day multiplier lives on GridEntry.lot_multiplier, not here.
+
+    # ── SEBI classification ───────────────────────────────────────────────────
+    strategy_type = Column(
+        Enum(StrategyType, values_callable=lambda x: [e.value for e in x]),
+        nullable=True,
+    )  # "white_box" or "black_box" — required for algorithms_registry
 
     # ── Journey config (Phase 1E) ─────────────────────────────────────────────
     journey_config = Column(JSON, nullable=True)

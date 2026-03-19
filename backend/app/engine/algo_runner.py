@@ -43,6 +43,7 @@ from app.models.account import Account, BrokerType
 
 from app.engine.strike_selector import StrikeSelector
 from app.engine.order_placer import OrderPlacer
+from app.engine.execution_manager import ExecutionManager
 from app.engine.sl_tp_monitor import SLTPMonitor, PositionMonitor
 from app.engine.tsl_engine import TSLEngine, TSLState
 from app.engine.ttp_engine import TTPEngine, TTPState
@@ -119,22 +120,26 @@ class AlgoRunner:
         # Rate limiter — 8 orders/sec (SEBI max is 10)
         self._rate_limiter = TokenBucketRateLimiter(rate=8)
 
+        # Execution layer — single control point (wired via wire_engines)
+        self._execution_manager: Optional[ExecutionManager] = None
+
     def wire_engines(
         self,
-        strike_selector: StrikeSelector,
-        order_placer:    OrderPlacer,
-        sl_tp_monitor:   SLTPMonitor,
-        tsl_engine:      TSLEngine,
-        ttp_engine:      TTPEngine,
-        journey_engine:  JourneyEngine,
-        mtm_monitor:     MTMMonitor,
-        wt_evaluator:    WTEvaluator,
-        orb_tracker:     ORBTracker,
-        reentry_engine:  ReentryEngine,
-        ltp_consumer:    LTPConsumer,
+        strike_selector:   StrikeSelector,
+        order_placer:      OrderPlacer,
+        sl_tp_monitor:     SLTPMonitor,
+        tsl_engine:        TSLEngine,
+        ttp_engine:        TTPEngine,
+        journey_engine:    JourneyEngine,
+        mtm_monitor:       MTMMonitor,
+        wt_evaluator:      WTEvaluator,
+        orb_tracker:       ORBTracker,
+        reentry_engine:    ReentryEngine,
+        ltp_consumer:      LTPConsumer,
         ws_manager,
-        zerodha_broker=None,
-        angel_brokers=None,
+        zerodha_broker     = None,
+        angel_brokers      = None,
+        execution_manager  = None,
     ):
         """Called once in main.py lifespan after all engines are initialised."""
         self._strike_selector = strike_selector
@@ -155,6 +160,9 @@ class AlgoRunner:
         if angel_brokers:
             for b in angel_brokers:
                 self._angel_broker_map[b.client_id] = b
+
+        # Execution layer
+        self._execution_manager = execution_manager
 
         logger.info("✅ AlgoRunner engines wired")
 
@@ -428,34 +436,71 @@ class AlgoRunner:
         # ── Rate limit (SEBI: max 10/s; we cap at 8) ──────────────────────────
         await self._rate_limiter.acquire()
 
-        # ── Place order ────────────────────────────────────────────────────────
+        # ── Generate algo_tag (SEBI audit tag) ────────────────────────────────
+        account_nickname = account.nickname if account else "unknown"
+        algo_name_safe   = algo.name.replace(" ", "_").replace("/", "_")
+        ts_ms            = int(datetime.now(IST).timestamp() * 1000)
+        algo_tag         = f"STAAX_{account_nickname}_{algo_name_safe}_{leg.leg_number}_{ts_ms}"
+
+        if not grid_entry.is_practix and not algo_tag:
+            logger.error(
+                f"[ALGO RUNNER] algo_tag generation failed for "
+                f"algo={algo.name} leg={leg.leg_number} — blocking order"
+            )
+            raise ValueError("algo_tag generation failed")
+
+        # ── Place order via ExecutionManager (single control point) ───────────
         idempotency_key = f"{grid_entry.id}:{leg.id}:{algo_state.reentry_count}"
-        order_id_str    = await self._order_placer.place(
-            idempotency_key=idempotency_key,
-            algo_id=str(algo.id),
-            symbol=symbol,
-            exchange="NFO",
-            direction=direction,
-            quantity=quantity,
-            order_type=algo.order_type or "market",
-            ltp=ltp,
-            is_practix=grid_entry.is_practix,
-            is_overnight=is_overnight,
-            broker_type=broker_type,
-            symbol_token=str(instrument_token),
-        )
+
+        if self._execution_manager:
+            order_id_str = await self._execution_manager.place(
+                db              = db,
+                idempotency_key = idempotency_key,
+                algo_id         = str(algo.id),
+                account_id      = str(algo.account_id),
+                symbol          = symbol,
+                exchange        = "NFO",
+                direction       = direction,
+                quantity        = quantity,
+                order_type      = algo.order_type or "market",
+                ltp             = ltp,
+                algo_tag        = algo_tag,
+                is_practix      = grid_entry.is_practix,
+                is_overnight    = is_overnight,
+                broker_type     = broker_type,
+                symbol_token    = str(instrument_token),
+            )
+        else:
+            # Fallback: direct OrderPlacer (execution_manager not wired)
+            logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer")
+            order_id_str = await self._order_placer.place(
+                idempotency_key = idempotency_key,
+                algo_id         = str(algo.id),
+                symbol          = symbol,
+                exchange        = "NFO",
+                direction       = direction,
+                quantity        = quantity,
+                order_type      = algo.order_type or "market",
+                ltp             = ltp,
+                is_practix      = grid_entry.is_practix,
+                is_overnight    = is_overnight,
+                broker_type     = broker_type,
+                symbol_token    = str(instrument_token),
+                algo_tag        = algo_tag,
+            )
 
         if not order_id_str:
-            logger.warning(f"Duplicate order blocked: {idempotency_key}")
+            logger.warning(f"Order blocked or duplicate: {idempotency_key}")
             return None
 
         fill_price = ltp  # MARKET fill at LTP; LIMIT would use limit_price
 
-        # ── Log exchange order ID (P2 SEBI compliance) ────────────────────────
+        # ── Log exchange order ID ──────────────────────────────────────────────
         if not grid_entry.is_practix:
             logger.info(
                 f"[ORDER] Exchange order ID: {order_id_str} | "
-                f"{symbol} {direction.upper()} qty={quantity} broker={broker_type}"
+                f"{symbol} {direction.upper()} qty={quantity} "
+                f"broker={broker_type} tag={algo_tag}"
             )
 
         # ── Persist Order to DB ────────────────────────────────────────────────
@@ -472,6 +517,7 @@ class AlgoRunner:
             leg_id=leg.id,
             algo_name=algo.name,
             account_nickname=str(algo.account_id),  # resolved by AccountService
+            algo_tag=algo_tag,
             symbol=symbol,
             exchange="NFO",
             direction=direction,

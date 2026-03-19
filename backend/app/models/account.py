@@ -31,7 +31,8 @@ class Account(Base):
     client_id   = Column(String(100), nullable=False)
     api_key     = Column(String(255), nullable=True)               # encrypted
     api_secret  = Column(Text, nullable=True)                      # encrypted
-    access_token = Column(Text, nullable=True)                     # daily token
+    access_token = Column(Text, nullable=True)                     # daily JWT token
+    feed_token  = Column(Text, nullable=True)                      # Angel One SmartStream feed token
     token_generated_at = Column(DateTime(timezone=True), nullable=True)
     status      = Column(Enum(AccountStatus, values_callable=lambda x: [e.value for e in x]), default=AccountStatus.DISCONNECTED)
     global_sl   = Column(Float, nullable=True)                     # account-level SL ₹

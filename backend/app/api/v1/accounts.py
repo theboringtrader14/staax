@@ -211,6 +211,14 @@ async def zerodha_token_status(db: AsyncSession = Depends(get_db)):
 
 # ── Angel One Token Flow ──────────────────────────────────────────────────────
 
+# Maps URL slug → (DB nickname, app.state key, settings PIN field)
+_AO_ACCOUNT_MAP = {
+    "mom":     ("Mom",       "angelone_mom",     "ANGELONE_MOM_PIN"),
+    "wife":    ("Wife",      "angelone_wife",    "ANGELONE_WIFE_PIN"),
+    "karthik": ("Karthik AO","angelone_karthik", "ANGELONE_KARTHIK_PASSWORD"),
+}
+
+
 @router.post("/angelone/{account_nickname}/login")
 async def angelone_login(
     account_nickname: str,
@@ -219,37 +227,34 @@ async def angelone_login(
 ):
     """
     Login to Angel One using TOTP (auto-generated from secret).
-    account_nickname: "mom" or "wife"
-    Saves token to DB and wires app.state.angelone_mom / angelone_wife.
+    account_nickname: "mom", "wife", or "karthik"
+    Saves access_token + feed_token to DB.
     """
     from datetime import datetime, timezone
     from app.core.config import settings
 
-    nickname_map = {"mom": "Mom", "wife": "Wife"}
-    state_key_map = {"mom": "angelone_mom", "wife": "angelone_wife"}
-    nickname = nickname_map.get(account_nickname.lower())
-    state_key = state_key_map.get(account_nickname.lower())
+    entry = _AO_ACCOUNT_MAP.get(account_nickname.lower())
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom', 'wife', or 'karthik'")
+    nickname, state_key, pin_attr = entry
 
-    if not nickname:
-        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom' or 'wife'")
-
-    # Get broker from app.state
     broker = getattr(request.app.state, state_key, None)
     if not broker:
         raise HTTPException(status_code=503, detail=f"Angel One broker ({account_nickname}) not initialised")
 
+    pin = getattr(settings, pin_attr, "")
     try:
-        result = await broker.login_with_totp()
+        result = await broker.login_with_totp(password=pin)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Angel One login failed: {str(e)}")
 
-    # Save token to DB
     result_db = await db.execute(select(Account).where(Account.nickname == nickname))
     account = result_db.scalar_one_or_none()
     if account:
-        account.access_token = result.get("jwtToken", "")
+        account.access_token       = result.get("jwt_token", "")
+        account.feed_token         = result.get("feed_token", "")
         account.token_generated_at = datetime.now(timezone.utc)
-        account.status = AccountStatus.ACTIVE
+        account.status             = AccountStatus.ACTIVE
         await db.commit()
 
     return {
@@ -259,18 +264,32 @@ async def angelone_login(
     }
 
 
+@router.post("/angelone/{account_nickname}/auto-login")
+async def angelone_auto_login(
+    account_nickname: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Auto-login to Angel One using pyotp TOTP + PIN from .env.
+    Identical to /login but exposed under /auto-login for the frontend Auto-Login button.
+    account_nickname: "mom", "wife", or "karthik"
+    """
+    return await angelone_login(account_nickname, request, db)
+
+
 @router.get("/angelone/{account_nickname}/token-status")
 async def angelone_token_status(
     account_nickname: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Check if today's Angel One token is valid for mom or wife."""
+    """Check if today's Angel One token is valid for mom, wife, or karthik."""
     from datetime import datetime, timezone, date
 
-    nickname_map = {"mom": "Mom", "wife": "Wife"}
-    nickname = nickname_map.get(account_nickname.lower())
-    if not nickname:
-        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom' or 'wife'")
+    entry = _AO_ACCOUNT_MAP.get(account_nickname.lower())
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom', 'wife', or 'karthik'")
+    nickname = entry[0]
 
     result = await db.execute(select(Account).where(Account.nickname == nickname))
     account = result.scalar_one_or_none()

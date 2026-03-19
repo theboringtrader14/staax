@@ -5,19 +5,21 @@ Architecture:
     AlgoRunner
         ↓
     ExecutionManager        ← this file
-        ↓
+        ↓ (micro_delay + burst_control via ExecutionSignature)
     OrderRetryQueue
         ↓
     OrderPlacer
 
 Responsibilities:
-  - Apply global risk checks before every order (kill switch, market hours)
+  - Generate and validate algo_tag on every live order
+  - Apply global risk checks (kill switch, market hours)
+  - Apply execution signature (micro delay, burst control)
   - Route all order placement through OrderRetryQueue
-  - Coordinate RUN / SQ / T manual actions from Orders page
-  - Maintain execution audit log (every order decision recorded)
-  - Single control point for the entire order lifecycle
+  - Write every decision to execution_logs (DB audit trail)
+  - Enforce cancel rate guard on square-offs
 """
 import logging
+import uuid
 from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -25,13 +27,14 @@ from zoneinfo import ZoneInfo
 from app.engine import order_retry_queue
 from app.engine.order_placer import OrderPlacer
 from app.engine.global_kill_switch import is_activated as kill_switch_active
+from app.engine.execution_signature import execution_signature, CancelRateExceeded
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 # ── Market hours ───────────────────────────────────────────────────────────────
-MARKET_OPEN  = (9,  15)   # 09:15 IST
-MARKET_CLOSE = (15, 30)   # 15:30 IST
+MARKET_OPEN  = (9,  15)
+MARKET_CLOSE = (15, 30)
 
 
 def _is_market_open() -> bool:
@@ -56,135 +59,229 @@ class ExecutionManager:
         self._order_placer = order_placer
         logger.info("[EM] Wired to OrderPlacer")
 
-    # ── Audit log ─────────────────────────────────────────────────────────────
+    # ── Audit log (DB + structured logger) ────────────────────────────────────
 
-    def _audit(self, event: str, **kwargs) -> None:
+    async def _log(
+        self,
+        db,
+        action:     str,
+        status:     str,
+        algo_tag:   str  = "",
+        algo_id:    str  = "",
+        order_id:   str  = "",
+        account_id: str  = "",
+        reason:     str  = "",
+    ) -> None:
         """
-        Structured audit log entry. Every order decision is recorded here.
-        Events: REQUEST | RISK_PASS | RISK_BLOCK | ROUTED | BROKER_OK | BROKER_FAIL | SQ_REQUEST | SQ_OK | SQ_FAIL
+        Write one ExecutionLog row. Never raises — audit must not break execution.
+        Also emits a structured logger line for log aggregation.
         """
-        parts = [f"[EXEC] {event}"]
-        for k, v in kwargs.items():
-            parts.append(f"{k}={v}")
+        parts = [f"[EXEC] {action} status={status}"]
+        if algo_tag:   parts.append(f"tag={algo_tag}")
+        if algo_id:    parts.append(f"algo={algo_id}")
+        if account_id: parts.append(f"account={account_id}")
+        if order_id:   parts.append(f"order={order_id}")
+        if reason:     parts.append(f"reason={reason}")
         logger.info(" | ".join(parts))
+
+        if db is None:
+            return
+
+        try:
+            from app.models.execution_log import ExecutionLog
+            import uuid as _uuid
+
+            def _to_uuid(v: str):
+                if not v:
+                    return None
+                try:
+                    return _uuid.UUID(v)
+                except (ValueError, AttributeError):
+                    return None
+
+            log = ExecutionLog(
+                id         = _uuid.uuid4(),
+                algo_tag   = algo_tag   or None,
+                algo_id    = _to_uuid(algo_id),
+                order_id   = _to_uuid(order_id),
+                account_id = _to_uuid(account_id),
+                action     = action,
+                status     = status,
+                reason     = reason or None,
+            )
+            db.add(log)
+            await db.flush()
+        except Exception as e:
+            logger.warning(f"[EM] ExecutionLog write failed (non-fatal): {e}")
 
     # ── Risk gate ─────────────────────────────────────────────────────────────
 
-    def _check_risk(self, algo_id: str, account_id: str) -> Optional[str]:
-        """
-        Returns an error string if placement should be blocked, else None.
-        """
+    def _check_risk(
+        self,
+        algo_id:    str,
+        account_id: str,
+        algo_tag:   str,
+        is_practix: bool,
+    ) -> Optional[str]:
+        """Returns a block reason string if the order should be rejected, else None."""
         if kill_switch_active(account_id=account_id):
-            return f"[EM] ORDER BLOCKED — Kill switch active for account {account_id}"
+            return f"Kill switch active for account={account_id}"
         if not _is_market_open():
-            return f"[EM] ORDER BLOCKED — Outside market hours for algo {algo_id}"
+            return f"Outside market hours for algo={algo_id}"
+        if not is_practix and not algo_tag:
+            return f"algo_tag missing for live order algo={algo_id}"
         return None
 
     # ── Primary placement entry point ─────────────────────────────────────────
 
     async def place(
         self,
-        order,              # Order model instance
-        db,                 # AsyncSession
-        instrument: dict,
-        direction: str,
-        quantity: int,
-        order_type: str,
-        price: float = 0.0,
-        product: str = "MIS",
-        tag: str = "",
-        account_id: str = "",
+        db,
+        idempotency_key: str,
+        algo_id:         str,
+        account_id:      str,
+        symbol:          str,
+        exchange:        str,
+        direction:       str,
+        quantity:        int,
+        order_type:      str,
+        ltp:             float,
+        algo_tag:        str  = "",
+        is_practix:      bool = True,
+        is_overnight:    bool = False,
+        limit_price:     Optional[float] = None,
+        broker_type:     str  = "zerodha",
+        symbol_token:    str  = "",
     ) -> Optional[str]:
         """
-        Gate + route an order through RetryQueue → OrderPlacer.
+        Gate, sign, and route an order through RetryQueue → OrderPlacer.
         Returns broker_order_id on success, None on block or failure.
         """
-        # AR-3: Structured audit log
-        self._audit("REQUEST",
-            algo=order.algo_id, account=account_id,
-            dir=direction, qty=quantity,
-            sym=instrument.get("symbol", "?"), tag=tag)
+        await self._log(db, "PLACE", "PENDING",
+                        algo_tag=algo_tag, algo_id=algo_id,
+                        account_id=account_id)
 
-        # Risk gate
-        block_reason = self._check_risk(str(order.algo_id), account_id)
+        # ── Risk gate ─────────────────────────────────────────────────────────
+        block_reason = self._check_risk(algo_id, account_id, algo_tag, is_practix)
         if block_reason:
-            self._audit("RISK_BLOCK", reason=block_reason)
+            await self._log(db, "PLACE", "BLOCKED",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id, reason=block_reason)
+            logger.error(f"[EM] ORDER BLOCKED — {block_reason}")
             return None
-
-        self._audit("RISK_PASS", algo=order.algo_id, account=account_id)
 
         if self._order_placer is None:
-            self._audit("RISK_BLOCK", reason="OrderPlacer not wired")
-            logger.error("[EXEC] OrderPlacer not wired — cannot place order")
+            reason = "OrderPlacer not wired"
+            await self._log(db, "PLACE", "BLOCKED",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id, reason=reason)
+            logger.error(f"[EM] {reason}")
             return None
 
-        self._audit("ROUTED", algo=order.algo_id, queue="OrderRetryQueue")
+        # ── Execution signature: micro delay + burst control ──────────────────
+        await execution_signature.micro_delay()
+        await execution_signature.burst_control()
 
-        # Route through retry queue
+        # ── Route through retry queue ─────────────────────────────────────────
         result = await order_retry_queue.place(
-            order_placer=self._order_placer,
-            order=order,
-            db=db,
-            instrument=instrument,
-            direction=direction,
-            quantity=quantity,
-            order_type=order_type,
-            price=price,
-            product=product,
-            tag=tag,
+            order_placer    = self._order_placer,
+            idempotency_key = idempotency_key,
+            algo_id         = algo_id,
+            symbol          = symbol,
+            exchange        = exchange,
+            direction       = direction,
+            quantity        = quantity,
+            order_type      = order_type,
+            ltp             = ltp,
+            is_practix      = is_practix,
+            is_overnight    = is_overnight,
+            limit_price     = limit_price,
+            broker_type     = broker_type,
+            symbol_token    = symbol_token,
+            algo_tag        = algo_tag,
         )
+
         if result:
-            self._audit("BROKER_OK", algo=order.algo_id, broker_order_id=result)
+            await self._log(db, "PLACE", "OK",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id,
+                            reason=f"broker_order_id={result}")
         else:
-            self._audit("BROKER_FAIL", algo=order.algo_id, sym=instrument.get("symbol","?"))
+            await self._log(db, "PLACE", "FAILED",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id)
+
         return result
 
-    # ── Square-off entry point (SQ / T actions from Orders page) ─────────────
+    # ── Square-off entry point ────────────────────────────────────────────────
 
     async def square_off(
         self,
-        order,
         db,
-        instrument: dict,
-        quantity: int,
-        is_practix: bool,
-        account_id: str = "",
-        tag: str = "square_off",
+        idempotency_key: str,
+        algo_id:         str,
+        account_id:      str,
+        symbol:          str,
+        exchange:        str,
+        direction:       str,       # direction of the OPEN order (will be reversed)
+        quantity:        int,
+        algo_tag:        str  = "",
+        is_practix:      bool = True,
+        broker_type:     str  = "zerodha",
+        symbol_token:    str  = "",
     ) -> Optional[str]:
         """
         Place a square-off (opposite direction) order.
-        Bypasses kill switch check — square-off is always allowed.
-        Bypasses market hours check — allow late SQ for safety.
+        Bypasses kill switch and market hours — SQ is always permitted.
+        Cancel rate guard applied.
         """
-        self._audit("SQ_REQUEST",
-            algo=order.algo_id, account=account_id,
-            qty=quantity, sym=instrument.get("symbol","?"), tag=tag)
+        await self._log(db, "SQ", "PENDING",
+                        algo_tag=algo_tag, algo_id=algo_id,
+                        account_id=account_id)
 
-        if self._order_placer is None:
-            self._audit("SQ_FAIL", reason="OrderPlacer not wired")
-            logger.error("[EXEC] OrderPlacer not wired — cannot square off")
+        # Cancel rate guard
+        try:
+            execution_signature.check_cancel_rate()
+        except CancelRateExceeded as e:
+            await self._log(db, "SQ", "BLOCKED",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id, reason=str(e))
+            logger.error(str(e))
             return None
 
-        # Determine opposite direction for square-off
-        sq_direction = "sell" if order.direction.lower() in ("buy", "b") else "buy"
+        if self._order_placer is None:
+            reason = "OrderPlacer not wired"
+            await self._log(db, "SQ", "BLOCKED",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id, reason=reason)
+            logger.error(f"[EM] {reason}")
+            return None
 
-        sq_result = await order_retry_queue.place(
-            order_placer=self._order_placer,
-            order=order,
-            db=db,
-            instrument=instrument,
-            direction=sq_direction,
-            quantity=quantity,
-            order_type="MARKET",
-            price=0.0,
-            product="MIS",
-            tag=tag,
+        sq_direction = "sell" if direction.lower() in ("buy", "b") else "buy"
+
+        result = await order_retry_queue.place(
+            order_placer    = self._order_placer,
+            idempotency_key = idempotency_key,
+            algo_id         = algo_id,
+            symbol          = symbol,
+            exchange        = exchange,
+            direction       = sq_direction,
+            quantity        = quantity,
+            order_type      = "MARKET",
+            ltp             = 0.0,
+            is_practix      = is_practix,
+            is_overnight    = False,
+            broker_type     = broker_type,
+            symbol_token    = symbol_token,
+            algo_tag        = algo_tag,
         )
-        if sq_result:
-            self._audit("SQ_OK", algo=order.algo_id, broker_order_id=sq_result)
-        else:
-            self._audit("SQ_FAIL", algo=order.algo_id, sym=instrument.get("symbol","?"))
-        return sq_result
+
+        status = "OK" if result else "FAILED"
+        await self._log(db, "SQ", status,
+                        algo_tag=algo_tag, algo_id=algo_id,
+                        account_id=account_id,
+                        reason=f"broker_order_id={result}" if result else "")
+        return result
 
 
 # ── Singleton ──────────────────────────────────────────────────────────────────
