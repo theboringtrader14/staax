@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 6.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 6.1 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2382,3 +2382,17 @@ P1 — Important:
 P2 — Pending from backlog:
 6. STBT/BTST exit time logic
 7. Soft notifications (Feature 16)
+
+
+## Angel One Instrument Master — Key Findings (19 Mar 2026)
+
+- URL: https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json (public, no auth)
+- Size: 40MB, 209,641 instruments
+- NIFTY expiry weekday: Tuesday (changed from Thursday in 2024)
+- BANKNIFTY/FINNIFTY/MIDCAPNIFTY: monthly only (no weekly)
+- SENSEX: BFO exchange (not NFO)
+- MIDCAPNIFTY name in master: "MIDCPNIFTY"
+- Strike stored ×100: divide by 100 to get actual strike
+- Angel One option chain API (/market/v1/optionChain) is IP-blocked — returns HTML rejection
+- Solution: use instrument master JSON instead of option chain API
+- Cache once per day as class-level cache shared across all broker instances
