@@ -319,6 +319,7 @@ class AlgoRunner:
             for order in placed_orders:
                 await self._ws_manager.notify_trade(
                             symbol=order.symbol,
+                    algo_name=algo.name,
                     direction=order.direction,
                     price=order.fill_price or 0.0,
                 )
@@ -565,7 +566,7 @@ class AlgoRunner:
             )
 
         # ── Register TSL ───────────────────────────────────────────────────────
-        if self._tsl_engine and leg.tsl_enabled and leg.tsl_x and leg.tsl_y:
+        if self._tsl_engine and getattr(leg, "tsl_enabled", False) and leg.tsl_x and leg.tsl_y:
             tsl_state = TSLState(
                 order_id=str(order.id),
                 direction=direction,
