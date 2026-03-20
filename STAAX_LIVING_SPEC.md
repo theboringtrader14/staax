@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.4 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2780,3 +2780,35 @@ This marks the first successful end-to-end algo trade on STAAX.
     - TradingView provides free real-time index quotes via widget
     - Embed TradingView ticker widget in sidebar
     - Show: NIFTY, BANKNIFTY, SENSEX, FINNIFTY, MIDCAP, GOLDM
+
+
+## 20 Mar 2026 — End of Day Summary
+
+### Session accomplishments
+- 15 PRACTIX strategies tested (Algo-1 through Algo-19)
+- Algo-4 OTM2 ✅ correct strike at 23400, premium 201
+- Algo-1 ATM ✅ correct at 23250
+- Orders page: real fill prices, IST timestamps, SL calculated values
+- Smart Grid: containerized scroll, sticky column headers, All+Promote chips
+- Algo Config: loads correctly, unsaved changes banner
+- Dashboard: Today P&L +₹271 showing correctly
+- Topbar MTM fallback to today_pnl ✅
+- Active algos + open positions: IST date filter applied
+- Sidebar: TradingView broken iframes removed, static tickers with links
+- System Log: IST timestamps, newest first
+
+### Known pending (Monday)
+- Algo-3 PE leg failure (SL% straddle) — needs log analysis
+- Algo-6/9 W&T failures — need live LTP feed
+- Algo-7/10/12 ORB no trade — need live LTP feed  
+- Angel One SmartStream not connecting — root cause: _subscribe_open_position_tokens
+  called inside _auto_start_market_feed try/except, fails silently
+- Sidebar live tickers — blocked on SmartStream
+- SEBI April 1: static IP required for Angel One Smart API
+
+### Monday morning checklist
+1. cd ~/STAXX/staax && ./debug_log.sh
+2. Auto-login all 3 AO accounts
+3. Run: ./show_errors.sh
+4. Create test algos: one per strategy type
+5. Watch Orders page for real fill prices
