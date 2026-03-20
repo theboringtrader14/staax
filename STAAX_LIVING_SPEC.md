@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.1 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.2 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2623,3 +2623,30 @@ This marks the first successful end-to-end algo trade on STAAX.
 - Karthik AO: testing only (no cash, margin errors expected and OK)
 - Mom + Wife: live trading when ready
 - Living Spec = memory file (no separate CLAUDE.md needed)
+
+
+## Batch 13 — UX polish + Live data
+
+### Completed in Batch 12+
+- Sticky headers (Grid + Orders) — z-index fix
+- Sort dropdown on Grid
+- Add algo to all weekdays button
+- ORB SL provisions (orb_high/orb_low)
+- BNF weekly expiry disabled
+- BTST/STBT next-day scheduling fix
+
+### In progress (this batch)
+- P0: Sticky header overlay fix (background #1A1C1E, isolation, z-index 50)
+- P1: Sort dropdown moved to beside Show Weekends on Grid
+- P1: Sort added to Orders page
+- P1: Unsaved algo confirmation dialog (useBlocker + isDirty)
+- P2: Live LTP + P&L in Orders page via ws/pnl WebSocket
+- P2: Sidebar tickers via ws/ticker WebSocket
+
+### Known errors from today (20 Mar)
+- Algo-3 ERROR: NF Sell straddle with SL% — PE leg not firing (logging added)
+- Algo-6 ERROR: NF Sell straddle W&T — W&T entry failing
+- Algo-9 ERROR: NF Buy CE/PE W&T — W&T entry failing  
+- Algo-7, 10, 12 NO TRADE: ORB algos — ORB breakout not detected (no real market feed)
+- Algo-14 NO TRADE: Missed due to backend restart
+- Algo-15 STBT: Exit time wrong (same day instead of next day) — fixed in this batch
