@@ -2650,3 +2650,67 @@ This marks the first successful end-to-end algo trade on STAAX.
 - Algo-7, 10, 12 NO TRADE: ORB algos — ORB breakout not detected (no real market feed)
 - Algo-14 NO TRADE: Missed due to backend restart
 - Algo-15 STBT: Exit time wrong (same day instead of next day) — fixed in this batch
+
+
+## Batch 16 — UX Fixes + Stability
+
+### Completed today (20 Mar)
+- Containerized Grid + Orders scroll ✅
+- Nickname edit ✅
+- Fill price + LTP in Orders page ✅
+- BTST/STBT next-day scheduling ✅
+- Premium strike buildPayload fix ✅
+- DTE edge case fix ✅
+
+### P0 — Algo Config crash
+- useBlocker incompatible with BrowserRouter
+- Replace with useEffect + window.beforeunload only
+- File: AlgoPage.tsx
+
+### P0 — _subscribe_open_position_tokens NameError  
+- Market feed auto-start fails at startup
+- Function defined at 367, called at 455/538 inside _auto_start_market_feed (391)
+- Error: caught inside try/except, logged as non-fatal
+- Fix: inline the function or ensure it is found in scope
+
+### P0 — Angel One SmartStream not connecting
+- feedToken exists in DB (confirmed)
+- No [AO-DEBUG] logs — adapter start() never called
+- Market feed auto-start is failing before reaching Angel One path
+- Fix: resolve _subscribe_open_position_tokens first, then debug SmartStream
+
+### P1 — Grid + Orders UX (from today)
+1. Grid table first row (ALGO/MON/TUE) should be sticky within container
+2. Add "All" chip button in table header row beside ALGO column
+3. Hide scrollbar visually (scrollbar-width: none)
+4. Algo card: 4 rows — Name | Account+Tags | Promote+All chips
+5. Rename chips: "Promote" and "All"
+
+### P1 — Orders page display fixes
+6. SL/Target show % — should show calculated price value
+   BUY SL: entry_price * (1 - sl_pct/100)
+   SELL SL: entry_price * (1 + sl_pct/100)
+7. MTM shows "0" when not set — hide if null/zero
+8. Exit time shows 9:31 default — show actual exit time
+9. REASON shows auto_sq for all — should show exit_time when exit by time
+10. MTM not showing in topbar or browser tab
+
+### P1 — System Log
+11. Date grouping wrong (IST vs UTC issue partially fixed)
+12. Recent events should be on top, date separators correct
+
+### P2 — Stability (from ChatGPT analysis — all valid)
+1. Execution lock per (algo_id, leg_id) — prevent duplicate orders
+2. Kill switch enforcement in retry queue
+3. Event-based reconciliation after place/SQ/kill switch
+4. Orphan position handling (external positions)
+5. Smart retry classifier (don't retry margin errors)
+6. Broker reconnect subscription verification
+7. Portfolio-level daily loss guard
+
+### Known errors
+- Algo-3: PE leg not firing (SL% straddle) — logging added
+- Algo-6: W&T failing (no LTP feed)
+- Algo-9: W&T failing (no LTP feed)
+- Algo-7/10/12: ORB no trade (no LTP feed)
+- Algo-18: DTE positional error

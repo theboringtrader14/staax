@@ -440,9 +440,9 @@ export default function GridPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div>
-      {/* Header — sticky so New Algo button always visible */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#1A1C1E', isolation: 'isolate', paddingBottom: '4px', borderBottom: '1px solid var(--bg-border)' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 92px)' }}>
+      {/* Header */}
+      <div style={{ flexShrink: 0, borderBottom: '1px solid var(--bg-border)', paddingBottom: '4px' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily:"'ADLaM Display',serif", fontSize:'22px', fontWeight:400 }}>Smart Grid</h1>
@@ -474,11 +474,11 @@ export default function GridPage() {
           <button className="btn btn-primary" onClick={() => nav('/algo/new')}>+ New Algo</button>
         </div>
       </div>
-      </div>{/* end sticky wrapper */}
+      </div>{/* end header */}
 
       {/* Archive panel */}
       {showArch && (
-        <div style={{ background:'rgba(215,123,18,0.07)', border:'1px solid rgba(215,123,18,0.22)', borderRadius:'8px', padding:'14px 16px', marginBottom:'12px' }}>
+        <div style={{ flexShrink: 0, background:'rgba(215,123,18,0.07)', border:'1px solid rgba(215,123,18,0.22)', borderRadius:'8px', padding:'14px 16px', margin:'8px 0' }}>
           <div style={{ fontSize:'11px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'0.08em' }}>📦 Archived Algos</div>
           {archived.length === 0
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>No archived algos.</span>
@@ -498,7 +498,7 @@ export default function GridPage() {
       )}
 
       {/* Legend */}
-      <div style={{ display:'flex', gap:'12px', marginBottom:'12px', flexWrap:'wrap', alignItems:'center', padding:'6px 12px', background:'var(--bg-secondary)', borderRadius:'6px', border:'1px solid var(--bg-border)' }}>
+      <div style={{ flexShrink: 0, display:'flex', gap:'12px', margin:'8px 0', flexWrap:'wrap', alignItems:'center', padding:'6px 12px', background:'var(--bg-secondary)', borderRadius:'6px', border:'1px solid var(--bg-border)' }}>
         {Object.entries(SC).map(([k, s]) => (
           <span key={k} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', color:'var(--text-muted)' }}>
             <span style={{ width:'7px', height:'7px', borderRadius:'2px', background:s.col, display:'inline-block' }}/>{s.label}
@@ -509,8 +509,8 @@ export default function GridPage() {
         </span>
       </div>
 
-      {/* Grid table */}
-      <div style={{ overflowX:'auto' }}>
+      {/* Grid table — flex:1 fills remaining height, overflow:auto scrolls X and Y */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <colgroup>
             <col style={{ width:'200px' }}/>
@@ -518,9 +518,9 @@ export default function GridPage() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', position:'sticky', top:'62px', zIndex:49 }}>ALGO</th>
+              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>ALGO</th>
               {days.map(d => (
-                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)', position:'sticky', top:'62px', zIndex:49 }}>
+                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)' }}>
                   {d}
                   <div style={{ fontSize:'9px', color:'var(--text-dim)', fontWeight:400, marginTop:'1px' }}>
                     {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}

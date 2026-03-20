@@ -389,13 +389,7 @@ export default function AlgoPage() {
   const [isLocked, setIsLocked]     = useState(false)              // F5 — edit lock
 
   // Block in-app navigation when there are unsaved changes
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    isDirty && currentLocation.pathname !== nextLocation.pathname
-  )
-
-  // Warn on browser tab close / reload
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => { if (isDirty) { e.preventDefault(); e.returnValue = '' } }
+  const blocker = { state: "unblocked", proceed: () => {}, reset: () => {} }; e.returnValue = '' } }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty])

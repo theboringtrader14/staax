@@ -407,9 +407,9 @@ export default function OrdersPage() {
   })
 
   return (
-    <div>
-      {/* Sticky zone: page header + day tabs stay visible while scrolling */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#1A1C1E', isolation: 'isolate' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
+      {/* Fixed zone: page header + day tabs — never scrolls */}
+      <div style={{ flexShrink: 0 }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
@@ -472,9 +472,10 @@ export default function OrdersPage() {
           </span>
         </div>
       </div>
-      </div>{/* end sticky zone */}
+      </div>{/* end fixed zone */}
 
-      {/* WAITING algos — entry time not yet reached */}
+      {/* Scroll zone: waiting algos + all order groups */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
       <div style={{ height: '14px' }} />
       {waitingAlgos.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
@@ -598,6 +599,7 @@ export default function OrdersPage() {
           </div>
         </div>
       ))}
+      </div>{/* end scroll zone */}
 
       {/* SYNC Modal */}
       {showSync !== null && (
