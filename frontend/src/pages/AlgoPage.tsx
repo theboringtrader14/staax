@@ -388,13 +388,18 @@ export default function AlgoPage() {
   const [showTomorrowWarn, setShowTomorrowWarn] = useState(false)  // F6
   const [isLocked, setIsLocked]     = useState(false)              // F5 — edit lock
 
-  // Warn on browser close/refresh when unsaved
+  // Sync isDirty to window flag — Sidebar reads this to block nav clicks
+  // Also warn on browser close/refresh when unsaved
   useEffect(() => {
+    ;(window as any).__staaxDirty = isDirty
     const handler = (e: BeforeUnloadEvent) => {
       if (isDirty) { e.preventDefault(); e.returnValue = '' }
     }
     window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
+    return () => {
+      window.removeEventListener('beforeunload', handler)
+      ;(window as any).__staaxDirty = false  // clear when leaving AlgoPage
+    }
   }, [isDirty])
 
   // For new algos, mark form as loaded immediately so changes register as dirty

@@ -1,16 +1,16 @@
-import { NavLink } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 
-// TradingView symbol mapping
-const TV_SYMBOLS: Record<string, string> = {
-  NIFTY:      'NSE:NIFTY50',
-  BANKNIFTY:  'NSE:BANKNIFTY',
-  SENSEX:     'BSE:SENSEX',
-  FINNIFTY:   'NSE:FINNIFTY',
-  MIDCPNIFTY: 'NSE:MIDCPNIFTY',
-  GOLDM:      'MCX:GOLDM1!',
+// TradingView chart links for each index (opens in new tab on click)
+const TV_LINKS: Record<string, string> = {
+  NIFTY:      'https://www.tradingview.com/chart/?symbol=NSE:NIFTY50',
+  BANKNIFTY:  'https://www.tradingview.com/chart/?symbol=NSE:BANKNIFTY',
+  SENSEX:     'https://www.tradingview.com/chart/?symbol=BSE:SENSEX',
+  FINNIFTY:   'https://www.tradingview.com/chart/?symbol=NSE:FINNIFTY',
+  MIDCPNIFTY: 'https://www.tradingview.com/chart/?symbol=NSE:MIDCPNIFTY',
+  GOLDM:      'https://www.tradingview.com/chart/?symbol=MCX:GOLDM1!',
 }
-const TICKER_NAMES = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCAP', 'GOLDM']
+const TICKER_NAMES = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY', 'GOLDM']
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 const iconSize = 18
@@ -65,13 +65,14 @@ const IconCandlestick = () => (
   </svg>
 )
 
+// P2-A — nav order: Indicator Bots after Orders
 const nav = [
   { path: '/dashboard',  label: 'Dashboard',      Icon: IconHome        },
   { path: '/grid',       label: 'Smart Grid',      Icon: IconGrid        },
   { path: '/orders',     label: 'Orders',          Icon: IconList        },
+  { path: '/indicators', label: 'Indicator Bots',  Icon: IconCandlestick },
   { path: '/reports',    label: 'Reports',         Icon: IconChart       },
   { path: '/accounts',   label: 'Accounts',        Icon: IconUser        },
-  { path: '/indicators', label: 'Indicator Bots',  Icon: IconCandlestick },
 ]
 
 function StaaxLogo({ size = 32 }: { size?: number }) {
@@ -83,77 +84,21 @@ function StaaxLogo({ size = 32 }: { size?: number }) {
   )
 }
 
-function TVChartModal({ symbol, onClose }: { symbol: string; onClose: () => void }) {
-  useEffect(() => {
-    const script = document.createElement('script')
-    script.src = 'https://s3.tradingview.com/tv.js'
-    script.async = true
-    script.onload = () => {
-      if ((window as any).TradingView) {
-        new (window as any).TradingView.widget({
-          container_id: 'tv_chart_container',
-          symbol: TV_SYMBOLS[symbol] || `NSE:${symbol}`,
-          interval: '5', timezone: 'Asia/Kolkata', theme: 'dark',
-          style: '1', locale: 'en', toolbar_bg: '#2A2C2E',
-          enable_publishing: false, hide_top_toolbar: false,
-          save_image: false, height: 500, width: '100%',
-        })
-      }
-    }
-    document.head.appendChild(script)
-    return () => { try { document.head.removeChild(script) } catch {} }
-  }, [symbol])
-
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ width:'900px', maxWidth:'95vw', background:'var(--bg-secondary)', borderRadius:'10px', border:'1px solid var(--bg-border)', overflow:'hidden' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid var(--bg-border)' }}>
-          <div style={{ fontSize:'13px', fontWeight:700, color:'var(--accent-blue)' }}>{symbol} — 5 min Chart</div>
-          <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--text-dim)', fontSize:'18px', cursor:'pointer' }}>×</button>
-        </div>
-        <div id="tv_chart_container" style={{ height:'500px' }}/>
-      </div>
-    </div>
-  )
-}
-
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
-  const [prices, setPrices]       = useState<Record<string, number | null>>({})
-  const [chartSym, setChartSym]   = useState<string | null>(null)
+  // P0-A — dirty-nav guard state
+  const [pendingPath, setPendingPath] = useState<string | null>(null)
+  const navigate = useNavigate()
   const toggle = (v: boolean) => { setCollapsed(v); localStorage.setItem('sidebar_collapsed', String(v)) }
   const W = collapsed ? '56px' : '216px'
 
-  useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const WS_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
-    let ws: WebSocket | null = null
-    let retryTimeout: ReturnType<typeof setTimeout> | null = null
-    let retryDelay = 2000
-
-    const connect = () => {
-      ws = new WebSocket(`${WS_BASE}/ws/ticker`)
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data)
-          if (msg.type === 'ticker') setPrices(msg.data)
-        } catch {}
-      }
-      ws.onclose = () => {
-        retryTimeout = setTimeout(connect, retryDelay)
-        retryDelay = Math.min(retryDelay * 1.5, 15000)
-      }
-      ws.onerror = () => ws?.close()
+  // P0-A — intercept NavLink click when AlgoPage has unsaved changes
+  const handleNavClick = (e: React.MouseEvent, to: string) => {
+    if ((window as any).__staaxDirty) {
+      e.preventDefault()
+      setPendingPath(to)
     }
-    connect()
-    return () => {
-      if (retryTimeout) clearTimeout(retryTimeout)
-      ws?.close()
-    }
-  }, [])
-
-  const fmt = (p: number | null) => p ? p.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'
+  }
 
   return (
     <>
@@ -186,10 +131,11 @@ export default function Sidebar() {
           {collapsed && <StaaxLogo size={28} />}
         </div>
 
-        {/* Nav links */}
+        {/* Nav links — P0-A: onClick intercepts when dirty */}
         <div style={{ flex: 1, paddingTop: '6px' }}>
           {nav.map(({ path, label, Icon }) => (
             <NavLink key={path} to={path} title={collapsed ? label : undefined}
+              onClick={(e) => handleNavClick(e, path)}
               style={({ isActive }) => ({
                 display: 'flex', alignItems: 'center',
                 justifyContent: collapsed ? 'center' : 'flex-start',
@@ -211,22 +157,31 @@ export default function Sidebar() {
           ))}
         </div>
 
-        {/* Ticker bar */}
+        {/* Ticker strip — static placeholders, click opens TradingView chart */}
         <div style={{ borderTop: '1px solid var(--bg-border)', overflow: 'hidden' }}>
           {collapsed ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', padding: '8px 0' }}>
               {[0,1,2].map(i => <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-blue)', opacity: 0.4 }}/>)}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', padding: '4px 0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }}>
               {TICKER_NAMES.map(name => (
-                <div key={name} onClick={() => setChartSym(name)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 12px', cursor: 'pointer', borderRadius: '3px', transition: 'background 0.1s' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,176,240,0.07)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.04em' }}>{name}</span>
-                  <span style={{ fontSize: '11px', color: prices[name] ? 'var(--text)' : 'var(--text-dim)', fontWeight: 600, fontFamily: 'monospace' }}>{fmt(prices[name] ?? null)}</span>
-                </div>
+                <a
+                  key={name}
+                  href={TV_LINKS[name]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '5px 14px', textDecoration: 'none',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(0,176,240,0.06)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                >
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.03em' }}>{name}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'monospace' }}>--</span>
+                </a>
               ))}
             </div>
           )}
@@ -238,7 +193,29 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {chartSym && <TVChartModal symbol={chartSym} onClose={() => setChartSym(null)} />}
+      {/* P0-A — Unsaved changes confirmation modal */}
+      {pendingPath && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-box" style={{ maxWidth: '360px' }}>
+            <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '8px' }}>Unsaved changes</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.5 }}>
+              You have unsaved changes on this page.<br/>Leave without saving?
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setPendingPath(null)}>Stay</button>
+              <button className="btn" style={{ background: 'var(--red)', color: '#fff', border: 'none' }}
+                onClick={() => {
+                  ;(window as any).__staaxDirty = false
+                  const dest = pendingPath
+                  setPendingPath(null)
+                  navigate(dest)
+                }}>
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

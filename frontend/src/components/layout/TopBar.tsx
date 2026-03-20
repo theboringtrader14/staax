@@ -66,7 +66,8 @@ export default function TopBar() {
     const poll = () => {
       systemAPI.stats()
         .then(res => {
-          const mtm = res.data?.mtm_total
+          const mtm = res.data?.mtm_total ?? res.data?.today_pnl ?? 0
+          console.log('[TopBar] stats poll:', mtm)
           if (typeof mtm === 'number') setLivePnl(mtm)
         })
         .catch(() => {})

@@ -73,7 +73,7 @@ def _order_to_dict(order: Order) -> dict:
         "exit_price":        order.exit_price_manual if order.exit_price_manual else order.exit_price,
         "exit_price_raw":    order.exit_price,
         "exit_price_manual": order.exit_price_manual,
-        "exit_time":         order.exit_time.isoformat() if order.exit_time else None,
+        "exit_time":         order.exit_time.isoformat() if order.exit_time and order.status == OrderStatus.CLOSED else None,
         "exit_reason":       order.exit_reason.value if order.exit_reason else None,
         "pnl":               order.pnl,
         "status":            order.status.value if order.status else "pending",

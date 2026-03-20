@@ -505,13 +505,16 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   )
 }
 
+type AggOrder = BotOrder & { botName: string }
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function IndicatorsPage() {
-  const [bots, setBots]         = useState<Bot[]>([])
-  const [accounts, setAccounts] = useState<any[]>([])
+  const [bots, setBots]           = useState<Bot[]>([])
+  const [accounts, setAccounts]   = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [loading, setLoading]   = useState(true)
+  const [loading, setLoading]     = useState(true)
+  const [allBotOrders, setAllBotOrders] = useState<AggOrder[]>([])
 
   const loadBots = useCallback(() => {
     apiGet('/bots/').then(r => setBots(r.data || [])).catch(() => {})
@@ -523,6 +526,24 @@ export default function IndicatorsPage() {
       accountsAPI.list().then(r => setAccounts(r.data || [])),
     ]).finally(() => setLoading(false))
   }, [])
+
+  // Aggregate orders from all active bots
+  useEffect(() => {
+    const activeBotList = bots.filter(b => !b.is_archived)
+    if (activeBotList.length === 0) return
+    Promise.allSettled(
+      activeBotList.map(b =>
+        apiGet(`/bots/${b.id}/orders`).then(r =>
+          (r.data || []).map((o: BotOrder) => ({ ...o, botName: b.name }))
+        )
+      )
+    ).then(results => {
+      const flat: AggOrder[] = results
+        .filter(r => r.status === 'fulfilled')
+        .flatMap(r => (r as PromiseFulfilledResult<AggOrder[]>).value)
+      setAllBotOrders(flat)
+    })
+  }, [bots])
 
   const handleSave = async (form: any) => {
     const res = await apiPost('/bots/', form)
@@ -572,6 +593,27 @@ export default function IndicatorsPage() {
         </div>
       </div>
 
+      {/* ── Signal Tracker ──────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Signal Tracker</div>
+        <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
+          <table className="staax-table">
+            <thead>
+              <tr>
+                <th>Signal</th><th>Underlying</th><th>Direction</th><th>Triggered At</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                  No signals today — bot signal API coming soon
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Empty state */}
       {!loading && activeBots.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
@@ -584,7 +626,7 @@ export default function IndicatorsPage() {
 
       {/* Active bots */}
       {activeBots.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px', marginBottom: archivedBots.length > 0 && showArchived ? '24px' : '0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px', marginBottom: archivedBots.length > 0 && showArchived ? '24px' : '16px' }}>
           {activeBots.map(bot => (
             <BotCard key={bot.id} bot={bot} accounts={accounts}
               onUpdate={handleUpdate} onArchive={handleArchive}
@@ -597,7 +639,7 @@ export default function IndicatorsPage() {
       {showArchived && archivedBots.length > 0 && (
         <>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>📦 Archived Bots</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px', marginBottom: '16px' }}>
             {archivedBots.map(bot => (
               <BotCard key={bot.id} bot={bot} accounts={accounts}
                 onUpdate={handleUpdate} onArchive={handleArchive}
@@ -605,6 +647,39 @@ export default function IndicatorsPage() {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Aggregated Orders ───────────────────────────────────────────────── */}
+      {allBotOrders.length > 0 && (
+        <div style={{ marginTop: '8px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
+            Orders · {allBotOrders.length} total
+          </div>
+          <div className="no-scrollbar" style={{ maxHeight: '320px', overflowY: 'auto', border: '1px solid var(--bg-border)', borderRadius: '7px' }}>
+            <table className="staax-table">
+              <thead>
+                <tr>
+                  <th>Bot</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allBotOrders.map(o => (
+                  <tr key={o.id}>
+                    <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{o.botName}</td>
+                    <td style={{ fontSize: '11px', fontWeight: 700, color: o.direction === 'BUY' ? 'var(--green)' : 'var(--red)' }}>{o.direction}</td>
+                    <td style={{ fontSize: '11px' }}>{o.lots}</td>
+                    <td style={{ fontSize: '11px' }}>{o.entry_price?.toLocaleString('en-IN') || '—'}</td>
+                    <td style={{ fontSize: '11px' }}>{o.exit_price?.toLocaleString('en-IN') || '—'}</td>
+                    <td style={{ fontSize: '11px', fontWeight: 600, color: (o.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {o.pnl != null ? `${o.pnl >= 0 ? '+' : ''}₹${o.pnl.toLocaleString('en-IN')}` : '—'}
+                    </td>
+                    <td><span style={{ fontSize: '10px', color: o.status === 'open' ? 'var(--green)' : 'var(--text-dim)' }}>{o.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {showCreate && (

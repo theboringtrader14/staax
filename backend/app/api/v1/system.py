@@ -127,28 +127,31 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
       today_pnl       — sum of closed-order P&L for today
       fy_pnl          — sum of all closed-order P&L in the current financial year
     """
-    from datetime import date as _date
+    from datetime import date as _date, datetime as _dt, timezone as _tz, timedelta as _td
     from sqlalchemy import func, select as sa_select
-    from app.models.grid import GridEntry, GridStatus
     from app.models.order import Order, OrderStatus
 
     today = _date.today()
 
-    # ── Active algos: entries today that are past NO_TRADE (triggered or open) ──
-    active_statuses = [GridStatus.ALGO_ACTIVE, GridStatus.ORDER_PENDING, GridStatus.OPEN]
+    # IST midnight as UTC — used to scope active/open counts to today only
+    _IST = _tz(_td(hours=5, minutes=30))
+    today_start_ist = _dt.now(_IST).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_ist.astimezone(_tz.utc)
+
+    # ── Active algos: distinct algo_ids with OPEN orders created today (IST) ───
     active_result = await db.execute(
-        sa_select(func.count(GridEntry.id)).where(
-            GridEntry.trading_date == today,
-            GridEntry.status.in_(active_statuses),
-            GridEntry.is_archived == False,
+        sa_select(func.count(func.distinct(Order.algo_id))).where(
+            Order.status == OrderStatus.OPEN,
+            Order.created_at >= today_start_utc,
         )
     )
     active_algos = active_result.scalar() or 0
 
-    # ── Open positions: orders with status OPEN today ──────────────────────────
+    # ── Open positions: OPEN orders created today (IST) ───────────────────────
     open_result = await db.execute(
         sa_select(func.count(Order.id)).where(
             Order.status == OrderStatus.OPEN,
+            Order.created_at >= today_start_utc,
         )
     )
     open_positions = open_result.scalar() or 0
