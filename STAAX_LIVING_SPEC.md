@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.5 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.6 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2812,3 +2812,73 @@ This marks the first successful end-to-end algo trade on STAAX.
 3. Run: ./show_errors.sh
 4. Create test algos: one per strategy type
 5. Watch Orders page for real fill prices
+
+
+## STAAX Roadmap — Post 20 Mar 2026
+
+### Phase 1F — UX Enhancements (Next)
+
+#### 1. Platform-wide
+- P&L live in topbar (fallback to today_pnl working, live MTM pending SmartStream)
+- Move "+ New Algo" from Smart Grid to a dedicated sidebar nav item with distinct icon/color
+- Sidebar live tickers (blocked on Angel One SmartStream fix)
+- Documentation popup: user workflow guide + algo config guide with screenshots
+
+#### 2. Dashboard
+- Active Algos count: IST date filter applied (pending restart to take effect)
+
+#### 3. Smart Grid
+- Rename "All → Today" chip to "All" 
+- Add Delete + Archive buttons beside "All" chip in table header row
+- Both require confirmation popup before executing (grid-level destructive actions)
+
+#### 4. Algo Config
+- RESL/RETP split (re-entry on SL vs TP independently) — queued in Batch 14
+
+#### 5. Orders Page
+- RUN/RE/SYNC/SQ/T button styling improvement (currently too plain)
+- P&L alignment: fixed-width right side so buttons stay aligned across all cards
+  (currently P&L value causes zig-zag misalignment)
+
+#### 6. Indicator Bots
+- Section order: Bots cards → Signal Tracker → Orders
+- Activate real signal tracking per underlying + indicator defined per bot
+
+#### 7. Reports
+- Wire real trade data to Reports page
+- Fix P&L legend and "Click to Expand" alignment/spacing
+- Show/hide algos in PER-ALGO METRICS based on date period (include deleted algos)
+- Sort buttons on each column header in PER-ALGO METRICS table
+
+### Phase 2 — Platform Deployment
+
+#### Infrastructure
+- Multi-app URL structure:
+  - STAAX → URL/STAAX
+  - INVEX → URL/INVEX  
+  - BUDGEX → URL/BUDGEX
+  - FINEX → URL/FINEX
+- AWS EC2 server with Elastic IP (static IP required for Angel One Smart API)
+- SSL certificate + domain name (good URL TBD)
+- Security hardening (env secrets, HTTPS, CORS lockdown)
+
+#### SEBI Compliance (April 1 2026 deadline)
+- Static IP registration on Angel One Smart API dashboard (all 3 accounts)
+- New API key generation after IP registration
+- Family account compliance flow (Angel One working on this for same-WiFi accounts)
+
+### Phase 3 — Premium Redesign
+- Glassmorphism + liquid glass effects throughout
+- Different visual language per module (Grid, Orders, Dashboard, Reports each unique)
+- Single-user platform — performance is not a constraint
+- Premium dark UI with proper design system and CSS variables
+- Target: "institutional trading terminal" aesthetic not "generic SaaS"
+
+### Known Bugs (Monday priority)
+1. Angel One SmartStream not connecting → blocks tickers, W&T, ORB, live P&L
+   Root: _subscribe_open_position_tokens NameError in _auto_start_market_feed
+2. Algo-3 PE leg failure (SL% straddle)
+3. Algo-6/9 W&T failures (need live LTP)
+4. Algo-7/10/12 ORB no trade (need live LTP)
+5. Algo-18 DTE positional error
+6. Wife order routing (safe in PRACTIX, must fix before LIVE)
