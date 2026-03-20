@@ -117,6 +117,10 @@ class AlgoRunner:
         self._zerodha_broker   = None
         self._angel_broker_map: Dict[str, object] = {}  # client_id → AngelOneBroker
 
+        # ORB range levels — stored at breakout, keyed by grid_entry_id
+        # Used to populate PositionMonitor.orb_high / orb_low for SL evaluation
+        self._orb_levels: Dict[str, tuple] = {}  # grid_entry_id → (orb_high, orb_low)
+
         # Rate limiter — 8 orders/sec (SEBI max is 10)
         self._rate_limiter = TokenBucketRateLimiter(rate=8)
 
@@ -564,6 +568,7 @@ class AlgoRunner:
         # ── Register SL/TP monitor ─────────────────────────────────────────────
         if self._sl_tp_monitor and (leg.sl_type or leg.tp_type):
             underlying_token = getattr(leg, "underlying_token", 0) or 0
+            orb_high, orb_low = self._orb_levels.get(str(grid_entry.id), (0.0, 0.0))
             pos_monitor = PositionMonitor(
                 order_id=str(order.id),
                 grid_entry_id=str(grid_entry.id),
@@ -575,6 +580,8 @@ class AlgoRunner:
                 sl_value=leg.sl_value,
                 tp_type=leg.tp_type,
                 tp_value=leg.tp_value,
+                orb_high=orb_high,
+                orb_low=orb_low,
             )
             self._sl_tp_monitor.add_position(
                 pos_monitor,
@@ -943,8 +950,9 @@ class AlgoRunner:
 
     def _make_orb_callback(self, grid_entry_id: str):
         """Returns a callback for ORBTracker on_entry."""
-        async def on_orb_entry(eid: str, entry_price: float):
-            logger.info(f"ORB triggered for {eid} @ {entry_price}")
+        async def on_orb_entry(eid: str, entry_price: float, orb_high: float, orb_low: float):
+            logger.info(f"ORB triggered for {eid} @ {entry_price} | H={orb_high} L={orb_low}")
+            self._orb_levels[eid] = (orb_high, orb_low)
             await self.enter(eid, reentry=False)
 
         return on_orb_entry

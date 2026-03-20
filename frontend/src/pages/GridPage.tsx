@@ -129,6 +129,7 @@ export default function GridPage() {
   const [showArch, setShowArch] = useState(false)
   const [del,      setDel]      = useState<string | null>(null)
   const [opError,  setOpError]  = useState<string>('')   // inline op error
+  const [sortBy,   setSortBy]   = useState<string>('date_desc')
 
   const days = wk ? [...DAYS, ...WEEKENDS] : DAYS
 
@@ -325,6 +326,45 @@ export default function GridPage() {
     await Promise.all(promises)
   }
 
+  // ── Add algo to all weekdays ──────────────────────────────────────────────────
+  const addAllWeekdays = async (algoId: string) => {
+    const algo      = algos.find(x => x.id === algoId)
+    const missing   = DAYS.filter(d => !grid[algoId]?.[d])
+    if (!missing.length) return
+
+    // Optimistic UI for all missing days
+    setGrid(g => ({
+      ...g,
+      [algoId]: {
+        ...g[algoId],
+        ...Object.fromEntries(missing.map(d => [d, {
+          multiplier: 1, status: 'algo_active' as CS, mode: 'practix' as CM,
+          entry: algo?.et || '09:16', exit: algo?.xt || '15:10',
+        }])),
+      },
+    }))
+
+    await Promise.all(missing.map(async day => {
+      try {
+        const res = await gridAPI.deploy({
+          algo_id: algoId, trading_date: weekDates[day],
+          lot_multiplier: 1, is_practix: true,
+        })
+        const gridEntryId = String(res.data?.id || '')
+        setGrid(g => ({
+          ...g,
+          [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], gridEntryId } },
+        }))
+      } catch (e: any) {
+        // Rollback this day
+        setGrid(g => {
+          const u = { ...g[algoId] }; delete u[day]; return { ...g, [algoId]: u }
+        })
+        flashError(e?.response?.data?.detail || `Deploy failed for ${day}`)
+      }
+    }))
+  }
+
   // ── Archive algo ──────────────────────────────────────────────────────────────
   const archAlgo = async (algoId: string) => {
     const algoCells = Object.values(grid[algoId] || {})
@@ -382,10 +422,27 @@ export default function GridPage() {
   const active   = algos.filter(a => !a.arch)
   const archived = algos.filter(a => a.arch)
 
+  const sortedActive = [...active].sort((a, b) => {
+    if (sortBy === 'name_asc')  return a.name.localeCompare(b.name)
+    if (sortBy === 'name_desc') return b.name.localeCompare(a.name)
+    if (sortBy === 'buy_first') {
+      const aHasBuy = a.legs.some(l => l.d === 'B') ? 0 : 1
+      const bHasBuy = b.legs.some(l => l.d === 'B') ? 0 : 1
+      return aHasBuy - bHasBuy
+    }
+    if (sortBy === 'sell_first') {
+      const aHasSell = a.legs.some(l => l.d === 'S') ? 0 : 1
+      const bHasSell = b.legs.some(l => l.d === 'S') ? 0 : 1
+      return aHasSell - bHasSell
+    }
+    return 0  // date_desc = API order (default)
+  })
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Header */}
+      {/* Header — sticky so New Algo button always visible */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)', paddingBottom: '2px' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily:"'ADLaM Display',serif", fontSize:'22px', fontWeight:400 }}>Smart Grid</h1>
@@ -406,9 +463,18 @@ export default function GridPage() {
             <span style={{ fontSize:'14px' }}>📦</span> Archive
             {archived.length > 0 && <span style={{ position:'absolute', top:'4px', right:'4px', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
           </button>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+            style={{ height:'30px', fontSize:'11px', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', borderRadius:'5px', color:'var(--text-muted)', padding:'0 8px', cursor:'pointer' }}>
+            <option value="date_desc">Date Created</option>
+            <option value="name_asc">Name A → Z</option>
+            <option value="name_desc">Name Z → A</option>
+            <option value="buy_first">Buy first</option>
+            <option value="sell_first">Sell first</option>
+          </select>
           <button className="btn btn-primary" onClick={() => nav('/algo/new')}>+ New Algo</button>
         </div>
       </div>
+      </div>{/* end sticky wrapper */}
 
       {/* Archive panel */}
       {showArch && (
@@ -464,7 +530,7 @@ export default function GridPage() {
             </tr>
           </thead>
           <tbody>
-            {active.map(algo => {
+            {sortedActive.map(algo => {
               const st    = worstStatus(grid[algo.id])
               const cells = Object.values(grid[algo.id] || {})
               return (
@@ -494,14 +560,24 @@ export default function GridPage() {
                             </span>
                           ))}
                         </div>
-                        {cells.some(c => c.mode === 'practix') && (
-                          <button onClick={() => promLive(algo.id)}
-                            style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(34,197,94,0.3)', background:'transparent', color:'var(--green)', cursor:'pointer' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            → Promote all to LIVE
-                          </button>
-                        )}
+                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                          {DAYS.some(d => !grid[algo.id]?.[d]) && (
+                            <button onClick={() => addAllWeekdays(algo.id)}
+                              style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                              → All days
+                            </button>
+                          )}
+                          {cells.some(c => c.mode === 'practix') && (
+                            <button onClick={() => promLive(algo.id)}
+                              style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(34,197,94,0.3)', background:'transparent', color:'var(--green)', cursor:'pointer' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                              → Promote all to LIVE
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display:'flex', flexDirection:'column', gap:'2px', flexShrink:0 }}>
                         <IBtn onClick={() => setDel(algo.id)}  icon="🗑" hc="var(--red)"          title="Delete permanently"/>

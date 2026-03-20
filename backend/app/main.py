@@ -363,6 +363,28 @@ async def _build_angel_broker_map(app: "FastAPI", order_placer) -> None:
         logger.warning(f"[STARTUP] _build_angel_broker_map failed (non-fatal): {e}")
 
 
+async def _subscribe_open_position_tokens(ltp_consumer) -> None:
+    """Subscribe instrument tokens of all currently-open orders so LTP flows after restart."""
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.models.order import Order, OrderStatus
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Order.instrument_token)
+                .where(Order.status == OrderStatus.OPEN, Order.instrument_token.isnot(None))
+                .distinct()
+            )
+            tokens = [row[0] for row in result.fetchall() if row[0]]
+        if tokens:
+            ltp_consumer.subscribe(tokens)
+            logger.info(f"[STARTUP MF] Subscribed {len(tokens)} open-position tokens: {tokens}")
+        else:
+            logger.info("[STARTUP MF] No open positions to subscribe")
+    except Exception as e:
+        logger.warning(f"[STARTUP MF] Open-position token subscription failed (non-fatal): {e}")
+
+
 async def _auto_start_market_feed(app: "FastAPI") -> None:
     """
     Called once at startup. If a valid today's broker token exists in DB,
@@ -427,6 +449,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     except Exception as e:
                         logger.warning(f"[STARTUP MF] Index token subscription failed: {e}")
 
+                    await _subscribe_open_position_tokens(ltp_consumer)
                     return  # Zerodha feed started — done
             else:
                 logger.info("[STARTUP MF] Zerodha token is from a previous day — not using")
@@ -502,6 +525,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                 except Exception as e:
                     logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
 
+                await _subscribe_open_position_tokens(ltp_consumer)
                 market_feed_started = True
 
         if not market_feed_started:

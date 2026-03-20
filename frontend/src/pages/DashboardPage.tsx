@@ -76,17 +76,31 @@ export default function DashboardPage() {
     eventsAPI.list(50)
       .then(res => {
         const entries: any[] = res.data || []
-        // API returns newest-first; reverse to get oldest-first for the prepended lines
-        const lines = [...entries].map((e: any) => {
-          const ts  = e.ts
+        // Determine today's date in IST (YYYY-MM-DD)
+        const istNow  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+        const todayStr = istNow.toISOString().slice(0, 10)
+
+        // Build lines oldest-first, inserting date separators for non-today events
+        const lines: string[] = []
+        let lastDateSep = ''
+        // entries arrive newest-first from API; iterate reversed (oldest-first)
+        const oldest = [...entries].reverse()
+        for (const e of oldest) {
+          const eventDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
+          const eventDay  = e.ts ? new Date(e.ts).toISOString().slice(0, 10) : todayStr
+          if (eventDay !== todayStr && eventDate && eventDay !== lastDateSep) {
+            lines.push(`── ${eventDate} ──`)
+            lastDateSep = eventDay
+          }
+          const ts   = e.ts
             ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
             : '--:--:--'
-          const src = e.source ? `[${e.source}] ` : ''
+          const src  = e.source ? `[${e.source}] ` : ''
           const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
-          return `[${ts}] ${icon} ${src}${e.msg}`
-        })
+          lines.push(`[${ts}] ${icon} ${src}${e.msg}`)
+        }
         if (lines.length > 0) {
-          setLog(prev => [...lines.reverse(), ...prev])
+          setLog(prev => [...lines, ...prev])
         }
       })
       .catch(() => {}) // non-fatal — in-memory log still works
@@ -385,11 +399,19 @@ export default function DashboardPage() {
         <div className="card" style={{ background: 'var(--bg-secondary)' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>System Log</div>
           <div style={{ fontFamily: 'monospace', fontSize: '11px', height: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {log.map((line, i) => (
-              <div key={i} style={{ color: line.includes('✅') ? 'var(--green)' : line.includes('⛔') ? 'var(--red)' : line.includes('Starting') || line.includes('Stopping') ? 'var(--accent-amber)' : 'var(--text-muted)' }}>
-                {line}
-              </div>
-            ))}
+            {log.map((line, i) => {
+              const isSep = line.startsWith('──')
+              return (
+                <div key={i} style={isSep ? {
+                  color: 'var(--text-dim)', textAlign: 'center', fontSize: '10px',
+                  letterSpacing: '0.06em', padding: '2px 0', userSelect: 'none',
+                } : {
+                  color: line.includes('✅') ? 'var(--green)' : line.includes('⛔') ? 'var(--red)' : line.includes('Starting') || line.includes('Stopping') ? 'var(--accent-amber)' : 'var(--text-muted)',
+                }}>
+                  {line}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>

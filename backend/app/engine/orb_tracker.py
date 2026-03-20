@@ -56,7 +56,7 @@ class ORBTracker:
         self._callbacks: Dict[str, Callable]  = {}
 
     def register(self, window: ORBWindow, on_entry: Callable):
-        """on_entry(grid_entry_id, entry_price) called on breakout."""
+        """on_entry(grid_entry_id, entry_price, orb_high, orb_low) called on breakout."""
         self._windows[window.grid_entry_id]   = window
         self._callbacks[window.grid_entry_id] = on_entry
         logger.info(f"ORB registered: {window.algo_id} | {window.start_time}–{window.end_time} | {window.direction}")
@@ -94,14 +94,14 @@ class ORBTracker:
             # Monitor for breakout
             if w.direction == "buy" and ltp >= w.entry_high():
                 w.is_triggered = True
-                logger.info(f"🟢 ORB BUY triggered: {w.algo_id} @ {ltp}")
+                logger.info(f"🟢 ORB BUY triggered: {w.algo_id} @ {ltp} | H={w.range_high} L={w.range_low}")
                 cb = self._callbacks.get(eid)
                 if cb:
-                    await cb(eid, w.entry_high())
+                    await cb(eid, w.entry_high(), w.range_high, w.range_low)
 
             elif w.direction == "sell" and ltp <= w.entry_low():
                 w.is_triggered = True
-                logger.info(f"🔴 ORB SELL triggered: {w.algo_id} @ {ltp}")
+                logger.info(f"🔴 ORB SELL triggered: {w.algo_id} @ {ltp} | H={w.range_high} L={w.range_low}")
                 cb = self._callbacks.get(eid)
                 if cb:
-                    await cb(eid, w.entry_low())
+                    await cb(eid, w.entry_low(), w.range_high, w.range_low)

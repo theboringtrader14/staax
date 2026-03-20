@@ -10,6 +10,9 @@ const EXPIRY_OPTIONS = [
   { value: 'current_monthly',label: 'Current Monthly'},
   { value: 'next_monthly',   label: 'Next Monthly'   },
 ]
+// BNF, FINNIFTY, MIDCAPNIFTY have no weekly expiry since Nov 2024
+const MONTHLY_ONLY_CODES = new Set(['BN', 'FN', 'MN'])
+const MONTHLY_ONLY_EXPIRY = EXPIRY_OPTIONS.filter(o => o.value.includes('monthly'))
 const STRIKE_OPTIONS = [...Array.from({ length: 10 }, (_, i) => `ITM${10 - i}`), 'ATM', ...Array.from({ length: 10 }, (_, i) => `OTM${i + 1}`)]
 
 type FeatureKey = 'wt' | 'sl' | 're' | 'tp' | 'tsl' | 'ttp'
@@ -69,7 +72,7 @@ const mkLeg = (n: number): Leg => ({
 })
 const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, re: { ...l.vals.re }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
 
-function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void }) {
+function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void; entryType: string }) {
   const active = FEATURES.filter(f => leg.active[f.key])
   if (!active.length) return null
   const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
@@ -83,7 +86,12 @@ function FeatVals({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Parti
         <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: `${f.color}08`, border: `1px solid ${f.color}22`, borderRadius: '5px', padding: '4px 8px' }}>
           <span style={{ fontSize: '10px', color: f.color, fontWeight: 700, marginRight: '2px' }}>{f.label}:</span>
           {f.key === 'wt'  && <>{sel('wt',  'direction', [['up','↑Up'],['down','↓Dn']])} {inp('wt',  'value', 'val')} {sel('wt',  'unit', [['pts','pts'],['pct','%']])}</>}
-          {f.key === 'sl'  && <>{sel('sl',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']])} {inp('sl',  'value', 'val')}</>}
+          {f.key === 'sl'  && (() => {
+            const slOpts: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']]
+            if (entryType === 'orb') { slOpts.push(['orb_high','ORB High'],['orb_low','ORB Low']) }
+            const isOrbSL = leg.vals.sl.type === 'orb_high' || leg.vals.sl.type === 'orb_low'
+            return <>{sel('sl', 'type', slOpts)} {!isOrbSL && inp('sl', 'value', 'val')}</>
+          })()}
           {f.key === 're'  && <>{sel('re',  'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']])} {sel('re',  'trigger', [['sl','SL'],['tp','TP'],['any','Any']])} {sel('re', 'count', [['1','1×'],['2','2×'],['3','3×'],['4','4×'],['5','5×']])}</>}
           {f.key === 'tp'  && <>{sel('tp',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']])} {inp('tp',  'value', 'val')}</>}
           {f.key === 'tsl' && <>{inp('tsl', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('tsl', 'y', 'Y')} {sel('tsl', 'unit', [['pts','pts'],['pct','%']])}</>}
@@ -102,6 +110,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
   const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)' }
   const csSt = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
+  const childExpiryOpts = MONTHLY_ONLY_CODES.has(child.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
   const depthColor = depth === 1 ? '#A78BFA' : depth === 2 ? '#F59E0B' : '#22C55E'
   const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
   const tslBlocked = !child.sl_enabled
@@ -118,11 +127,16 @@ function JourneyChildPanel({ child, depth, onChange }: {
         {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
           <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: '1px solid rgba(0,176,240,0.3)', cursor: 'pointer' }}>{child.instType}</button>
-          <select className="staax-select" value={child.instCode} onChange={e => u('instCode', e.target.value)} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
+          <select className="staax-select" value={child.instCode} onChange={e => {
+            const code = e.target.value
+            const patch: Partial<JourneyChild> = { instCode: code }
+            if (MONTHLY_ONLY_CODES.has(code) && !child.expiry.includes('monthly')) patch.expiry = 'current_monthly'
+            onChange({ ...child, ...patch })
+          }} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
           <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,197,94,0.3)', cursor: 'pointer' }}>{child.direction}</button>
           {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>}
           {child.instType === 'OP' && <>
-            <select className="staax-select" value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            <select className="staax-select" value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{childExpiryOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             <select className="staax-select" value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
             {child.strikeMode === 'leg' && <select className="staax-select" value={child.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...cs, width: '70px' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
             {child.strikeMode === 'premium' && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...csSt, width: '82px' }} />}
@@ -227,17 +241,19 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   )
 }
 
-function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, onBlockedClick }: {
+function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, onBlockedClick, entryType }: {
   leg: Leg; isDragging: boolean
   onUpdate: (id: string, u: Partial<Leg>) => void
   onRemove: (id: string) => void
   onCopy:   (id: string) => void
   dragHandleProps: any
   onBlockedClick: (msg: string) => void
+  entryType: string
 }) {
   const u = (k: keyof Leg, v: any) => onUpdate(leg.id, { [k]: v })
   const s    = { height: '28px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)' }
   const sInp = { height: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
+  const expiryOpts = MONTHLY_ONLY_CODES.has(leg.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
 
   return (
     <div style={{ background: 'var(--bg-secondary)', border: `1px solid ${isDragging ? 'var(--accent-blue)' : 'var(--bg-border)'}`, borderRadius: '7px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'border-color 0.1s' }}>
@@ -245,11 +261,16 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         <span {...dragHandleProps} title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-dim)', fontSize: '13px', flexShrink: 0, padding: '0 2px', userSelect: 'none' }}>⠿</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', minWidth: '20px', textAlign: 'center' }}>L{leg.no}</span>
         <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: leg.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: leg.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: `1px solid ${leg.instType === 'OP' ? 'rgba(0,176,240,0.3)' : 'rgba(215,123,18,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
-        <select className="staax-select" value={leg.instCode} onChange={e => u('instCode', e.target.value)} style={{ ...s, color: leg.instCode ? 'var(--text)' : 'var(--text-muted)' }}>{Object.entries(INST_CODES).map(([c, n]) => <option key={c} value={c} title={n}>{c}</option>)}</select>
+        <select className="staax-select" value={leg.instCode} onChange={e => {
+          const code = e.target.value
+          const patch: Partial<Leg> = { instCode: code }
+          if (MONTHLY_ONLY_CODES.has(code) && !leg.expiry.includes('monthly')) patch.expiry = 'current_monthly'
+          onUpdate(leg.id, patch)
+        }} style={{ ...s, color: leg.instCode ? 'var(--text)' : 'var(--text-muted)' }}>{Object.entries(INST_CODES).map(([c, n]) => <option key={c} value={c} title={n}>{c}</option>)}</select>
         <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: leg.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: leg.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: `1px solid ${leg.direction === 'BUY' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
         {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
-          <select className="staax-select" value={leg.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...s, width: '128px', color: leg.expiry === 'current_weekly' ? 'var(--text-muted)' : 'var(--text)' }}>{EXPIRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+          <select className="staax-select" value={leg.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...s, width: '128px', color: leg.expiry === 'current_weekly' ? 'var(--text-muted)' : 'var(--text)' }}>{expiryOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
           <select className="staax-select" value={leg.strikeMode} onChange={e => { u('strikeMode', e.target.value); if (e.target.value === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} style={{ ...s, color: leg.strikeMode === 'leg' ? 'var(--text-muted)' : 'var(--text)' }}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
           {leg.strikeMode === 'leg' && <select className="staax-select" value={leg.strikeType} onChange={e => u('strikeType', e.target.value)} style={{ ...s, width: '70px', color: leg.strikeType === 'atm' ? 'var(--text-muted)' : 'var(--text)' }}>{STRIKE_OPTIONS.map(st => <option key={st} value={st.toLowerCase()}>{st}</option>)}</select>}
           {leg.strikeMode === 'premium' && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...sInp, width: '82px' }} />}
@@ -278,7 +299,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--red)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
-      <FeatVals leg={leg} onUpdate={onUpdate} />
+      <FeatVals leg={leg} onUpdate={onUpdate} entryType={entryType} />
       <JourneyPanel leg={leg} onUpdate={onUpdate} />
     </div>
   )
@@ -496,7 +517,8 @@ export default function AlgoPage() {
           if (!hasValue) return `❌ ${L}: ${feat.label} is enabled but values are missing`
         }
       }
-      if (leg.active['sl'] && !(leg.vals.sl as any).value) return `❌ ${L}: SL value is required when SL is enabled`
+      const slType = (leg.vals.sl as any).type || ''
+      if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return `❌ ${L}: SL value is required when SL is enabled`
       if (leg.active['tp'] && !(leg.vals.tp as any).value) return `❌ ${L}: TP value is required when TP is enabled`
       if (leg.active['wt'] && !(leg.vals.wt as any).value) return `❌ ${L}: W&T value is required when W&T is enabled`
       if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return `❌ ${L}: TSL requires SL to be enabled with a value`
@@ -537,7 +559,8 @@ export default function AlgoPage() {
       // Features
       wt_enabled:  l.active.wt,
       wt_direction: l.vals.wt.direction, wt_value: parseFloat(l.vals.wt.value) || undefined, wt_unit: l.vals.wt.unit,
-      sl_type:  l.active.sl ? l.vals.sl.type : undefined,  sl_value: l.active.sl ? parseFloat(l.vals.sl.value) : undefined,
+      sl_type:  l.active.sl ? l.vals.sl.type : undefined,
+      sl_value: l.active.sl && !['orb_high','orb_low'].includes(l.vals.sl.type) ? parseFloat(l.vals.sl.value) : undefined,
       tp_type:  l.active.tp ? l.vals.tp.type : undefined,  tp_value: l.active.tp ? parseFloat(l.vals.tp.value) : undefined,
       tsl_enabled: l.active.tsl, tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
       ttp_enabled: l.active.ttp, ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
@@ -773,7 +796,7 @@ export default function AlgoPage() {
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
           style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent-blue)' : 'none', borderRadius: '7px' }}>
-          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} />
+          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} entryType={entryType} />
         </div>
       ))}
 

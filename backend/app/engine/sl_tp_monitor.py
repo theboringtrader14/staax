@@ -34,6 +34,8 @@ class PositionMonitor:
     tp_level:          float = 0.0
     is_active:         bool  = True
     tsl_trail_count:   int   = 0
+    orb_high:          float = 0.0   # ORB range high — used as SL for sell legs
+    orb_low:           float = 0.0   # ORB range low  — used as SL for buy legs
 
     def compute_levels(self):
         """Compute initial SL and TP levels from entry price."""
@@ -53,7 +55,18 @@ class PositionMonitor:
                 self.tp_level = self.entry_price * (1 + self.tp_value/100) if self.direction == "buy" else self.entry_price * (1 - self.tp_value/100)
 
     def is_sl_hit(self, ltp: float, ul_ltp: Optional[float] = None) -> bool:
-        if not self.sl_type or not self.sl_value:
+        if not self.sl_type:
+            return False
+        # ORB SL types use the locked ORB range levels — no sl_value needed
+        if self.sl_type == "orb_high" and self.orb_high:
+            # Buy leg SL: instrument rises above ORB High (unexpected — treat as SL)
+            # Sell leg SL: instrument rises above ORB High
+            return ltp >= self.orb_high
+        if self.sl_type == "orb_low" and self.orb_low:
+            # Buy leg SL: instrument falls below ORB Low
+            # Sell leg SL: instrument falls below ORB Low (unexpected reversal)
+            return ltp <= self.orb_low
+        if not self.sl_value:
             return False
         if self.sl_type in ("pts_instrument", "pct_instrument"):
             return ltp <= self.sl_actual if self.direction == "buy" else ltp >= self.sl_actual
