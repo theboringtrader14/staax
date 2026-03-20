@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.3 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.4 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2714,3 +2714,69 @@ This marks the first successful end-to-end algo trade on STAAX.
 - Algo-9: W&T failing (no LTP feed)
 - Algo-7/10/12: ORB no trade (no LTP feed)
 - Algo-18: DTE positional error
+
+
+## Batch 18 — Orders UX + Indicator Bots + Sidebar Tickers
+
+### P0 — Critical fixes
+1. AlgoPage: unsaved changes popup (useBlocker alternative)
+   - Current: banner shows but navigation not blocked
+   - Fix: intercept sidebar NavLink clicks when isDirty=true
+   - Show confirmation modal "Unsaved changes — Leave anyway?"
+   - Use useNavigate + local pendingPath state
+
+2. Active algos count wrong (Dashboard shows 1 when 0)
+   - Check /api/v1/system/stats active_algos count
+   - Likely counting grid entries not actual running algos
+
+3. Exit time shows 09:31 (default algo exit time, not actual exit)
+   - Orders page shows configured exit_time not actual order.exit_time
+   - Fix: use order.exit_time from DB not algo config
+
+### P1 — Orders page improvements  
+4. Algo name click → show strategy popup (not navigate)
+   - Show popup modal with algo parameters (hide empty ones)
+   - Close button returns user to Orders page
+
+5. Historical orders filter
+   - Intraday closed orders: only show on the day they were traded
+   - STBT/BTST: show on exit day not entry day
+   - Add is_historical flag or filter by fill_time date
+
+6. SL/TP/W&T display consolidation
+   - Show calculated values with setting in parenthesis
+   - O: = Original (configured level price)
+   - A: = Actual (current adjusted level, e.g. after TSL moves)
+   - Only show A/O when TSL/TTP is active
+   - Plain vanilla: just show price (no A/O prefix)
+   - W&T: show trigger price
+   - Format: "23150 (50%)" or "23150 (50pts)"
+
+7. Entry/Fill consolidation  
+   - ENTRY/REF: the reference price (ATM strike price at time of selection)
+   - FILL: actual avg fill price (may differ from entry due to slippage)
+   - Consolidate into one column: show FILL as primary, ENTRY as secondary
+   - Format: "Fill: 23150 / Ref: 23100"
+
+8. MTM in topbar + browser tab still not updating
+   - Check TopBar polling + setLivePnl wiring
+
+### P2 — Indicator Bots page
+9. Add Signal Tracker section below indicator cards
+   - Shows active signals being tracked
+   - Columns: Signal, Underlying, Direction, Triggered At, Status
+
+10. Add Orders section below Signal Tracker
+    - Shows orders placed by indicator bots
+    - Columns: #, STATUS, SYMBOL, LOTS, ENTRY/FILL + date, LTP, EXIT + date, REASON, P&L
+    - Containerized scroll like Orders page (no day tabs)
+    - Simple cards without day-wise grouping
+
+11. Move Indicator Bots tab after Orders in sidebar
+
+### P2 — Sidebar tickers (TradingView alternative)
+12. Use TradingView free widget API for index prices
+    - Replace Angel One SmartStream attempt
+    - TradingView provides free real-time index quotes via widget
+    - Embed TradingView ticker widget in sidebar
+    - Show: NIFTY, BANKNIFTY, SENSEX, FINNIFTY, MIDCAP, GOLDM
