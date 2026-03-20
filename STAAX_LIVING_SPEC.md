@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.1 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2607,6 +2607,17 @@ This marks the first successful end-to-end algo trade on STAAX.
    - ORB High = SL for sell trades, ORB Low = SL for buy trades
    - Backend: store orb_high and orb_low on AlgoState when ORB fires
    - File: engine/algo_runner.py, frontend/src/pages/AlgoPage.tsx
+
+### P0 — LTP feed for open positions
+- When order is placed, subscribe instrument_token to ltp_consumer
+- LTP updates must flow to Orders page LTP column and MTM/P&L
+- File: engine/algo_runner.py
+
+### P1 — System Log date filter
+- Show only today's logs by default (filter by today's date on load)
+- If showing older logs, prepend a date stamp: "── 19 Mar 2026 ──"
+- Backend: /events/ endpoint already has timestamp — filter by date on frontend
+- File: frontend/src/pages/DashboardPage.tsx
 
 ### Notes
 - Karthik AO: testing only (no cash, margin errors expected and OK)
