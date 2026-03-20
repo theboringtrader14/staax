@@ -79,15 +79,14 @@ export default function DashboardPage() {
         // Today's date in IST as YYYY-MM-DD — 'sv' locale gives ISO format in the given tz
         const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
 
-        // Build lines oldest-first, inserting date separators for non-today events
+        // Build lines newest-first — entries arrive newest-first from API, iterate as-is
         const lines: string[] = []
         let lastDateSep = ''
-        // entries arrive newest-first from API; iterate reversed (oldest-first)
-        const oldest = [...entries].reverse()
-        for (const e of oldest) {
+        for (const e of entries) {
           const eventDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
           // Use 'sv' locale for YYYY-MM-DD in IST — avoids UTC vs IST date mismatch
           const eventDay  = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
+          // Insert separator when we encounter events from a new older day
           if (eventDay !== todayStr && eventDate && eventDay !== lastDateSep) {
             lines.push(`── ${eventDate} ──`)
             lastDateSep = eventDay

@@ -406,6 +406,9 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
         logger.warning("[STARTUP MF] ltp_consumer not found on app.state — skipping")
         return
 
+    # Explicit local binding — avoids any future hoisting / closure ambiguity
+    _subscribe_tokens = _subscribe_open_position_tokens
+
     logger.info("[STARTUP MF] Checking for valid broker token in DB...")
 
     try:
@@ -452,7 +455,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     except Exception as e:
                         logger.warning(f"[STARTUP MF] Index token subscription failed: {e}")
 
-                    await _subscribe_open_position_tokens(ltp_consumer)
+                    await _subscribe_tokens(ltp_consumer)
                     return  # Zerodha feed started — done
             else:
                 logger.info("[STARTUP MF] Zerodha token is from a previous day — not using")
@@ -535,7 +538,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                 except Exception as e:
                     logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
 
-                await _subscribe_open_position_tokens(ltp_consumer)
+                await _subscribe_tokens(ltp_consumer)
                 market_feed_started = True
 
         if not market_feed_started:

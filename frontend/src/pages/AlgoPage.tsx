@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams, useBlocker } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { algosAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 
@@ -388,8 +388,11 @@ export default function AlgoPage() {
   const [showTomorrowWarn, setShowTomorrowWarn] = useState(false)  // F6
   const [isLocked, setIsLocked]     = useState(false)              // F5 — edit lock
 
-  // Block in-app navigation when there are unsaved changes
-  const blocker = { state: "unblocked", proceed: () => {}, reset: () => {} }; e.returnValue = '' } }
+  // Warn on browser close/refresh when unsaved
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty) { e.preventDefault(); e.returnValue = '' }
+    }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty])
@@ -669,23 +672,6 @@ export default function AlgoPage() {
 
   return (
     <div>
-      {/* Unsaved changes confirmation dialog */}
-      {blocker.state === 'blocked' && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '10px', padding: '28px 32px', width: '380px', textAlign: 'center' }}>
-            <div style={{ fontSize: '22px', marginBottom: '10px' }}>⚠️</div>
-            <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '8px' }}>Unsaved changes</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6 }}>
-              You have unsaved changes to this algo.<br />Leave without saving?
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button className="btn btn-ghost" style={{ minWidth: '110px' }} onClick={() => blocker.reset?.()}>Keep editing</button>
-              <button className="btn btn-primary" style={{ minWidth: '110px', background: 'var(--red)', borderColor: 'var(--red)' }}
-                onClick={() => blocker.proceed?.()}>Leave anyway</button>
-            </div>
-          </div>
-        </div>
-      )}
       <style>{`
         .staax-time-input::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
         .staax-time-input::-webkit-inner-spin-button { display: none !important; }
@@ -700,6 +686,7 @@ export default function AlgoPage() {
       <div className="page-header">
         <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
         <div className="page-header-actions">
+          {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
           {saveError  && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveError}</span>}
           <button className="btn btn-ghost" onClick={() => navigate('/grid')}>Cancel</button>

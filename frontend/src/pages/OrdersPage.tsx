@@ -77,9 +77,20 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
       <td style={{ width: COLS[5], fontWeight: 600 }}>{leg.fillPrice ?? '—'}</td>
       <td style={{ width: COLS[6], fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>{ltp != null ? ltp.toFixed(2) : '—'}</td>
       <td style={{ width: COLS[7], fontSize: '11px' }}>
-        {leg.slActual != null && <div style={{ color: 'var(--amber)' }}>A:{leg.slActual}</div>}
-        {leg.slOrig   != null && <div style={{ color: 'var(--text-muted)' }}>O:{leg.slOrig}</div>}
-        {leg.slOrig == null && '—'}
+        {(() => {
+          const slPrice = leg.fillPrice != null && leg.slOrig != null
+            ? leg.fillPrice * (1 - (leg.dir === 'BUY' ? 1 : -1) * leg.slOrig / 100)
+            : null
+          return <>
+            {leg.slActual != null && <div style={{ color: 'var(--amber)' }}>A:{leg.slActual.toFixed(1)}</div>}
+            {slPrice != null
+              ? <div style={{ color: 'var(--text-muted)' }}>O:{slPrice.toFixed(1)}</div>
+              : leg.slOrig != null
+                ? <div style={{ color: 'var(--text-muted)' }}>O:{leg.slOrig}%</div>
+                : null}
+            {leg.slActual == null && leg.slOrig == null && '—'}
+          </>
+        })()}
       </td>
       <td style={{ width: COLS[8], color: 'var(--text-muted)' }}>{leg.target ?? '—'}</td>
       <td style={{ width: COLS[9], fontSize: '11px' }}>
@@ -92,11 +103,13 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
       </td>
       <td style={{ width: COLS[10] }}>
         {leg.exitReason
-          ? <span className="tag" style={{ color: 'var(--red)', background: 'rgba(239,68,68,0.1)', fontSize: '10px' }}>{leg.exitReason}</span>
+          ? <span className="tag" style={{ color: 'var(--red)', background: 'rgba(239,68,68,0.1)', fontSize: '10px' }}>
+              {leg.exitReason === 'auto_sq' ? 'Exit Time' : leg.exitReason}
+            </span>
           : '—'}
       </td>
       <td style={{ width: COLS[11], fontWeight: 700, textAlign: 'right', color: (leg.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
-        {leg.pnl != null ? `${leg.pnl >= 0 ? '+' : ''}₹${Math.abs(leg.pnl).toLocaleString('en-IN')}` : '—'}
+        {leg.pnl != null && leg.pnl !== 0 ? `${leg.pnl >= 0 ? '+' : ''}₹${Math.abs(leg.pnl).toLocaleString('en-IN')}` : '—'}
       </td>
     </tr>
     {leg.status === 'error' && leg.errorMessage && (

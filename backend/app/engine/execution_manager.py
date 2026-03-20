@@ -18,6 +18,7 @@ Responsibilities:
   - Write every decision to execution_logs (DB audit trail)
   - Enforce cancel rate guard on square-offs
 """
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -51,6 +52,7 @@ class ExecutionManager:
 
     def __init__(self) -> None:
         self._order_placer: Optional[OrderPlacer] = None
+        self._locks: dict[str, asyncio.Lock] = {}   # P2.1 — per-idempotency_key lock
         logger.info("[EM] ExecutionManager initialised")
 
     # ── Wiring ────────────────────────────────────────────────────────────────
@@ -132,6 +134,51 @@ class ExecutionManager:
             return f"algo_tag missing for live order algo={algo_id}"
         return None
 
+    # ── Daily loss guard (P2.7) ───────────────────────────────────────────────
+
+    async def _check_daily_loss(self, db, account_id: str, is_practix: bool) -> Optional[str]:
+        """
+        Returns a block reason if today's realized P&L for the account has breached global_sl.
+        Skips practix orders (paper trading) and accounts without a global_sl set.
+        """
+        if is_practix:
+            return None
+        try:
+            from sqlalchemy import select, func
+            from app.models.account import Account
+            from app.models.order import Order, OrderStatus
+            import uuid as _uuid
+
+            acc_uuid = _uuid.UUID(account_id) if account_id else None
+            if not acc_uuid:
+                return None
+
+            # Load global_sl for this account
+            result = await db.execute(select(Account).where(Account.id == acc_uuid))
+            account = result.scalar_one_or_none()
+            if not account or not account.global_sl:
+                return None
+
+            # Sum today's closed P&L for this account
+            today_str = datetime.now(IST).date().isoformat()
+            pnl_result = await db.execute(
+                select(func.sum(Order.pnl)).where(
+                    Order.account_id == acc_uuid,
+                    Order.status == OrderStatus.CLOSED,
+                    Order.trading_date == today_str,
+                    Order.pnl.isnot(None),
+                )
+            )
+            total_pnl = pnl_result.scalar_one_or_none() or 0.0
+            if total_pnl <= -abs(account.global_sl):
+                return (
+                    f"Daily loss guard triggered for account={account_id}: "
+                    f"realized_pnl={total_pnl:.0f} <= -global_sl={account.global_sl:.0f}"
+                )
+        except Exception as e:
+            logger.warning(f"[EM] Daily loss check failed (non-fatal): {e}")
+        return None
+
     # ── Primary placement entry point ─────────────────────────────────────────
 
     async def place(
@@ -157,6 +204,41 @@ class ExecutionManager:
         Gate, sign, and route an order through RetryQueue → OrderPlacer.
         Returns broker_order_id on success, None on block or failure.
         """
+        # P2.1 — per-idempotency_key lock: deduplicate concurrent placement calls
+        lock = self._locks.setdefault(idempotency_key, asyncio.Lock())
+        if lock.locked():
+            logger.warning(f"[EM] Duplicate place() for idempotency_key={idempotency_key} — skipping")
+            return None
+        async with lock:
+            return await self._place_inner(
+                db=db, idempotency_key=idempotency_key,
+                algo_id=algo_id, account_id=account_id,
+                symbol=symbol, exchange=exchange, direction=direction,
+                quantity=quantity, order_type=order_type, ltp=ltp,
+                algo_tag=algo_tag, is_practix=is_practix,
+                is_overnight=is_overnight, limit_price=limit_price,
+                broker_type=broker_type, symbol_token=symbol_token,
+            )
+
+    async def _place_inner(
+        self,
+        db,
+        idempotency_key: str,
+        algo_id:         str,
+        account_id:      str,
+        symbol:          str,
+        exchange:        str,
+        direction:       str,
+        quantity:        int,
+        order_type:      str,
+        ltp:             float,
+        algo_tag:        str  = "",
+        is_practix:      bool = True,
+        is_overnight:    bool = False,
+        limit_price:     Optional[float] = None,
+        broker_type:     str  = "zerodha",
+        symbol_token:    str  = "",
+    ) -> Optional[str]:
         await self._log(db, "PLACE", "PENDING",
                         algo_tag=algo_tag, algo_id=algo_id,
                         account_id=account_id)
@@ -168,6 +250,15 @@ class ExecutionManager:
                             algo_tag=algo_tag, algo_id=algo_id,
                             account_id=account_id, reason=block_reason)
             logger.error(f"[EM] ORDER BLOCKED — {block_reason}")
+            return None
+
+        # ── Daily loss guard (P2.7) ───────────────────────────────────────────
+        loss_reason = await self._check_daily_loss(db, account_id, is_practix)
+        if loss_reason:
+            await self._log(db, "PLACE", "BLOCKED",
+                            algo_tag=algo_tag, algo_id=algo_id,
+                            account_id=account_id, reason=loss_reason)
+            logger.error(f"[EM] ORDER BLOCKED — {loss_reason}")
             return None
 
         if self._order_placer is None:
@@ -212,6 +303,13 @@ class ExecutionManager:
                             algo_tag=algo_tag, algo_id=algo_id,
                             account_id=account_id)
 
+        # P2.3 — trigger reconciliation pass immediately after placement
+        try:
+            from app.engine.order_reconciler import order_reconciler
+            asyncio.ensure_future(order_reconciler.run())
+        except Exception as e:
+            logger.debug(f"[EM] Post-place reconciler trigger failed (non-fatal): {e}")
+
         return result
 
     # ── Square-off entry point ────────────────────────────────────────────────
@@ -236,6 +334,35 @@ class ExecutionManager:
         Bypasses kill switch and market hours — SQ is always permitted.
         Cancel rate guard applied.
         """
+        # P2.1 — per-idempotency_key lock: deduplicate concurrent square-off calls
+        lock = self._locks.setdefault(idempotency_key, asyncio.Lock())
+        if lock.locked():
+            logger.warning(f"[EM] Duplicate square_off() for idempotency_key={idempotency_key} — skipping")
+            return None
+        async with lock:
+            return await self._square_off_inner(
+                db=db, idempotency_key=idempotency_key,
+                algo_id=algo_id, account_id=account_id,
+                symbol=symbol, exchange=exchange, direction=direction,
+                quantity=quantity, algo_tag=algo_tag,
+                is_practix=is_practix, broker_type=broker_type, symbol_token=symbol_token,
+            )
+
+    async def _square_off_inner(
+        self,
+        db,
+        idempotency_key: str,
+        algo_id:         str,
+        account_id:      str,
+        symbol:          str,
+        exchange:        str,
+        direction:       str,
+        quantity:        int,
+        algo_tag:        str  = "",
+        is_practix:      bool = True,
+        broker_type:     str  = "zerodha",
+        symbol_token:    str  = "",
+    ) -> Optional[str]:
         await self._log(db, "SQ", "PENDING",
                         algo_tag=algo_tag, algo_id=algo_id,
                         account_id=account_id)
@@ -282,6 +409,14 @@ class ExecutionManager:
                         algo_tag=algo_tag, algo_id=algo_id,
                         account_id=account_id,
                         reason=f"broker_order_id={result}" if result else "")
+
+        # P2.3 — trigger reconciliation pass immediately after square-off
+        try:
+            from app.engine.order_reconciler import order_reconciler
+            asyncio.ensure_future(order_reconciler.run())
+        except Exception as e:
+            logger.debug(f"[EM] Post-sq reconciler trigger failed (non-fatal): {e}")
+
         return result
 
 

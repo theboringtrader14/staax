@@ -365,6 +365,35 @@ export default function GridPage() {
     }))
   }
 
+  // ── Add ALL active algos to today's column ────────────────────────────────────
+  const addAllToToday = async () => {
+    const now = new Date()
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    const todayDay = ['SUN','MON','TUE','WED','THU','FRI','SAT'][ist.getDay()]
+    if (!days.includes(todayDay)) { flashError('Today is not a trading day'); return }
+    const tradingDate = weekDates[todayDay]
+    const algosToAdd  = sortedActive.filter(a => !grid[a.id]?.[todayDay])
+    if (!algosToAdd.length) return
+
+    setGrid(g => {
+      const u = { ...g }
+      for (const a of algosToAdd)
+        u[a.id] = { ...g[a.id], [todayDay]: { multiplier:1, status:'algo_active' as CS, mode:'practix' as CM, entry:a.et||'09:16', exit:a.xt||'15:10' } }
+      return u
+    })
+
+    await Promise.all(algosToAdd.map(async a => {
+      try {
+        const res = await gridAPI.deploy({ algo_id:a.id, trading_date:tradingDate, lot_multiplier:1, is_practix:true })
+        const gridEntryId = String(res.data?.id || '')
+        setGrid(g => ({ ...g, [a.id]: { ...g[a.id], [todayDay]: { ...g[a.id][todayDay], gridEntryId } } }))
+      } catch (e: any) {
+        setGrid(g => { const u = { ...g[a.id] }; delete u[todayDay]; return { ...g, [a.id]: u } })
+        flashError(e?.response?.data?.detail || `Deploy failed for ${a.name}`)
+      }
+    }))
+  }
+
   // ── Archive algo ──────────────────────────────────────────────────────────────
   const archAlgo = async (algoId: string) => {
     const algoCells = Object.values(grid[algoId] || {})
@@ -510,7 +539,7 @@ export default function GridPage() {
       </div>
 
       {/* Grid table — flex:1 fills remaining height, overflow:auto scrolls X and Y */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <colgroup>
             <col style={{ width:'200px' }}/>
@@ -518,9 +547,19 @@ export default function GridPage() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>ALGO</th>
+              <th style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  ALGO
+                  <button onClick={addAllToToday} title="Deploy all active algos to today"
+                    style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer', fontWeight:600 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    All → Today
+                  </button>
+                </div>
+              </th>
               {days.map(d => (
-                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)' }}>
+                <th key={d} style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)' }}>
                   {d}
                   <div style={{ fontSize:'9px', color:'var(--text-dim)', fontWeight:400, marginTop:'1px' }}>
                     {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}
