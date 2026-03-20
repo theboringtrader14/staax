@@ -582,7 +582,8 @@ export default function AlgoPage() {
       instrument:      l.instType === 'FU' ? 'fu' : l.optType.toLowerCase(),
       underlying:      INST_CODES[l.instCode] || l.instCode,
       expiry:          l.expiry,
-      strike_type:     l.strikeType,
+      strike_type:     l.strikeMode === 'premium' ? 'premium' : l.strikeMode === 'straddle' ? 'straddle_premium' : l.strikeType,
+      strike_value:    (l.strikeMode === 'premium' || l.strikeMode === 'straddle') ? parseFloat(l.premiumVal) || undefined : undefined,
       lots:            parseInt(l.lots) || 1,
       opt_type:        l.optType.toLowerCase(),
       // Features

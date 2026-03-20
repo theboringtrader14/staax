@@ -507,6 +507,13 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             # Load JWT token into broker instance so LTP + order calls work
             feed_token    = ao_acc.feed_token or ""
             refresh_token = ao_acc.refresh_token if hasattr(ao_acc, "refresh_token") else ""
+            ft_preview = (feed_token[:10] + "...") if len(feed_token) > 10 else (feed_token or "EMPTY")
+            logger.info(
+                f"[STARTUP MF] AO {ao_acc.nickname}: "
+                f"feed_token={'SET (' + str(len(feed_token)) + ' chars) [' + ft_preview + ']' if feed_token else 'EMPTY'}, "
+                f"access_token={'SET' if ao_acc.access_token else 'EMPTY'}, "
+                f"api_key={'SET' if ao_acc.api_key else 'EMPTY'}"
+            )
             await ao_broker.load_token(ao_acc.access_token, feed_token, refresh_token or "")
             logger.info(f"[STARTUP MF] Token loaded into {broker_key}")
 

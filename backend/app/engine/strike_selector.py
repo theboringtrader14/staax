@@ -155,6 +155,9 @@ class StrikeSelector:
         wd = EXPIRY_WEEKDAY.get(underlying.upper(), 3)  # default Thursday
 
         days_ahead = (wd - today.weekday()) % 7
+        # If today IS expiry day, treat it as already expired — advance to next week
+        if days_ahead == 0:
+            days_ahead = 7
 
         if expiry == "current_weekly":
             return (today + timedelta(days=days_ahead)).isoformat()

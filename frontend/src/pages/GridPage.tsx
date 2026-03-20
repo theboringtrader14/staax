@@ -129,7 +129,7 @@ export default function GridPage() {
   const [showArch, setShowArch] = useState(false)
   const [del,      setDel]      = useState<string | null>(null)
   const [opError,  setOpError]  = useState<string>('')   // inline op error
-  const [sortBy,   setSortBy]   = useState<string>('date_desc')
+  const [sortBy,   setSortBy]   = useState<string>(() => localStorage.getItem('staax_grid_sort') || 'date_desc')
 
   const days = wk ? [...DAYS, ...WEEKENDS] : DAYS
 
@@ -459,8 +459,8 @@ export default function GridPage() {
             <input type="checkbox" checked={wk} onChange={e => setWk(e.target.checked)} style={{ accentColor:'var(--accent-blue)' }}/>
             Show Weekends
           </label>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            style={{ height:'30px', fontSize:'11px', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', borderRadius:'5px', color:'var(--text-muted)', padding:'0 8px', cursor:'pointer' }}>
+          <select value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('staax_grid_sort', e.target.value) }}
+            className="staax-select" style={{ width:'130px' }}>
             <option value="date_desc">Date Created</option>
             <option value="name_asc">Name A → Z</option>
             <option value="name_desc">Name Z → A</option>
@@ -543,14 +543,16 @@ export default function GridPage() {
                         <Pie s={st}/>
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
+                        {/* Row 1: Name */}
                         <div onClick={() => nav(`/algo/${algo.id}`)} title="Click to edit"
-                          style={{ fontWeight:700, fontSize:'12px', color:'var(--accent-blue)', cursor:'pointer', marginBottom:'2px',
+                          style={{ fontWeight:700, fontSize:'12px', color:'var(--accent-blue)', cursor:'pointer', marginBottom:'3px',
                             whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
                             textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.35)' }}>
                           {algo.name}
                         </div>
-                        <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'4px' }}>{algo.account}</div>
-                        <div style={{ display:'flex', gap:'3px', flexWrap:'wrap', marginBottom:'5px' }}>
+                        {/* Row 2: Account + leg chips on same line */}
+                        <div style={{ display:'flex', alignItems:'center', gap:'4px', flexWrap:'wrap', marginBottom:'4px' }}>
+                          <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'var(--bg-surface)', padding:'1px 5px', borderRadius:'3px', border:'1px solid var(--bg-border)', flexShrink:0 }}>{algo.account}</span>
                           {algo.legs.map((l, i) => (
                             <span key={i} style={{ fontSize:'9px', fontWeight:700, padding:'1px 4px', borderRadius:'3px',
                               background: l.d==='B' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
@@ -560,24 +562,27 @@ export default function GridPage() {
                             </span>
                           ))}
                         </div>
-                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                          {DAYS.some(d => !grid[algo.id]?.[d]) && (
-                            <button onClick={() => addAllWeekdays(algo.id)}
-                              style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
-                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              → All days
-                            </button>
-                          )}
-                          {cells.some(c => c.mode === 'practix') && (
-                            <button onClick={() => promLive(algo.id)}
-                              style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(34,197,94,0.3)', background:'transparent', color:'var(--green)', cursor:'pointer' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
-                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              → Promote all to LIVE
-                            </button>
-                          )}
-                        </div>
+                        {/* Row 3: → All days + → Promote to Live on same line */}
+                        {(DAYS.some(d => !grid[algo.id]?.[d]) || cells.some(c => c.mode === 'practix')) && (
+                          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                            {DAYS.some(d => !grid[algo.id]?.[d]) && (
+                              <button onClick={() => addAllWeekdays(algo.id)}
+                                style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                → All days
+                              </button>
+                            )}
+                            {cells.some(c => c.mode === 'practix') && (
+                              <button onClick={() => promLive(algo.id)}
+                                style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(34,197,94,0.3)', background:'transparent', color:'var(--green)', cursor:'pointer' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                → Promote to Live
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display:'flex', flexDirection:'column', gap:'2px', flexShrink:0 }}>
                         <IBtn onClick={() => setDel(algo.id)}  icon="🗑" hc="var(--red)"          title="Delete permanently"/>

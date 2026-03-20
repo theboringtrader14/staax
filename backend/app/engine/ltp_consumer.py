@@ -67,6 +67,14 @@ class AngelOneTickerAdapter:
         self._running                       = False
         self._corr_id                       = "staax_ltp"
 
+        # Debug: log credential presence at construction time
+        ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
+        logger.info(
+            f"[AO-DEBUG] AngelOneTickerAdapter init — "
+            f"client_code={client_code!r}, api_key={api_key[:6]!r}..., "
+            f"feed_token={ft_preview!r} (len={len(feed_token) if feed_token else 0})"
+        )
+
     def start(
         self,
         tokens: List[str],
@@ -91,6 +99,13 @@ class AngelOneTickerAdapter:
         self._on_tick_cb = on_tick
         self._subscribed = list(tokens)
 
+        ft_preview = (self.feed_token[:10] + "...") if self.feed_token and len(self.feed_token) > 10 else (self.feed_token or "EMPTY")
+        logger.info(
+            f"[AO-DEBUG] SmartWebSocketV2 init — "
+            f"client_code={self.client_code!r}, api_key={self.api_key[:6]!r}..., "
+            f"feed_token={ft_preview!r} (len={len(self.feed_token) if self.feed_token else 0}), "
+            f"tokens={tokens[:5]!r}{'...' if len(tokens) > 5 else ''}"
+        )
         self._sws = SmartWebSocketV2(
             self.auth_token,
             self.api_key,
@@ -101,6 +116,7 @@ class AngelOneTickerAdapter:
         self._sws.on_data  = self._on_data
         self._sws.on_error = self._on_error
         self._sws.on_close = self._on_close
+        logger.info("[AO-DEBUG] Calling SmartWebSocketV2.connect() ...")
         self._sws.connect()
         self._running = True
         logger.info(f"[AO] ✅ SmartStream started — {len(tokens)} tokens")
@@ -143,7 +159,7 @@ class AngelOneTickerAdapter:
         return token_list
 
     def _on_open(self, ws):
-        logger.info("[AO] ✅ SmartStream WebSocket connected")
+        logger.info(f"[AO-DEBUG] _on_open fired — ws={ws!r}")
         if self._subscribed and self._sws:
             try:
                 self._sws.subscribe(self._corr_id, 1, self._build_token_list(self._subscribed))
@@ -153,6 +169,7 @@ class AngelOneTickerAdapter:
 
     def _on_data(self, ws, message):
         """Hot path — normalise Angel One tick and dispatch to async loop."""
+        logger.debug(f"[AO-DEBUG] _on_data — raw message type={type(message).__name__}, len={len(message) if hasattr(message, '__len__') else 'N/A'}")
         if not self._loop or not self._on_tick_cb:
             return
         try:

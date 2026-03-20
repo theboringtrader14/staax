@@ -11,6 +11,7 @@ interface Leg {
   id: string; parentId?: string; journeyLevel: string; status: LegStatus
   symbol: string; dir: 'BUY' | 'SELL'; lots: string; entryCondition: string
   instrumentToken?: number
+  errorMessage?: string
   refPrice?: number; fillPrice?: number; ltp?: number
   slOrig?: number; slActual?: number; target?: number
   exitPrice?: number; exitTime?: string; exitReason?: string; pnl?: number
@@ -58,6 +59,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
   const st  = STATUS_STYLE[leg.status]
   const ltp = liveLtp ?? leg.ltp  // prefer live WebSocket value
   return (
+    <>
     <tr style={{ background: isChild ? 'rgba(0,176,240,0.025)' : undefined }}>
       <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
@@ -97,6 +99,14 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
         {leg.pnl != null ? `${leg.pnl >= 0 ? '+' : ''}₹${Math.abs(leg.pnl).toLocaleString('en-IN')}` : '—'}
       </td>
     </tr>
+    {leg.status === 'error' && leg.errorMessage && (
+      <tr>
+        <td colSpan={COLS.length} style={{ padding: '3px 10px 5px 26px', background: 'rgba(239,68,68,0.05)', borderBottom: '1px solid var(--bg-border)', fontSize: '10px', color: 'var(--red)' }}>
+          ⚠ {leg.errorMessage}
+        </td>
+      </tr>
+    )}
+  </>
   )
 }
 
@@ -133,7 +143,7 @@ export default function OrdersPage() {
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
   const [activeDay, setActiveDay]     = useState(todayDay())
   const [showWeekends, setShowWeekends] = useState(() => localStorage.getItem('orders_show_weekends') === 'true')
-  const [sortBy, setSortBy]             = useState('date_desc')
+  const [sortBy, setSortBy]             = useState(() => localStorage.getItem('staax_orders_sort') || 'date_desc')
   const [ltpMap, setLtpMap]             = useState<Record<number, number>>({})
   const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
   const [sqChecked, setSqChecked]     = useState<Record<string, boolean>>({})
@@ -167,6 +177,7 @@ export default function OrdersPage() {
             lots:           String(o.lots ?? ''),
             entryCondition:  o.entry_type || '',
             instrumentToken: o.instrument_token ?? undefined,
+            errorMessage:    o.error_message ?? undefined,
             fillPrice:       o.fill_price ?? undefined,
             ltp:             o.ltp ?? undefined,
             slOrig:         o.sl_original ?? undefined,
@@ -409,8 +420,8 @@ export default function OrdersPage() {
             <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--accent-blue)' }} />
             Show Weekends
           </label>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            style={{ height: '30px', fontSize: '11px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', color: 'var(--text-muted)', padding: '0 8px', cursor: 'pointer' }}>
+          <select value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('staax_orders_sort', e.target.value) }}
+            className="staax-select" style={{ width: '130px' }}>
             <option value="date_desc">Date Created</option>
             <option value="name_asc">Name A → Z</option>
             <option value="name_desc">Name Z → A</option>
