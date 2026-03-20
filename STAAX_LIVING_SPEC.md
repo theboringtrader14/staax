@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 6.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.0 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2570,3 +2570,45 @@ This marks the first successful end-to-end algo trade on STAAX.
 - P1: Sidebar tickers (Angel One WebSocket)
 - P2: Orders page live MTM (currently shows sum of closed P&L, not live MTM)
 - P2: Start Session reliability
+
+
+## Claude Code Batch 12 — Smart Grid + Algo Config UX
+
+### P0 — Live trading verification
+1. Karthik AO LIVE mode test (no cash, will get margin error — that is OK)
+   - Confirms order actually reaches Angel One broker
+   - Verifies broker_order_id is returned and stored
+
+### P1 — Smart Grid improvements
+2. Add algo to all weekdays at once
+   - "Add to all days" button or drag-to-week option in Smart Grid
+   - Currently have to drag to each day individually
+   - File: frontend/src/pages/GridPage.tsx
+
+3. Sticky header in Smart Grid
+   - Page header + New Algo button disappear when scrolling down
+   - Make header sticky so New Algo button always visible
+   - File: frontend/src/pages/GridPage.tsx
+
+4. Sort algos in Smart Grid
+   - Sort by: name, date created, buy/sell, underlying
+   - Add sort dropdown to Smart Grid header
+   - File: frontend/src/pages/GridPage.tsx
+
+### P2 — Algo configuration
+5. Disable weekly expiry for BANKNIFTY/FINNIFTY/MIDCAPNIFTY
+   - These have no weekly expiry (monthly only since Nov 2024)
+   - In leg config expiry dropdown: hide "Current Weekly" / "Next Weekly" when underlying is BNF/FINNIFTY/MIDCAP
+   - File: frontend/src/pages/AlgoPage.tsx
+
+6. ORB SL provisions
+   - ORB entry: sell straddle enters at ORB low, buy enters at ORB high
+   - New SL option: "ORB High" and "ORB Low" as SL levels
+   - ORB High = SL for sell trades, ORB Low = SL for buy trades
+   - Backend: store orb_high and orb_low on AlgoState when ORB fires
+   - File: engine/algo_runner.py, frontend/src/pages/AlgoPage.tsx
+
+### Notes
+- Karthik AO: testing only (no cash, margin errors expected and OK)
+- Mom + Wife: live trading when ready
+- Living Spec = memory file (no separate CLAUDE.md needed)
