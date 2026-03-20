@@ -176,11 +176,21 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     )
     fy_pnl = float(fy_pnl_result.scalar() or 0)
 
+    # ── MTM total: sum of unrealised P&L for currently OPEN orders ────────────
+    mtm_result = await db.execute(
+        sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
+            Order.status == OrderStatus.OPEN,
+            Order.pnl.isnot(None),
+        )
+    )
+    mtm_total = float(mtm_result.scalar() or 0)
+
     return {
         "active_algos":   active_algos,
         "open_positions": open_positions,
         "today_pnl":      today_pnl,
         "fy_pnl":         fy_pnl,
+        "mtm_total":      mtm_total,
     }
 
 
@@ -218,6 +228,79 @@ async def get_ticker(request: Request):
         for name in TICKER_INSTRUMENTS:
             result[name] = None
     return result
+
+
+@router.post("/start-market-feed")
+async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Manually start (or restart) the Market Feed using the most recent valid Angel One token.
+    Priority: Karthik AO → Wife → Mom.
+    Idempotent — safe to call if feed is already running.
+    """
+    from app.models.account import Account, BrokerType
+    from app.engine.ltp_consumer import AngelOneTickerAdapter
+    from app.api.v1.services import _service_states, ServiceStatus
+    from sqlalchemy import select
+    from datetime import date, timezone
+
+    ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+    if not ltp_consumer:
+        raise HTTPException(status_code=503, detail="ltp_consumer not initialised — restart backend")
+
+    _NICKNAME_TO_BROKER_KEY = {
+        "Karthik AO": "angelone_karthik",
+        "Wife":       "angelone_wife",
+        "Mom":        "angelone_mom",
+    }
+    _PRIORITY = ["Karthik AO", "Wife", "Mom"]
+
+    result = await db.execute(
+        select(Account).where(Account.broker == BrokerType.ANGELONE, Account.is_active == True)
+    )
+    ao_accounts = result.scalars().all()
+    ao_map = {a.nickname: a for a in ao_accounts}
+
+    chosen_acc = None
+    for nick in _PRIORITY:
+        acc = ao_map.get(nick)
+        if not acc or not acc.access_token or not acc.token_generated_at:
+            continue
+        token_date = acc.token_generated_at.astimezone(timezone.utc).date()
+        if token_date == date.today():
+            chosen_acc = acc
+            break
+
+    if not chosen_acc:
+        raise HTTPException(status_code=400, detail="No valid Angel One token found for today — login first")
+
+    broker_key = _NICKNAME_TO_BROKER_KEY[chosen_acc.nickname]
+    ao_broker  = getattr(request.app.state, broker_key, None)
+    if not ao_broker:
+        raise HTTPException(status_code=503, detail=f"Broker instance {broker_key!r} not found on app.state")
+
+    feed_token    = chosen_acc.feed_token or ""
+    refresh_token = getattr(chosen_acc, "refresh_token", "") or ""
+    await ao_broker.load_token(chosen_acc.access_token, feed_token, refresh_token)
+
+    adapter = AngelOneTickerAdapter(
+        auth_token  = chosen_acc.access_token,
+        api_key     = chosen_acc.api_key or "",
+        client_code = chosen_acc.client_id,
+        feed_token  = feed_token,
+    )
+    ltp_consumer.set_angel_adapter(adapter)
+
+    # Subscribe index tokens
+    try:
+        index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
+        ltp_consumer.subscribe(index_tokens)
+    except Exception as e:
+        logger.warning(f"[START-MF] Index token subscription failed: {e}")
+
+    _service_states["ws"] = ServiceStatus.RUNNING
+    logger.info(f"[START-MF] Market Feed started via {chosen_acc.nickname}")
+
+    return {"status": "ok", "account": chosen_acc.nickname, "broker_key": broker_key}
 
 
 async def daily_system_reset():

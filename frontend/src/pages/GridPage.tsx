@@ -609,7 +609,7 @@ export default function GridPage() {
                                 style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                → All days
+                                All
                               </button>
                             )}
                             {cells.some(c => c.mode === 'practix') && (
@@ -617,7 +617,7 @@ export default function GridPage() {
                                 style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(34,197,94,0.3)', background:'transparent', color:'var(--green)', cursor:'pointer' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                → Promote to Live
+                                Promote
                               </button>
                             )}
                           </div>

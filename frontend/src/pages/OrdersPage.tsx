@@ -1,5 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { algosAPI, ordersAPI } from '@/services/api'
 
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
@@ -84,7 +85,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
           return <>
             {leg.slActual != null && <div style={{ color: 'var(--amber)' }}>A:{leg.slActual.toFixed(1)}</div>}
             {slPrice != null
-              ? <div style={{ color: 'var(--text-muted)' }}>O:{slPrice.toFixed(1)}</div>
+              ? <div style={{ color: 'var(--text-muted)' }}>O:{slPrice.toFixed(1)} ({leg.slOrig}%)</div>
               : leg.slOrig != null
                 ? <div style={{ color: 'var(--text-muted)' }}>O:{leg.slOrig}%</div>
                 : null}
@@ -97,7 +98,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
         {leg.exitPrice != null
           ? <div style={{ cursor: 'pointer' }} title="Click to correct exit price" onClick={() => leg.exitPrice != null && onEditExit && onEditExit(leg.id, leg.exitPrice)}>
               <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)' }}>{leg.exitPrice}</div>
-              {leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{leg.exitTime}</div>}
+              {leg.status === 'closed' && leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{leg.exitTime}</div>}
             </div>
           : '—'}
       </td>
@@ -145,13 +146,32 @@ function setInlineStatus(setOrders: any, idx: number, msg: string, color: string
   setTimeout(() => setOrders((o: AlgoGroup[]) => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
 }
 
-/** Returns today's day abbreviation e.g. "MON" */
+/** Returns today's day abbreviation e.g. "MON" in IST */
 function todayDay(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase().slice(0, 3)
 }
 
+/** Returns ISO date string for each day of the current week (IST Monday-based) */
+function getWeekDates(): Record<string, string> {
+  const now    = new Date()
+  const ist    = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const dow    = ist.getDay()
+  const monday = new Date(ist)
+  monday.setDate(ist.getDate() - (dow === 0 ? 6 : dow - 1))
+  const names  = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+  const map: Record<string, string> = {}
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    map[names[i]] = d.toISOString().slice(0, 10)
+  }
+  return map
+}
+
 export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
+  const navigate = useNavigate()
+  const weekDates = getWeekDates()
   const [orders, setOrders]           = useState<AlgoGroup[]>([])
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
   const [activeDay, setActiveDay]     = useState(todayDay())
@@ -167,10 +187,10 @@ export default function OrdersPage() {
   const [editExit, setEditExit]       = useState<{ orderId: string; value: string } | null>(null)
   const [exitSaving, setExitSaving]   = useState(false)
 
-  // Load today's orders + waiting algos from API
+  // Load orders + waiting algos from API — re-fetch when day tab changes
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    ordersAPI.list(today)
+    const tradingDate = weekDates[activeDay] || new Date().toISOString().slice(0, 10)
+    ordersAPI.list(tradingDate)
       .then(res => {
         const data = res.data
         const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
@@ -205,10 +225,10 @@ export default function OrdersPage() {
       })
       .catch(() => {}) // keep demo data if API unreachable
 
-    ordersAPI.waiting(today)
+    ordersAPI.waiting(tradingDate)
       .then(res => setWaitingAlgos(res.data?.waiting || []))
       .catch(() => {})
-  }, [])
+  }, [activeDay])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live LTP via WebSocket — updates leg LTP cells in real time
   useEffect(() => {
@@ -245,7 +265,7 @@ export default function OrdersPage() {
 
   const visibleDays = showWeekends
     ? [...ALL_DAYS, 'SAT', 'SUN']
-    : [...ALL_DAYS, 'SAT', 'SUN']
+    : ALL_DAYS
 
   const safeOrders = Array.isArray(orders) ? orders : []
   const totalMTM = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
@@ -488,7 +508,7 @@ export default function OrdersPage() {
       </div>{/* end fixed zone */}
 
       {/* Scroll zone: waiting algos + all order groups */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
       <div style={{ height: '14px' }} />
       {waitingAlgos.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
@@ -555,7 +575,9 @@ export default function OrdersPage() {
               <span title="Algo is live" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', flexShrink: 0 }} />
             )}
 
-            <span style={{ fontWeight: 700, fontSize: '14px', color: group.terminated ? 'var(--text-dim)' : 'var(--accent-blue)' }}>
+            <span onClick={() => navigate(`/algo/${group.algoId}`)}
+              style={{ fontWeight: 700, fontSize: '14px', color: group.terminated ? 'var(--text-dim)' : 'var(--accent-blue)',
+                cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(0,176,240,0.4)' }}>
               {group.algoName}
             </span>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '4px' }}>{group.account}</span>
@@ -597,9 +619,11 @@ export default function OrdersPage() {
                   {btn.label}
                 </button>
               ))}
-              <span style={{ fontWeight: 700, fontSize: '14px', marginLeft: '6px', color: group.mtm >= 0 ? 'var(--green)' : 'var(--red)', opacity: group.terminated ? 0.6 : 1 }}>
-                {group.mtm >= 0 ? '+' : ''}₹{group.mtm.toLocaleString('en-IN')}
-              </span>
+              {group.mtm !== 0 && (
+                <span style={{ fontWeight: 700, fontSize: '14px', marginLeft: '6px', color: group.mtm >= 0 ? 'var(--green)' : 'var(--red)', opacity: group.terminated ? 0.6 : 1 }}>
+                  {group.mtm >= 0 ? '+' : ''}₹{group.mtm.toLocaleString('en-IN')}
+                </span>
+              )}
             </div>
           </div>
 

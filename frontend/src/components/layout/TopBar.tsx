@@ -1,5 +1,5 @@
 import { useStore } from '@/store'
-import { eventsAPI } from '@/services/api'
+import { eventsAPI, systemAPI } from '@/services/api'
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
@@ -14,6 +14,7 @@ export default function TopBar() {
   const isPractixMode     = useStore(s => s.isPractixMode)
   const setIsPractixMode  = useStore(s => s.setIsPractixMode)
   const livePnl           = useStore(s => s.livePnl)
+  const setLivePnl        = useStore(s => s.setLivePnl)
   const notifications     = useStore(s => s.notifications)
   const markAllRead       = useStore(s => s.markAllRead)
   const theme             = useStore(s => s.theme)
@@ -59,6 +60,21 @@ export default function TopBar() {
     const t = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Poll /system/stats every 5s for live MTM — supplements WebSocket
+  useEffect(() => {
+    const poll = () => {
+      systemAPI.stats()
+        .then(res => {
+          const mtm = res.data?.mtm_total
+          if (typeof mtm === 'number') setLivePnl(mtm)
+        })
+        .catch(() => {})
+    }
+    poll()
+    const t = setInterval(poll, 5000)
+    return () => clearInterval(t)
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.title = `STAAX ${livePnl >= 0 ? '+' : ''}₹${livePnl.toLocaleString('en-IN')}`
