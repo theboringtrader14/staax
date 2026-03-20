@@ -442,7 +442,7 @@ export default function GridPage() {
   return (
     <div>
       {/* Header — sticky so New Algo button always visible */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)', paddingBottom: '2px' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg-primary)', paddingBottom: '4px', borderBottom: '1px solid var(--bg-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily:"'ADLaM Display',serif", fontSize:'22px', fontWeight:400 }}>Smart Grid</h1>
@@ -518,9 +518,9 @@ export default function GridPage() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>ALGO</th>
+              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', position:'sticky', top:'62px', zIndex:9 }}>ALGO</th>
               {days.map(d => (
-                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)' }}>
+                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)', position:'sticky', top:'62px', zIndex:9 }}>
                   {d}
                   <div style={{ fontSize:'9px', color:'var(--text-dim)', fontWeight:400, marginTop:'1px' }}>
                     {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}

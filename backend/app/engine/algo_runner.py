@@ -277,6 +277,11 @@ class AlgoRunner:
         entry_error = False
 
         for leg in legs:
+            logger.info(
+                f"[ENTER] Leg {leg.leg_number}/{len(legs)} — "
+                f"{leg.underlying} {leg.instrument} {leg.direction} "
+                f"expiry={leg.expiry} strike={leg.strike_type} lots={leg.lots}"
+            )
             try:
                 order = await self._place_leg(
                     db, leg, algo, algo_state, grid_entry, reentry, original_order,
@@ -284,8 +289,17 @@ class AlgoRunner:
                 )
                 if order:
                     placed_orders.append(order)
+                    logger.info(
+                        f"[ENTER] Leg {leg.leg_number} placed: "
+                        f"symbol={order.symbol} fill={order.fill_price} token={order.instrument_token}"
+                    )
+                else:
+                    logger.info(f"[ENTER] Leg {leg.leg_number} deferred (W&T / ORB)")
             except Exception as e:
-                logger.error(f"Leg {leg.leg_number} entry failed: {e}")
+                logger.error(
+                    f"[ENTER] Leg {leg.leg_number} failed: {e}",
+                    exc_info=True,
+                )
                 entry_error = True
 
                 if algo.exit_on_entry_failure:

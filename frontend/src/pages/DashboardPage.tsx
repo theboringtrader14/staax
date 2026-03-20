@@ -76,9 +76,8 @@ export default function DashboardPage() {
     eventsAPI.list(50)
       .then(res => {
         const entries: any[] = res.data || []
-        // Determine today's date in IST (YYYY-MM-DD)
-        const istNow  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-        const todayStr = istNow.toISOString().slice(0, 10)
+        // Today's date in IST as YYYY-MM-DD — 'sv' locale gives ISO format in the given tz
+        const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
 
         // Build lines oldest-first, inserting date separators for non-today events
         const lines: string[] = []
@@ -87,7 +86,8 @@ export default function DashboardPage() {
         const oldest = [...entries].reverse()
         for (const e of oldest) {
           const eventDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
-          const eventDay  = e.ts ? new Date(e.ts).toISOString().slice(0, 10) : todayStr
+          // Use 'sv' locale for YYYY-MM-DD in IST — avoids UTC vs IST date mismatch
+          const eventDay  = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
           if (eventDay !== todayStr && eventDate && eventDay !== lastDateSep) {
             lines.push(`── ${eventDate} ──`)
             lastDateSep = eventDay

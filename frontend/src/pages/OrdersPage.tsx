@@ -352,6 +352,8 @@ export default function OrdersPage() {
 
   return (
     <div>
+      {/* Sticky zone: page header + day tabs stay visible while scrolling */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
@@ -366,7 +368,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Day tabs — F4: today highlighted with dot marker */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '18px', borderBottom: '1px solid var(--bg-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', borderBottom: '1px solid var(--bg-border)', background: 'var(--bg-primary)' }}>
         {visibleDays.map(d => {
           const isWeekend  = d === 'SAT' || d === 'SUN'
           const isToday    = d === todayDay()        // F4 — active day marker
@@ -407,8 +409,10 @@ export default function OrdersPage() {
           </span>
         </div>
       </div>
+      </div>{/* end sticky zone */}
 
       {/* WAITING algos — entry time not yet reached */}
+      <div style={{ height: '14px' }} />
       {waitingAlgos.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
           {waitingAlgos.map(w => (

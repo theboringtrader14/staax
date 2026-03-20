@@ -375,7 +375,9 @@ async def _subscribe_open_position_tokens(ltp_consumer) -> None:
                 .where(Order.status == OrderStatus.OPEN, Order.instrument_token.isnot(None))
                 .distinct()
             )
-            tokens = [row[0] for row in result.fetchall() if row[0]]
+            # .scalars().all() returns a clean List[int] — avoids Row/tuple wrapping
+            raw = result.scalars().all()
+            tokens = [int(t) for t in raw if t is not None]
         if tokens:
             ltp_consumer.subscribe(tokens)
             logger.info(f"[STARTUP MF] Subscribed {len(tokens)} open-position tokens: {tokens}")
