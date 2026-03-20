@@ -189,6 +189,7 @@ class LTPConsumer:
         self._callbacks: List[Callable]       = []
         self._subscribed_tokens: List[int]    = []
         self._angel_adapter: Optional[AngelOneTickerAdapter] = None
+        self._ws_manager                      = None   # injected via set_ws_manager()
         self._running  = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -203,6 +204,11 @@ class LTPConsumer:
         """Attach Angel One SmartStream adapter. Called from services.py after AO login."""
         self._angel_adapter = adapter
         logger.info("[LTP] Angel One adapter registered")
+
+    def set_ws_manager(self, manager):
+        """Inject WebSocket manager for real-time broadcast to frontend."""
+        self._ws_manager = manager
+        logger.info("[LTP] WebSocket manager wired")
 
     # ── Callback registry ─────────────────────────────────────────────────────
 
@@ -286,8 +292,23 @@ class LTPConsumer:
                 self._process_ticks(ticks), self._loop
             )
 
+    # Index token maps for WebSocket broadcast
+    # Zerodha tokens → name, Angel One tokens → name
+    _INDEX_TOKEN_NAMES: Dict[int, str] = {
+        256265:   "NIFTY",
+        260105:   "BANKNIFTY",
+        257801:   "FINNIFTY",
+        288009:   "MIDCPNIFTY",
+        265:      "SENSEX",
+        99926000: "NIFTY",
+        99926009: "BANKNIFTY",
+        99926037: "FINNIFTY",
+        99926014: "MIDCPNIFTY",
+        99919000: "SENSEX",
+    }
+
     async def _process_ticks(self, ticks: list):
-        """Write to Redis + fire all callbacks. Shared by Zerodha and Angel One."""
+        """Write to Redis + fire all callbacks + broadcast via WebSocket."""
         pipe = self.redis.pipeline()
         for tick in ticks:
             pipe.setex(
@@ -296,6 +317,26 @@ class LTPConsumer:
                 str(tick.get("last_price", 0))
             )
         await pipe.execute()
+
+        # Broadcast batches — split index tickers from position LTPs
+        if self._ws_manager:
+            ticker_prices: Dict[str, float] = {}
+            ltp_batch:     Dict[int, float]  = {}
+            for tick in ticks:
+                token = int(tick["instrument_token"])
+                ltp   = float(tick.get("last_price", 0))
+                name  = self._INDEX_TOKEN_NAMES.get(token)
+                if name:
+                    ticker_prices[name] = ltp
+                else:
+                    ltp_batch[token] = ltp
+            try:
+                if ticker_prices:
+                    asyncio.ensure_future(self._ws_manager.broadcast_ticker(ticker_prices))
+                if ltp_batch:
+                    asyncio.ensure_future(self._ws_manager.broadcast_ltp_batch(ltp_batch))
+            except Exception as e:
+                logger.debug(f"[LTP] WS broadcast skipped: {e}")
 
         for tick in ticks:
             token = tick["instrument_token"]

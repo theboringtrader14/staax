@@ -122,6 +122,7 @@ async def lifespan(app: FastAPI):
     # LTPConsumer is created with a placeholder — ticker injected after login
     # We pass None here; accounts router calls ltp_consumer.set_ticker() after token set
     ltp_consumer = LTPConsumer(None, redis_client)
+    ltp_consumer.set_ws_manager(ws_manager)
     app.state.ltp_consumer = ltp_consumer
 
     # ── 6. Engine singletons ──────────────────────────────────────────────────

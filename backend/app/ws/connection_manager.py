@@ -38,6 +38,7 @@ class ConnectionManager:
         self.pnl_connections:    Set[WebSocket] = set()
         self.status_connections: Set[WebSocket] = set()
         self.notif_connections:  Set[WebSocket] = set()
+        self.ticker_connections: Set[WebSocket] = set()
 
     # ── Connection management ─────────────────────────────────────────────────
 
@@ -56,10 +57,16 @@ class ConnectionManager:
         self.notif_connections.add(ws)
         logger.info(f"WS /notifications connected ({len(self.notif_connections)} total)")
 
+    async def connect_ticker(self, ws: WebSocket):
+        await ws.accept()
+        self.ticker_connections.add(ws)
+        logger.info(f"WS /ticker connected ({len(self.ticker_connections)} total)")
+
     def disconnect(self, ws: WebSocket):
         self.pnl_connections.discard(ws)
         self.status_connections.discard(ws)
         self.notif_connections.discard(ws)
+        self.ticker_connections.discard(ws)
 
     # ── Broadcast helpers ─────────────────────────────────────────────────────
 
@@ -101,6 +108,31 @@ class ConnectionManager:
                 "total_pnl":  round(total_pnl, 2),
                 "ts":         _now_ist(),
             }
+        })
+
+    async def broadcast_ltp_batch(self, token_ltp: dict):
+        """
+        Broadcast a batch of LTP updates to Orders subscribers.
+        token_ltp: { instrument_token: ltp_float, ... }
+        Frontend matches by instrument_token to update leg LTP in real time.
+        """
+        if not self.pnl_connections:
+            return
+        await self._send(self.pnl_connections, {
+            "type": "ltp_batch",
+            "data": token_ltp,
+        })
+
+    async def broadcast_ticker(self, prices: dict):
+        """
+        Broadcast index LTPs to sidebar.
+        prices: { "NIFTY": 22450.5, "BANKNIFTY": 48230.0, ... }
+        """
+        if not self.ticker_connections:
+            return
+        await self._send(self.ticker_connections, {
+            "type": "ticker",
+            "data": prices,
         })
 
     # ── Status channel ────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ Routes:
   ws://host/ws/pnl
   ws://host/ws/status
   ws://host/ws/notifications
+  ws://host/ws/ticker
 """
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -62,3 +63,19 @@ async def ws_notifications(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         logger.info("WS /notifications disconnected")
+
+
+@router.websocket("/ws/ticker")
+async def ws_ticker(websocket: WebSocket):
+    """
+    Live index LTP ticker for sidebar.
+    Receives: ticker message type — { type: "ticker", data: { NIFTY: 22450, ... } }
+    Pushed on every tick for subscribed index tokens.
+    """
+    await manager.connect_ticker(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        logger.info("WS /ticker disconnected")

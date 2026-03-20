@@ -62,6 +62,7 @@ def _order_to_dict(order: Order) -> dict:
         "quantity":          order.quantity,
         "entry_type":        order.entry_type,
         "entry_reference":   order.entry_reference,
+        "instrument_token":  order.instrument_token,
         "fill_price":        order.fill_price,
         "fill_time":         order.fill_time.isoformat() if order.fill_time else None,
         "ltp":               order.ltp,

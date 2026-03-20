@@ -442,7 +442,7 @@ export default function GridPage() {
   return (
     <div>
       {/* Header — sticky so New Algo button always visible */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg-primary)', paddingBottom: '4px', borderBottom: '1px solid var(--bg-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#1A1C1E', isolation: 'isolate', paddingBottom: '4px', borderBottom: '1px solid var(--bg-border)' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily:"'ADLaM Display',serif", fontSize:'22px', fontWeight:400 }}>Smart Grid</h1>
@@ -459,10 +459,6 @@ export default function GridPage() {
             <input type="checkbox" checked={wk} onChange={e => setWk(e.target.checked)} style={{ accentColor:'var(--accent-blue)' }}/>
             Show Weekends
           </label>
-          <button className="btn btn-ghost" style={{ position:'relative', fontSize:'12px', display:'flex', alignItems:'center', gap:'6px' }} onClick={() => setShowArch(v => !v)}>
-            <span style={{ fontSize:'14px' }}>📦</span> Archive
-            {archived.length > 0 && <span style={{ position:'absolute', top:'4px', right:'4px', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
-          </button>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             style={{ height:'30px', fontSize:'11px', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', borderRadius:'5px', color:'var(--text-muted)', padding:'0 8px', cursor:'pointer' }}>
             <option value="date_desc">Date Created</option>
@@ -471,6 +467,10 @@ export default function GridPage() {
             <option value="buy_first">Buy first</option>
             <option value="sell_first">Sell first</option>
           </select>
+          <button className="btn btn-ghost" style={{ position:'relative', fontSize:'12px', display:'flex', alignItems:'center', gap:'6px' }} onClick={() => setShowArch(v => !v)}>
+            <span style={{ fontSize:'14px' }}>📦</span> Archive
+            {archived.length > 0 && <span style={{ position:'absolute', top:'4px', right:'4px', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
+          </button>
           <button className="btn btn-primary" onClick={() => nav('/algo/new')}>+ New Algo</button>
         </div>
       </div>
@@ -518,9 +518,9 @@ export default function GridPage() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', position:'sticky', top:'62px', zIndex:9 }}>ALGO</th>
+              <th style={{ padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', position:'sticky', top:'62px', zIndex:49 }}>ALGO</th>
               {days.map(d => (
-                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)', position:'sticky', top:'62px', zIndex:9 }}>
+                <th key={d} style={{ padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)', position:'sticky', top:'62px', zIndex:49 }}>
                   {d}
                   <div style={{ fontSize:'9px', color:'var(--text-dim)', fontWeight:400, marginTop:'1px' }}>
                     {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}

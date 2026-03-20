@@ -10,6 +10,7 @@ type LegStatus = 'open' | 'closed' | 'error' | 'pending'
 interface Leg {
   id: string; parentId?: string; journeyLevel: string; status: LegStatus
   symbol: string; dir: 'BUY' | 'SELL'; lots: string; entryCondition: string
+  instrumentToken?: number
   refPrice?: number; fillPrice?: number; ltp?: number
   slOrig?: number; slActual?: number; target?: number
   exitPrice?: number; exitTime?: string; exitReason?: string; pnl?: number
@@ -53,8 +54,9 @@ const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
 const COLS = ['36px','66px','174px','66px','116px','54px','54px','76px','58px','88px','62px','82px']
 const HDRS = ['#','Status','Symbol','Lots','Entry / Ref','Fill','LTP','SL (A/O)','Target','Exit','Reason','P&L']
 
-function LegRow({ leg, isChild, onEditExit }: { leg: Leg; isChild: boolean; onEditExit?: (orderId: string, price: number) => void }) {
-  const st = STATUS_STYLE[leg.status]
+function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: boolean; liveLtp?: number; onEditExit?: (orderId: string, price: number) => void }) {
+  const st  = STATUS_STYLE[leg.status]
+  const ltp = liveLtp ?? leg.ltp  // prefer live WebSocket value
   return (
     <tr style={{ background: isChild ? 'rgba(0,176,240,0.025)' : undefined }}>
       <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
@@ -71,7 +73,7 @@ function LegRow({ leg, isChild, onEditExit }: { leg: Leg; isChild: boolean; onEd
         {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice}</div>}
       </td>
       <td style={{ width: COLS[5], fontWeight: 600 }}>{leg.fillPrice ?? '—'}</td>
-      <td style={{ width: COLS[6], fontWeight: 600, color: leg.ltp != null && leg.fillPrice != null ? (leg.ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>{leg.ltp ?? '—'}</td>
+      <td style={{ width: COLS[6], fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>{ltp != null ? ltp.toFixed(2) : '—'}</td>
       <td style={{ width: COLS[7], fontSize: '11px' }}>
         {leg.slActual != null && <div style={{ color: 'var(--amber)' }}>A:{leg.slActual}</div>}
         {leg.slOrig   != null && <div style={{ color: 'var(--text-muted)' }}>O:{leg.slOrig}</div>}
@@ -131,6 +133,8 @@ export default function OrdersPage() {
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
   const [activeDay, setActiveDay]     = useState(todayDay())
   const [showWeekends, setShowWeekends] = useState(() => localStorage.getItem('orders_show_weekends') === 'true')
+  const [sortBy, setSortBy]             = useState('date_desc')
+  const [ltpMap, setLtpMap]             = useState<Record<number, number>>({})
   const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
   const [sqChecked, setSqChecked]     = useState<Record<string, boolean>>({})
   const [loading, setLoading]         = useState<Record<string, boolean>>({})
@@ -161,9 +165,10 @@ export default function OrdersPage() {
             symbol:         o.symbol || '',
             dir:            ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
             lots:           String(o.lots ?? ''),
-            entryCondition: o.entry_type || '',
-            fillPrice:      o.fill_price ?? undefined,
-            ltp:            o.ltp ?? undefined,
+            entryCondition:  o.entry_type || '',
+            instrumentToken: o.instrument_token ?? undefined,
+            fillPrice:       o.fill_price ?? undefined,
+            ltp:             o.ltp ?? undefined,
             slOrig:         o.sl_original ?? undefined,
             slActual:       o.sl_actual ?? undefined,
             target:         o.target ?? undefined,
@@ -179,6 +184,39 @@ export default function OrdersPage() {
     ordersAPI.waiting(today)
       .then(res => setWaitingAlgos(res.data?.waiting || []))
       .catch(() => {})
+  }, [])
+
+  // Live LTP via WebSocket — updates leg LTP cells in real time
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const WS_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
+    let ws: WebSocket | null = null
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 2000
+
+    const connect = () => {
+      try {
+        ws = new WebSocket(`${WS_BASE}/ws/pnl`)
+        ws.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data)
+            if (msg.type === 'ltp_batch') setLtpMap(prev => ({ ...prev, ...msg.data }))
+          } catch {}
+        }
+        ws.onclose = () => {
+          retryTimeout = setTimeout(connect, retryDelay)
+          retryDelay = Math.min(retryDelay * 1.5, 15000)
+        }
+        ws.onerror = () => ws?.close()
+      } catch {
+        retryTimeout = setTimeout(connect, retryDelay)
+      }
+    }
+    connect()
+    return () => {
+      if (retryTimeout) clearTimeout(retryTimeout)
+      ws?.close()
+    }
   }, [])
 
   const visibleDays = showWeekends
@@ -350,10 +388,17 @@ export default function OrdersPage() {
     }
   }
 
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (sortBy === 'name_asc')  return a.algoName.localeCompare(b.algoName)
+    if (sortBy === 'name_desc') return b.algoName.localeCompare(a.algoName)
+    if (sortBy === 'account')   return a.account.localeCompare(b.account)
+    return 0  // date_desc = API order
+  })
+
   return (
     <div>
       {/* Sticky zone: page header + day tabs stay visible while scrolling */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#1A1C1E', isolation: 'isolate' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
@@ -364,6 +409,13 @@ export default function OrdersPage() {
             <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--accent-blue)' }} />
             Show Weekends
           </label>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+            style={{ height: '30px', fontSize: '11px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', color: 'var(--text-muted)', padding: '0 8px', cursor: 'pointer' }}>
+            <option value="date_desc">Date Created</option>
+            <option value="name_asc">Name A → Z</option>
+            <option value="name_desc">Name Z → A</option>
+            <option value="account">Account</option>
+          </select>
         </div>
       </div>
 
@@ -454,7 +506,7 @@ export default function OrdersPage() {
       )}
 
       {/* Algo groups */}
-      {orders.map((group, gi) => (
+      {sortedOrders.map((group, gi) => (
         <div key={gi} style={{ marginBottom: '12px', opacity: group.terminated ? 0.65 : 1 }}>
           <div style={{
             background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
@@ -530,7 +582,7 @@ export default function OrdersPage() {
             <table className="staax-table">
               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
               <thead><tr>{HDRS.map(h => <th key={h}>{h}</th>)}</tr></thead>
-              <tbody>{buildRows(group.legs).map(({ leg, isChild }) => <LegRow key={leg.id} leg={leg} isChild={isChild} onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })} />)}</tbody>
+              <tbody>{buildRows(group.legs).map(({ leg, isChild }) => <LegRow key={leg.id} leg={leg} isChild={isChild} liveLtp={leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined} onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })} />)}</tbody>
             </table>
           </div>
         </div>

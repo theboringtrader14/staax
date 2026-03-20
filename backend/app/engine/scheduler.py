@@ -115,6 +115,13 @@ class AlgoScheduler:
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
+    def _next_trading_day(self, from_date: date) -> date:
+        """Return the next Mon–Fri after from_date (no holiday calendar)."""
+        d = from_date + timedelta(days=1)
+        while d.weekday() >= 5:  # 5=Sat, 6=Sun
+            d += timedelta(days=1)
+        return d
+
     def schedule_algo_jobs(self, grid_entry_id: str, algo: Algo, trading_date: date):
         """
         Schedule entry, exit, and ORB-end jobs for one algo for today.
@@ -166,22 +173,39 @@ class AlgoScheduler:
                 jobs.append(job.id)
                 logger.info(f"Exit job: {algo.name} @ {algo.exit_time}")
 
-        # BTST/STBT: next-day SL check at entry_time - 2 minutes
+        # BTST/STBT: next-trading-day SL check + exit job
         if algo.strategy_mode in (StrategyMode.BTST, StrategyMode.STBT):
+            next_day = self._next_trading_day(trading_date)
             if algo.entry_time:
                 h, m = map(int, algo.entry_time.split(":")[:2])
-                sl_check_dt = datetime.now(IST).replace(
-                    hour=h, minute=m, second=0, microsecond=0
+                sl_check_dt = datetime(
+                    next_day.year, next_day.month, next_day.day,
+                    h, m, 0, tzinfo=IST
                 ) - timedelta(minutes=2)
-                if sl_check_dt > datetime.now(IST):
-                    job = self._scheduler.add_job(
-                        self._job_overnight_sl_check_single,
-                        DateTrigger(run_date=sl_check_dt, timezone=IST),
-                        args=[grid_entry_id],
-                        id=f"sl_check_{grid_entry_id}",
-                        replace_existing=True,
-                    )
-                    jobs.append(job.id)
+                job = self._scheduler.add_job(
+                    self._job_overnight_sl_check_single,
+                    DateTrigger(run_date=sl_check_dt, timezone=IST),
+                    args=[grid_entry_id],
+                    id=f"sl_check_{grid_entry_id}",
+                    replace_existing=True,
+                )
+                jobs.append(job.id)
+                logger.info(f"BTST/STBT SL check: {algo.name} @ {sl_check_dt.strftime('%Y-%m-%d %H:%M')}")
+            if algo.exit_time:
+                h, m = map(int, algo.exit_time.split(":")[:2])
+                exit_dt = datetime(
+                    next_day.year, next_day.month, next_day.day,
+                    h, m, 0, tzinfo=IST
+                )
+                job = self._scheduler.add_job(
+                    self._job_auto_sq,
+                    DateTrigger(run_date=exit_dt, timezone=IST),
+                    args=[grid_entry_id],
+                    id=f"exit_{grid_entry_id}",
+                    replace_existing=True,
+                )
+                jobs.append(job.id)
+                logger.info(f"BTST/STBT exit job: {algo.name} @ {exit_dt.strftime('%Y-%m-%d %H:%M')}")
 
         self._per_algo_jobs[grid_entry_id] = jobs
 

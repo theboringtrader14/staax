@@ -1,6 +1,5 @@
 import { NavLink } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { systemAPI } from '@/services/api'
 
 // TradingView symbol mapping
 const TV_SYMBOLS: Record<string, string> = {
@@ -127,10 +126,31 @@ export default function Sidebar() {
   const W = collapsed ? '56px' : '216px'
 
   useEffect(() => {
-    const fetchPrices = () => systemAPI.ticker().then(r => setPrices(r.data || {})).catch(() => {})
-    fetchPrices()
-    const id = setInterval(fetchPrices, 3000)
-    return () => clearInterval(id)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const WS_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
+    let ws: WebSocket | null = null
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 2000
+
+    const connect = () => {
+      ws = new WebSocket(`${WS_BASE}/ws/ticker`)
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.type === 'ticker') setPrices(msg.data)
+        } catch {}
+      }
+      ws.onclose = () => {
+        retryTimeout = setTimeout(connect, retryDelay)
+        retryDelay = Math.min(retryDelay * 1.5, 15000)
+      }
+      ws.onerror = () => ws?.close()
+    }
+    connect()
+    return () => {
+      if (retryTimeout) clearTimeout(retryTimeout)
+      ws?.close()
+    }
   }, [])
 
   const fmt = (p: number | null) => p ? p.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'
