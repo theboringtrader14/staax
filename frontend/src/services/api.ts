@@ -29,6 +29,8 @@ export const accountsAPI = {
     api.post(`/accounts/${id}/margin`, data),
   updateGlobalRisk: (id: string, data: { global_sl?: number; global_tp?: number }) =>
     api.post(`/accounts/${id}/global-risk`, data),
+  updateNickname: (id: string, nickname: string) =>
+    api.patch(`/accounts/${id}/nickname`, { nickname }),
   angeloneLogin: (account: string) =>
     api.post(`/accounts/angelone/${account}/login`),
   angeloneAutoLogin: (account: string) =>

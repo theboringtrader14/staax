@@ -24,6 +24,9 @@ class GlobalRiskUpdate(BaseModel):
     global_sl: Optional[float] = None
     global_tp: Optional[float] = None
 
+class NicknameUpdate(BaseModel):
+    nickname: str
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -133,6 +136,22 @@ async def update_global_risk(
 
     await db.commit()
     return {"status": "ok", "message": "Global risk settings saved"}
+
+
+@router.patch("/{account_id}/nickname")
+async def update_nickname(
+    account_id: str,
+    body: NicknameUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the display nickname for an account."""
+    result = await db.execute(select(Account).where(Account.id == account_id))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    account.nickname = body.nickname.strip()
+    await db.commit()
+    return {"status": "ok", "nickname": account.nickname}
 
 
 # ── Zerodha Token Flow ────────────────────────────────────────────────────────

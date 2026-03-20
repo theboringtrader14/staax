@@ -8,11 +8,11 @@ export default function Layout() {
   useWebSocket()
 
   return (
-    <div style={{ display:'flex', height:'100vh' }}>
+    <div style={{ display:'flex', minHeight:'100vh' }}>
       <Sidebar />
-      <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+      <div style={{ flex:1, display:'flex', flexDirection:'column' }}>
         <TopBar />
-        <main style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
+        <main style={{ flex:1, padding:'20px 24px' }}>
           <Outlet />
         </main>
       </div>

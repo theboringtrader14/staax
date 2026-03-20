@@ -164,6 +164,7 @@ export default function Sidebar() {
         display: 'flex', flexDirection: 'column',
         transition: 'width 0.18s ease, min-width 0.18s ease',
         overflow: 'hidden',
+        position: 'sticky', top: 0, height: '100vh', alignSelf: 'flex-start',
       }}>
         {/* Logo row */}
         <div onClick={() => toggle(!collapsed)} style={{

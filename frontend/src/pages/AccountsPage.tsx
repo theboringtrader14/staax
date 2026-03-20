@@ -40,6 +40,8 @@ export default function AccountsPage() {
   const [saving,     setSaving]     = useState<Record<string, boolean>>({})
   const [tokenStatus, setTokenStatus] = useState<Record<string, boolean>>({})
   const [logging,     setLogging]     = useState<Record<string, boolean>>({})
+  const [editNick,    setEditNick]    = useState<Record<string, string>>({})
+  const [nickEditing, setNickEditing] = useState<Record<string, boolean>>({})
 
   // Load accounts directly from API on mount
   useEffect(() => {
@@ -102,6 +104,19 @@ export default function AccountsPage() {
   const showSaved = (id: string, msg: string) => {
     setSaved(s => ({ ...s, [id]: msg }))
     setTimeout(() => setSaved(s => { const n = { ...s }; delete n[id]; return n }), 3000)
+  }
+
+  const saveNickname = async (acc: AccountLocal) => {
+    const newName = (editNick[acc.id] ?? acc.name).trim()
+    if (!newName || newName === acc.name) { setNickEditing(n => ({ ...n, [acc.id]: false })); return }
+    try {
+      await accountsAPI.updateNickname(acc.id, newName)
+      setAccounts(a => a.map(x => x.id === acc.id ? { ...x, name: newName } : x))
+      showSaved(acc.id, '✅ Nickname saved')
+    } catch {
+      showSaved(acc.id, '⚠️ Nickname save failed')
+    }
+    setNickEditing(n => ({ ...n, [acc.id]: false }))
   }
 
   // Single save: margin + SL/TP + brokerage in one click
@@ -207,7 +222,26 @@ export default function AccountsPage() {
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '16px' }}>{acc.name}</div>
+                  {nickEditing[acc.id] ? (
+                    <input
+                      className="staax-input"
+                      autoFocus
+                      defaultValue={acc.name}
+                      style={{ fontSize: '14px', fontWeight: 700, width: '130px', padding: '2px 6px' }}
+                      onChange={e => setEditNick(n => ({ ...n, [acc.id]: e.target.value }))}
+                      onBlur={() => saveNickname(acc)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveNickname(acc); if (e.key === 'Escape') setNickEditing(n => ({ ...n, [acc.id]: false })) }}
+                    />
+                  ) : (
+                    <div
+                      style={{ fontWeight: 700, fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      title="Click to rename"
+                      onClick={() => setNickEditing(n => ({ ...n, [acc.id]: true }))}
+                    >
+                      {acc.name}
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 400 }}>✎</span>
+                    </div>
+                  )}
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{acc.broker} · {acc.type}</div>
                 </div>
                 <span style={{
