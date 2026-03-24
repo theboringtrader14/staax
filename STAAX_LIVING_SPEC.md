@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.6 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -2882,3 +2882,36 @@ This marks the first successful end-to-end algo trade on STAAX.
 4. Algo-7/10/12 ORB no trade (need live LTP)
 5. Algo-18 DTE positional error
 6. Wife order routing (safe in PRACTIX, must fix before LIVE)
+
+
+## Batch 20 — Errors, System Log, Grid Reset
+
+### P0 — Grid entries reset (urgent)
+- All algos dragged to Mon-Fri have disappeared from the grid
+- Need to investigate: were grid_entries deleted from DB or is it a frontend bug?
+- Check: SELECT COUNT(*) FROM grid_entries WHERE is_active=true
+- If entries exist in DB but grid shows empty: frontend week date calculation bug
+- If entries deleted: check what triggered the deletion
+
+### P1 — Leg error display in Orders page
+- Errors for each leg should show inline below that leg
+- Light red background highlight on the leg row
+- Red font for error message text
+- Show error_message field from Order record
+- If entire algo errored: show in algo header row as inline comment
+- File: frontend/src/pages/OrdersPage.tsx
+
+### P1 — System Log as universal action capture
+- Ditch the notifications bell/section entirely
+- System Log (on Dashboard) should capture ALL platform actions:
+  - Scheduler: entry fired, exit fired
+  - Auth: login/logout per account
+  - Orders: placed, failed, closed, SL hit, TP hit
+  - Kill switch: activated/deactivated
+  - Market feed: started/stopped
+  - Any error with [ERROR] prefix
+- Remove notifications icon from TopBar
+- Remove notifications dropdown/panel
+- File: backend/app/engine/algo_runner.py (add event logging for all order events)
+  frontend/src/components/layout/TopBar.tsx (remove bell icon)
+  frontend/src/pages/DashboardPage.tsx (System Log already shows events)
