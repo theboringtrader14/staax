@@ -74,7 +74,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
   const ltp = liveLtp ?? leg.ltp  // prefer live WebSocket value
   return (
     <>
-    <tr style={{ background: isChild ? 'rgba(0,176,240,0.025)' : undefined }}>
+    <tr style={{ background: isChild ? 'rgba(0,176,240,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #EF4444' : undefined }}>
       <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
       </td>
@@ -133,7 +133,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
     </tr>
     {leg.status === 'error' && leg.errorMessage && (
       <tr>
-        <td colSpan={COLS.length} style={{ padding: '3px 10px 5px 26px', background: 'rgba(239,68,68,0.05)', borderBottom: '1px solid var(--bg-border)', fontSize: '10px', color: 'var(--red)' }}>
+        <td colSpan={COLS.length} style={{ padding: '3px 10px 5px 26px', background: 'rgba(239,68,68,0.08)', borderLeft: '2px solid #EF4444', borderBottom: '1px solid var(--bg-border)', fontSize: '10px', color: 'var(--red)' }}>
           ⚠ {leg.errorMessage}
         </td>
       </tr>
@@ -593,6 +593,16 @@ export default function OrdersPage() {
             {group.isLive && !group.terminated && (
               <span title="Algo is live" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', flexShrink: 0 }} />
             )}
+
+            {/* Error badge — one or more legs failed */}
+            {!group.terminated && group.legs.some(l => l.status === 'error') && (() => {
+              const errCount = group.legs.filter(l => l.status === 'error').length
+              return (
+                <span style={{ fontSize: '10px', fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 8px', borderRadius: '4px' }}>
+                  ⚠ {errCount} LEG{errCount > 1 ? 'S' : ''} FAILED
+                </span>
+              )
+            })()}
 
             <span
               onClick={() => algosAPI.get(group.algoId).then(r => setAlgoPopup({ algoName: group.algoName, data: r.data })).catch(() => setAlgoPopup({ algoName: group.algoName, data: null }))}

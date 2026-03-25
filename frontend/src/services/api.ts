@@ -86,7 +86,8 @@ export const gridAPI = {
     is_enabled?:     boolean
   }) => api.put(`/grid/${entryId}`, data),
 
-  remove:    (entryId: string) => api.delete(`/grid/${entryId}`),
+  remove:    (entryId: string, removeRecurring = false) =>
+    api.delete(`/grid/${entryId}`, { params: removeRecurring ? { remove_recurring: true } : {} }),
   archive:   (entryId: string) => api.post(`/grid/${entryId}/archive`),
   unarchive: (entryId: string) => api.post(`/grid/${entryId}/unarchive`),
 

@@ -53,6 +53,7 @@ from app.engine.wt_evaluator import WTEvaluator, WTWindow
 from app.engine.orb_tracker import ORBTracker, ORBWindow
 from app.engine.reentry_engine import ReentryEngine
 from app.engine.ltp_consumer import LTPConsumer
+from app.engine import event_logger as _ev
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
@@ -333,21 +334,12 @@ class AlgoRunner:
         await db.commit()
 
         # ── 9. WebSocket notifications ────────────────────────────────────────
-        if self._ws_manager:
-            for order in placed_orders:
-                await self._ws_manager.notify_trade(
-                            symbol=order.symbol,
-                    algo_name=algo.name,
-                    direction=order.direction,
-                    price=order.fill_price or 0.0,
-                )
-            await self._ws_manager.broadcast_algo_status(
-                algo_id=str(algo.id),
-                grid_entry_id=str(grid_entry_id),
-                status="active",
-                reason="entry_complete",
+        for order in placed_orders:
+            sign = order.direction.upper() if order.direction else "?"
+            await _ev.success(
+                f"{algo.name} · {sign} {order.symbol} OPEN @ {order.fill_price or 0:.2f}",
+                algo_name=algo.name, source="engine",
             )
-
         logger.info(
             f"✅ Entry complete: {algo.name} | {len(placed_orders)} orders placed"
         )
@@ -795,15 +787,6 @@ class AlgoRunner:
         await db.commit()
         logger.info(f"✅ exit_all complete: {grid_entry_id} | reason={reason}")
 
-        # Notify WebSocket
-        if self._ws_manager and algo:
-            await self._ws_manager.broadcast_algo_status(
-                algo_id=str(algo.id),
-                grid_entry_id=str(grid_entry_id),
-                status=reason,
-                reason=reason,
-            )
-
     # ── F9: Cancel broker SL orders ───────────────────────────────────────────
 
     async def _cancel_broker_sl(self, order: Order):
@@ -868,18 +851,12 @@ class AlgoRunner:
                     await db.commit()
 
                     # Notify WebSocket
-                    if self._ws_manager:
-                        await self._ws_manager.notify_sl_hit(
-                            algo_name=order.algo_name or "",
-                            symbol=order.symbol,
-                            exit_price=ltp,
-                            pnl=order.pnl or 0.0,
-                        )
-                        await self._ws_manager.broadcast_order_update(
-                            order_id=str(order.id),
-                            update={"status": "closed", "exit_reason": "sl", "exit_price": ltp},
-                        )
-
+                    _pnl = order.pnl or 0.0
+                    _sign = "+" if _pnl >= 0 else ""
+                    await _ev.error(
+                        f"{order.algo_name or ''} · SL {order.symbol} @ {ltp} · P&L {_sign}₹{_pnl:,.0f}",
+                        algo_name=order.algo_name or "", source="engine",
+                    )
                     # Re-entry check
                     if self._reentry_engine:
                         await self._reentry_engine.on_exit(
@@ -919,13 +896,11 @@ class AlgoRunner:
 
                     await db.commit()
 
-                    if self._ws_manager:
-                        await self._ws_manager.notify_tp_hit(
-                            algo_name=order.algo_name or "",
-                            symbol=order.symbol,
-                            exit_price=ltp,
-                            pnl=order.pnl or 0.0,
-                        )
+                    _pnl_tp = order.pnl or 0.0
+                    await _ev.success(
+                        f"{order.algo_name or ''} · TP {order.symbol} @ {ltp} · P&L +₹{_pnl_tp:,.0f}",
+                        algo_name=order.algo_name or "", source="engine",
+                    )
 
                     if self._reentry_engine:
                         tsl_trailed = (
@@ -950,12 +925,12 @@ class AlgoRunner:
         """Returns an async callback for MTMMonitor on_breach."""
         async def on_mtm_breach(algo_id: str, reason: str, total_pnl: float):
             logger.info(f"MTM breach: {algo_id} | {reason} | pnl={total_pnl:.2f}")
-            if self._ws_manager:
-                await self._ws_manager.notify_mtm_breach(
-                    algo_name=algo_id,
-                    breach_type=reason,
-                    mtm=total_pnl,
-                )
+            _level = "error" if reason == "sl" else "success"
+            await _ev.log(
+                _level,
+                f"{algo_id} · MTM {reason.upper()} hit · ₹{total_pnl:,.0f}",
+                algo_name=algo_id, source="engine",
+            )
             await self.exit_all(grid_entry_id, reason=reason)
 
         return on_mtm_breach
@@ -1156,11 +1131,10 @@ class AlgoRunner:
         algo_state.error_message = msg
         grid_entry.status        = GridStatus.ERROR
         await db.commit()
-        if self._ws_manager:
-            await self._ws_manager.notify_error(
-                algo_name=str(getattr(algo_state, "algo_id", "")),
-                error=msg,
-            )
+        await _ev.error(
+            f"{getattr(algo_state, 'algo_id', '')} · {msg}",
+            algo_name=str(getattr(algo_state, "algo_id", "")), source="engine",
+        )
 
     async def _mark_error(self, grid_entry_id: str, msg: str):
         async with AsyncSessionLocal() as db:

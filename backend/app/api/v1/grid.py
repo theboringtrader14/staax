@@ -2,7 +2,7 @@
 Smart Grid API — manages algo deployments per trading day.
 Fully wired to PostgreSQL.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from pydantic import BaseModel
@@ -124,7 +124,7 @@ async def get_week_grid(
 
 @router.post("/")
 async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Algo).where(Algo.id == body.algo_id))
+    result = await db.execute(select(Algo).where(Algo.id == body.algo_id).with_for_update())
     algo = result.scalar_one_or_none()
     if not algo:
         raise HTTPException(status_code=404, detail="Algo not found")
@@ -139,6 +139,12 @@ async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = 
         )
     )
     existing_entry = existing_result.scalar_one_or_none()
+    # ── Update recurring_days (FOR UPDATE lock held on algo row) ──────────────
+    day_upper = day_str.upper()
+    existing_recurring = list(algo.recurring_days or [])
+    if day_upper not in existing_recurring:
+        algo.recurring_days = existing_recurring + [day_upper]
+
     if existing_entry:
         # Already deployed — update multiplier and practix flag instead of rejecting
         existing_entry.lot_multiplier = body.lot_multiplier
@@ -146,7 +152,9 @@ async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = 
         existing_entry.is_archived = False
         await db.commit()
         await db.refresh(existing_entry)
-        return _entry_to_dict(existing_entry)
+        result_dict = _entry_to_dict(existing_entry)
+        result_dict["algo_recurring_days"] = algo.recurring_days or []
+        return result_dict
 
     entry = GridEntry(
         id=uuid_lib.uuid4(),
@@ -220,7 +228,9 @@ async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = 
                 f"[GRID] Entry time {algo.entry_time} already passed for {algo.name} — no_trade"
             )
 
-    return _entry_to_dict(entry)
+    result_dict = _entry_to_dict(entry)
+    result_dict["algo_recurring_days"] = algo.recurring_days or []
+    return result_dict
 
 
 @router.get("/{entry_id}")
@@ -249,14 +259,30 @@ async def update_entry(entry_id: str, body: UpdateEntryRequest, db: AsyncSession
 
 
 @router.delete("/{entry_id}")
-async def remove_entry(entry_id: str, db: AsyncSession = Depends(get_db)):
+async def remove_entry(
+    entry_id: str,
+    remove_recurring: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(GridEntry).where(GridEntry.id == entry_id))
     entry = result.scalar_one_or_none()
     if not entry:
         raise HTTPException(status_code=404, detail="Grid entry not found")
+
+    updated_recurring: list = []
+    if remove_recurring:
+        algo_result = await db.execute(
+            select(Algo).where(Algo.id == entry.algo_id).with_for_update()
+        )
+        algo = algo_result.scalar_one_or_none()
+        if algo:
+            day_upper = entry.day_of_week.upper()
+            algo.recurring_days = [d for d in (algo.recurring_days or []) if d != day_upper]
+            updated_recurring = algo.recurring_days
+
     await db.delete(entry)
     await db.commit()
-    return {"status": "ok", "entry_id": entry_id}
+    return {"status": "ok", "entry_id": entry_id, "algo_recurring_days": updated_recurring}
 
 
 @router.post("/{entry_id}/archive")

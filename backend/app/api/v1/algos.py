@@ -114,6 +114,8 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "wt_value":        leg.wt_value,
         "wt_unit":         leg.wt_unit,
         "reentry_enabled": leg.reentry_enabled,
+            "reentry_on_sl": leg.reentry_on_sl or False,
+            "reentry_on_tp": leg.reentry_on_tp or False,
         "reentry_mode":    leg.reentry_mode.value if leg.reentry_mode else None,
         "reentry_max":     leg.reentry_max,
     }
@@ -147,6 +149,7 @@ def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -
         "exit_on_entry_failure": algo.exit_on_entry_failure,
         "base_lot_multiplier":   algo.base_lot_multiplier,
         "notes":                 algo.notes,
+        "recurring_days":        algo.recurring_days or [],
         "created_at":            algo.created_at.isoformat() if algo.created_at else None,
     }
     if legs is not None:

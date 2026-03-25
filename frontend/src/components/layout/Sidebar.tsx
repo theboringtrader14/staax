@@ -1,17 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { useStore } from '../../store'
 
 // TradingView chart links for each index (opens in new tab on click)
-const TV_LINKS: Record<string, string> = {
-  NIFTY:      'https://www.tradingview.com/chart/?symbol=NSE:NIFTY50',
-  BANKNIFTY:  'https://www.tradingview.com/chart/?symbol=NSE:BANKNIFTY',
-  SENSEX:     'https://www.tradingview.com/chart/?symbol=BSE:SENSEX',
-  FINNIFTY:   'https://www.tradingview.com/chart/?symbol=NSE:FINNIFTY',
-  MIDCPNIFTY: 'https://www.tradingview.com/chart/?symbol=NSE:MIDCPNIFTY',
-  GOLDM:      'https://www.tradingview.com/chart/?symbol=MCX:GOLDM1!',
-}
-const TICKER_NAMES = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY', 'GOLDM']
-
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 const iconSize = 18
 
@@ -65,10 +56,20 @@ const IconCandlestick = () => (
   </svg>
 )
 
+
+const IconPlus = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
+
+
+
 // P2-A — nav order: Indicator Bots after Orders
 const nav = [
   { path: '/dashboard',  label: 'Dashboard',      Icon: IconHome        },
   { path: '/grid',       label: 'Smart Grid',      Icon: IconGrid        },
+  { path: '/algo/new', label: 'New Algo', Icon: IconPlus },
   { path: '/orders',     label: 'Orders',          Icon: IconList        },
   { path: '/indicators', label: 'Indicator Bots',  Icon: IconCandlestick },
   { path: '/reports',    label: 'Reports',         Icon: IconChart       },
@@ -86,6 +87,7 @@ function StaaxLogo({ size = 32 }: { size?: number }) {
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
+  const logout = useStore((s: any) => s.logout)
   // P0-A — dirty-nav guard state
   const [pendingPath, setPendingPath] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -141,7 +143,7 @@ export default function Sidebar() {
                 justifyContent: collapsed ? 'center' : 'flex-start',
                 padding: '10px 0',
                 textDecoration: 'none',
-                color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
+                color: isActive ? 'var(--accent-blue)' : path === '/algo/new' ? '#D77B12' : 'var(--text-muted)',
                 background: isActive ? 'rgba(0,176,240,0.08)' : 'transparent',
                 borderLeft: isActive && !collapsed ? '2px solid var(--accent-blue)' : '2px solid transparent',
                 fontSize: '13px', transition: 'all 0.12s',
@@ -157,39 +159,29 @@ export default function Sidebar() {
           ))}
         </div>
 
-        {/* Ticker strip — static placeholders, click opens TradingView chart */}
-        <div style={{ borderTop: '1px solid var(--bg-border)', overflow: 'hidden' }}>
-          {collapsed ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', padding: '8px 0' }}>
-              {[0,1,2].map(i => <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-blue)', opacity: 0.4 }}/>)}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }}>
-              {TICKER_NAMES.map(name => (
-                <a
-                  key={name}
-                  href={TV_LINKS[name]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '5px 14px', textDecoration: 'none',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(0,176,240,0.06)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
-                >
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.03em' }}>{name}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'monospace' }}>--</span>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Footer */}
-        <div style={{ padding: collapsed ? '10px 0' : '10px 20px', borderTop: '1px solid var(--bg-border)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-          <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>v0.1.0 · Phase 1F</div>
+        <div style={{ borderTop: '1px solid var(--bg-border)' }}>
+          {/* Logout */}
+          <button onClick={logout} title="Logout" style={{
+            width: '100%', display: 'flex', alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: '10px', padding: collapsed ? '10px 0' : '10px 20px',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--text-muted)', fontSize: '13px', fontWeight: 500,
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#EF4444'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.06)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            {!collapsed && <span>Logout</span>}
+          </button>
+          {/* Version */}
+          <div style={{ padding: collapsed ? '6px 0' : '4px 20px 8px', fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s', whiteSpace: 'nowrap', overflow: 'hidden' }}>v0.1.0 · Phase 1F</div>
         </div>
       </nav>
 

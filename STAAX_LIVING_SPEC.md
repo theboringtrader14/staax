@@ -2915,3 +2915,39 @@ This marks the first successful end-to-end algo trade on STAAX.
 - File: backend/app/engine/algo_runner.py (add event logging for all order events)
   frontend/src/components/layout/TopBar.tsx (remove bell icon)
   frontend/src/pages/DashboardPage.tsx (System Log already shows events)
+
+
+## 25 Mar 2026 — Session Summary
+
+### Completed This Session
+
+#### Batch 20 — Recurring Grid + System Log + Orders Errors
+- recurring_days JSON column added to algos table (migration run)
+- Grid entries auto-populate missing recurring days on page mount
+- X button on grid cell shows "Just Today / Remove Recurring" modal
+- Bell icon removed from TopBar entirely
+- System Log captures all platform events (auth, scheduler, orders, errors)
+- Orders page: leg error rows show inline with left red border + group error badge
+
+#### Sidebar
+- New Algo nav item added between Smart Grid and Orders — amber #D77B12, + icon
+- Logout button moved to sidebar bottom, red on hover
+- Static ticker instruments removed from sidebar
+
+#### AlgoPage — RESL / RETP
+- RE split into RE-SL and RE-TP independent toggles
+- New DB columns: reentry_on_sl, reentry_on_tp on algo_legs (migration 0012)
+- Button order all levels: W&T > SL > TSL > RE-SL > TP > TTP > RE-TP
+- Blocked logic uniform: TSL/RE-SL blocked unless SL enabled+value; TTP/RE-TP blocked unless TP enabled+value
+- Cascades: SL off resets TSL+RE-SL; TP off resets TTP+RE-TP
+- RE-SL/RE-TP panels: mode (@Entry/Now/@Cost) + count 1-3x (max 3)
+- Journey children: RE-SL and RE-TP panels wired on all levels
+
+#### SmartStream Debug
+- [AO-CONNECT] logging added around AngelOneTickerAdapter creation in main.py
+- Full traceback on failure via [AO-CONNECT FAILED]
+
+### Pending
+- SmartStream actual fix — debug logs ready, test tomorrow with valid AO token
+- Recurring auto-fill — test tomorrow morning when scheduler fires
+- TradingView ticker deferred — not needed for systematic trading

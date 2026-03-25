@@ -388,6 +388,7 @@ async def _subscribe_open_position_tokens(ltp_consumer) -> None:
         logger.warning(f"[STARTUP MF] Open-position token subscription failed (non-fatal): {e}")
 
 
+import traceback
 async def _auto_start_market_feed(app: "FastAPI") -> None:
     """
     Called once at startup. If a valid today's broker token exists in DB,
@@ -522,24 +523,31 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
             # Start market feed with the first valid account
             if not market_feed_started:
-                adapter = AngelOneTickerAdapter(
-                    auth_token=ao_acc.access_token,
-                    api_key=ao_acc.api_key or "",
-                    client_code=ao_acc.client_id,
-                    feed_token=feed_token,
-                )
-                ltp_consumer.set_angel_adapter(adapter)
-                _service_states["ws"] = ServiceStatus.RUNNING
-                logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
-
                 try:
-                    index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
-                    ltp_consumer.subscribe(index_tokens)
-                except Exception as e:
-                    logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
+                    logger.info("[AO-CONNECT] Creating AngelOneTickerAdapter...")
+                    adapter = AngelOneTickerAdapter(
+                        auth_token=ao_acc.access_token,
+                        api_key=ao_acc.api_key or "",
+                        client_code=ao_acc.client_id,
+                        feed_token=feed_token,
+                    )
+                    logger.info("[AO-CONNECT] Calling set_angel_adapter...")
+                    ltp_consumer.set_angel_adapter(adapter)
+                    logger.info("[AO-CONNECT] Adapter set OK")
+                    _service_states["ws"] = ServiceStatus.RUNNING
+                    logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
 
-                await _subscribe_tokens(ltp_consumer)
-                market_feed_started = True
+                    try:
+                        index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
+                        ltp_consumer.subscribe(index_tokens)
+                    except Exception as e:
+                        logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
+
+                    await _subscribe_tokens(ltp_consumer)
+                    market_feed_started = True
+                except Exception as _ao_ex:
+                    import traceback as _tb
+                    logger.error(f"[AO-CONNECT FAILED] {_ao_ex}\n{_tb.format_exc()}")
 
         if not market_feed_started:
             logger.info("[STARTUP MF] No valid Angel One token found — Market Feed will start after manual login")

@@ -18,13 +18,14 @@ interface Cell {
   pnl?:         number
 }
 interface Algo {
-  id:      string
-  name:    string
-  account: string
-  legs:    {i:string; d:'B'|'S'}[]
-  et:      string
-  xt:      string
-  arch:    boolean
+  id:            string
+  name:          string
+  account:       string
+  legs:          {i:string; d:'B'|'S'}[]
+  et:            string
+  xt:            string
+  arch:          boolean
+  recurringDays: string[]   // ["MON","WED"] — server is source of truth
 }
 
 // ── Status config ──────────────────────────────────────────────────────────────
@@ -40,9 +41,9 @@ const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
 
 // ── Demo fallback (shown when API is unreachable) ──────────────────────────────
 const DEMO_ALGOS: Algo[] = [
-  {id:'1',name:'AWS-1', account:'Karthik',legs:[{i:'NF',d:'B'},{i:'NF',d:'B'}],et:'09:16',xt:'15:10',arch:false},
-  {id:'2',name:'TF-BUY',account:'Mom',    legs:[{i:'BN',d:'B'}],               et:'09:30',xt:'15:10',arch:false},
-  {id:'3',name:'S1',    account:'Karthik',legs:[{i:'NF',d:'B'},{i:'NF',d:'S'}],et:'09:20',xt:'15:10',arch:false},
+  {id:'1',name:'AWS-1', account:'Karthik',legs:[{i:'NF',d:'B'},{i:'NF',d:'B'}],et:'09:16',xt:'15:10',arch:false,recurringDays:[]},
+  {id:'2',name:'TF-BUY',account:'Mom',    legs:[{i:'BN',d:'B'}],               et:'09:30',xt:'15:10',arch:false,recurringDays:[]},
+  {id:'3',name:'S1',    account:'Karthik',legs:[{i:'NF',d:'B'},{i:'NF',d:'S'}],et:'09:20',xt:'15:10',arch:false,recurringDays:[]},
 ]
 const DEMO_GRID: Record<string,Record<string,Cell>> = {
   '1':{MON:{multiplier:1,status:'open',       mode:'practix',entry:'09:16',exit:'15:10',pnl:1325},
@@ -127,9 +128,11 @@ export default function GridPage() {
   const [ev,       setEv]       = useState('')
   const [drag,     setDrag]     = useState<string | null>(null)
   const [showArch, setShowArch] = useState(false)
-  const [del,      setDel]      = useState<string | null>(null)
-  const [opError,  setOpError]  = useState<string>('')   // inline op error
-  const [sortBy,   setSortBy]   = useState<string>(() => localStorage.getItem('staax_grid_sort') || 'date_desc')
+  const [del,           setDel]          = useState<string | null>(null)
+  const [opError,       setOpError]      = useState<string>('')   // inline op error
+  const [autoFillToast, setAutoFillToast] = useState<string>('')  // "Auto-filled N recurring day(s)"
+  const [rmModal,       setRmModal]      = useState<{algoId:string; day:string} | null>(null)
+  const [sortBy,        setSortBy]       = useState<string>(() => localStorage.getItem('staax_grid_sort') || 'date_desc')
 
   const days = wk ? [...DAYS, ...WEEKENDS] : DAYS
 
@@ -146,16 +149,17 @@ export default function GridPage() {
       // Load algos
       const algoRes = await algosAPI.list()
       const apiAlgos: Algo[] = (algoRes.data || []).map((a: any) => ({
-        id:      String(a.id),
-        name:    a.name,
-        account: a.account_nickname || '',
-        legs:    (a.legs || []).map((l: any) => ({
+        id:            String(a.id),
+        name:          a.name,
+        account:       a.account_nickname || '',
+        legs:          (a.legs || []).map((l: any) => ({
           i: ({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'}[l.underlying] || (l.underlying||'NF').slice(0,2).toUpperCase()),
           d: l.direction === 'buy' ? 'B' : 'S',
         })),
-        et:   a.entry_time || '09:16',
-        xt:   a.exit_time  || '15:10',
-        arch: a.is_archived || false,
+        et:            a.entry_time || '09:16',
+        xt:            a.exit_time  || '15:10',
+        arch:          a.is_archived || false,
+        recurringDays: Array.isArray(a.recurring_days) ? a.recurring_days : [],
       }))
       setAlgos(apiAlgos)
 
@@ -184,6 +188,46 @@ export default function GridPage() {
           }
         }
         setGrid(newGrid)
+
+        // ── Auto-fill recurring days ─────────────────────────────────────────
+        // For each active algo with recurring_days, deploy missing days silently.
+        let autoFilled = 0
+        const updatedAlgos = [...apiAlgos]
+        await Promise.all(apiAlgos.filter(a => !a.arch && a.recurringDays.length > 0).map(async algo => {
+          const missingDays = DAYS.filter(d => algo.recurringDays.includes(d) && !newGrid[algo.id]?.[d])
+          for (const day of missingDays) {
+            try {
+              const res = await gridAPI.deploy({
+                algo_id: algo.id, trading_date: weekDates[day],
+                lot_multiplier: 1, is_practix: true,
+              })
+              const gridEntryId = String(res.data?.id || '')
+              newGrid[algo.id] = newGrid[algo.id] || {}
+              newGrid[algo.id][day] = {
+                gridEntryId,
+                multiplier: 1,
+                status:     mapStatus(res.data?.status || 'no_trade'),
+                mode:       'practix',
+                entry:      algo.et,
+                exit:       algo.xt,
+              }
+              // Sync recurringDays from server response
+              const idx = updatedAlgos.findIndex(a => a.id === algo.id)
+              if (idx >= 0 && Array.isArray(res.data?.algo_recurring_days)) {
+                updatedAlgos[idx] = { ...updatedAlgos[idx], recurringDays: res.data.algo_recurring_days }
+              }
+              autoFilled++
+            } catch {
+              // Silent — don't block the rest of the load
+            }
+          }
+        }))
+        if (autoFilled > 0) {
+          setGrid({ ...newGrid })
+          setAlgos(updatedAlgos)
+          setAutoFillToast(`Auto-filled ${autoFilled} recurring day${autoFilled > 1 ? 's' : ''}`)
+          setTimeout(() => setAutoFillToast(''), 3500)
+        }
       }
     } catch {
       // API unreachable — keep demo data, user can still interact
@@ -228,11 +272,12 @@ export default function GridPage() {
       const gridEntryId = String(res.data?.id || '')
       setGrid(g => ({
         ...g,
-        [algoId]: {
-          ...g[algoId],
-          [day]: { ...g[algoId][day], gridEntryId },
-        },
+        [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], gridEntryId } },
       }))
+      // Sync recurringDays from server
+      if (Array.isArray(res.data?.algo_recurring_days)) {
+        setAlgos(a => a.map(x => x.id === algoId ? { ...x, recurringDays: res.data.algo_recurring_days } : x))
+      }
     } catch (e: any) {
       // Rollback optimistic update
       setGrid(g => {
@@ -244,16 +289,20 @@ export default function GridPage() {
     }
   }
 
-  // ── Remove cell ───────────────────────────────────────────────────────────────
-  const rmCell = async (algoId: string, day: string) => {
-    const cell = grid[algoId]?.[day]
-
-    // Block remove if cell is active or open
+  // ── Remove cell — opens modal for Just Today / Remove Recurring ──────────────
+  const rmCell = (algoId: string, day: string) => {
     const cellStatus = grid[algoId]?.[day]?.status
     if (cellStatus === 'algo_active' || cellStatus === 'waiting' || cellStatus === 'open' || cellStatus === 'order_pending') {
       flashError('Cannot remove an active algo from this day')
       return
     }
+    setRmModal({ algoId, day })
+  }
+
+  const doRemove = async (algoId: string, day: string, removeRecurring: boolean) => {
+    const cell = grid[algoId]?.[day]
+    setRmModal(null)
+
     // Optimistic remove
     setGrid(g => {
       const u = { ...g[algoId] }
@@ -263,7 +312,11 @@ export default function GridPage() {
 
     if (cell?.gridEntryId) {
       try {
-        await gridAPI.remove(cell.gridEntryId)
+        const res = await gridAPI.remove(cell.gridEntryId, removeRecurring)
+        // Sync recurringDays from server if we removed the recurring flag
+        if (removeRecurring && Array.isArray(res.data?.algo_recurring_days)) {
+          setAlgos(a => a.map(x => x.id === algoId ? { ...x, recurringDays: res.data.algo_recurring_days } : x))
+        }
       } catch {
         // Restore on failure
         setGrid(g => ({ ...g, [algoId]: { ...g[algoId], [day]: cell } }))
@@ -355,6 +408,10 @@ export default function GridPage() {
           ...g,
           [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], gridEntryId } },
         }))
+        // Sync recurringDays from server (FOR UPDATE ensures correct state)
+        if (Array.isArray(res.data?.algo_recurring_days)) {
+          setAlgos(a => a.map(x => x.id === algoId ? { ...x, recurringDays: res.data.algo_recurring_days } : x))
+        }
       } catch (e: any) {
         // Rollback this day
         setGrid(g => {
@@ -387,6 +444,9 @@ export default function GridPage() {
         const res = await gridAPI.deploy({ algo_id:a.id, trading_date:tradingDate, lot_multiplier:1, is_practix:true })
         const gridEntryId = String(res.data?.id || '')
         setGrid(g => ({ ...g, [a.id]: { ...g[a.id], [todayDay]: { ...g[a.id][todayDay], gridEntryId } } }))
+        if (Array.isArray(res.data?.algo_recurring_days)) {
+          setAlgos(al => al.map(x => x.id === a.id ? { ...x, recurringDays: res.data.algo_recurring_days } : x))
+        }
       } catch (e: any) {
         setGrid(g => { const u = { ...g[a.id] }; delete u[todayDay]; return { ...g, [a.id]: u } })
         flashError(e?.response?.data?.detail || `Deploy failed for ${a.name}`)
@@ -483,6 +543,9 @@ export default function GridPage() {
         <div className="page-header-actions">
           {opError && (
             <span style={{ fontSize:'11px', color:'var(--red)', fontWeight:600 }}>⚠ {opError}</span>
+          )}
+          {autoFillToast && (
+            <span style={{ fontSize:'11px', color:'var(--accent-blue)', fontWeight:600 }}>↻ {autoFillToast}</span>
           )}
           <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'var(--text-muted)', cursor:'pointer' }}>
             <input type="checkbox" checked={wk} onChange={e => setWk(e.target.checked)} style={{ accentColor:'var(--accent-blue)' }}/>
@@ -711,6 +774,42 @@ export default function GridPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Remove cell modal — Just Today vs Remove Recurring */}
+      {rmModal && (() => {
+        const algo = algos.find(x => x.id === rmModal.algoId)
+        const isRecurring = algo?.recurringDays.includes(rmModal.day)
+        return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth:'360px' }}>
+              <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'8px' }}>
+                Remove {algo?.name} from {rmModal.day}?
+              </div>
+              {isRecurring
+                ? <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'18px' }}>
+                    This algo recurs every <strong>{rmModal.day}</strong>. Remove just this week, or stop it recurring?
+                  </div>
+                : <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'18px' }}>
+                    Remove this entry from {rmModal.day}?
+                  </div>
+              }
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="btn btn-ghost" onClick={() => setRmModal(null)}>Cancel</button>
+                <button className="btn" style={{ background:'var(--bg-surface)', color:'var(--text-muted)', border:'1px solid var(--bg-border)' }}
+                  onClick={() => doRemove(rmModal.algoId, rmModal.day, false)}>
+                  Just Today
+                </button>
+                {isRecurring && (
+                  <button className="btn" style={{ background:'rgba(239,68,68,0.15)', color:'var(--red)', border:'1px solid rgba(239,68,68,0.3)' }}
+                    onClick={() => doRemove(rmModal.algoId, rmModal.day, true)}>
+                    Remove Recurring
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Delete modal */}
       {del && (() => {

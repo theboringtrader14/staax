@@ -1,65 +1,30 @@
-import { useStore } from '@/store'
-import { eventsAPI, systemAPI } from '@/services/api'
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-
-const NOTIF_COLOR: Record<string, string> = {
-  error:   'var(--red)',
-  warn:    'var(--amber)',
-  success: 'var(--green)',
-  info:    'var(--accent-blue)',
-}
+import { useStore } from '../../store'
+import { systemAPI } from '../../services/api'
 
 export default function TopBar() {
   const isPractixMode     = useStore(s => s.isPractixMode)
   const setIsPractixMode  = useStore(s => s.setIsPractixMode)
   const livePnl           = useStore(s => s.livePnl)
   const setLivePnl        = useStore(s => s.setLivePnl)
-  const notifications     = useStore(s => s.notifications)
-  const markAllRead       = useStore(s => s.markAllRead)
   const theme             = useStore(s => s.theme)
   const toggleTheme       = useStore(s => s.toggleTheme)
-  const unreadCount       = useStore(s => s.unreadCount)
   const rawAccounts       = useStore(s => s.accounts)
   const activeAccount     = useStore(s => s.activeAccount)
   const setActiveAccount  = useStore(s => s.setActiveAccount)
-  const logout            = useStore(s => s.logout)
 
   // Guard: ensure accounts is always a plain array regardless of what the API returned
   const accounts = Array.isArray(rawAccounts) ? rawAccounts : []
 
-  const [time, setTime]           = useState(new Date())
-  const [showNotif, setShowNotif] = useState(false)
-
-  // Load persisted events from DB on mount
-  useEffect(() => {
-    eventsAPI.list(50)
-      .then(res => {
-        const rows = res.data || []
-        rows.forEach((e: any) => addNotification({
-          type: e.level === 'success' ? 'success' : e.level === 'warn' ? 'warn' : e.level === 'error' ? 'error' : 'info',
-          title: e.algo_name || e.source || 'System',
-          message: e.msg,
-          time: e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
-        }))
-      })
-      .catch(() => {})
-  }, [])
-
-  const handleExport = async () => {
-    try {
-      const res = await eventsAPI.export()
-      const url = URL.createObjectURL(new Blob([JSON.stringify(res.data, null, 2)]))
-      const a = document.createElement('a')
-      a.href = url; a.download = 'staax_event_log.json'; a.click()
-      URL.revokeObjectURL(url)
-    } catch {}
-  }
+  const [time, setTime] = useState(new Date())
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
+
+
 
   // Poll /system/stats every 5s for live MTM — supplements WebSocket
   useEffect(() => {
@@ -85,8 +50,6 @@ export default function TopBar() {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
     timeZone: 'Asia/Kolkata', hour12: true,
   })
-
-  const unread = unreadCount()
 
   const location = useLocation()
   const accountDropdownActive = ['/grid', '/orders', '/reports'].some(p => location.pathname.startsWith(p))
@@ -115,6 +78,35 @@ export default function TopBar() {
           </span>
         </div>
 
+
+        {/* Middle — TradingView Ticker Tape */}
+        <div style={{ flex: 1, maxWidth: '600px', overflow: 'hidden', height: '36px' }}>
+          <div className="tradingview-widget-container" style={{ height: '36px' }}>
+            <div className="tradingview-widget-container__widget"></div>
+            <script
+              type="text/javascript"
+              src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
+              async
+              dangerouslySetInnerHTML={{ __html: JSON.stringify({
+                symbols: [
+                  { description: "NIFTY",    proName: "NSE:NIFTY" },
+                  { description: "BANKNIFTY",proName: "NSE:BANKNIFTY" },
+                  { description: "SENSEX",   proName: "BSE:SENSEX" },
+                  { description: "FINNIFTY", proName: "NSE:FINNIFTY" },
+                  { description: "MIDCAP",   proName: "NSE:MIDCPNIFTY" },
+                  { description: "GOLD",     proName: "MCX:GOLD1!" },
+                ],
+                showSymbolLogo: false,
+                isTransparent: true,
+                displayMode: "compact",
+                colorTheme: "dark",
+                locale: "in",
+              })}}
+            />
+          </div>
+        </div>
+
+
         {/* Right */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <select
@@ -122,8 +114,7 @@ export default function TopBar() {
             value={accountDropdownActive ? (activeAccount || 'All Accounts') : 'All Accounts'}
             onChange={e => accountDropdownActive && setActiveAccount(e.target.value === 'All Accounts' ? null : e.target.value)}
             disabled={!accountDropdownActive}
-            style={{ opacity: accountDropdownActive ? 1 : 0.38, cursor: accountDropdownActive ? 'pointer' : 'default', pointerEvents: accountDropdownActive ? 'auto' : 'none' }}
-            style={{ width: '150px', fontSize: '12px' }}
+            style={{ opacity: accountDropdownActive ? 1 : 0.38, cursor: accountDropdownActive ? 'pointer' : 'default', pointerEvents: accountDropdownActive ? 'auto' : 'none', width: '110px', fontSize: '11px' }}
           >
             {accountOptions.map(a => <option key={a}>{a}</option>)}
           </select>
@@ -145,25 +136,6 @@ export default function TopBar() {
             {isPractixMode ? 'PRACTIX' : 'LIVE'}
           </button>
 
-          <button
-            onClick={() => { setShowNotif(!showNotif); if (!showNotif) markAllRead() }}
-            style={{
-              background: showNotif ? 'rgba(0,176,240,0.12)' : 'var(--bg-surface)',
-              border: `1px solid ${showNotif ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-              borderRadius: '5px', width: 'var(--btn-h)', height: 'var(--btn-h)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'var(--text-muted)', fontSize: '15px', position: 'relative',
-            }}
-          >
-            🔔
-            {unread > 0 && (
-              <span style={{
-                position: 'absolute', top: '5px', right: '5px',
-                width: '7px', height: '7px', borderRadius: '50%', background: 'var(--red)',
-              }} />
-            )}
-          </button>
-
           <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             style={{
               background: 'transparent', border: '1px solid var(--bg-border)',
@@ -178,59 +150,10 @@ export default function TopBar() {
             <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{theme === 'dark' ? '☀' : '☾'}</span>
           </button>
 
-          <button onClick={logout}
-            style={{ background: 'transparent', border: '1px solid var(--bg-border)',
-              borderRadius: '5px', height: 'var(--btn-h)', padding: '0 12px',
-              cursor: 'pointer', color: 'var(--text-muted)', fontSize: '11px',
-              fontWeight: 600, letterSpacing: '0.04em', transition: 'all 0.12s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--text-dim)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--bg-border)' }}
-            title="Logout">
-            Logout
-          </button>
+
         </div>
       </header>
 
-      {showNotif && (
-        <div className="notif-panel">
-          <div style={{
-            padding: '14px 16px', borderBottom: '1px solid var(--bg-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span style={{ fontWeight: 700, fontSize: '13px' }}>Notifications</span>
-            <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-              <button onClick={handleExport} title="Export log for debugging"
-                style={{ background:'none', border:'1px solid var(--bg-border)', borderRadius:'4px', cursor:'pointer', color:'var(--text-dim)', fontSize:'10px', padding:'2px 6px' }}>↓ Export</button>
-              <button onClick={() => setShowNotif(false)} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', fontSize: '14px',
-            }}>✕</button>
-            </div>
-          </div>
-          <div style={{ padding: '8px 0' }}>
-            {notifications.length === 0 && (
-              <div style={{ padding: '20px 16px', color: 'var(--text-dim)', fontSize: '12px', textAlign: 'center' }}>
-                No notifications yet
-              </div>
-            )}
-            {notifications.map(n => (
-              <div key={n.id} style={{
-                padding: '10px 16px', borderBottom: '1px solid rgba(63,65,67,0.4)',
-                borderLeft: `3px solid ${NOTIF_COLOR[n.type]}`,
-                animation: 'fadeIn 0.15s ease', marginBottom: '1px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3px' }}>
-                  <span style={{
-                    fontSize: '10px', fontWeight: 700, color: NOTIF_COLOR[n.type], textTransform: 'uppercase',
-                  }}>{n.type}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{n.time}</span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.4 }}>{n.msg}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </>
   )
 }

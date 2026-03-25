@@ -114,6 +114,11 @@ class Algo(Base):
     # ── Journey config (Phase 1E) ─────────────────────────────────────────────
     journey_config = Column(JSON, nullable=True)
 
+    # ── Recurring grid days ────────────────────────────────────────────────────
+    # ["MON","WED","FRI"] — GridPage auto-creates entries each week for these days.
+    # Updated by POST /grid/ (deploy) and DELETE /grid/{id}?remove_recurring=true.
+    recurring_days = Column(JSON, nullable=True, default=list)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     notes      = Column(Text, nullable=True)
@@ -169,6 +174,8 @@ class AlgoLeg(Base):
     # ── Per-leg Re-entry ──────────────────────────────────────────────────────
     # reentry_max: 0 = disabled, 1–5 = max re-entries per day
     reentry_enabled = Column(Boolean, default=False)
+    reentry_on_sl   = Column(Boolean, default=False)   # re-enter after SL hit
+    reentry_on_tp   = Column(Boolean, default=False)   # re-enter after TP hit
     reentry_mode    = Column(Enum(ReentryMode, values_callable=lambda x: [e.value for e in x]), nullable=True)
     reentry_max     = Column(Integer, default=0)   # 0–5
 
