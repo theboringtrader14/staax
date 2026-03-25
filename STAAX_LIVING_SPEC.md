@@ -2973,3 +2973,103 @@ This marks the first successful end-to-end algo trade on STAAX.
 3. Watch logs for: [AO-LOGIN] SmartStream auto-started
 4. Then watch for: [AO-DEBUG] _on_open fired
 5. If _on_open fires → SmartStream working → tickers, W&T, ORB all unblocked
+
+
+---
+
+## STAAX — Living Backlog & Status (updated 25 Mar 2026)
+
+> This section is the SSOT for all pending work. Updated every session. Supersedes all prior backlog entries above.
+
+---
+
+### 🔴 P0 — Blockers (nothing works without these)
+
+| # | Item | Status | Blocked by |
+|---|------|--------|------------|
+| P0-1 | **SmartStream `_on_open` confirmation** | ⏳ Test tomorrow morning | Need fresh tokens during market hours |
+| P0-2 | **SEBI April 1 static IP** | ⏳ Do before live deployment | AWS EC2 + Elastic IP required |
+
+**SmartStream current state:**
+- `smartapi-python` 1.5.5 installed ✅
+- Import path fixed: `SmartApi.smartWebSocketV2` ✅
+- `adapter.start()` wired in `angelone_login()` — auto-starts on every morning login ✅
+- Startup SmartStream attempt removed (tokens always stale at startup) ✅
+- Tomorrow: login → watch logs for `[AO-LOGIN] SmartStream auto-started` → then `[AO-DEBUG] _on_open fired`
+
+---
+
+### 🟡 P1 — Active Phase 1F Backlog
+
+#### Engine / Backend
+| # | Item | Notes |
+|---|------|-------|
+| P1-1 | Algo-3 PE leg failure | SL% straddle, CE fires but PE fails silently. Needs log analysis |
+| P1-2 | Algo-6/9 W&T failures | Blocked on SmartStream |
+| P1-3 | Algo-7/10/12 ORB no trade | Blocked on SmartStream |
+| P1-4 | Algo-18 DTE positional error | Needs investigation |
+| P1-5 | Wife order routing | Safe in PRACTIX, must fix before LIVE |
+| P1-6 | Recurring auto-fill test | Deploy to Thursday — verify auto-fill at mount tomorrow |
+
+#### Frontend / UX
+| # | Item | Notes |
+|---|------|-------|
+| P1-7 | Orders page button styling | RUN/RE/SYNC/SQ/T too plain |
+| P1-8 | Orders P&L alignment | Fixed-width right side to stop zig-zag misalignment |
+| P1-9 | Orders exit time fix | Shows configured exit_time not actual order.exit_time |
+| P1-10 | Orders algo name click → popup | Show strategy params modal, don't navigate |
+| P1-11 | Reports page — wire real data | Currently stub. Wire to orders table + execution_logs |
+| P1-12 | Reports fixes | P&L legend, Click to Expand spacing, PER-ALGO sort buttons |
+| P1-13 | Grid: Delete + Archive buttons | Beside "All" chip, with confirmation popup |
+| P1-14 | Dashboard: Active Algos IST filter | Needs restart to take effect |
+| P1-15 | Indicator Bots: Signal Tracker + Orders | Below bot cards, per spec §6 |
+| P1-16 | Documentation popup | User workflow guide + algo config guide |
+
+---
+
+### 🟢 Phase 2 — Deployment (after platform stable)
+
+| # | Item | Notes |
+|---|------|-------|
+| PH2-1 | AWS EC2 + Elastic IP | Required for SEBI static IP compliance |
+| PH2-2 | SSL + domain | Good URL TBD |
+| PH2-3 | Multi-app URLs | /STAAX /INVEX /BUDGEX /FINEX |
+| PH2-4 | Security hardening | HTTPS, CORS lockdown, env secrets |
+| PH2-5 | SEBI Angel One registration | Register static IP on all 3 accounts, regenerate API keys |
+
+---
+
+### 🔵 INVEX — Phase 2 (SIP Engine)
+
+| # | Item | Notes |
+|---|------|-------|
+| INV-1 | SIP frontend page | Tables + API routes already exist in invex/ |
+| INV-2 | SIP scheduler job | 09:20 IST daily, market order CNC |
+| INV-3 | SIP order execution | Via Angel/Zerodha execution_router |
+
+---
+
+### ✅ Completed This Session (25 Mar 2026) — commit `baa9b93`
+
+- Recurring grid entries: `recurring_days` column, auto-fill on mount, Just Today/Remove Recurring modal
+- Bell icon removed from TopBar — System Log is universal action capture
+- Orders page: leg error inline display with red left border + group badge
+- New Algo in sidebar (amber #D77B12, + icon)
+- Logout moved to sidebar bottom, red on hover
+- Static tickers removed from sidebar
+- RE split into RE-SL + RE-TP: independent toggles, blocked logic, panels with mode + count 1-3x
+- reentry_on_sl + reentry_on_tp columns migrated (migration 0012)
+- Button order W&T > SL > TSL > RE-SL > TP > TTP > RE-TP on all levels
+- SmartStream: smartapi-python installed, import fixed, adapter.start() wired on login
+
+---
+
+### 📋 Tomorrow Morning Checklist
+
+1. `cd ~/STAXX/staax && ./debug_log.sh`
+2. Auto-login all 3 AO accounts
+3. Watch logs for `[AO-LOGIN] SmartStream auto-started` and `[AO-DEBUG] _on_open fired`
+4. Check Grid — recurring days should auto-fill Thursday entries
+5. Run `./show_errors.sh`
+6. Next task from backlog: P1-7 Orders button styling OR P1-1 Algo-3 PE leg failure analysis
+
