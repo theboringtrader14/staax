@@ -15,6 +15,7 @@ NOTE: LTPConsumer.start() is NOT called at startup — the ticker requires a val
 Zerodha access token. It is started lazily when the user completes broker login
 (via POST /api/v1/accounts/zerodha/set-token).
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -457,7 +458,9 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                         logger.warning(f"[STARTUP MF] Index token subscription failed: {e}")
 
                     await _subscribe_tokens(ltp_consumer)
-                    return  # Zerodha feed started — done
+                    logger.info("[STARTUP MF] Zerodha feed started — also checking Angel One for live order routing...")
+                    # Don't return — fall through to also start Angel One SmartStream
+                    # Mom + Wife accounts need AO SmartStream for SL/TP monitoring
             else:
                 logger.info("[STARTUP MF] Zerodha token is from a previous day — not using")
         else:
@@ -534,16 +537,52 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     logger.info("[AO-CONNECT] Calling set_angel_adapter...")
                     ltp_consumer.set_angel_adapter(adapter)
                     logger.info("[AO-CONNECT] Adapter set OK")
-                    _service_states["ws"] = ServiceStatus.RUNNING
-                    logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
 
+                    # Collect all tokens to subscribe
+                    all_tokens: list[int] = []
                     try:
                         index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
-                        ltp_consumer.subscribe(index_tokens)
+                        all_tokens.extend(index_tokens)
                     except Exception as e:
-                        logger.warning(f"[STARTUP MF] AO index token subscription failed: {e}")
+                        logger.warning(f"[STARTUP MF] AO index token build failed: {e}")
 
-                    await _subscribe_tokens(ltp_consumer)
+                    # Add open position tokens
+                    try:
+                        from app.core.database import AsyncSessionLocal as _ASL2
+                        from app.models.order import Order, OrderStatus
+                        from sqlalchemy import select as _sel
+                        async with _ASL2() as _db:
+                            _res = await _db.execute(
+                                _sel(Order.instrument_token)
+                                .where(Order.status == OrderStatus.OPEN, Order.instrument_token.isnot(None))
+                                .distinct()
+                            )
+                            open_tokens = [int(t) for t in _res.scalars().all() if t is not None]
+                            all_tokens.extend(open_tokens)
+                            if open_tokens:
+                                logger.info(f"[AO-CONNECT] Added {len(open_tokens)} open position tokens")
+                    except Exception as e:
+                        logger.warning(f"[AO-CONNECT] Open position tokens fetch failed: {e}")
+
+                    # NOW actually start the adapter — this creates SmartWebSocketV2 and calls connect()
+                    # Skip SmartStream at startup — tokens expire daily, auto-login will start it
+                    # SmartStream is now auto-started from angelone_login() after fresh token obtained
+                    logger.info("[AO-CONNECT] Skipping SmartStream at startup — will auto-start after morning login")
+                    market_feed_started = True
+                    continue
+                    logger.info(f"[AO-CONNECT] Calling adapter.start() with {len(all_tokens)} tokens...")
+                    loop = asyncio.get_event_loop()
+                    import concurrent.futures as _cf
+                    executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_smartstream")
+                    loop.run_in_executor(executor, lambda: adapter.start(
+                        tokens=[str(t) for t in all_tokens],
+                        loop=loop,
+                        on_tick=ltp_consumer._process_ticks,
+                    ))
+                    logger.info("[AO-CONNECT] adapter.start() dispatched to thread")
+
+                    _service_states["ws"] = ServiceStatus.RUNNING
+                    logger.info(f"[STARTUP MF] ✅ Market Feed auto-started with Angel One ({ao_acc.nickname})")
                     market_feed_started = True
                 except Exception as _ao_ex:
                     import traceback as _tb

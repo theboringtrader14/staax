@@ -293,15 +293,28 @@ async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)
     )
     ltp_consumer.set_angel_adapter(adapter)
 
-    # Subscribe index tokens
+    # Collect tokens
+    all_tokens = []
     try:
         index_tokens = [int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
-        ltp_consumer.subscribe(index_tokens)
+        all_tokens.extend(index_tokens)
     except Exception as e:
-        logger.warning(f"[START-MF] Index token subscription failed: {e}")
+        logger.warning(f"[START-MF] Index token build failed: {e}")
+
+    # Actually start the SmartWebSocketV2 connection in a thread
+    import asyncio as _aio
+    import concurrent.futures as _cf
+    loop = _aio.get_event_loop()
+    executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_smartstream")
+    loop.run_in_executor(executor, lambda: adapter.start(
+        tokens=[str(t) for t in all_tokens],
+        loop=loop,
+        on_tick=ltp_consumer._process_ticks,
+    ))
+    logger.info(f"[START-MF] adapter.start() dispatched — {len(all_tokens)} tokens")
 
     _service_states["ws"] = ServiceStatus.RUNNING
-    logger.info(f"[START-MF] Market Feed started via {chosen_acc.nickname}")
+    logger.info(f"[START-MF] ✅ Market Feed started via {chosen_acc.nickname}")
 
     return {"status": "ok", "account": chosen_acc.nickname, "broker_key": broker_key}
 

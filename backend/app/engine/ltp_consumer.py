@@ -87,7 +87,7 @@ class AngelOneTickerAdapter:
         on_tick: async callable(ticks: list) — same signature as _process_ticks.
         """
         try:
-            from SmartApi.SmartWebSocketV2 import SmartWebSocketV2
+            from SmartApi.smartWebSocketV2 import SmartWebSocketV2
         except ImportError:
             logger.error(
                 "[AO] SmartWebSocketV2 not available — install smartapi-python. "

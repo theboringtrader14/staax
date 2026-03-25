@@ -2951,3 +2951,25 @@ This marks the first successful end-to-end algo trade on STAAX.
 - SmartStream actual fix — debug logs ready, test tomorrow with valid AO token
 - Recurring auto-fill — test tomorrow morning when scheduler fires
 - TradingView ticker deferred — not needed for systematic trading
+
+
+## 25 Mar 2026 — SmartStream Debug Session
+
+### Root cause found and fixed
+- `smartapi-python` was NOT installed — this was the core blocker for all SmartStream sessions
+- Installed: smartapi-python 1.5.5 + logzero + websocket-client
+- Import path fixed: `SmartApi.smartWebSocketV2` (lowercase w) not `SmartApi.SmartWebSocketV2`
+- `asyncio` import confirmed at line 17 of main.py
+
+### Architecture fix
+- `_auto_start_market_feed()` at startup no longer attempts SmartStream (tokens always stale at startup)
+- SmartStream now auto-starts from `angelone_login()` after fresh token obtained
+- `adapter.start()` wired in both `accounts.py` and `system.py` start-market-feed endpoint
+- Flow: morning auto-login → fresh JWT + feed_token → adapter.start() → SmartWebSocketV2.connect()
+
+### Tomorrow morning test
+1. Start backend: ./debug_log.sh
+2. Run auto-login for all 3 accounts
+3. Watch logs for: [AO-LOGIN] SmartStream auto-started
+4. Then watch for: [AO-DEBUG] _on_open fired
+5. If _on_open fires → SmartStream working → tickers, W&T, ORB all unblocked

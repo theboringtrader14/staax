@@ -290,6 +290,37 @@ async def angelone_login(
     from app.engine import event_logger as _ev
     await _ev.success(f"Angel One ({nickname}) connected", source="auth")
 
+    # Auto-start SmartStream if not already running — use first account that logs in
+    try:
+        ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+        if ltp_consumer and jwt_token and feed_token:
+            existing = getattr(ltp_consumer, "_angel_adapter", None)
+            already_running = existing and getattr(existing, "_running", False)
+            if not already_running:
+                from app.engine.ltp_consumer import AngelOneTickerAdapter
+                import asyncio as _aio
+                import concurrent.futures as _cf
+                adapter = AngelOneTickerAdapter(
+                    auth_token=jwt_token,
+                    api_key=broker.api_key if hasattr(broker, "api_key") else (account.api_key or ""),
+                    client_code=account.client_id,
+                    feed_token=feed_token,
+                )
+                ltp_consumer.set_angel_adapter(adapter)
+                index_tokens = [str(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
+                loop = _aio.get_event_loop()
+                executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_smartstream")
+                loop.run_in_executor(executor, lambda: adapter.start(
+                    tokens=index_tokens,
+                    loop=loop,
+                    on_tick=ltp_consumer._process_ticks,
+                ))
+                import logging as _log
+                _log.getLogger(__name__).info(f"[AO-LOGIN] SmartStream auto-started via {nickname}")
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger(__name__).warning(f"[AO-LOGIN] SmartStream auto-start failed (non-fatal): {_e}")
+
     return {
         "status": "success",
         "message": f"✅ Angel One ({nickname}) connected for today",
