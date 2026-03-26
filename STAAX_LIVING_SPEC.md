@@ -3233,3 +3233,26 @@ This marks the first successful end-to-end algo trade on STAAX.
 4. Check Grid — Thursday recurring auto-fill
 5. FRI tab — Algo-3 and Algo-18 open positions should show
 6. Next: P1-11 Reports OR P1-13 Grid Delete/Archive OR P1-14 Remove New Algo from Grid
+
+---
+
+## ⚠️ CRITICAL RULES (added 26 Mar 2026 after data loss incident)
+
+1. **ALWAYS run `~/STAXX/backup_db.sh` before ANY DB schema changes**
+2. Daily auto-backup runs at 6pm → `~/STAXX/db_backups/`
+3. Never run `ALTER TYPE RENAME VALUE` without backup first
+4. Never share API credentials in chat — add to `.env` directly
+5. Verify `.gitignore` before every `git add` — `.env` must never be committed
+
+## DB Recovery Notes (26 Mar 2026)
+- All data was lost due to enum renames without backup
+- Enum values corrected to lowercase: orderstatus, strategymode, brokertype, algorunstatus, accountstatus
+- Missing columns added: orders.instrument_token, algos.dte, accounts.fy_margin etc
+- Accounts re-inserted: Karthik AO (angelone), Karthik (zerodha)
+- Algos and grid entries need to be re-entered manually
+
+## Pending After Data Loss
+- Re-enter all 19 algos via Algo page
+- Re-populate Smart Grid for the week
+- Add Mom and Wife accounts once credentials are available
+- PRACTIX orders from 20 Mar are permanently lost (test data only)
