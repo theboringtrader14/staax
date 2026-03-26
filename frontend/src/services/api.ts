@@ -101,6 +101,10 @@ export const gridAPI = {
 }
 
 // ── Orders ────────────────────────────────────────────────────────────────────
+export const openPositionsAPI = {
+  list: () => api.get('/orders/open-positions'),
+}
+
 export const ordersAPI = {
   list: (date?: string) =>
     api.get('/orders/', { params: date ? { trading_date: date } : {} }),

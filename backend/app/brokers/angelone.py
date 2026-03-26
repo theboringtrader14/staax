@@ -371,6 +371,23 @@ class AngelOneBroker(BaseBroker):
             logger.debug("[AO master] Using cached instrument master")
             return AngelOneBroker._master_cache
 
+        # Check disk cache — avoids 40MB re-download on every backend restart
+        import os, json as _json
+        _cache_file = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache.json")
+        _cache_meta = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache_date.txt")
+        try:
+            if os.path.exists(_cache_file) and os.path.exists(_cache_meta):
+                with open(_cache_meta) as _f:
+                    _cached_date = _f.read().strip()
+                if _cached_date == str(_date.today()):
+                    logger.info("[AO master] Loading from disk cache (today's data)")
+                    with open(_cache_file) as _f:
+                        AngelOneBroker._master_cache = _json.load(_f)
+                    AngelOneBroker._master_date = _date.today()
+                    return AngelOneBroker._master_cache
+        except Exception as _ce:
+            logger.warning(f"[AO master] Disk cache read failed: {_ce}")
+
         logger.info(f"[AO master] Downloading instrument master from {self._INSTRUMENT_MASTER_URL}")
         import httpx
         try:
@@ -379,6 +396,18 @@ class AngelOneBroker(BaseBroker):
             data: List[dict] = resp.json()
             AngelOneBroker._master_cache = data
             AngelOneBroker._master_date  = _date.today()
+            # Write to disk cache for fast reload on restart
+            try:
+                import os, json as _json
+                _cache_file = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache.json")
+                _cache_meta = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache_date.txt")
+                with open(_cache_file, 'w') as _f:
+                    _json.dump(data, _f)
+                with open(_cache_meta, 'w') as _f:
+                    _f.write(str(_date.today()))
+                logger.info("[AO master] Disk cache written for tomorrow's fast load")
+            except Exception as _we:
+                logger.warning(f"[AO master] Disk cache write failed (non-fatal): {_we}")
             logger.info(f"[AO master] ✅ Cached {len(data):,} instruments")
             return data
         except Exception as e:

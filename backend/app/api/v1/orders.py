@@ -12,7 +12,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, exists as sa_exists
+from sqlalchemy import select, and_, or_, exists as sa_exists
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timezone
@@ -111,13 +111,27 @@ async def list_orders(
     target_date = _parse_date(trading_date) or date.today()
 
     # Find all GridEntries for this day
+    day_name = target_date.strftime('%a').lower()  # 'mon', 'tue', etc.
+
     grid_result = await db.execute(
         select(GridEntry).where(GridEntry.trading_date == target_date)
     )
     grid_entries = grid_result.scalars().all()
     grid_entry_ids = [e.id for e in grid_entries]
 
-    if not grid_entry_ids:
+    # Also include open orders from same day_of_week (BTST/STBT/Positional carry-forwards)
+    open_ge_result = await db.execute(
+        select(GridEntry).where(
+            GridEntry.day_of_week == day_name,
+            GridEntry.trading_date != target_date,
+        )
+    )
+    open_ge_ids = [e.id for e in open_ge_result.scalars().all()]
+
+    # We'll include orders from open_ge_ids only if they have open status
+    all_grid_entry_ids = list(set(grid_entry_ids + open_ge_ids))
+
+    if not all_grid_entry_ids:
         return {
             "trading_date": target_date.isoformat(),
             "orders":       [],
@@ -127,7 +141,15 @@ async def list_orders(
         }
 
     # Build query
-    conditions = [Order.grid_entry_id.in_(grid_entry_ids)]
+    conditions = [
+        or_(
+            Order.grid_entry_id.in_(grid_entry_ids),  # today's entries — all statuses
+            and_(
+                Order.grid_entry_id.in_(open_ge_ids),  # carry-forward entries — open only
+                Order.status == OrderStatus.OPEN,
+            )
+        )
+    ]
     if algo_id:
         conditions.append(Order.algo_id == algo_id)
     if account_id:
@@ -195,6 +217,83 @@ async def list_orders(
         "groups":       groups,
         "total":        len(orders_list),
     }
+
+
+
+@router.get("/open-positions")
+async def list_open_positions(db: AsyncSession = Depends(get_db)):
+    """
+    Returns ALL open orders across all dates, grouped by algo.
+    Used by the Open Positions Panel on the Orders page.
+    Includes day_of_week so frontend knows which tab to navigate to.
+    """
+    result = await db.execute(
+        select(Order, GridEntry)
+        .join(GridEntry, Order.grid_entry_id == GridEntry.id)
+        .where(Order.status == OrderStatus.OPEN)
+        .order_by(Order.created_at)
+    )
+    rows = result.all()
+
+    if not rows:
+        return {"open_positions": [], "total": 0}
+
+    # Group by algo_id
+    by_algo: dict = {}
+    ge_map: dict = {}
+    for order, ge in rows:
+        aid = str(order.algo_id)
+        if aid not in by_algo:
+            by_algo[aid] = []
+            ge_map[aid] = ge
+        by_algo[aid].append(_order_to_dict(order))
+
+    # Fetch algo + account metadata
+    try:
+        algo_ids = [_uuid.UUID(aid) for aid in by_algo.keys()]
+        algo_result = await db.execute(
+            select(Algo, Account)
+            .join(Account, Algo.account_id == Account.id, isouter=True)
+            .where(Algo.id.in_(algo_ids))
+        )
+        algo_meta = {}
+        for a, acc in algo_result.all():
+            algo_meta[str(a.id)] = {
+                "algo_name":     a.name,
+                "account":       acc.nickname if acc else "",
+                "strategy_mode": a.strategy_mode.value if a.strategy_mode else "intraday",
+            }
+    except Exception as e:
+        logger.warning(f"[open-positions] metadata fetch failed: {e}")
+        algo_meta = {}
+
+    groups = []
+    for aid, orders_list in by_algo.items():
+        ge = ge_map[aid]
+        meta = algo_meta.get(aid, {})
+        pnl = round(sum((o.get("pnl") or 0.0) for o in orders_list), 2)
+        # Format entry date
+        entry_date = ""
+        if orders_list and orders_list[0].get("fill_time"):
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(orders_list[0]["fill_time"].replace("Z", "+00:00"))
+                entry_date = dt.strftime("%d %b")
+            except Exception:
+                entry_date = ""
+        groups.append({
+            "algo_id":       aid,
+            "algo_name":     meta.get("algo_name", ""),
+            "account":       meta.get("account", ""),
+            "strategy_mode": meta.get("strategy_mode", "intraday"),
+            "day_of_week":   ge.day_of_week.upper() if ge.day_of_week else "",
+            "entry_date":    entry_date,
+            "open_count":    len(orders_list),
+            "pnl":           pnl,
+            "orders":        orders_list,
+        })
+
+    return {"open_positions": groups, "total": len(groups)}
 
 
 @router.get("/waiting")

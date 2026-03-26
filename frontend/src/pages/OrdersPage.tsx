@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { algosAPI, ordersAPI } from '@/services/api'
+import { algosAPI, ordersAPI, openPositionsAPI } from '@/services/api'
 
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
 const WEEKEND_ACTIVE: Record<string, string[]> = {}
@@ -39,6 +39,12 @@ interface WaitingAlgo {
   grid_entry_id: string; algo_id: string; algo_name: string
   account_name: string; entry_time: string | null; exit_time: string | null
   is_practix: boolean
+}
+
+interface OpenPosition {
+  algo_id: string; algo_name: string; account: string
+  strategy_mode: string; day_of_week: string; entry_date: string
+  open_count: number; pnl: number
 }
 
 // Demo data — replaced by API data when available
@@ -164,6 +170,13 @@ function setInlineStatus(setOrders: any, idx: number, msg: string, color: string
   setTimeout(() => setOrders((o: AlgoGroup[]) => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
 }
 
+const STRATEGY_LABEL: Record<string, { label: string; color: string }> = {
+  intraday:   { label: 'Intraday',   color: '#6B7280' },
+  btst:       { label: 'BTST',       color: '#00B0F0' },
+  stbt:       { label: 'STBT',       color: '#A78BFA' },
+  positional: { label: 'Positional', color: '#F59E0B' },
+}
+
 /** Returns today's day abbreviation e.g. "MON" in IST */
 function todayDay(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase().slice(0, 3)
@@ -204,6 +217,14 @@ export default function OrdersPage() {
   const [editExit, setEditExit]       = useState<{ orderId: string; value: string } | null>(null)
   const [exitSaving, setExitSaving]   = useState(false)
   const [algoPopup, setAlgoPopup]     = useState<{ algoName: string; data: any } | null>(null)
+  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([])
+
+  // Fetch open positions once on mount
+  useEffect(() => {
+    openPositionsAPI.list()
+      .then(res => setOpenPositions(res.data?.open_positions || []))
+      .catch(() => {})
+  }, [])
 
   // Load orders + waiting algos from API — re-fetch when day tab changes
   useEffect(() => {
@@ -482,28 +503,72 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Day tabs — F4: today highlighted with dot marker */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', borderBottom: '1px solid var(--bg-border)', background: 'var(--bg-primary)' }}>
+      {/* Open Positions Panel */}
+      {openPositions.length > 0 && (
+        <div style={{ padding: '10px 0 20px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', paddingLeft: '2px' }}>
+            Open Positions · {openPositions.length}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {openPositions.map(pos => {
+              const strat = STRATEGY_LABEL[pos.strategy_mode] || { label: pos.strategy_mode, color: '#6B7280' }
+              const pnlColor = pos.pnl >= 0 ? 'var(--green)' : 'var(--red)'
+              return (
+                <div key={pos.algo_id}
+                  onClick={() => setActiveDay(pos.day_of_week.slice(0,3))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
+                    borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
+                    transition: 'border-color 0.15s', minWidth: 0,
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--bg-border)'}
+                >
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.entry_date}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: `${strat.color}18`, color: strat.color, border: `1px solid ${strat.color}40`, whiteSpace: 'nowrap' }}>{strat.label}</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{pos.algo_name}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.open_count} open</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: pnlColor, whiteSpace: 'nowrap' }}>{pos.pnl >= 0 ? '+' : ''}₹{Math.abs(pos.pnl).toLocaleString('en-IN')}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--accent-blue)', fontWeight: 700, whiteSpace: 'nowrap' }}>→ {pos.day_of_week.slice(0,3)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Trading Day header + MTM */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 2px 6px' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trading Day</span>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: totalMTM >= 0 ? 'var(--green)' : 'var(--red)' }}>
+          MTM: {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
+        </span>
+      </div>
+
+      {/* Day tabs — full width, equal spacing, P&L per day */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--bg-border)', background: 'var(--bg-primary)' }}>
         {visibleDays.map(d => {
           const isWeekend  = d === 'SAT' || d === 'SUN'
-          const isToday    = d === todayDay()        // F4 — active day marker
+          const isToday    = d === todayDay()
           const isSelected = activeDay === d
-          const pnl = DAY_PNL[d] ?? null  // null = no data for this day
+          const pnl = DAY_PNL[d] ?? null
           return (
             <button key={d} onClick={() => setActiveDay(d)} style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '8px 12px', fontSize: '12px', fontWeight: 600,
-              border: 'none', cursor: 'pointer', borderRadius: '5px 5px 0 0',
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: '2px', padding: '8px 4px', fontSize: '12px', fontWeight: 600,
+              border: 'none', cursor: 'pointer',
               background: isSelected ? 'var(--bg-surface)' : 'transparent',
               color: isSelected ? 'var(--accent-blue)' : isWeekend ? 'var(--text-dim)' : 'var(--text-muted)',
               borderBottom: isSelected ? '2px solid var(--accent-blue)' : '2px solid transparent',
-              position: 'relative',
+              transition: 'all 0.12s',
             }}>
-              <span>{d}</span>
-              {/* F4 — today dot */}
-              {isToday && (
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-blue)', flexShrink: 0 }} />
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>{d}</span>
+                {isToday && (
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-blue)', flexShrink: 0 }} />
+                )}
+              </div>
               {pnl != null && (
                 <span style={{ fontSize: '10px', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                   {pnl >= 0 ? '+' : ''}{(pnl / 1000).toFixed(1)}k
@@ -512,17 +577,6 @@ export default function OrdersPage() {
             </button>
           )
         })}
-        {/* Total MTM */}
-        <div style={{ marginLeft: 'auto', paddingBottom: '2px', paddingRight: '4px' }}>
-          <span style={{
-            fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '5px',
-            color: totalMTM >= 0 ? 'var(--green)' : 'var(--red)',
-            background: totalMTM >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-            border: `1px solid ${totalMTM >= 0 ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
-          }}>
-            MTM: {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
-          </span>
-        </div>
       </div>
       </div>{/* end fixed zone */}
 
@@ -638,22 +692,21 @@ export default function OrdersPage() {
                 <button key={btn.label} title={btn.label}
                   disabled={btn.disabled || loading[`${btn.label.toLowerCase()}-${gi}`]}
                   style={{
-                    height: '26px', minWidth: '38px', padding: '0 10px', fontSize: '11px', fontWeight: 700,
-                    border: `1.5px solid ${btn.color}`, background: 'transparent', color: btn.color,
-                    borderRadius: '4px', cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.12s', opacity: btn.disabled ? 0.4 : 1,
+                    height: '26px', minWidth: '42px', padding: '0 12px', fontSize: '11px', fontWeight: 700,
+                    border: `1.5px solid ${btn.color}`, background: `${btn.color}14`, color: btn.color,
+                    borderRadius: '13px', cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s', opacity: btn.disabled ? 0.35 : 1,
+                    letterSpacing: '0.04em',
                   }}
-                  onMouseEnter={e => { if (!btn.disabled) (e.currentTarget as HTMLElement).style.background = `${btn.color}18` }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                  onMouseEnter={e => { if (!btn.disabled) { (e.currentTarget as HTMLElement).style.background = `${btn.color}28`; (e.currentTarget as HTMLElement).style.boxShadow = `0 0 8px ${btn.color}50` } }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${btn.color}14`; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}
                   onClick={btn.action}>
                   {btn.label}
                 </button>
               ))}
-              {group.mtm !== 0 && (
-                <span style={{ fontWeight: 700, fontSize: '14px', marginLeft: '6px', color: group.mtm >= 0 ? 'var(--green)' : 'var(--red)', opacity: group.terminated ? 0.6 : 1 }}>
-                  {group.mtm >= 0 ? '+' : ''}₹{group.mtm.toLocaleString('en-IN')}
-                </span>
-              )}
+              <span style={{ minWidth: '90px', textAlign: 'right', fontWeight: 700, fontSize: '14px', marginLeft: '6px', color: group.mtm !== 0 ? (group.mtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent', opacity: group.terminated ? 0.6 : 1 }}>
+                {group.mtm !== 0 ? `${group.mtm >= 0 ? '+' : ''}₹${group.mtm.toLocaleString('en-IN')}` : ''}
+              </span>
             </div>
           </div>
 
