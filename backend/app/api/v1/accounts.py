@@ -40,6 +40,7 @@ def _account_to_dict(acc: Account) -> dict:
         "global_sl":    acc.global_sl,
         "global_tp":    acc.global_tp,
         "fy_brokerage": acc.fy_brokerage,
+        "fy_margin":    acc.fy_margin,
         "is_active":    acc.is_active,
         "token_generated_at": acc.token_generated_at.isoformat() if acc.token_generated_at else None,
         "token_valid_today": (
@@ -131,6 +132,8 @@ async def update_global_risk(
         account.global_sl = body.global_sl
     if body.global_tp is not None:
         account.global_tp = body.global_tp
+    if hasattr(body, "fy_margin") and body.fy_margin is not None:
+        account.fy_margin = body.fy_margin
     if hasattr(body, "fy_brokerage") and body.fy_brokerage is not None:
         account.fy_brokerage = body.fy_brokerage
 
