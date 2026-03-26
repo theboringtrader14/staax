@@ -3073,3 +3073,163 @@ This marks the first successful end-to-end algo trade on STAAX.
 5. Run `./show_errors.sh`
 6. Next task from backlog: P1-7 Orders button styling OR P1-1 Algo-3 PE leg failure analysis
 
+
+
+---
+
+## STAAX — Living Backlog & Status (updated 26 Mar 2026)
+
+> Supersedes all prior backlog entries. Updated every session.
+
+---
+
+### ✅ Completed This Session (26 Mar 2026) — commit TBD
+
+#### Orders Page
+- Open Positions Panel — compact cards above day tabs, groups by algo, shows entry date + strategy type + open count + P&L
+- Clicking card navigates to correct day tab
+- list_orders API fixed — open orders from same day_of_week always show on that day tab (BTST/Positional carry-forward)
+- New GET /orders/open-positions endpoint
+- Day tabs full-width equal spacing
+- TRADING DAY header with inline MTM (plain text, green/red)
+- Button style: pill shape with glow on hover
+- P&L fixed min-width — no button shift
+
+#### Performance
+- Instrument master disk cache — avoids 40MB re-download on every backend restart
+- First restart downloads and saves cache; subsequent restarts load from disk in <1s
+
+---
+
+### 🔴 P0 — Blockers
+
+| # | Item | Status |
+|---|------|--------|
+| P0-1 | SmartStream _on_open confirmation | ⏳ Test tomorrow morning with fresh tokens |
+| P0-2 | SEBI April 1 static IP | ⏳ Before live deployment |
+
+---
+
+### 🟡 P1 — Active Backlog
+
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| P1-1 | Algo-3 PE leg failure | ⏳ | SL% straddle, needs log analysis |
+| P1-2 | W&T failures (Algo-6/9) | ⏳ | Blocked on SmartStream |
+| P1-3 | ORB no trade (Algo-7/10/12) | ⏳ | Blocked on SmartStream |
+| P1-4 | Algo-18 DTE positional error | ⏳ | Needs investigation |
+| P1-5 | Wife order routing | ⏳ | Fix before LIVE |
+| P1-6 | Recurring auto-fill test | ⏳ | Verify tomorrow morning |
+| P1-7 | Orders button styling | ✅ Done | Pill + glow |
+| P1-8 | Orders P&L alignment | ✅ Done | Fixed min-width |
+| P1-9 | Orders exit time | ✅ Verified | Uses actual order.exit_time |
+| P1-10 | Orders algo name → popup | ✅ Verified | Already wired |
+| P1-11 | Reports page wire real data | ⏳ | Next task |
+| P1-12 | Reports fixes | ⏳ | P&L legend, sort buttons |
+| P1-13 | Grid: Delete + Archive buttons | ⏳ | With confirmation popup |
+| P1-14 | Remove New Algo button from Smart Grid | ⏳ | Now in sidebar, remove from grid |
+| P1-15 | Dashboard: Active Algos IST filter | ⏳ | |
+| P1-16 | Indicator Bots: Signal Tracker + Orders | ⏳ | |
+| P1-17 | Documentation popup | ⏳ | |
+| P1-18 | api.ts env TypeScript error | ⏳ | Needs vite-env.d.ts fix |
+| P1-19 | Backend slow startup | ✅ Done | Disk cache for instrument master |
+| P1-20 | Open Positions Panel | ✅ Done | Compact cards above day tabs |
+
+---
+
+### 🔵 INVEX Phase 2
+| # | Item | Status |
+|---|------|--------|
+| INV-1 | SIP frontend page | ⏳ |
+| INV-2 | SIP scheduler 09:20 IST | ⏳ |
+| INV-3 | SIP order execution | ⏳ |
+
+---
+
+### 📋 Tomorrow Morning Checklist
+1. `./debug_log.sh`
+2. Auto-login all 3 AO accounts
+3. Watch for `[AO-LOGIN] SmartStream auto-started` → `[AO-DEBUG] _on_open fired`
+4. Check Grid — Thursday recurring auto-fill
+5. Check FRI tab — Algo-3 and Algo-18 open positions should show
+6. Next task: P1-11 Reports page OR P1-13 Grid Delete/Archive
+
+
+---
+
+## STAAX — Living Backlog & Status (updated 26 Mar 2026)
+
+> Supersedes all prior backlog entries. Updated every session.
+
+---
+
+### ✅ Completed This Session (26 Mar 2026) — commit 4af9f2e
+
+#### Orders Page
+- Open Positions Panel — compact cards above day tabs, groups by algo, shows entry date + strategy type + open count + P&L
+- Clicking card navigates to correct day tab
+- list_orders API fixed — open orders from same day_of_week always show (BTST/Positional carry-forward)
+- New GET /orders/open-positions endpoint
+- Day tabs full-width equal spacing
+- TRADING DAY header with inline MTM (plain text, green/red)
+- Button style: pill shape with glow on hover
+- P&L fixed min-width — no button shift
+
+#### Performance
+- Instrument master disk cache — avoids 40MB re-download on every restart
+
+---
+
+### 🔴 P0 — Blockers
+
+| # | Item | Status |
+|---|------|--------|
+| P0-1 | SmartStream _on_open confirmation | ⏳ Test tomorrow morning |
+| P0-2 | SEBI April 1 static IP | ⏳ Before live deployment |
+
+---
+
+### 🟡 P1 — Active Backlog
+
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| P1-1 | Algo-3 PE leg failure | ⏳ | Needs log analysis |
+| P1-2 | W&T failures Algo-6/9 | ⏳ | Blocked on SmartStream |
+| P1-3 | ORB no trade Algo-7/10/12 | ⏳ | Blocked on SmartStream |
+| P1-4 | Algo-18 DTE positional error | ⏳ | Needs investigation |
+| P1-5 | Wife order routing | ⏳ | Fix before LIVE |
+| P1-6 | Recurring auto-fill test | ⏳ | Verify tomorrow morning |
+| P1-7 | Orders button styling | ✅ | Pill + glow |
+| P1-8 | Orders P&L alignment | ✅ | Fixed min-width |
+| P1-9 | Orders exit time | ✅ | Uses actual order.exit_time |
+| P1-10 | Orders algo name popup | ✅ | Already wired |
+| P1-11 | Reports page wire real data | ⏳ | Next task |
+| P1-12 | Reports fixes | ⏳ | P&L legend, sort buttons |
+| P1-13 | Grid Delete + Archive buttons | ⏳ | With confirmation popup |
+| P1-14 | Remove New Algo button from Smart Grid | ⏳ | Now in sidebar, remove from grid |
+| P1-15 | Dashboard Active Algos IST filter | ⏳ | |
+| P1-16 | Indicator Bots Signal Tracker + Orders | ⏳ | |
+| P1-17 | Documentation popup | ⏳ | |
+| P1-18 | api.ts env TypeScript error | ⏳ | Needs vite-env.d.ts fix |
+| P1-19 | Backend slow startup | ✅ | Disk cache for instrument master |
+| P1-20 | Open Positions Panel | ✅ | Compact cards above day tabs |
+
+---
+
+### 🔵 INVEX Phase 2
+
+| # | Item | Status |
+|---|------|--------|
+| INV-1 | SIP frontend page | ⏳ |
+| INV-2 | SIP scheduler 09:20 IST | ⏳ |
+| INV-3 | SIP order execution | ⏳ |
+
+---
+
+### 📋 Tomorrow Morning Checklist
+1. ./debug_log.sh
+2. Auto-login all 3 AO accounts
+3. Watch for [AO-LOGIN] SmartStream auto-started → [AO-DEBUG] _on_open fired
+4. Check Grid — Thursday recurring auto-fill
+5. FRI tab — Algo-3 and Algo-18 open positions should show
+6. Next: P1-11 Reports OR P1-13 Grid Delete/Archive OR P1-14 Remove New Algo from Grid
