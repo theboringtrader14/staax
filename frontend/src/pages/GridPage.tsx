@@ -522,9 +522,11 @@ export default function GridPage() {
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily:"'ADLaM Display',serif", fontSize:'22px', fontWeight:400 }}>Smart Grid</h1>
-          <p style={{ fontSize:'12px', color:'var(--text-muted)', marginTop:'2px' }}>
-            Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}
-            {loading && <span style={{ marginLeft:'8px', color:'var(--accent-blue)', fontSize:'11px' }}>Loading...</span>}
+          <p style={{ fontSize:'12px', color:'var(--text-muted)', marginTop:'2px', display:'flex', alignItems:'center', gap:'6px' }}>
+            Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })} ·{' '}
+            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
+              {isPractixMode?'PRACTIX':'LIVE'}
+            </span>
           </p>
         </div>
         <div className="page-header-actions">

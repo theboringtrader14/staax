@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { accountsAPI } from '@/services/api'
 import axios from 'axios'
+import { useStore } from '@/store'
 
 const API = 'http://localhost:8000/api/v1'
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
@@ -350,7 +351,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   }, [bot.id])
 
   const openOrder = orders.find(o => o.status === 'open')
-  const todayPnl = orders
+  const _todayPnl = orders
     .filter(o => o.exit_time?.startsWith(new Date().toISOString().slice(0, 10)))
     .reduce((s, o) => s + (o.pnl || 0), 0)
 
@@ -509,6 +510,7 @@ type AggOrder = BotOrder & { botName: string }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function IndicatorsPage() {
+  const isPractixMode = useStore(s => s.isPractixMode)
   const [bots, setBots]           = useState<Bot[]>([])
   const [accounts, setAccounts]   = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
@@ -516,13 +518,13 @@ export default function IndicatorsPage() {
   const [loading, setLoading]     = useState(true)
   const [allBotOrders, setAllBotOrders] = useState<AggOrder[]>([])
 
-  const loadBots = useCallback(() => {
-    apiGet('/bots/').then(r => setBots(r.data || [])).catch(() => {})
+  const _loadBots = useCallback(() => {
+    apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
     Promise.all([
-      apiGet('/bots/').then(r => setBots(r.data || [])),
+      apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])),
       accountsAPI.list().then(r => setAccounts(r.data || [])),
     ]).finally(() => setLoading(false))
   }, [])
@@ -579,9 +581,9 @@ export default function IndicatorsPage() {
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: "'ADLaM Display', serif", fontSize: '22px', fontWeight: 400 }}>Indicator Bots</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display:'flex', alignItems:'center', gap:'6px' }}>
             {loading ? 'Loading...' : `${activeBots.filter(b => b.status !== 'inactive').length} running · ${activeBots.length} total`}
-          </p>
+          {' '}·{' '}<span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>{isPractixMode?'PRACTIX':'LIVE'}</span></p>
         </div>
         <div className="page-header-actions">
           {archivedBots.length > 0 && (

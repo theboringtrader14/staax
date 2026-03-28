@@ -227,26 +227,27 @@ export default function ReportsPage(){
         </div>
 
         {/* Day-of-week P&L — compact horizontal bars */}
-        <div className="card">
-          <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'8px'}}>P&L by Day</div>
-          <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-            {DAY_NAMES.map(day=>{
-              const pnl=dowPnl[day]||0
-              const barW=pnl!==0?Math.max(Math.abs(pnl)/maxAbsDow*100,4):0
-              const fmt=Math.abs(pnl)>=1000?(pnl>=0?'+':'-')+'₹'+(Math.abs(pnl)/1000).toFixed(1)+'k':(pnl>=0?pnl>0?'+':'':'')+(pnl!==0?'₹'+Math.abs(pnl).toFixed(0):'—')
-              return(
-                <div key={day} style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                  <span style={{fontSize:'10px',fontWeight:600,color:'var(--text-dim)',width:'26px',flexShrink:0}}>{day}</span>
-                  <div style={{flex:1,height:'10px',background:'var(--bg-border)',borderRadius:'3px',overflow:'hidden'}}>
-                    {barW>0&&<div style={{width:`${barW}%`,height:'100%',borderRadius:'3px',background:pnl>0?'var(--green)':'var(--red)',opacity:0.75}}/>}
-                  </div>
-                  <span style={{fontSize:'10px',fontWeight:700,color:pnl>0?'var(--green)':pnl<0?'var(--red)':'var(--text-dim)',width:'52px',textAlign:'right',flexShrink:0}}>{fmt}</span>
+        <div className="card" style={{marginBottom:'12px'}}>
+        <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'12px'}}>P&L by Day</div>
+        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-around',height:'64px',gap:'6px'}}>
+          {DAY_NAMES.map(day=>{
+            const pnl=dowPnl[day]||0
+            const barH=pnl!==0?Math.max(Math.abs(pnl)/maxAbsDow*48,4):0
+            return(
+              <div key={day} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',flex:1}}>
+                <div style={{display:'flex',alignItems:'flex-end',height:'48px',width:'100%',justifyContent:'center'}}>
+                  {pnl!==0
+                    ?<div style={{width:'60%',height:`${barH}px`,borderRadius:'3px 3px 0 0',background:pnl>0?'var(--green)':'var(--red)',opacity:0.75,transition:'height 0.3s'}}/>
+                    :<div style={{width:'60%',height:'2px',borderRadius:'2px',background:'var(--bg-border)',opacity:0.4}}/>
+                  }
                 </div>
-              )
-            })}
-          </div>
+                <span style={{fontSize:'9px',fontWeight:700,color:'var(--text-dim)'}}>{day.charAt(0)}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
+      </div>{/* end top widgets grid */}
 
       {/* Equity Curve Modal */}
       {chartModal&&(
