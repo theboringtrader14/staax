@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { algosAPI, accountsAPI } from '@/services/api'
-import { useStore } from '@/store'
 
 const INST_CODES: Record<string, string> = { NF: 'NIFTY', BN: 'BANKNIFTY', SX: 'SENSEX', MN: 'MIDCAPNIFTY', FN: 'FINNIFTY' }
 const EXPIRY_OPTIONS = [
@@ -375,8 +374,6 @@ export default function AlgoPage() {
   const navigate    = useNavigate()
   const { id }      = useParams<{ id: string }>()
   const isEdit      = !!id
-  const _storeAlgos  = useStore(s => s.algos)
-
   // Account list — populated from API on mount
   const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([])
 

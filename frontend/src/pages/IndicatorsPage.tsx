@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { accountsAPI } from '@/services/api'
 import axios from 'axios'
 import { useStore } from '@/store'
@@ -351,10 +351,6 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   }, [bot.id])
 
   const openOrder = orders.find(o => o.status === 'open')
-  const _todayPnl = orders
-    .filter(o => o.exit_time?.startsWith(new Date().toISOString().slice(0, 10)))
-    .reduce((s, o) => s + (o.pnl || 0), 0)
-
   const accountName = accounts.find((a: any) => a.id === bot.account_id)?.nickname || '—'
   const tfLabel = TIMEFRAMES.find(t => t.value === bot.timeframe_mins)?.label || `${bot.timeframe_mins}m`
   const indLabel = INDICATORS.find(i => i.value === bot.indicator)?.label || bot.indicator
@@ -517,10 +513,6 @@ export default function IndicatorsPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading]     = useState(true)
   const [allBotOrders, setAllBotOrders] = useState<AggOrder[]>([])
-
-  const _loadBots = useCallback(() => {
-    apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])).catch(() => {})
-  }, [])
 
   useEffect(() => {
     Promise.all([

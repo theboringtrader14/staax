@@ -175,6 +175,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     fy_pnl_result = await db.execute(
         sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
             Order.status == OrderStatus.CLOSED,
+            Order.is_practix == is_practix,
             Order.exit_time >= fy_start,
         )
     )

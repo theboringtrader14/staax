@@ -542,7 +542,7 @@ export default function DashboardPage() {
             const colors = ['#00B0F0', '#22C55E', '#D77B12']
             const color = colors[i] || '#6B7280'
             const brokerLabel = acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'
-            const isActive = acc.token_valid_today === true
+            const isActive = (acc as any).token_valid_today === true
             return (
               <div key={acc.id} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '12px', borderLeft: `3px solid ${color}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>

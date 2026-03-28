@@ -109,13 +109,14 @@ export default function GridPage() {
 
   const [algos,    setAlgos]    = useState<Algo[]>([])
   const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>({})
-  const [loading,  setLoading]  = useState(true)
+  const [, setLoading]  = useState(true)
   const [wk,       setWk]       = useState(false)
   const [ed,       setEd]       = useState<{id:string;day:string} | null>(null)
   const [ev,       setEv]       = useState('')
   const [drag,     setDrag]     = useState<string | null>(null)
   const [showArch, setShowArch] = useState(false)
   const [del,           setDel]          = useState<string | null>(null)
+  const [archConfirm,   setArchConfirm]  = useState<string | null>(null)
   const [opError,       setOpError]      = useState<string>('')   // inline op error
   const [autoFillToast, setAutoFillToast] = useState<string>('')  // "Auto-filled N recurring day(s)"
   const [rmModal,       setRmModal]      = useState<{algoId:string; day:string} | null>(null)
@@ -180,7 +181,7 @@ export default function GridPage() {
         // For each active algo with recurring_days, deploy missing days silently.
         let autoFilled = 0
         const updatedAlgos = [...apiAlgos]
-        await Promise.all(apiAlgos.filter(a => !a.arch && a.recurringDays.length > 0).map(async algo => {
+        await Promise.all((isPractixMode ? apiAlgos.filter(a => !a.arch && a.recurringDays.length > 0) : []).map(async algo => {
           const missingDays = DAYS.filter(d => algo.recurringDays.includes(d) && !newGrid[algo.id]?.[d])
           for (const day of missingDays) {
             try {
@@ -253,7 +254,7 @@ export default function GridPage() {
         algo_id:       algoId,
         trading_date:  tradingDate,
         lot_multiplier: 1,
-        is_practix:    true,
+        is_practix:    isPractixMode,
       })
       // Patch in the real grid_entry_id from API response
       const gridEntryId = String(res.data?.id || '')
@@ -360,10 +361,11 @@ export default function GridPage() {
 
     // Fire API for each cell that has a gridEntryId
     const promises = Object.values(cells)
-      .filter(c => c.gridEntryId && c.mode === 'practix')
+      .filter(c => c.gridEntryId)
       .map(c => gridAPI.setMode(c.gridEntryId!, { is_practix: false }).catch(() => null))
 
     await Promise.all(promises)
+    loadData()
   }
 
   // ── Add algo to all weekdays ──────────────────────────────────────────────────
@@ -388,7 +390,7 @@ export default function GridPage() {
       try {
         const res = await gridAPI.deploy({
           algo_id: algoId, trading_date: weekDates[day],
-          lot_multiplier: 1, is_practix: true,
+          lot_multiplier: 1, is_practix: isPractixMode,
         })
         const gridEntryId = String(res.data?.id || '')
         setGrid(g => ({
@@ -428,7 +430,7 @@ export default function GridPage() {
 
     await Promise.all(algosToAdd.map(async a => {
       try {
-        const res = await gridAPI.deploy({ algo_id:a.id, trading_date:tradingDate, lot_multiplier:1, is_practix:true })
+        const res = await gridAPI.deploy({ algo_id:a.id, trading_date:tradingDate, lot_multiplier:1, is_practix:isPractixMode })
         const gridEntryId = String(res.data?.id || '')
         setGrid(g => ({ ...g, [a.id]: { ...g[a.id], [todayDay]: { ...g[a.id][todayDay], gridEntryId } } }))
         if (Array.isArray(res.data?.algo_recurring_days)) {
@@ -621,7 +623,7 @@ export default function GridPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedActive.map(algo => {
+            {sortedActive.filter(algo => Object.keys(grid[algo.id] || {}).length > 0).map(algo => {
               const st    = worstStatus(grid[algo.id])
               const cells = Object.values(grid[algo.id] || {})
               return (
@@ -667,7 +669,7 @@ export default function GridPage() {
                                 All
                               </button>
                             )}
-                            {cells.some(c => c.mode === 'practix') && (
+                            {isPractixMode && cells.some(c => c.mode === 'practix') && (
                               <button onClick={() => promLive(algo.id)}
                                 style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(34,197,94,0.3)', background:'transparent', color:'var(--green)', cursor:'pointer' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
@@ -680,7 +682,7 @@ export default function GridPage() {
                       </div>
                       <div style={{ display:'flex', flexDirection:'column', gap:'2px', flexShrink:0 }}>
                         <IBtn onClick={() => setDel(algo.id)}  icon="🗑" hc="var(--red)"          title="Delete permanently"/>
-                        <IBtn onClick={() => archAlgo(algo.id)} icon="📦" hc="var(--accent-amber)" title="Archive"/>
+                        <IBtn onClick={() => setArchConfirm(algo.id)} icon="📦" hc="var(--accent-amber)" title="Archive"/>
                       </div>
                     </div>
                   </td>
@@ -797,6 +799,26 @@ export default function GridPage() {
                     Remove Recurring
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Archive confirmation modal */}
+      {archConfirm && (() => {
+        const a = algos.find(x => x.id === archConfirm)
+        return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth:'360px' }}>
+              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Archive {a?.name}?</div>
+              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>
+                Moves this algo to the archive. It won't appear in the grid but can be restored anytime.
+              </div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="btn btn-ghost" onClick={() => setArchConfirm(null)}>Cancel</button>
+                <button className="btn" style={{ background:'rgba(215,123,18,0.15)', color:'var(--accent-amber)', border:'1px solid rgba(215,123,18,0.3)' }}
+                  onClick={() => { archAlgo(archConfirm); setArchConfirm(null) }}>📦 Archive</button>
               </div>
             </div>
           </div>

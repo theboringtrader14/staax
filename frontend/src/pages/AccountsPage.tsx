@@ -58,6 +58,9 @@ export default function AccountsPage() {
             globalTP:    api.global_tp ?? null,
             fyBrokerage: api.fy_brokerage ?? null,
             margin:      0,
+            pnl:         0,
+            token:       '',
+            color:       '',
             type:        api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
           })))
         }
@@ -96,6 +99,9 @@ export default function AccountsPage() {
         globalTP:    api.global_tp ?? null,
         fyBrokerage: api.fy_brokerage ?? null,
         margin:      0,
+        pnl:         0,
+        token:       '',
+        color:       '',
         type:        api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
       })))
     }
