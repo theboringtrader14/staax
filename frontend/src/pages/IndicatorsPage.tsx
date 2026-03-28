@@ -540,7 +540,7 @@ export default function IndicatorsPage() {
   }, [bots])
 
   const handleSave = async (form: any) => {
-    const res = await apiPost('/bots/', form)
+    const res = await apiPost('/bots/', { ...form, is_practix: isPractixMode })
     setBots(prev => [res.data, ...prev])
     setShowCreate(false)
   }
@@ -584,27 +584,6 @@ export default function IndicatorsPage() {
             </button>
           )}
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Bot</button>
-        </div>
-      </div>
-
-      {/* ── Signal Tracker ──────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Signal Tracker</div>
-        <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
-          <table className="staax-table">
-            <thead>
-              <tr>
-                <th>Signal</th><th>Underlying</th><th>Direction</th><th>Triggered At</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>
-                  No signals today — bot signal API coming soon
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
 
@@ -675,6 +654,27 @@ export default function IndicatorsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Signal Tracker ──────────────────────────────────────────────────── */}
+      <div style={{ marginTop: '24px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Signal Tracker</div>
+        <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
+          <table className="staax-table">
+            <thead>
+              <tr>
+                <th>Signal</th><th>Underlying</th><th>Direction</th><th>Triggered At</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                  No signals today — bot signal API coming soon
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {showCreate && (
         <BotConfigurator accounts={accounts} onSave={handleSave} onClose={() => setShowCreate(false)} />

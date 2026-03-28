@@ -53,6 +53,8 @@ export const algosAPI = {
   update:    (id: string, data: object) => api.put(`/algos/${id}`, data),
   delete:    (id: string) => api.delete(`/algos/${id}`),
   archive:   (id: string) => api.post(`/algos/${id}/archive`),
+  promote:   (id: string) => api.post(`/algos/${id}/promote`),
+  demote:    (id: string) => api.post(`/algos/${id}/demote`),
   unarchive: (id: string) => api.post(`/algos/${id}/unarchive`),
 
   // Runtime controls (Orders page buttons)

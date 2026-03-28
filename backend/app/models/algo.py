@@ -72,6 +72,7 @@ class Algo(Base):
     order_type   = Column(Enum(OrderType, values_callable=lambda x: [e.value for e in x]), default=OrderType.MARKET)
     is_active    = Column(Boolean, default=True)
     is_archived  = Column(Boolean, default=False)
+    is_live      = Column(Boolean, default=False, nullable=False)
 
     # ── Timing ────────────────────────────────────────────────────────────────
     entry_time      = Column(String(8), nullable=True)    # HH:MM:SS — E: time (all modes)

@@ -1,5 +1,5 @@
 """Bots API — Indicator Systems CRUD."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ class BotCreate(BaseModel):
     channel_candles: Optional[int] = None
     channel_tf:      Optional[str] = None
     tt_lookback:     Optional[int] = None
+    is_practix:      bool = True
 
 def _bot_dict(b: Bot) -> dict:
     return {
@@ -40,12 +41,13 @@ def _bot_dict(b: Bot) -> dict:
         "tt_lookback":    b.tt_lookback,
         "status": b.status or "active",
         "is_archived":    b.is_archived,
+        "is_practix":     b.is_practix if b.is_practix is not None else True,
         "created_at":     b.created_at.isoformat() if b.created_at else None,
     }
 
 @router.get("/")
-async def list_bots(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Bot).where(Bot.is_archived == False).order_by(desc(Bot.created_at)))
+async def list_bots(is_practix: bool = Query(True), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Bot).where(Bot.is_archived == False, Bot.is_practix == is_practix).order_by(desc(Bot.created_at)))
     return [_bot_dict(b) for b in result.scalars().all()]
 
 @router.post("/")
@@ -65,6 +67,7 @@ async def create_bot(body: BotCreate, db: AsyncSession = Depends(get_db)):
         tt_lookback=body.tt_lookback,
         status="active",
         is_archived=False,
+        is_practix=body.is_practix,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )

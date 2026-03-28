@@ -27,6 +27,7 @@ interface Algo {
   xt:            string
   arch:          boolean
   recurringDays: string[]   // ["MON","WED"] — server is source of truth
+  is_live:       boolean
 }
 
 // ── Status config ──────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ export default function GridPage() {
         xt:            a.exit_time  || '15:10',
         arch:          a.is_archived || false,
         recurringDays: Array.isArray(a.recurring_days) ? a.recurring_days : [],
+        is_live:       a.is_live || false,
       }))
       setAlgos(apiAlgos)
 
@@ -242,7 +244,7 @@ export default function GridPage() {
         [day]: {
           multiplier: 1,
           status:     'algo_active',
-          mode:       'practix',
+          mode:       isPractixMode ? 'practix' : 'live',
           entry:      algo?.et || '09:16',
           exit:       algo?.xt || '15:10',
         },
@@ -347,24 +349,17 @@ export default function GridPage() {
     }
   }
 
-  // ── Promote all to live ───────────────────────────────────────────────────────
+  // ── Promote to live ──────────────────────────────────────────────────────────
   const promLive = async (algoId: string) => {
-    const cells = grid[algoId] || {}
+    await algosAPI.promote(algoId)
+    setAlgos(a => a.map(x => x.id === algoId ? { ...x, is_live: true } : x))
+    loadData()
+  }
 
-    // Optimistic
-    setGrid(g => ({
-      ...g,
-      [algoId]: Object.fromEntries(
-        Object.entries(g[algoId] || {}).map(([d, c]) => [d, { ...c, mode: 'live' as CM }])
-      ),
-    }))
-
-    // Fire API for each cell that has a gridEntryId
-    const promises = Object.values(cells)
-      .filter(c => c.gridEntryId)
-      .map(c => gridAPI.setMode(c.gridEntryId!, { is_practix: false }).catch(() => null))
-
-    await Promise.all(promises)
+  // ── Demote back to PRACTIX ────────────────────────────────────────────────────
+  const demoteLive = async (algoId: string) => {
+    await algosAPI.demote(algoId)
+    setAlgos(a => a.map(x => x.id === algoId ? { ...x, is_live: false } : x))
     loadData()
   }
 
@@ -623,7 +618,10 @@ export default function GridPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedActive.filter(algo => Object.keys(grid[algo.id] || {}).length > 0).map(algo => {
+            {sortedActive
+              .filter(algo => isPractixMode ? !algo.is_live : algo.is_live)
+              .filter(algo => Object.keys(grid[algo.id] || {}).length > 0 || !isPractixMode)
+              .map(algo => {
               const st    = worstStatus(grid[algo.id])
               const cells = Object.values(grid[algo.id] || {})
               return (
@@ -659,7 +657,7 @@ export default function GridPage() {
                           ))}
                         </div>
                         {/* Row 3: → All days + → Promote to Live on same line */}
-                        {(DAYS.some(d => !grid[algo.id]?.[d]) || cells.some(c => c.mode === 'practix')) && (
+                        {(DAYS.some(d => !grid[algo.id]?.[d]) || cells.some(c => c.mode === 'practix') || (!isPractixMode && algo.is_live)) && (
                           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
                             {DAYS.some(d => !grid[algo.id]?.[d]) && (
                               <button onClick={() => addAllWeekdays(algo.id)}
@@ -675,6 +673,14 @@ export default function GridPage() {
                                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(34,197,94,0.1)')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                                 Promote
+                              </button>
+                            )}
+                            {!isPractixMode && algo.is_live && (
+                              <button onClick={() => demoteLive(algo.id)}
+                                style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(239,68,68,0.3)', background:'transparent', color:'var(--red)', cursor:'pointer' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.1)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                Demote
                               </button>
                             )}
                           </div>

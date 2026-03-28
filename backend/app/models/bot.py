@@ -38,6 +38,7 @@ class Bot(Base):
     tt_lookback    = Column(Integer, nullable=True)
     status         = Column(String(20), nullable=False, server_default='active')
     is_archived    = Column(Boolean, default=False)
+    is_practix     = Column(Boolean, default=True, nullable=False)
     created_at     = Column(DateTime(timezone=True))
     updated_at     = Column(DateTime(timezone=True))
 

@@ -3256,3 +3256,51 @@ This marks the first successful end-to-end algo trade on STAAX.
 - Re-populate Smart Grid for the week
 - Add Mom and Wife accounts once credentials are available
 - PRACTIX orders from 20 Mar are permanently lost (test data only)
+
+## Session Update — 2026-03-28
+
+### Completed This Session
+- ✅ FO-2: Accounts load on app init (App.tsx) — dropdown works on all pages
+- ✅ FO-3: Open positions cards show account name chip
+- ✅ FO-4: Smart Grid filters by is_practix mode
+- ✅ FO-5: Open positions filtered by mode
+- ✅ FO-6: Dashboard stats filtered by mode (active_algos, open_positions, today_pnl, fy_pnl)
+- ✅ FO-7: Dashboard counts now show correctly (removed today-only scope)
+- ✅ FO-8: P&L by Day widget redesigned — proportional bars, single letters, no numbers
+- ✅ FO-9: fy_pnl filtered by is_practix
+- ✅ FO-10: PRACTIX/LIVE chip uniform across all pages (Dashboard, Grid, Orders, Reports, Indicators)
+- ✅ FO-11: Reports top widgets uniform height (127px)
+- ✅ BUG-1: Recurring deploy loop fixed — auto-deploy disabled in LIVE mode
+- ✅ P1-13: Archive confirmation modal added to Smart Grid
+- ✅ isPractixMode persists to localStorage (survives refresh)
+- ✅ Mom AO + Wife AO accounts created in DB (KRAH1029, KRAH1008)
+- ✅ BUDGEX: Full backend built (expenses, accounts, subscriptions, dashboard, voice APIs)
+- ✅ BUDGEX: Frontend built by Claude Code, redesigning to match INVEX style
+
+### Pending
+- 🔄 FO-1: Promote to LIVE — in progress (Claude Code)
+- 🔄 BUDGEX: UI redesign to match INVEX (Claude Code)
+- ❌ P1-1: Algo-3 PE leg failure — needs log analysis
+- ❌ P1-5: Wife order routing — DB accounts created, needs testing
+- ❌ SmartStream WebSocket adapter — blocks live tickers (Monday morning test)
+- ❌ SEBI April 1 static IP — required before LIVE deployment
+
+### DB State
+- staax_db: 4 accounts (Karthik/Zerodha, Karthik AO, Mom AO, Wife AO)
+- No duplicate grid entries
+- 2 open PRACTIX positions (Algo-3, Algo-15/18)
+
+### Start Commands
+```bash
+# Backend (no --reload)
+cd ~/STAXX/staax/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Frontend
+cd ~/STAXX/staax/frontend && npm run dev
+
+# BUDGEX Backend
+cd ~/STAXX/budgex/backend && uvicorn app.main:app --host 0.0.0.0 --port 8002
+
+# BUDGEX Frontend  
+cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
+```

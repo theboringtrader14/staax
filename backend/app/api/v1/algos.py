@@ -149,6 +149,7 @@ def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -
         "exit_on_entry_failure": algo.exit_on_entry_failure,
         "base_lot_multiplier":   algo.base_lot_multiplier,
         "notes":                 algo.notes,
+        "is_live":               getattr(algo, 'is_live', False),
         "recurring_days":        algo.recurring_days or [],
         "created_at":            algo.created_at.isoformat() if algo.created_at else None,
     }
@@ -361,6 +362,30 @@ async def unarchive_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     algo.is_archived = False
     await db.commit()
     return {"algo_id": algo_id, "action": "unarchived", "status": "ok"}
+
+
+# ── Promote / Demote ──────────────────────────────────────────────────────────
+
+@router.post("/{algo_id}/promote")
+async def promote_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(Algo).where(Algo.id == uuid_lib.UUID(algo_id)))
+    algo = res.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(404, "Algo not found")
+    algo.is_live = True
+    await db.commit()
+    return {"id": str(algo.id), "is_live": True}
+
+
+@router.post("/{algo_id}/demote")
+async def demote_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(Algo).where(Algo.id == uuid_lib.UUID(algo_id)))
+    algo = res.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(404, "Algo not found")
+    algo.is_live = False
+    await db.commit()
+    return {"id": str(algo.id), "is_live": False}
 
 
 # ── Runtime controls ──────────────────────────────────────────────────────────
