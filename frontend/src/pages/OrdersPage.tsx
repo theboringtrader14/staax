@@ -3,8 +3,6 @@ import { useState, useEffect } from 'react'
 import { algosAPI, ordersAPI, openPositionsAPI } from '@/services/api'
 
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
-const WEEKEND_ACTIVE: Record<string, string[]> = {}
-const DAY_PNL: Record<string, number> = {}
 
 // IST time formatters — all timestamps from backend are UTC ISO strings
 const fmtIST = (iso: string | null | undefined): string => {
@@ -13,13 +11,6 @@ const fmtIST = (iso: string | null | undefined): string => {
     timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
-const fmtDateIST = (iso: string | null | undefined): string => {
-  if (!iso) return ''
-  return new Date(iso).toLocaleDateString('en-IN', {
-    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short',
-  })
-}
-
 type LegStatus = 'open' | 'closed' | 'error' | 'pending'
 interface Leg {
   id: string; parentId?: string; journeyLevel: string; status: LegStatus
@@ -48,23 +39,6 @@ interface OpenPosition {
 }
 
 // Demo data — replaced by API data when available
-const DEMO_ORDERS: AlgoGroup[] = [
-  {
-    algoId: '1', algoName: 'AWS-1', account: 'Karthik', mtm: 4320, mtmSL: -5000, mtmTP: 10000, isLive: true,
-    legs: [
-      { id: 'L1',  journeyLevel: '1',   status: 'open',   symbol: 'NIFTY 22500CE 27MAR25', dir: 'BUY',  lots: '1 (50)', entryCondition: 'ORB High', refPrice: 186.5, fillPrice: 187.0, ltp: 213.5, slOrig: 150, slActual: 175, target: 280, pnl: 1325 },
-      { id: 'L1a', journeyLevel: '1.1', status: 'closed', symbol: 'NIFTY 22500CE 27MAR25', dir: 'BUY',  lots: '1 (50)', entryCondition: 'Re-entry', refPrice: 187.0, fillPrice: 188.0, slOrig: 155, target: 280, exitPrice: 120, exitTime: '10:15:22', exitReason: 'SL', pnl: -3400, parentId: 'L1' },
-      { id: 'L2',  journeyLevel: '2',   status: 'open',   symbol: 'NIFTY 22500PE 27MAR25', dir: 'BUY',  lots: '1 (50)', entryCondition: 'ORB Low',  refPrice: 143.0, fillPrice: 142.5, ltp: 118.2, slOrig: 110, slActual: 110, target: 200, pnl: -1215 },
-      { id: 'L3',  journeyLevel: '3',   status: 'error',  symbol: 'NIFTY 22400CE 27MAR25', dir: 'BUY',  lots: '1 (50)', entryCondition: 'Direct',   pnl: 0 },
-    ],
-  },
-  {
-    algoId: '2', algoName: 'TF-BUY', account: 'Mom', mtm: -800, mtmSL: -3000, mtmTP: 6000, isLive: true,
-    legs: [
-      { id: 'L4', journeyLevel: '1', status: 'open', symbol: 'BANKNIFTY 48000CE 26MAR25', dir: 'BUY', lots: '2 (30)', entryCondition: 'W&T Up 5%', refPrice: 200.0, fillPrice: 210.0, ltp: 198.5, slOrig: 180, slActual: 185, target: 280, pnl: -575 },
-    ],
-  },
-]
 
 const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
   open:    { color: '#22C55E', bg: 'rgba(34,197,94,0.12)'   },
@@ -221,15 +195,15 @@ export default function OrdersPage() {
 
   // Fetch open positions once on mount
   useEffect(() => {
-    openPositionsAPI.list()
+    openPositionsAPI.list(isPractixMode)
       .then(res => setOpenPositions(res.data?.open_positions || []))
       .catch(() => {})
-  }, [])
+  }, [isPractixMode])
 
   // Load orders + waiting algos from API — re-fetch when day tab changes
   useEffect(() => {
     const tradingDate = weekDates[activeDay] || new Date().toISOString().slice(0, 10)
-    ordersAPI.list(tradingDate)
+    ordersAPI.list(tradingDate, isPractixMode)
       .then(res => {
         const data = res.data
         const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
@@ -265,10 +239,10 @@ export default function OrdersPage() {
       })
       .catch(() => {}) // keep demo data if API unreachable
 
-    ordersAPI.waiting(tradingDate)
+    ordersAPI.waiting(tradingDate, isPractixMode)
       .then(res => setWaitingAlgos(res.data?.waiting || []))
       .catch(() => {})
-  }, [activeDay])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeDay, isPractixMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live LTP via WebSocket — updates leg LTP cells in real time
   useEffect(() => {
@@ -552,7 +526,7 @@ export default function OrdersPage() {
           const isWeekend  = d === 'SAT' || d === 'SUN'
           const isToday    = d === todayDay()
           const isSelected = activeDay === d
-          const pnl = DAY_PNL[d] ?? null
+          const pnl: number | null = null
           return (
             <button key={d} onClick={() => setActiveDay(d)} style={{
               flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',

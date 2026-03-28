@@ -81,8 +81,9 @@ def _day_of_week(d: date) -> str:
 
 @router.get("/")
 async def get_week_grid(
-    week_start: Optional[str] = None,
-    week_end:   Optional[str] = None,
+    week_start:  Optional[str] = None,
+    week_end:    Optional[str] = None,
+    is_practix:  Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
 ):
     monday = _get_week_monday(week_start)
@@ -93,6 +94,7 @@ async def get_week_grid(
             GridEntry.trading_date >= monday,
             GridEntry.trading_date <= friday,
             GridEntry.is_archived == False,
+            *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
         ).order_by(GridEntry.trading_date, GridEntry.created_at)
     )
     entries = result.scalars().all()

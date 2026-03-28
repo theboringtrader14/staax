@@ -66,7 +66,7 @@ export const algosAPI = {
 // ── Grid ──────────────────────────────────────────────────────────────────────
 export const gridAPI = {
   // Load all entries for a week — used by GridPage on mount
-  list: (params: { week_start: string; week_end: string }) =>
+  list: (params: { week_start: string; week_end: string; is_practix?: boolean }) =>
     api.get('/grid/', { params }),
 
   // Deploy an algo to a day cell
@@ -102,14 +102,14 @@ export const gridAPI = {
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 export const openPositionsAPI = {
-  list: () => api.get('/orders/open-positions'),
+  list: (isPractix?: boolean) => api.get('/orders/open-positions', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
 }
 
 export const ordersAPI = {
-  list: (date?: string) =>
-    api.get('/orders/', { params: date ? { trading_date: date } : {} }),
-  waiting: (date?: string) =>
-    api.get('/orders/waiting', { params: date ? { trading_date: date } : {} }),
+  list: (date?: string, isPractix?: boolean) =>
+    api.get('/orders/', { params: { ...(date ? { trading_date: date } : {}), ...(isPractix !== undefined ? { is_practix: isPractix } : {}) } }),
+  waiting: (date?: string, isPractix?: boolean) =>
+    api.get('/orders/waiting', { params: { ...(date ? { trading_date: date } : {}), ...(isPractix !== undefined ? { is_practix: isPractix } : {}) } }),
   correctExitPrice: (orderId: string, price: number) =>
     api.patch(`/orders/${orderId}/exit-price`, { exit_price: price }),
   syncOrder: (algoId: string, data: object) =>
@@ -138,7 +138,7 @@ export const systemAPI = {
   activateKillSwitch: (accountIds: string[] = []) => api.post('/system/kill-switch', { account_ids: accountIds }),
   killSwitchStatus:   () => api.get("/system/kill-switch/status"),
   ticker:             () => api.get("/system/ticker"),
-  stats:              () => api.get("/system/stats"),
+  stats:              (isPractix?: boolean) => api.get("/system/stats", { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
 }
 
 export const botsAPI = {

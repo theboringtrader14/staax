@@ -26,7 +26,7 @@ def _fy_range(fy: str):
         datetime(start_year + 1, 3, 31, 23, 59, 59, tzinfo=IST),
     )
 
-def _base_query(fy: str, account_id: str | None):
+def _base_query(fy: str, account_id: str | None, is_practix: bool | None = None):
     """Return base filter conditions for closed orders in FY."""
     fy_start, fy_end = _fy_range(fy)
     conditions = [
@@ -41,6 +41,8 @@ def _base_query(fy: str, account_id: str | None):
             conditions.append(Order.account_id == _uuid.UUID(account_id))
         except ValueError:
             pass
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
     return conditions
 
 
@@ -49,8 +51,9 @@ async def algo_metrics(
     db: AsyncSession = Depends(get_db),
     fy: str = Query("2024-25"),
     account_id: str | None = Query(None),
+    is_practix: bool | None = Query(None),
 ):
-    conditions = _base_query(fy, account_id)
+    conditions = _base_query(fy, account_id, is_practix)
     result = await db.execute(
         select(Order, Algo)
         .join(Algo, Order.algo_id == Algo.id, isouter=True)
@@ -108,8 +111,9 @@ async def trade_calendar(
     db: AsyncSession = Depends(get_db),
     fy: str = Query("2024-25"),
     account_id: str | None = Query(None),
+    is_practix: bool | None = Query(None),
 ):
-    conditions = _base_query(fy, account_id)
+    conditions = _base_query(fy, account_id, is_practix)
     result = await db.execute(
         select(Order).where(*conditions).order_by(Order.fill_time)
     )
@@ -135,8 +139,9 @@ async def equity_curve(
     db: AsyncSession = Depends(get_db),
     fy: str = Query("2024-25"),
     account_id: str | None = Query(None),
+    is_practix: bool | None = Query(None),
 ):
-    conditions = _base_query(fy, account_id)
+    conditions = _base_query(fy, account_id, is_practix)
     result = await db.execute(
         select(Order).where(*conditions).order_by(Order.fill_time)
     )

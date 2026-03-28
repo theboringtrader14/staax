@@ -101,6 +101,7 @@ async def list_orders(
     algo_id:      Optional[str] = Query(None),
     account_id:   Optional[str] = Query(None),
     status:       Optional[str] = Query(None),   # pending|open|closed|error
+    is_practix:   Optional[bool] = Query(None),  # true=PRACTIX, false=LIVE, None=all
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -154,6 +155,8 @@ async def list_orders(
         conditions.append(Order.algo_id == algo_id)
     if account_id:
         conditions.append(Order.account_id == account_id)
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
     if status:
         try:
             conditions.append(Order.status == OrderStatus(status))
@@ -221,7 +224,10 @@ async def list_orders(
 
 
 @router.get("/open-positions")
-async def list_open_positions(db: AsyncSession = Depends(get_db)):
+async def list_open_positions(
+    db: AsyncSession = Depends(get_db),
+    is_practix: bool | None = Query(None),
+):
     """
     Returns ALL open orders across all dates, grouped by algo.
     Used by the Open Positions Panel on the Orders page.
@@ -230,7 +236,10 @@ async def list_open_positions(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Order, GridEntry)
         .join(GridEntry, Order.grid_entry_id == GridEntry.id)
-        .where(Order.status == OrderStatus.OPEN)
+        .where(
+            Order.status == OrderStatus.OPEN,
+            *([] if is_practix is None else [Order.is_practix == is_practix]),
+        )
         .order_by(Order.created_at)
     )
     rows = result.all()
@@ -299,6 +308,7 @@ async def list_open_positions(db: AsyncSession = Depends(get_db)):
 @router.get("/waiting")
 async def get_waiting_algos(
     trading_date: Optional[str] = Query(None, description="YYYY-MM-DD, defaults to today"),
+    is_practix:   Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -325,6 +335,7 @@ async def get_waiting_algos(
             GridEntry.is_archived == False,
             GridEntry.is_enabled == True,
             AlgoState.status == AlgoRunStatus.WAITING,
+            *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
         )
         .order_by(Algo.entry_time)
     )
@@ -342,6 +353,7 @@ async def get_waiting_algos(
             GridEntry.is_archived == False,
             GridEntry.is_enabled == True,
             ~sa_exists().where(AlgoState.grid_entry_id == GridEntry.id),
+            *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
         )
         .order_by(Algo.entry_time)
     )

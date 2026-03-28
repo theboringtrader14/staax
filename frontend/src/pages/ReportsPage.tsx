@@ -119,17 +119,17 @@ export default function ReportsPage(){
   const [fyTotal, setFyTotal] = useState(0)
 
   useEffect(() => {
-    reportsAPI.metrics({ fy }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
-    reportsAPI.calendar({ fy }).then(r => {
+    reportsAPI.metrics({ fy, is_practix: isPractixMode }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
+    reportsAPI.calendar({ fy, is_practix: isPractixMode }).then(r => {
       const map: Record<string,number> = {}
       ;(r.data?.calendar || []).forEach((d: any) => { map[d.date] = d.pnl })
       setCalendarData(map)
     }).catch(() => {})
-    reportsAPI.equityCurve({ fy }).then(r => {
+    reportsAPI.equityCurve({ fy, is_practix: isPractixMode }).then(r => {
       setEquityCurve(r.data?.data || [])
       setFyTotal(r.data?.total || 0)
     }).catch(() => {})
-  }, [fy])
+  }, [fy, isPractixMode])
 
   const handleDownload = async (format: 'csv' | 'excel' = 'csv') => {
     setDownloading(true)

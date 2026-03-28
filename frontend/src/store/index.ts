@@ -127,8 +127,8 @@ export const useStore = create<STAAXStore>((set, get) => ({
   unreadCount: () => get().notifications.filter(n => !n.read).length,
 
   // ── UI ────────────────────────────────────────────────────────────────────
-  isPractixMode: true,
-  setIsPractixMode: (v) => set({ isPractixMode: v }),
+  isPractixMode: localStorage.getItem('staax_practix_mode') !== 'false',
+  setIsPractixMode: (v) => { localStorage.setItem('staax_practix_mode', String(v)); set({ isPractixMode: v }) },
   showWeekends: false,
   setShowWeekends: (v) => set({ showWeekends: v }),
 }))

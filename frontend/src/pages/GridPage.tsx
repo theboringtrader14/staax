@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI } from '@/services/api'
+import { useStore } from '@/store'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS    = ['MON','TUE','WED','THU','FRI']
@@ -39,29 +40,14 @@ const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
   error:        {label:'Error',   col:'#EF4444',bg:'rgba(239,68,68,0.12)',pct:60},
 }
 
-// ── Demo fallback (shown when API is unreachable) ──────────────────────────────
-const DEMO_ALGOS: Algo[] = [
-  {id:'1',name:'AWS-1', account:'Karthik',legs:[{i:'NF',d:'B'},{i:'NF',d:'B'}],et:'09:16',xt:'15:10',arch:false,recurringDays:[]},
-  {id:'2',name:'TF-BUY',account:'Mom',    legs:[{i:'BN',d:'B'}],               et:'09:30',xt:'15:10',arch:false,recurringDays:[]},
-  {id:'3',name:'S1',    account:'Karthik',legs:[{i:'NF',d:'B'},{i:'NF',d:'S'}],et:'09:20',xt:'15:10',arch:false,recurringDays:[]},
-]
-const DEMO_GRID: Record<string,Record<string,Cell>> = {
-  '1':{MON:{multiplier:1,status:'open',       mode:'practix',entry:'09:16',exit:'15:10',pnl:1325},
-       TUE:{multiplier:1,status:'algo_closed',mode:'practix',entry:'09:16',exit:'15:10',pnl:-840}},
-  '2':{MON:{multiplier:2,status:'algo_active',mode:'live',   entry:'09:30',exit:'15:10'}},
-}
-
-// ── Date helpers ───────────────────────────────────────────────────────────────
-/** Get ISO date string (YYYY-MM-DD) for each day of the current week */
 function getWeekDates(): Record<string, string> {
   const now    = new Date()
   const ist    = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-  const dow    = ist.getDay()                         // 0=Sun
+  const dow    = ist.getDay()
   const monday = new Date(ist)
   monday.setDate(ist.getDate() - (dow === 0 ? 6 : dow - 1))
-
+  const names  = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
   const map: Record<string, string> = {}
-  const names = ['MON','TUE','WED','THU','FRI','SAT','SUN']
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
@@ -119,6 +105,7 @@ function worstStatus(cells: Record<string, Cell> | undefined): CS {
 export default function GridPage() {
   const nav = useNavigate()
   const weekDates = getWeekDates()
+  const isPractixMode = useStore(s => s.isPractixMode)
 
   const [algos,    setAlgos]    = useState<Algo[]>([])
   const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>({})
@@ -153,7 +140,7 @@ export default function GridPage() {
         name:          a.name,
         account:       a.account_nickname || '',
         legs:          (a.legs || []).map((l: any) => ({
-          i: ({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'}[l.underlying] || (l.underlying||'NF').slice(0,2).toUpperCase()),
+          i: (({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'} as Record<string,string>)[l.underlying] || (l.underlying||'NF').slice(0,2).toUpperCase()),
           d: l.direction === 'buy' ? 'B' : 'S',
         })),
         et:            a.entry_time || '09:16',
@@ -166,7 +153,7 @@ export default function GridPage() {
       // Load grid entries for this week
       const weekStart = weekDates['MON']
       const weekEnd   = weekDates['FRI']
-      const gridRes = await gridAPI.list({ week_start: weekStart, week_end: weekEnd })
+      const gridRes = await gridAPI.list({ week_start: weekStart, week_end: weekEnd, is_practix: isPractixMode })
       const entries: any[] = gridRes.data?.entries || gridRes.data || []
 
       if (true) {  // always rebuild grid from API
@@ -234,7 +221,7 @@ export default function GridPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isPractixMode])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -563,7 +550,7 @@ export default function GridPage() {
             <span style={{ fontSize:'14px' }}>📦</span> Archive
             {archived.length > 0 && <span style={{ position:'absolute', top:'4px', right:'4px', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
           </button>
-          <button className="btn btn-primary" onClick={() => nav('/algo/new')}>+ New Algo</button>
+
         </div>
       </div>
       </div>{/* end header */}
@@ -652,9 +639,12 @@ export default function GridPage() {
                             textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.35)' }}>
                           {algo.name}
                         </div>
-                        {/* Row 2: Account + leg chips on same line */}
-                        <div style={{ display:'flex', alignItems:'center', gap:'4px', flexWrap:'wrap', marginBottom:'4px' }}>
-                          <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'var(--bg-surface)', padding:'1px 5px', borderRadius:'3px', border:'1px solid var(--bg-border)', flexShrink:0 }}>{algo.account}</span>
+                        {/* Row 2: Account name */}
+                        <div style={{ marginBottom:'3px' }}>
+                          <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'var(--bg-surface)', padding:'1px 5px', borderRadius:'3px', border:'1px solid var(--bg-border)' }}>{algo.account}</span>
+                        </div>
+                        {/* Row 3: Instrument chips */}
+                        <div style={{ display:'flex', alignItems:'center', gap:'3px', flexWrap:'wrap', marginBottom:'4px' }}>
                           {algo.legs.map((l, i) => (
                             <span key={i} style={{ fontSize:'9px', fontWeight:700, padding:'1px 4px', borderRadius:'3px',
                               background: l.d==='B' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',

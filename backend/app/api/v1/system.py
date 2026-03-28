@@ -119,7 +119,7 @@ async def kill_switch_status(db: AsyncSession = Depends(get_db)):
 # ── Dashboard stats ───────────────────────────────────────────────────────────
 
 @router.get("/stats")
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bool = True):
     """
     Returns stat card values for the Dashboard:
       active_algos    — grid entries today that have been triggered (not NO_TRADE/ERROR/CLOSED)
@@ -142,7 +142,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     active_result = await db.execute(
         sa_select(func.count(func.distinct(Order.algo_id))).where(
             Order.status == OrderStatus.OPEN,
-            Order.created_at >= today_start_utc,
+            Order.is_practix == is_practix,
         )
     )
     active_algos = active_result.scalar() or 0
@@ -151,7 +151,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     open_result = await db.execute(
         sa_select(func.count(Order.id)).where(
             Order.status == OrderStatus.OPEN,
-            Order.created_at >= today_start_utc,
+            Order.is_practix == is_practix,
         )
     )
     open_positions = open_result.scalar() or 0
@@ -160,6 +160,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     today_pnl_result = await db.execute(
         sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
             Order.status == OrderStatus.CLOSED,
+            Order.is_practix == is_practix,
             func.date(Order.exit_time) == today,
         )
     )

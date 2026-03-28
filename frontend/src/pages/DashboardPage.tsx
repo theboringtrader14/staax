@@ -66,10 +66,10 @@ export default function DashboardPage() {
 
   // Load dashboard stats on mount (active algos, open positions, P&L)
   useEffect(() => {
-    systemAPI.stats()
+    systemAPI.stats(isPractixMode)
       .then(res => setStats(res.data))
       .catch(() => {})
-  }, [])
+  }, [isPractixMode])
 
   // Pre-populate System Log from persisted event_log on mount
   useEffect(() => {
