@@ -193,7 +193,7 @@ export default function ReportsPage(){
       {/* Top widgets — 4 columns: FY P&L (wider), Trades, Win Rate, Day P&L */}
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr',gap:'12px',marginBottom:'12px'}}>
         {/* FY P&L */}
-        <div className="card" style={{cursor:'pointer'}} onClick={()=>setChartModal(true)}>
+        <div className="card" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden'}} onClick={()=>setChartModal(true)}>
           <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'4px'}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--accent-blue)'}}>↗</span></div>
           <div style={{display:'flex',alignItems:'flex-end',gap:'12px'}}>
             <div>
@@ -211,14 +211,14 @@ export default function ReportsPage(){
         </div>
 
         {/* Total Trades */}
-        <div className="card">
+        <div className="card" style={{maxHeight:'127px', overflow:'hidden'}}>
           <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px'}}>Total Trades</div>
           <div style={{fontSize:'26px',fontWeight:700,color:'var(--accent-blue)',lineHeight:1}}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
           <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{algoMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
-        <div className="card">
+        <div className="card" style={{maxHeight:'127px', overflow:'hidden'}}>
           <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px'}}>Win Rate</div>
           <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)>0?'var(--green)':'var(--text-muted)'}}>
             {algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)>0?(algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)/algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)*100).toFixed(1)+'%':'—'}
@@ -227,7 +227,7 @@ export default function ReportsPage(){
         </div>
 
         {/* Day-of-week P&L — compact horizontal bars */}
-        <div className="card" style={{marginBottom:'12px'}}>
+        <div className="card">
         <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'12px'}}>P&L by Day</div>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-around',height:'64px',gap:'6px'}}>
           {DAY_NAMES.map(day=>{
@@ -273,7 +273,7 @@ export default function ReportsPage(){
       )}
 
       {/* FY Calendar */}
-      <div className="card" style={{marginBottom:'12px'}}>
+      <div className="card">
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>

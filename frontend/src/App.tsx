@@ -10,6 +10,8 @@ import AccountsPage from '@/pages/AccountsPage'
 import DashboardPage from '@/pages/DashboardPage'
 import IndicatorsPage from '@/pages/IndicatorsPage'
 import { useStore } from '@/store'
+import { useEffect } from 'react'
+import { accountsAPI } from '@/services/api'
 
 /** Redirect unauthenticated users to /login */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -22,6 +24,14 @@ export default function App() {
   // Apply saved theme on mount
   const theme = localStorage.getItem('staax_theme') || 'dark'
   document.documentElement.setAttribute('data-theme', theme)
+  const setAccounts     = useStore(s => s.setAccounts)
+  const isAuthenticated = useStore(s => s.isAuthenticated)
+
+  // Load accounts once on auth — makes dropdown available on all pages
+  useEffect(() => {
+    if (!isAuthenticated) return
+    accountsAPI.list().then(r => setAccounts(r.data?.accounts || r.data || [])).catch(() => {})
+  }, [isAuthenticated, setAccounts])
 
   return (
     <BrowserRouter>
