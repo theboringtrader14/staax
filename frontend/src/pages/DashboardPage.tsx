@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -46,6 +46,8 @@ export default function DashboardPage() {
   const [log, setLog]                         = useState<string[]>(['STAAX Dashboard ready.'])
   const [zerodhaConnected, setZerodhaConnected] = useState(false)
   const [showLateWarning, setShowLateWarning] = useState(false)
+  const [holidays, setHolidays]                   = useState<any[]>([])
+  const [syncingHolidays, setSyncingHolidays]     = useState(false)
   const [showKillConfirm, setShowKillConfirm]     = useState(false)
   const [killActivated, setKillActivated]         = useState(false)
   const [killLoading, setKillLoading]             = useState(false)
@@ -104,6 +106,42 @@ export default function DashboardPage() {
       })
       .catch(() => {}) // non-fatal — in-memory log still works
   }, [])
+
+  // Load upcoming holidays
+  useEffect(() => {
+    holidaysAPI.list(new Date().getFullYear())
+      .then(res => {
+        const today = new Date()
+        const in30 = new Date(today); in30.setDate(today.getDate() + 30)
+        const upcoming = (res.data || []).filter((h: any) => {
+          const d = new Date(h.date)
+          return d >= today && d <= in30 && h.segment === 'fo'
+        })
+        setHolidays(upcoming.slice(0, 8))
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleSyncHolidays = async () => {
+    setSyncingHolidays(true)
+    try {
+      const res = await holidaysAPI.sync()
+      addLog(`✅ Holidays synced — ${res.data.synced} new, ${res.data.skipped} existing`)
+      // Refresh list
+      const listRes = await holidaysAPI.list(new Date().getFullYear())
+      const today = new Date()
+      const in30 = new Date(today); in30.setDate(today.getDate() + 30)
+      const upcoming = (listRes.data || []).filter((h: any) => {
+        const d = new Date(h.date)
+        return d >= today && d <= in30 && h.segment === 'fo'
+      })
+      setHolidays(upcoming.slice(0, 8))
+    } catch {
+      addLog('⛔ Holiday sync failed — check NSE connectivity')
+    } finally {
+      setSyncingHolidays(false)
+    }
+  }
 
   // Load kill switch state on mount
   useEffect(() => {
@@ -343,6 +381,48 @@ export default function DashboardPage() {
             </div>
           )
         })}
+      </div>
+
+      {/* Market Holidays widget */}
+      <div className="card" style={{ marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Upcoming Market Holidays (F&O) — next 30 days
+          </div>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: '10px', padding: '0 10px', height: '24px' }}
+            onClick={handleSyncHolidays}
+            disabled={syncingHolidays}
+          >
+            {syncingHolidays ? 'Syncing…' : '↻ Sync NSE'}
+          </button>
+        </div>
+        {holidays.length === 0 ? (
+          <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+            No F&O holidays in the next 30 days — or sync to load from NSE.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {holidays.map((h: any) => {
+              const d   = new Date(h.date)
+              const day = d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })
+              const dt  = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })
+              return (
+                <div key={h.id} style={{
+                  display: 'flex', flexDirection: 'column', gap: '2px',
+                  padding: '6px 12px', borderRadius: '6px',
+                  background: 'rgba(245,158,11,0.08)',
+                  border: '1px solid rgba(245,158,11,0.2)',
+                  minWidth: '110px',
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)' }}>{dt} · {day}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{h.description}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>

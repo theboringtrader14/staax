@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { algosAPI, gridAPI } from '@/services/api'
+import { algosAPI, gridAPI, holidaysAPI } from '@/services/api'
 import { useStore } from '@/store'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -120,6 +120,7 @@ export default function GridPage() {
   const [archConfirm,   setArchConfirm]  = useState<string | null>(null)
   const [opError,       setOpError]      = useState<string>('')   // inline op error
   const [autoFillToast, setAutoFillToast] = useState<string>('')  // "Auto-filled N recurring day(s)"
+  const [holidayDates,  setHolidayDates]  = useState<Set<string>>(new Set())  // ISO dates that are FO holidays
   const [rmModal,       setRmModal]      = useState<{algoId:string; day:string} | null>(null)
   const [sortBy,        setSortBy]       = useState<string>(() => localStorage.getItem('staax_grid_sort') || 'date_desc')
 
@@ -227,6 +228,16 @@ export default function GridPage() {
   }, [isPractixMode])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // ── Load market holidays for current week ────────────────────────────────────
+  useEffect(() => {
+    holidaysAPI.list(new Date().getFullYear())
+      .then(res => {
+        const foHolidays = (res.data || []).filter((h: any) => h.segment === 'fo')
+        setHolidayDates(new Set(foHolidays.map((h: any) => h.date)))
+      })
+      .catch(() => {})
+  }, [])
 
   // ── Drop (deploy) ─────────────────────────────────────────────────────────────
   const onDrop = async (algoId: string, day: string) => {
@@ -607,14 +618,29 @@ export default function GridPage() {
                   </button>
                 </div>
               </th>
-              {days.map(d => (
-                <th key={d} style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)' }}>
-                  {d}
-                  <div style={{ fontSize:'9px', color:'var(--text-dim)', fontWeight:400, marginTop:'1px' }}>
-                    {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}
-                  </div>
-                </th>
-              ))}
+              {days.map(d => {
+                const isoDate   = weekDates[d] || ''
+                const isHoliday = isoDate ? holidayDates.has(isoDate) : false
+                return (
+                  <th key={d} style={{
+                    position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center',
+                    background: isHoliday ? 'rgba(245,158,11,0.10)' : 'var(--bg-secondary)',
+                    border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700,
+                    letterSpacing:'0.08em', textTransform:'uppercase',
+                    color: isHoliday ? 'var(--accent-amber)' : WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)',
+                  }}>
+                    {d}
+                    <div style={{ fontSize:'9px', color: isHoliday ? 'var(--accent-amber)' : 'var(--text-dim)', fontWeight:400, marginTop:'1px', opacity: isHoliday ? 1 : undefined }}>
+                      {weekDates[d] ? weekDates[d].slice(8) + '-' + weekDates[d].slice(5,7) : ''}
+                    </div>
+                    {isHoliday && (
+                      <div style={{ fontSize:'8px', color:'var(--accent-amber)', fontWeight:600, marginTop:'1px', letterSpacing:'0.04em' }}>
+                        HOLIDAY
+                      </div>
+                    )}
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
@@ -695,14 +721,16 @@ export default function GridPage() {
 
                   {/* Day cells */}
                   {days.map(day => {
-                    const cell = grid[algo.id]?.[day]
-                    const s    = cell ? SC[cell.status] : null
+                    const cell      = grid[algo.id]?.[day]
+                    const s         = cell ? SC[cell.status] : null
+                    const isHolDay  = weekDates[day] ? holidayDates.has(weekDates[day]) : false
                     return (
                       <td key={day}
                         onDragOver={e => e.preventDefault()}
                         onDrop={() => onDrop(algo.id, day)}
                         style={{ padding:'4px', border:'1px solid var(--bg-border)', verticalAlign:'top', overflow:'hidden',
-                          background: WEEKENDS.includes(day) && !cell ? 'rgba(30,32,34,0.4)' : undefined }}>
+                          background: isHolDay && !cell ? 'rgba(245,158,11,0.04)' : WEEKENDS.includes(day) && !cell ? 'rgba(30,32,34,0.4)' : undefined,
+                          opacity: isHolDay && !cell ? 0.6 : undefined }}>
                         {cell && s
                           ? (
                             <div style={{ background:'var(--bg-secondary)', borderLeft:`3px solid ${s.col}`, borderRadius:'5px', padding:'6px 8px', position:'relative', overflow:'hidden' }}>

@@ -519,7 +519,7 @@ export default function IndicatorsPage() {
       apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])),
       accountsAPI.list().then(r => setAccounts(r.data || [])),
     ]).finally(() => setLoading(false))
-  }, [])
+  }, [isPractixMode])
 
   // Aggregate orders from all active bots
   useEffect(() => {

@@ -27,7 +27,7 @@ from app.core.config import settings
 from app.core.database import engine as db_engine, Base
 
 # ── API routers ────────────────────────────────────────────────────────────────
-from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots
+from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots, holidays as holidays_api
 from app.api.v1.system import daily_system_reset
 from app.engine.broker_reconnect   import broker_reconnect_manager
 
@@ -620,7 +620,8 @@ app.include_router(services.router, prefix="/api/v1/services", tags=["services"]
 app.include_router(system.router,   prefix="/api/v1/system",   tags=["system"])
 app.include_router(reports.router,  prefix="/api/v1/reports",  tags=["reports"])
 app.include_router(events.router,   prefix="/api/v1/events",   tags=["events"])
-app.include_router(bots.router,    prefix="/api/v1/bots",    tags=["bots"])
+app.include_router(bots.router,     prefix="/api/v1/bots",     tags=["bots"])
+app.include_router(holidays_api.router, prefix="/api/v1/holidays", tags=["holidays"])
 
 # ── WebSocket routes ───────────────────────────────────────────────────────────
 app.include_router(ws_routes.router, tags=["websocket"])
