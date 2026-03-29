@@ -3408,3 +3408,60 @@ cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
 - Phase 2: Wife's account (MCX via Indicator Bots)  
 - Phase 3: Zerodha (needs static IP from Zerodha)
 - Static IP: Angel One allows family mapping post 2-3 months (single IP)
+
+
+## Pending Items — Post-Monday Session
+
+### 🔴 Bug Fixes
+| # | Item | Details |
+|---|------|---------|
+| B-1 | Holiday highlight transparent | Shows algos below it in Smart Grid (see screenshot) — needs solid background |
+| B-2 | Algo created in LIVE mode not showing | Saved successfully but doesn't appear in LIVE or PRACTIX grid |
+| B-3 | Weekend entries reset on refresh | Adding algo to Sat/Sun resets after refresh in Smart Grid |
+| B-4 | Show Weekends checkbox resets | Doesn't retain state on refresh in Smart Grid (works in Orders page) |
+| B-5 | All→Today chip errors on weekend | "Today is not a trading day" when clicked on Sat/Sun |
+| B-6 | Reports filters not wired | Month/Date/Custom filters in Per-Algo Metrics don't work |
+| B-7 | Remove "Click to Expand" text | In Full Year Calendar section in Reports page |
+| B-8 | PRAC/LIVE toggle chip on cells | Should be removed — algo-level promote/demote makes cell-level toggle redundant |
+| B-9 | Indicator Bots toggle not reactive | Toggling PRACTIX/LIVE requires refresh (unlike Smart Grid which is dynamic) |
+
+### 🟡 UI/UX Improvements
+| # | Item | Details |
+|---|------|---------|
+| U-1 | Smart Grid table header border | Bottom border missing — needed for clear demarcation while scrolling |
+| U-2 | Consolidate Performance + Heatmap | Performance tab is replica of Reports page. Merge Best/Worst Algo + P&L bar into single Analytics view. Evaluate Algo Health Score addition |
+| U-3 | Add Account button | Replace "Zerodha manual login available in Dashboard" text with Add Account button in Accounts page |
+| U-4 | Add Account functionality | New accounts page with Add Account button — full CRUD for broker accounts |
+
+### 🟠 New Features
+| # | Item | Details |
+|---|------|---------|
+| F-1 | Indicator Bot Signal API | Backend endpoint to record/retrieve bot signals |
+| F-2 | Signal Tracker orders | Show orders triggered by each signal in Signal Tracker table |
+| F-3 | MCX holidays | NSE API endpoint shows MCX holidays too. MCX has session-based holidays (morning/evening). Required for Indicator Bots |
+| F-4 | Global SL/TP verification | Check if Global SL and Global TP settings are wired and working |
+| F-5 | Algo Health Score | Score based on P&L, drawdown, win rate, consistency — for Analytics page |
+
+### 🔵 Phase 2 Features (Analytics)
+- Wire Analytics tabs to new backend endpoints (day-breakdown, errors, slippage endpoints built, not yet wired)
+- Risk Heatmap: proper Day×Algo matrix using /reports/day-breakdown
+- Failure Analytics: wire to /reports/errors endpoint  
+- Slippage Report: wire to /reports/slippage endpoint
+- Trade Replay: store LTP snapshots (5s, 90-day FIFO), replay engine
+- Intelligent Alerting: Telegram bot for backend down, broker failures, kill switch
+- Latency Tracker: order placement time vs broker response time
+
+### 🔵 Phase 3 Features (Infrastructure)
+- Server setup + static IP registration with SEBI
+- Angel One family account mapping (post 2-3 months)
+- Execution Guard: check kill switch, duplicate orders, retry state before ANY order
+- Startup Safety Check: validate broker vs DB positions on startup
+- get_option_chain caching: cache per underlying+expiry for duration of single enter() call
+- Native mobile app (iOS/Android) — Phase 4
+
+### Live Trading Plan
+- Phase 1: Mom's Angel One account (after Monday testing)
+- Phase 2: Wife's account — MCX only via Indicator Bots
+- Phase 3: Zerodha — needs static IP (purchase from Zerodha or third party)
+- Static IP: Angel One allows family mapping post 2-3 months (single IP for all AO accounts)
+- Accounts for live: Zerodha (Karthik), Mom AO, Wife AO (MCX)
