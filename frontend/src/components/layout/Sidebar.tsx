@@ -62,6 +62,13 @@ const IconPlus = () => (
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 )
+const IconBarChart = () => (
+  <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="10" width="4" height="11" rx="1"/>
+    <rect x="10" y="4" width="4" height="17" rx="1"/>
+    <rect x="17" y="7" width="4" height="14" rx="1"/>
+  </svg>
+)
 
 
 
@@ -73,6 +80,7 @@ const nav = [
   { path: '/orders',     label: 'Orders',          Icon: IconList        },
   { path: '/indicators', label: 'Indicator Bots',  Icon: IconCandlestick },
   { path: '/reports',    label: 'Reports',         Icon: IconChart       },
+  { path: '/analytics',  label: 'Analytics',       Icon: IconBarChart    },
   { path: '/accounts',   label: 'Accounts',        Icon: IconUser        },
 ]
 

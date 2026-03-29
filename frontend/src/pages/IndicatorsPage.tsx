@@ -231,16 +231,33 @@ function BotConfigurator({ accounts, onSave, onClose }: {
         {step === 3 && (
           <div>
             <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Choose Timeframe</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: '8px' }}>
-              {TIMEFRAMES.map(tf => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Row 1: minutes */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                {TIMEFRAMES.filter(tf => tf.value < 60).map(tf => (
                 <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
-                  style={{ padding: '14px', borderRadius: 'var(--radius-md)',
+                  style={{ padding: '14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
                     border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-                    background: form.timeframe_mins === tf.value ? 'var(--accent-blue-dim)' : 'var(--bg-secondary)',
-                    color: 'var(--text)', cursor: 'pointer', fontWeight: 700, transition: 'all 0.12s' }}>
+                    background: form.timeframe_mins === tf.value ? 'rgba(0,176,240,0.08)' : 'var(--bg-secondary)',
+                    color: form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--text)',
+                    cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
                   {tf.label}
                 </button>
-              ))}
+                ))}
+              </div>
+              {/* Row 2: hours */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                {TIMEFRAMES.filter(tf => tf.value >= 60).map(tf => (
+                <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
+                  style={{ padding: '14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
+                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
+                    background: form.timeframe_mins === tf.value ? 'rgba(0,176,240,0.08)' : 'var(--bg-secondary)',
+                    color: form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--text)',
+                    cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                  {tf.label}
+                </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

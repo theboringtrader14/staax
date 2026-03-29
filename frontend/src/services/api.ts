@@ -152,6 +152,13 @@ export const botsAPI = {
   orders:  (id: string) => api.get(`/bots/${id}/orders`),
 }
 
+export const holidaysAPI = {
+  list:   (year?: number) => api.get('/holidays/', { params: year ? { year } : {} }),
+  sync:   () => api.post('/holidays/sync'),
+  create: (data: { date: string; segment: string; description?: string }) => api.post('/holidays/', data),
+  delete: (id: string) => api.delete(`/holidays/${id}`),
+}
+
 export const eventsAPI = {
   list:   (limit = 100) => api.get('/events/', { params: { limit } }),
   export: () => api.get('/events/export', { responseType: 'blob' }),

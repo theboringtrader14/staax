@@ -273,7 +273,7 @@ export default function ReportsPage(){
       )}
 
       {/* FY Calendar */}
-      <div className="card">
+      <div className="card" style={{marginBottom:'12px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>

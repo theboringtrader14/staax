@@ -9,6 +9,7 @@ import ReportsPage from '@/pages/ReportsPage'
 import AccountsPage from '@/pages/AccountsPage'
 import DashboardPage from '@/pages/DashboardPage'
 import IndicatorsPage from '@/pages/IndicatorsPage'
+import AnalyticsPage from '@/pages/AnalyticsPage'
 import { useStore } from '@/store'
 import { useEffect } from 'react'
 import { accountsAPI } from '@/services/api'
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="reports"    element={<ReportsPage />} />
           <Route path="accounts"   element={<AccountsPage />} />
           <Route path="indicators" element={<IndicatorsPage />} />
+          <Route path="analytics"  element={<AnalyticsPage />} />
         </Route>
         <Route path="/zerodha-callback" element={<ZerodhaCallbackPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

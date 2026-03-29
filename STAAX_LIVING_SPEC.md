@@ -3304,3 +3304,107 @@ cd ~/STAXX/budgex/backend && uvicorn app.main:app --host 0.0.0.0 --port 8002
 # BUDGEX Frontend  
 cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
 ```
+
+
+## Session Update — 2026-03-28 (continued)
+
+### Additional fixes this session
+- ✅ P1-1: Algo-3 CE stuck order closed via SQL (NIFTY24MAR2623250CE)
+- ✅ P1-4: Algo-18 BNF stuck order closed via SQL (BANKNIFTY28APR2654400CE)
+- ✅ Thursday holiday grid entries reset to no_trade
+- ✅ Mom AO + Wife AO DB accounts created
+- ✅ BUDGEX: Full backend + frontend built, INVEX-style redesign applied
+- 🔄 F-1: Market holidays feature (Claude Code building)
+
+### Systematic bug identified (not yet fixed)
+get_option_chain called once per leg (not cached per enter() call).
+A straddle = 2x 40MB downloads, iron condor = 4x. Any AO API hiccup
+between calls causes PE/subsequent legs to fail and CE to get stuck.
+Fix: cache get_option_chain result keyed by underlying+expiry for
+duration of single enter() call.
+
+### INVEX Updates
+- ✅ SIP page built by Claude Code
+- ✅ JWT fix: invex_token → staax_token (shared auth with STAAX)
+- ✅ Logout moved to sidebar
+- ✅ Page transition animations unified
+- ✅ SIP page design matches Portfolio page
+- 🔄 Portfolio data loading (JWT secret alignment in progress)
+
+### Pending Items
+| ID | Item | Status |
+|----|------|--------|
+| P0-1 | SmartStream WebSocket | Monday morning test |
+| P0-2 | SEBI April 1 static IP | ⚠️ URGENT — 4 days |
+| get_option_chain cache | Systematic PE leg fix | Next session |
+| F-1 | Market holidays | Claude Code building |
+| BUDGEX GitHub | Create repo | Pending |
+| INVEX portfolio | JWT secret alignment | In progress |
+
+
+## End of Session — 2026-03-28
+
+### Committed This Session
+- 7fb7274: Demote button, LIVE tag fix, bots is_practix, algo-level promote
+- Latest: F-1 Market holidays (NSE sync, dashboard widget, grid column highlight)
+
+### Critical Items for Monday
+1. SmartStream WebSocket test (P0-1) — blocks live tickers
+2. Server setup planning post-Monday session
+3. get_option_chain caching fix (systematic PE leg bug)
+4. Wife/Mom order routing test after Monday login
+
+### BUDGEX Start Commands
+```bash
+docker start budgex_db
+cd ~/STAXX/budgex/backend && uvicorn app.main:app --host 0.0.0.0 --port 8002 &
+cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
+```
+
+
+## Session Update — 2026-03-29 (Morning)
+
+### Completed This Session
+- ✅ Analytics page — 4 tabs: Performance, Risk Heatmap, Failures, Slippage
+- ✅ Performance tab: 5 summary cards (Total Trades, Win Rate, Total P&L, Best Algo, Worst Algo)
+- ✅ Best/Worst Algo cards show W/L breakdown
+- ✅ Tab state persists to localStorage across page refreshes
+- ✅ All warning/limitation badges removed from Analytics tabs
+- ✅ 4 new backend report endpoints:
+    - GET /reports/day-breakdown — Day×Algo P&L for Risk Heatmap
+    - GET /reports/errors — Historical failure analytics
+    - GET /reports/slippage — Historical slippage analytics  
+    - GET /reports/all-orders — All historical orders without date filter
+- ✅ Timeframe selector: 2 rows (15/30/45 min | 1/2/3 hr)
+- ✅ Reports page: Calendar → Per-Algo Metrics gap fixed
+- ✅ Indicator Bots: refetch on PRACTIX/LIVE toggle fixed
+- ✅ Market holidays: NSE sync, dashboard widget, grid highlight
+
+### Analytics Page — Known Limitations
+- Risk Heatmap shows FY P&L per algo (not day×algo) — day breakdown 
+  endpoint exists but Analytics page not yet wired to it
+- Failures/Slippage show today's orders only — need to wire to new 
+  /reports/errors and /reports/slippage endpoints
+
+### Next Steps (post-Monday live session)
+1. Wire Analytics tabs to new backend endpoints (day-breakdown, errors, slippage)
+2. Execution guard (Item 7) + Startup safety check (Item 8)
+3. get_option_chain caching fix (systematic PE leg bug)
+4. Intelligent alerting — Telegram bot
+5. Server setup + static IP
+
+### Monday Checklist
+1. ~/STAXX/backup_db.sh
+2. Start backend: cd ~/STAXX/staax/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000
+3. Start frontend: cd ~/STAXX/staax/frontend && npm run dev
+4. Login → auto-loads broker tokens
+5. Watch for SmartStream _on_open in logs
+6. Test PRACTIX session with all algos
+7. Test Mom's account order routing
+8. If SmartStream works → test 1 algo in LIVE mode
+
+### Live Trading Plan
+- Phase 1: Mom's Angel One account first
+- Phase 2: Wife's account (MCX via Indicator Bots)  
+- Phase 3: Zerodha (needs static IP from Zerodha)
+- Static IP: Angel One allows family mapping post 2-3 months (single IP)
