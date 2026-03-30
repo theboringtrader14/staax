@@ -601,6 +601,7 @@ export default function AlgoPage() {
     exit_delay_scope:    exitDelayScope,
     on_margin_error:     errorMargin ? 'exit_all' : 'none',
     on_entry_fail:       errorEntry  ? 'exit_all' : 'none',
+    recurring_days:      ['MON','TUE','WED','THU','FRI'],
     legs: legs.map(l => ({
       leg_number:      l.no,
       direction:       l.direction.toLowerCase(),

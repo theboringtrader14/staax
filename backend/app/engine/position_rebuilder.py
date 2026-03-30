@@ -138,58 +138,26 @@ class PositionRebuilder:
 
         logger.info("[STARTUP] Recovering order %s sym=%s algo=%s", order.id, symbol, order.algo_id)
 
-        # Re-subscribe LTP token
-        if self._ltp_consumer and getattr(order, "instrument_token", None):
-            self._ltp_consumer.subscribe(int(order.instrument_token))
+        # Re-subscribe LTP token so ticks flow immediately after restart.
+        # subscribe() expects List[int] — pass as single-element list.
+        token = getattr(order, "instrument_token", None)
+        if self._ltp_consumer and token:
+            self._ltp_consumer.subscribe([int(token)])
+            logger.info("[STARTUP] LTP token %s re-subscribed for order %s", token, order.id)
 
-        # Re-register SL/TP monitor
-        if self._sl_tp_monitor and order.sl_price:
-            from app.engine.sl_tp_monitor import PositionMonitor
-            from app.engine.algo_runner import algo_runner
-            monitor = PositionMonitor(
-                order_id=str(order.id),
-                algo_id=str(order.algo_id),
-                symbol=symbol,
-                sl_price=order.sl_price,
-                tp_price=order.tp_price,
-                direction=order.direction,
-                on_sl_hit=algo_runner.on_sl_hit,
-                on_tp_hit=algo_runner.on_tp_hit,
+        # SL/TP / TSL / TTP re-registration requires sl_type, sl_value, tp_type, tp_value
+        # which are stored on AlgoLeg, not on Order.  A full recovery would need to join
+        # AlgoLeg here — deferred to a future improvement.  For now, log the gap so the
+        # operator knows monitoring is not live until the next fresh algo run.
+        sl_actual = getattr(order, "sl_actual", None)
+        target    = getattr(order, "target", None)
+        if sl_actual or target:
+            logger.warning(
+                "[STARTUP] Order %s has sl_actual=%s target=%s but SL/TP monitor NOT "
+                "re-registered (AlgoLeg config not available on Order) — "
+                "monitoring resumes on next fresh placement",
+                order.id, sl_actual, target,
             )
-            self._sl_tp_monitor.register(monitor)
-            logger.info("[STARTUP] SL/TP monitor re-registered for order %s", order.id)
-
-        # Re-register TSL if enabled on this order's leg
-        if self._tsl_engine and order.tsl_enabled and order.tsl_x:
-            from app.engine.tsl_engine import TSLState
-            tsl_state = TSLState(
-                order_id=str(order.id),
-                symbol=symbol,
-                direction=order.direction,
-                x=order.tsl_x,
-                y=order.tsl_y,
-                unit=order.tsl_unit or "pts",
-                current_sl=order.sl_price or 0.0,
-                on_sl_update=self._sl_tp_monitor.update_sl if self._sl_tp_monitor else lambda *a: None,
-            )
-            self._tsl_engine.register(tsl_state)
-            logger.info("[STARTUP] TSL re-registered for order %s", order.id)
-
-        # Re-register TTP if enabled
-        if self._ttp_engine and order.ttp_enabled and order.ttp_x:
-            from app.engine.ttp_engine import TTPState
-            ttp_state = TTPState(
-                order_id=str(order.id),
-                symbol=symbol,
-                direction=order.direction,
-                x=order.ttp_x,
-                y=order.ttp_y,
-                unit=order.ttp_unit or "pts",
-                current_tp=order.tp_price or 0.0,
-                on_tp_update=self._sl_tp_monitor.update_tp if self._sl_tp_monitor else lambda *a: None,
-            )
-            self._ttp_engine.register(ttp_state)
-            logger.info("[STARTUP] TTP re-registered for order %s", order.id)
 
 
 # ── Singleton ──────────────────────────────────────────────────────────────────
