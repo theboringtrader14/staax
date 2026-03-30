@@ -18,7 +18,7 @@ LTPCache: Redis-backed read cache for all monitors.
 """
 import asyncio
 import logging
-from typing import Dict, Callable, List, Optional
+from typing import Dict, Callable, List, Optional, Set
 import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ class AngelOneTickerAdapter:
         self._subscribed: List[str]         = []
         self._running                       = False
         self._corr_id                       = "staax_ltp"
+        self._mcx_tokens: Set[str]          = set()   # tokens that need exchangeType=5
 
         # Debug: log credential presence at construction time
         ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
@@ -130,6 +131,11 @@ class AngelOneTickerAdapter:
             pass
         logger.info("[AO] 🛑 SmartStream stopped")
 
+    def register_mcx_tokens(self, tokens: List[str]):
+        """Register tokens that belong to MCX (exchangeType=5). Call before start()."""
+        self._mcx_tokens.update(tokens)
+        logger.info(f"[AO] Registered {len(tokens)} MCX tokens: {tokens}")
+
     def subscribe(self, tokens: List[str]):
         """Subscribe additional string tokens while running."""
         new = [t for t in tokens if t not in self._subscribed]
@@ -146,14 +152,19 @@ class AngelOneTickerAdapter:
     def _build_token_list(self, tokens: List[str]) -> List[dict]:
         """
         Build Angel One subscription payload grouped by exchange type.
-        Index tokens go to exchangeType=1 (NSE), all others to exchangeType=2 (NFO).
+          exchangeType=1 → NSE index tokens
+          exchangeType=5 → MCX tokens (GOLDM, SILVERMIC, etc.)
+          exchangeType=2 → NFO (everything else)
         """
         index_set  = set(self.INDEX_TOKENS.values())
         nse_tokens = [t for t in tokens if t in index_set]
-        nfo_tokens = [t for t in tokens if t not in index_set]
+        mcx_tokens = [t for t in tokens if t not in index_set and t in self._mcx_tokens]
+        nfo_tokens = [t for t in tokens if t not in index_set and t not in self._mcx_tokens]
         token_list = []
         if nse_tokens:
             token_list.append({"exchangeType": 1, "tokens": nse_tokens})
+        if mcx_tokens:
+            token_list.append({"exchangeType": 5, "tokens": mcx_tokens})
         if nfo_tokens:
             token_list.append({"exchangeType": 2, "tokens": nfo_tokens})
         return token_list
@@ -196,6 +207,22 @@ class AngelOneTickerAdapter:
     def _on_close(self, ws):
         logger.warning("[AO] ⚠️ SmartStream connection closed")
         self._running = False
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._reconnect(), self._loop)
+
+    async def _reconnect(self):
+        """Attempt to reconnect SmartStream after a 10-second delay."""
+        await asyncio.sleep(10)
+        if self._running:
+            return   # already reconnected by another path
+        logger.info("[AO] 🔄 Attempting SmartStream reconnect...")
+        try:
+            if self._sws:
+                self._sws.connect()
+                self._running = True
+                logger.info("[AO] ✅ SmartStream reconnected")
+        except Exception as e:
+            logger.error(f"[AO] Reconnect failed: {e}")
 
 
 class LTPConsumer:

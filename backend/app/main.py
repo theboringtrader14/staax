@@ -647,7 +647,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     logger.info("[AO-CONNECT] Creating AngelOneTickerAdapter...")
                     adapter = AngelOneTickerAdapter(
                         auth_token=ao_acc.access_token,
-                        api_key=ao_acc.api_key or "",
+                        api_key=ao_broker.api_key,
                         client_code=ao_acc.client_id,
                         feed_token=feed_token,
                     )
@@ -662,6 +662,16 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                         all_tokens.extend(index_tokens)
                     except Exception as e:
                         logger.warning(f"[STARTUP MF] AO index token build failed: {e}")
+
+                    # Add MCX bot tokens and register them for exchangeType=5 routing
+                    try:
+                        from app.engine.bot_runner import MCX_TOKENS
+                        mcx_int_tokens = list(MCX_TOKENS.values())
+                        all_tokens.extend(mcx_int_tokens)
+                        adapter.register_mcx_tokens([str(t) for t in mcx_int_tokens])
+                        logger.info(f"[AO-CONNECT] Added {len(mcx_int_tokens)} MCX bot tokens")
+                    except Exception as e:
+                        logger.warning(f"[AO-CONNECT] MCX token registration failed: {e}")
 
                     # Add open position tokens
                     try:
@@ -681,12 +691,6 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     except Exception as e:
                         logger.warning(f"[AO-CONNECT] Open position tokens fetch failed: {e}")
 
-                    # NOW actually start the adapter — this creates SmartWebSocketV2 and calls connect()
-                    # Skip SmartStream at startup — tokens expire daily, auto-login will start it
-                    # SmartStream is now auto-started from angelone_login() after fresh token obtained
-                    logger.info("[AO-CONNECT] Skipping SmartStream at startup — will auto-start after morning login")
-                    market_feed_started = True
-                    continue
                     logger.info(f"[AO-CONNECT] Calling adapter.start() with {len(all_tokens)} tokens...")
                     loop = asyncio.get_event_loop()
                     import concurrent.futures as _cf

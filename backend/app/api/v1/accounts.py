@@ -384,11 +384,19 @@ async def angelone_login(
                     feed_token=feed_token,
                 )
                 ltp_consumer.set_angel_adapter(adapter)
-                index_tokens = [str(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()]
+                all_tokens = list({str(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()})
+                # Add MCX bot tokens and register for exchangeType=5 routing
+                try:
+                    from app.engine.bot_runner import MCX_TOKENS
+                    mcx_str_tokens = [str(t) for t in MCX_TOKENS.values()]
+                    adapter.register_mcx_tokens(mcx_str_tokens)
+                    all_tokens.extend(mcx_str_tokens)
+                except Exception:
+                    pass
                 loop = _aio.get_event_loop()
                 executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_smartstream")
                 loop.run_in_executor(executor, lambda: adapter.start(
-                    tokens=index_tokens,
+                    tokens=all_tokens,
                     loop=loop,
                     on_tick=ltp_consumer._process_ticks,
                 ))
