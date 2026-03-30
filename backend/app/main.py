@@ -318,6 +318,19 @@ async def _load_all_broker_tokens(app: "FastAPI") -> None:
             refresh_token = getattr(ao_acc, "refresh_token", "") or ""
             await ao_broker.load_token(ao_acc.access_token, feed_token, refresh_token)
             logger.info(f"[STARTUP] Loaded token for {ao_acc.nickname}")
+
+            # Validate token is live by calling a lightweight LTP check
+            try:
+                ltp = await ao_broker.get_ltp_by_token("NSE", "Nifty 50", "99926000")
+                if ltp > 0:
+                    logger.info(f"✅ [startup] Broker {ao_acc.nickname} validated — NIFTY LTP={ltp:.2f}")
+                else:
+                    logger.warning(
+                        f"⚠️ [startup] Broker {ao_acc.nickname} token loaded but LTP=0 "
+                        "— session may be stale, re-login may be needed"
+                    )
+            except Exception as _ve:
+                logger.warning(f"[startup] LTP validation failed for {ao_acc.nickname}: {_ve}")
         except Exception as e:
             logger.warning(f"[STARTUP] Token load failed for {ao_acc.nickname}: {e}")
 

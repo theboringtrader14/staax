@@ -11,8 +11,14 @@ REDIS_URL=redis://localhost:6379
 
 # ── Zerodha (Karthik account) ─────────────────────
 ZERODHA_API_KEY=tan5x9oc8y2gd1pi
-ZERODHA_API_SECRET=43u7j3wkuivxooz2ywowrdlax2572hlg
+ZERODHA_API_SECRET=w7cdox23ss2rrrtqo6mubuswwkxperos
 ZERODHA_USER_ID=ZN6179
+
+# ── Angel One (Karthik account) ───────────────────────
+ANGELONE_KARTHIK_API_KEY=bREnxDe5
+ANGELONE_KARTHIK_CLIENT_ID=PEAN1003
+ANGELONE_KARTHIK_MPIN=5302
+ANGELONE_KARTHIK_TOTP_SECRET=DMEFGKPXB7XPV236JHA2FWPOCU
 
 # ── Angel One (Mom account) ───────────────────────
 ANGELONE_MOM_API_KEY=

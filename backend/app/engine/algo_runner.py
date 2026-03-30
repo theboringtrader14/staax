@@ -362,26 +362,8 @@ class AlgoRunner:
         direction = leg.direction  # "buy" or "sell"
         is_overnight = algo.strategy_mode in (StrategyMode.BTST, StrategyMode.STBT)
 
-        # ── W&T: register watcher and defer — order placed when threshold hits ─
-        if leg.wt_enabled and leg.wt_value and not reentry:
-            if self._wt_evaluator and leg.instrument_token:
-                window = WTWindow(
-                    grid_entry_id=str(grid_entry.id),
-                    algo_id=str(algo.id),
-                    direction=leg.wt_direction or "up",
-                    entry_time=self._parse_time(algo.entry_time or "09:16"),
-                    instrument_token=leg.instrument_token,
-                    wt_value=leg.wt_value,
-                    wt_unit=leg.wt_unit or "pts",
-                )
-                self._wt_evaluator.register(
-                    window,
-                    on_entry=self._make_wt_callback(str(grid_entry.id)),
-                )
-                logger.info(f"W&T registered for leg {leg.leg_number}: {algo.name}")
-            return None  # deferred — order placed when W&T fires
-
         # ── Resolve broker for this account ────────────────────────────────────
+        # Must be resolved before W&T check so the broker is available for strike selection
         broker_type  = "zerodha"
         account_broker = self._zerodha_broker   # default
         if account and account.broker == BrokerType.ANGELONE:
@@ -393,12 +375,62 @@ class AlgoRunner:
                     "falling back to order_placer default"
                 )
 
+        # ── Execution guard: broker session check ─────────────────────────────
+        if account_broker and not account_broker.is_token_set():
+            raise ValueError(
+                f"Broker not initialized for {broker_type} — token not set "
+                f"(account: {account.nickname if account else 'unknown'}). "
+                "Complete broker login first."
+            )
+
+        # ── W&T: register watcher and defer — order placed when threshold hits ─
+        if leg.wt_enabled and leg.wt_value and not reentry:
+            # Strike selection must happen here to resolve instrument_token for the watcher
+            wt_instrument = None
+            if self._strike_selector:
+                try:
+                    wt_instrument = await self._strike_selector.select(
+                        underlying=leg.underlying,
+                        instrument_type=leg.instrument,
+                        expiry=leg.expiry or "current_weekly",
+                        strike_type=leg.strike_type or "atm",
+                        strike_value=leg.strike_value,
+                        broker=account_broker,
+                    )
+                except Exception as _we:
+                    logger.warning(
+                        f"[W&T] Strike selection failed for leg {leg.leg_number} "
+                        f"({leg.underlying} {leg.instrument} {leg.strike_type}): {_we}"
+                    )
+            wt_token = wt_instrument.get("instrument_token", 0) if wt_instrument else 0
+            if self._wt_evaluator and wt_token:
+                window = WTWindow(
+                    grid_entry_id=str(grid_entry.id),
+                    algo_id=str(algo.id),
+                    direction=leg.wt_direction or "up",
+                    entry_time=self._parse_time(algo.entry_time or "09:16"),
+                    instrument_token=wt_token,
+                    wt_value=leg.wt_value,
+                    wt_unit=leg.wt_unit or "pts",
+                )
+                self._wt_evaluator.register(
+                    window,
+                    on_entry=self._make_wt_callback(str(grid_entry.id)),
+                )
+                logger.info(f"W&T registered for leg {leg.leg_number}: {algo.name}")
+            else:
+                logger.error(
+                    f"[W&T] instrument_token missing for leg {leg.leg_number} ({algo.name}) — "
+                    f"W&T NOT registered. strike_selector returned: {wt_instrument!r}"
+                )
+            return None  # deferred — order placed when W&T fires
+
         # ── Strike selection ───────────────────────────────────────────────────
         instrument = None
         if leg.instrument == "fu":
             # Futures — use underlying directly
             symbol        = f"{leg.underlying}FUT"
-            instrument_token = leg.instrument_token or 0
+            instrument_token = getattr(leg, 'instrument_token', 0) or 0
             ltp           = 0.0
         else:
             # Options
@@ -418,9 +450,17 @@ class AlgoRunner:
                         broker=account_broker,
                     )
                 if not instrument:
+                    _token_ok = not account_broker or account_broker.is_token_set()
+                    if not _token_ok:
+                        _reason = "broker session invalid (token not set)"
+                    else:
+                        _reason = (
+                            f"option chain empty or {leg.strike_type.upper()} strike not found "
+                            f"— check [STRIKE] logs above for exact chain size"
+                        )
                     raise ValueError(
                         f"Strike selection failed for leg {leg.leg_number}: "
-                        f"{leg.underlying} {leg.instrument} {leg.strike_type}"
+                        f"{leg.underlying} {leg.instrument.upper()} {leg.strike_type} — {_reason}"
                     )
                 symbol           = instrument.get("tradingsymbol", "")
                 instrument_token = instrument.get("instrument_token", 0)
@@ -580,7 +620,8 @@ class AlgoRunner:
                 grid_entry_id=str(grid_entry.id),
                 algo_id=str(algo.id),
                 direction=direction,
-                    underlying_token=underlying_token,
+                instrument_token=instrument_token,
+                underlying_token=underlying_token,
                 entry_price=fill_price,
                 sl_type=leg.sl_type,
                 sl_value=leg.sl_value,
