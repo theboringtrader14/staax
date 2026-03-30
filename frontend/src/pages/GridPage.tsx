@@ -42,17 +42,22 @@ const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
 }
 
 function getWeekDates(): Record<string, string> {
-  const now    = new Date()
-  const ist    = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-  const dow    = ist.getDay()
-  const monday = new Date(ist)
-  monday.setDate(ist.getDate() - (dow === 0 ? 6 : dow - 1))
-  const names  = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+  // Use pure UTC arithmetic with hardcoded IST offset (UTC+5:30 = 330 min)
+  // Avoids toLocaleString→local Date→toISOString round-trip which shifts dates for non-IST users
+  const IST_OFFSET_MS = 330 * 60 * 1000
+  const nowUtcMs = Date.now()
+  const istMs    = nowUtcMs + IST_OFFSET_MS
+  const ist      = new Date(istMs)
+  const dow      = ist.getUTCDay()
+  const mondayMs = istMs - (dow === 0 ? 6 : dow - 1) * 86400000
+  const names    = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
   const map: Record<string, string> = {}
   for (let i = 0; i < 7; i++) {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    map[names[i]] = d.toISOString().slice(0, 10)
+    const d = new Date(mondayMs + i * 86400000)
+    const y = d.getUTCFullYear()
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const dd = String(d.getUTCDate()).padStart(2, '0')
+    map[names[i]] = `${y}-${m}-${dd}`
   }
   return map
 }
@@ -587,14 +592,14 @@ export default function GridPage() {
 
       {/* Grid table — flex:1 fills remaining height, overflow:auto scrolls X and Y */}
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+        <table style={{ width:'100%', minWidth:'1200px', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <colgroup>
             <col style={{ width:'200px' }}/>
             {days.map(d => <col key={d} style={{ width:'140px' }}/>)}
           </colgroup>
           <thead>
             <tr>
-              <th style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', boxShadow:'0 2px 0 var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
+              <th className="grid-sticky-th" style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   ALGO
                   <button onClick={addAllToToday} title="Deploy all active algos to today (or Friday if weekend)"
@@ -609,10 +614,10 @@ export default function GridPage() {
                 const isoDate   = weekDates[d] || ''
                 const isHoliday = isoDate ? holidayDates.has(isoDate) : false
                 return (
-                  <th key={d} style={{
+                  <th key={d} className="grid-sticky-th" style={{
                     position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center',
                     background: isHoliday ? 'color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-amber) 12%)' : 'var(--bg-secondary)',
-                    border:'1px solid var(--bg-border)', boxShadow:'0 2px 0 var(--bg-border)', fontSize:'10px', fontWeight:700,
+                    border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700,
                     letterSpacing:'0.08em', textTransform:'uppercase',
                     color: isHoliday ? 'var(--accent-amber)' : WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)',
                   }}>

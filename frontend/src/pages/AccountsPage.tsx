@@ -29,6 +29,18 @@ function isApril(): boolean {
   return new Date().getMonth() === 3
 }
 
+interface AddAccountForm {
+  broker: 'zerodha' | 'angelone' | ''
+  nickname: string
+  client_id: string
+  api_key: string
+  api_secret: string
+  pin: string
+  totp_secret: string
+}
+
+const EMPTY_FORM: AddAccountForm = { broker: '', nickname: '', client_id: '', api_key: '', api_secret: '', pin: '', totp_secret: '' }
+
 export default function AccountsPage() {
   const storeAccounts = useStore(s => s.accounts)
   const [accounts, setAccounts] = useState<AccountLocal[]>([])
@@ -42,6 +54,53 @@ export default function AccountsPage() {
   const [logging,     setLogging]     = useState<Record<string, boolean>>({})
   const [editNick,    setEditNick]    = useState<Record<string, string>>({})
   const [nickEditing, setNickEditing] = useState<Record<string, boolean>>({})
+
+  // Add Account modal
+  const [addModal,   setAddModal]   = useState(false)
+  const [addStep,    setAddStep]    = useState<1|2>(1)
+  const [addForm,    setAddForm]    = useState<AddAccountForm>(EMPTY_FORM)
+  const [addSaving,  setAddSaving]  = useState(false)
+  const [addError,   setAddError]   = useState('')
+  const [addToast,   setAddToast]   = useState('')
+
+  const openAddModal = () => { setAddModal(true); setAddStep(1); setAddForm(EMPTY_FORM); setAddError('') }
+  const closeAddModal = () => { setAddModal(false); setAddError('') }
+  const patchForm = (p: Partial<AddAccountForm>) => setAddForm(f => ({ ...f, ...p }))
+
+  const submitAdd = async () => {
+    if (!addForm.nickname.trim() || !addForm.client_id.trim()) { setAddError('Nickname and Client ID are required'); return }
+    setAddSaving(true); setAddError('')
+    try {
+      await accountsAPI.create({
+        broker:      addForm.broker,
+        nickname:    addForm.nickname.trim(),
+        client_id:   addForm.client_id.trim(),
+        api_key:     addForm.api_key.trim(),
+        api_secret:  addForm.api_secret,
+        pin:         addForm.pin,
+        totp_secret: addForm.totp_secret,
+      })
+      closeAddModal()
+      accountsAPI.list().then(res => {
+        const data: any[] = res.data || []
+        if (data.length > 0) setAccounts(data.map((api: any) => ({
+          id: api.id, name: api.nickname,
+          broker: api.broker === 'zerodha' ? 'Zerodha' : 'Angel One',
+          status: api.status === 'active' ? 'active' : 'pending',
+          globalSL: api.global_sl ?? null, globalTP: api.global_tp ?? null,
+          fyBrokerage: api.fy_brokerage ?? null,
+          margin: 0, pnl: 0, token: '', color: '',
+          type: api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
+        })))
+      }).catch(() => {})
+      setAddToast('✅ Account added')
+      setTimeout(() => setAddToast(''), 3000)
+    } catch (e: any) {
+      setAddError(e?.response?.data?.detail || 'Failed to add account')
+    } finally {
+      setAddSaving(false)
+    }
+  }
 
   // Load accounts directly from API on mount
   useEffect(() => {
@@ -206,7 +265,8 @@ export default function AccountsPage() {
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Broker accounts & API tokens</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-ghost" style={{ fontSize: '12px' }} onClick={() => {}}>
+          {addToast && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>{addToast}</span>}
+          <button className="btn btn-ghost" style={{ fontSize: '12px' }} onClick={openAddModal}>
             + Add Account
           </button>
         </div>
@@ -372,6 +432,91 @@ export default function AccountsPage() {
           )
         })}
       </div>
+
+      {/* Add Account Modal */}
+      {addModal && (
+        <div className="modal-overlay" onClick={closeAddModal}>
+          <div className="modal-box" style={{ maxWidth: '480px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div style={{ fontWeight: 700, fontSize: '16px' }}>Add Account</div>
+              <button onClick={closeAddModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>✕</button>
+            </div>
+
+            {/* Step 1 — Broker selection */}
+            {addStep === 1 && (
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>Select your broker</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+                  {(['zerodha', 'angelone'] as const).map(b => (
+                    <div key={b} onClick={() => patchForm({ broker: b })} style={{
+                      padding: '20px 16px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
+                      border: `2px solid ${addForm.broker === b ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
+                      background: addForm.broker === b ? 'rgba(0,176,240,0.08)' : 'var(--bg-secondary)',
+                      transition: 'all 0.12s',
+                    }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '4px', color: addForm.broker === b ? 'var(--accent-blue)' : 'var(--text)' }}>
+                        {b === 'zerodha' ? 'Zerodha' : 'Angel One'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                        {b === 'zerodha' ? 'Kite API' : 'SmartAPI'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button className="btn" style={{ width: '100%', background: 'var(--accent-blue)', color: '#000', fontWeight: 700 }}
+                  disabled={!addForm.broker}
+                  onClick={() => setAddStep(2)}>
+                  Continue →
+                </button>
+              </div>
+            )}
+
+            {/* Step 2 — Details form */}
+            {addStep === 2 && (
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={() => setAddStep(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-blue)', fontSize: '12px', padding: 0 }}>← Back</button>
+                  <span style={{ fontWeight: 700, color: addForm.broker === 'zerodha' ? 'var(--accent-blue)' : 'var(--accent-amber)' }}>
+                    {addForm.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                  {[
+                    { key: 'nickname',   label: 'Nickname',    type: 'text',     placeholder: 'e.g. Karthik' },
+                    { key: 'client_id',  label: 'Client ID',   type: 'text',     placeholder: addForm.broker === 'zerodha' ? 'AB1234' : 'A123456' },
+                    { key: 'api_key',    label: 'API Key',     type: 'text',     placeholder: 'API key from console' },
+                    { key: 'api_secret', label: addForm.broker === 'zerodha' ? 'API Secret' : 'API Secret', type: 'password', placeholder: '••••••••' },
+                    { key: 'pin',        label: addForm.broker === 'zerodha' ? 'Password' : 'PIN / Password', type: 'password', placeholder: '••••••••' },
+                    { key: 'totp_secret', label: 'TOTP Secret', type: 'password', placeholder: 'Base32 TOTP secret' },
+                  ].map(({ key, label, type, placeholder }) => (
+                    <div key={key}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{label}</div>
+                      <input
+                        className="staax-input"
+                        type={type}
+                        placeholder={placeholder}
+                        value={(addForm as any)[key]}
+                        onChange={e => patchForm({ [key]: e.target.value } as Partial<AddAccountForm>)}
+                        style={{ fontSize: '12px' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {addError && (
+                  <div style={{ fontSize: '12px', color: 'var(--red)', background: 'rgba(239,68,68,0.1)', padding: '8px 12px', borderRadius: '6px', marginBottom: '12px' }}>
+                    {addError}
+                  </div>
+                )}
+                <button className="btn" style={{ width: '100%', background: 'var(--accent-blue)', color: '#000', fontWeight: 700 }}
+                  disabled={addSaving}
+                  onClick={submitAdd}>
+                  {addSaving ? 'Adding…' : 'Add Account'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

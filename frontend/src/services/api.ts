@@ -24,6 +24,7 @@ export const authAPI = {
 // ── Accounts ──────────────────────────────────────────────────────────────────
 export const accountsAPI = {
   list:         () => api.get('/accounts/'),
+  create:       (data: object) => api.post('/accounts/', data),
   status:       () => api.get('/accounts/status'),
   updateMargin: (id: string, data: object) =>
     api.post(`/accounts/${id}/margin`, data),
@@ -129,10 +130,13 @@ export const servicesAPI = {
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 export const reportsAPI = {
-  equityCurve: (params?: object) => api.get('/reports/equity-curve', { params }),
-  metrics:     (params?: object) => api.get('/reports/metrics',       { params }),
-  calendar:    (params?: object) => api.get('/reports/calendar',      { params }),
-  download:    (params?: object) => api.get('/reports/download',      { params, responseType: 'blob' }),
+  equityCurve:  (params?: object) => api.get('/reports/equity-curve',  { params }),
+  metrics:      (params?: object) => api.get('/reports/metrics',        { params }),
+  calendar:     (params?: object) => api.get('/reports/calendar',       { params }),
+  download:     (params?: object) => api.get('/reports/download',       { params, responseType: 'blob' }),
+  dayBreakdown: (params?: object) => api.get('/reports/day-breakdown',  { params }),
+  errors:       (params?: object) => api.get('/reports/errors',         { params }),
+  slippage:     (params?: object) => api.get('/reports/slippage',       { params }),
 }
 
 // ── System

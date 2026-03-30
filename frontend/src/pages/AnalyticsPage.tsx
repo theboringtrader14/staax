@@ -189,46 +189,60 @@ function PerformanceTab({ metrics, orders, algos }: { metrics: MetricRow[]; orde
   )
 }
 
-// ── Tab 2: Risk Heatmap (metrics-based — day breakdown needs historical endpoint) ──
-function HeatmapTab({ metrics }: { metrics: MetricRow[] }) {
-  const sorted = [...metrics].sort((a, b) => b.pnl - a.pnl)
-  const maxAbsPnl = Math.max(...sorted.map(m => Math.abs(m.pnl)), 1)
+// ── Tab 2: Risk Heatmap — Day × Algo breakdown from /reports/day-breakdown ──
+const HEATMAP_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
+
+function HeatmapTab({ breakdown }: { breakdown: Record<string, Record<string, { pnl: number; trades: number }>> }) {
+  const algos = Object.keys(breakdown).sort()
+
+  function cellBg(pnl: number | undefined): string {
+    if (pnl === undefined) return 'var(--bg-border)'
+    if (pnl > 0) return `rgba(34,197,94,${Math.min(Math.abs(pnl) / 5000, 1) * 0.5 + 0.12})`
+    if (pnl < 0) return `rgba(239,68,68,${Math.min(Math.abs(pnl) / 3000, 1) * 0.5 + 0.12})`
+    return 'var(--bg-border)'
+  }
 
   return (
     <div>
-
-      {sorted.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px' }}>No metrics data available.</div>
+      {algos.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px' }}>No day-breakdown data available.</div>
       ) : (
-        <div className="card">
-          <div style={secHdr}>FY P&L by Algo</div>
+        <div className="card" style={{ overflowX: 'auto' }}>
+          <div style={secHdr}>P&L by Day × Algo (FY)</div>
           <div style={tblWrap}>
-            <table className="staax-table" style={{ width: '100%' }}>
+            <table className="staax-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th>Algo</th>
-                  <th>Trades</th>
-                  <th>Win %</th>
-                  <th>P&L</th>
-                  <th style={{ width: '200px' }}>P&L Bar</th>
+                  <th style={{ minWidth: '140px' }}>Algo</th>
+                  {HEATMAP_DAYS.map(d => <th key={d} style={{ textAlign: 'center', width: '100px' }}>{d}</th>)}
+                  <th style={{ textAlign: 'right' }}>FY Total</th>
                 </tr>
               </thead>
               <tbody>
-                {sorted.map(m => {
-                  const barPct = Math.abs(m.pnl) / maxAbsPnl * 100
-                  const isPos = m.pnl >= 0
+                {algos.map(algo => {
+                  const row = breakdown[algo]
+                  const fyTotal = HEATMAP_DAYS.reduce((s, d) => s + (row[d]?.pnl ?? 0), 0)
                   return (
-                    <tr key={m.algo_name}>
-                      <td style={{ fontWeight: 600 }}>{m.algo_name}</td>
-                      <td>{m.trades}</td>
-                      <td style={{ color: m.win_rate >= 50 ? 'var(--green)' : 'var(--red)' }}>{m.win_rate.toFixed(1)}%</td>
-                      <td style={{ fontWeight: 700, color: isPos ? 'var(--green)' : 'var(--red)' }}>{fmtPnl(m.pnl)}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ flex: 1, height: '8px', background: 'var(--bg-border)', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ width: `${barPct}%`, height: '100%', background: isPos ? 'var(--green)' : 'var(--red)', borderRadius: '4px', opacity: 0.75 }} />
-                          </div>
-                        </div>
+                    <tr key={algo}>
+                      <td style={{ fontWeight: 600 }}>{algo}</td>
+                      {HEATMAP_DAYS.map(d => {
+                        const cell = row[d]
+                        return (
+                          <td key={d} style={{ textAlign: 'center', padding: '6px 4px' }}>
+                            <div style={{
+                              background: cellBg(cell?.pnl),
+                              borderRadius: '5px', padding: '5px 4px',
+                              fontSize: '10px', fontWeight: 700,
+                              color: cell ? (cell.pnl > 0 ? 'var(--green)' : cell.pnl < 0 ? 'var(--red)' : 'var(--text-dim)') : 'var(--text-dim)',
+                            }}>
+                              {cell ? (cell.pnl >= 0 ? '+' : '') + (cell.pnl / 1000).toFixed(1) + 'k' : '—'}
+                              {cell && <div style={{ fontSize: '9px', fontWeight: 400, color: 'var(--text-dim)', marginTop: '1px' }}>{cell.trades}t</div>}
+                            </div>
+                          </td>
+                        )
+                      })}
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: fyTotal >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                        {fmtPnl(fyTotal)}
                       </td>
                     </tr>
                   )
@@ -242,107 +256,67 @@ function HeatmapTab({ metrics }: { metrics: MetricRow[] }) {
   )
 }
 
-// ── Tab 3: Failure Analytics ───────────────────────────────────────────────────
-function FailuresTab({ orders }: { orders: Order[] }) {
-  const errorOrders = orders.filter(o => o.status === 'error')
-  const errorRate = orders.length > 0 ? (errorOrders.length / orders.length) * 100 : 0
+// ── Tab 3: Failure Analytics — from /reports/errors ───────────────────────────
+interface ErrorsData {
+  per_algo: { algo: string; errors: number; last_error: string | null }[]
+  recent:   { id: string; algo: string; symbol: string; error_message: string | null; created_at: string | null }[]
+  total_errors: number
+  total_orders: number
+  error_rate_pct: number
+}
 
-  const algoErrMap = new Map<string, { count: number; lastDate: string }>()
-  for (const o of errorOrders) {
-    if (!algoErrMap.has(o.algo_name)) algoErrMap.set(o.algo_name, { count: 0, lastDate: '' })
-    const e = algoErrMap.get(o.algo_name)!
-    e.count++
-    const d = o.fill_time || o.exit_time || ''
-    if (d > e.lastDate) e.lastDate = d
-  }
-  const algoErrRows = [...algoErrMap.entries()]
-    .map(([name, v]) => ({ algo_name: name, count: v.count, last_date: v.lastDate }))
-    .sort((a, b) => b.count - a.count)
-  const mostFailed = algoErrRows[0]?.algo_name || '—'
-
-  const errTypes: Record<string, number> = {}
-  for (const o of errorOrders) {
-    const key = (o.error_message || 'unknown').split(' ').slice(0, 2).join(' ')
-    errTypes[key] = (errTypes[key] ?? 0) + 1
-  }
-  const topErrType = Object.entries(errTypes).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
-
-  const last20 = [...errorOrders]
-    .sort((a, b) => (b.fill_time || '').localeCompare(a.fill_time || ''))
-    .slice(0, 20)
+function FailuresTab({ data }: { data: ErrorsData | null }) {
+  if (!data) return <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px' }}>No error data available.</div>
+  const mostFailed = data.per_algo[0]?.algo || '—'
 
   return (
     <div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
-        <SummaryCard label="Total Errors" value={errorOrders.length.toString()} valueColor="var(--red)" />
-        <SummaryCard label="Error Rate %" value={`${errorRate.toFixed(1)}%`} sub={`of ${orders.length} today's orders`} />
+        <SummaryCard label="Total Errors" value={data.total_errors.toString()} valueColor="var(--red)" />
+        <SummaryCard label="Error Rate %" value={`${data.error_rate_pct.toFixed(1)}%`} sub={`of ${data.total_orders} orders (FY)`} />
         <SummaryCard label="Most Failed Algo" value={mostFailed} valueColor="var(--accent-blue)" />
-        <SummaryCard label="Top Error Type" value={topErrType} />
+        <SummaryCard label="Algos with Errors" value={data.per_algo.length.toString()} />
       </div>
 
       <div className="card" style={{ marginBottom: '12px' }}>
-        <div style={secHdr}>Errors per Algo</div>
+        <div style={secHdr}>Errors per Algo (FY)</div>
         <div style={tblWrap}>
           <table className="staax-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>Algo</th>
-                <th>Error Count</th>
-                <th>Last Error</th>
-                <th>Error Rate %</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Algo</th><th>Errors</th><th>Last Error</th></tr></thead>
             <tbody>
-              {algoErrRows.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No errors today</td></tr>
+              {data.per_algo.length === 0 && (
+                <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No errors on record</td></tr>
               )}
-              {algoErrRows.map(row => {
-                const total = orders.filter(o => o.algo_name === row.algo_name).length
-                const rate = total > 0 ? (row.count / total) * 100 : 0
-                return (
-                  <tr key={row.algo_name}>
-                    <td style={{ fontWeight: 600 }}>{row.algo_name}</td>
-                    <td style={{ color: 'var(--red)', fontWeight: 700 }}>{row.count}</td>
-                    <td style={{ color: 'var(--text-muted)' }}>{fmtDate(row.last_date)}</td>
-                    <td style={{ color: rate > 10 ? 'var(--red)' : 'var(--text-muted)' }}>{rate.toFixed(1)}%</td>
-                  </tr>
-                )
-              })}
+              {data.per_algo.map(row => (
+                <tr key={row.algo}>
+                  <td style={{ fontWeight: 600 }}>{row.algo}</td>
+                  <td style={{ color: 'var(--red)', fontWeight: 700 }}>{row.errors}</td>
+                  <td style={{ color: 'var(--text-muted)' }}>{fmtDate(row.last_error ?? undefined)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
       <div className="card">
-        <div style={secHdr}>Recent Error Orders (today, last 20)</div>
+        <div style={secHdr}>Recent Error Orders (last 20)</div>
         <div style={{ ...tblWrap, overflowX: 'auto' }}>
           <table className="staax-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Algo</th>
-                <th>Symbol</th>
-                <th>Error Message</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Time</th><th>Algo</th><th>Symbol</th><th>Error Message</th></tr></thead>
             <tbody>
-              {last20.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No errors today</td></tr>
+              {data.recent.length === 0 && (
+                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No recent errors</td></tr>
               )}
-              {last20.map(o => {
+              {data.recent.map(o => {
                 const msg = o.error_message || '—'
                 const short = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
                 return (
                   <tr key={o.id}>
-                    <td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{fmtDate(o.fill_time)}</td>
-                    <td style={{ fontWeight: 600 }}>{o.algo_name}</td>
+                    <td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{fmtDate(o.created_at ?? undefined)}</td>
+                    <td style={{ fontWeight: 600 }}>{o.algo}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: '11px' }}>{o.symbol}</td>
-                    <td>
-                      <span title={msg} style={{ cursor: msg.length > 60 ? 'help' : 'default', color: 'var(--red)', fontSize: '11px' }}>
-                        {short}
-                      </span>
-                    </td>
+                    <td><span title={msg} style={{ cursor: msg.length > 60 ? 'help' : 'default', color: 'var(--red)', fontSize: '11px' }}>{short}</span></td>
                   </tr>
                 )
               })}
@@ -354,37 +328,15 @@ function FailuresTab({ orders }: { orders: Order[] }) {
   )
 }
 
-// ── Tab 4: Slippage Report ─────────────────────────────────────────────────────
-type SlippageOrder = Order & { slippage: number }
+// ── Tab 4: Slippage Report — from /reports/slippage ───────────────────────────
+interface SlippageData {
+  per_algo: { algo: string; orders: number; avg_slip_pts: number; total_slip_inr: number; best: number; worst: number }[]
+  avg_slippage_pts: number
+  total_orders_with_ref: number
+}
 
-function SlippageTab({ orders }: { orders: Order[] }) {
-  const withRef    = orders.filter(o => o.fill_price != null && o.entry_reference != null)
-  const withoutRef = orders.filter(o => o.fill_price != null && o.entry_reference == null)
-
-  function calcSlip(o: Order): number {
-    const fill = o.fill_price!
-    const ref  = Number(o.entry_reference!)
-    return o.direction === 'buy' ? fill - ref : ref - fill
-  }
-
-  const slipOrders: SlippageOrder[] = withRef.map(o => ({ ...o, slippage: calcSlip(o) }))
-  const avgSlip   = slipOrders.length > 0 ? slipOrders.reduce((s, o) => s + o.slippage, 0) / slipOrders.length : 0
-  const totalSlip = slipOrders.reduce((s, o) => s + o.slippage, 0)
-  const bestFill  = slipOrders.length > 0 ? Math.min(...slipOrders.map(o => o.slippage)) : 0
-  const worstFill = slipOrders.length > 0 ? Math.max(...slipOrders.map(o => o.slippage)) : 0
-
-  const algoMap = new Map<string, { orders: number; total: number; slips: number[] }>()
-  for (const o of slipOrders) {
-    if (!algoMap.has(o.algo_name)) algoMap.set(o.algo_name, { orders: 0, total: 0, slips: [] })
-    const a = algoMap.get(o.algo_name)!
-    a.orders++; a.total += o.slippage; a.slips.push(o.slippage)
-  }
-  const algoRows = [...algoMap.entries()]
-    .map(([name, v]) => ({
-      algo_name: name, orders: v.orders, avg: v.total / v.orders, total: v.total,
-      best: Math.min(...v.slips), worst: Math.max(...v.slips),
-    }))
-    .sort((a, b) => b.avg - a.avg)
+function SlippageTab({ data }: { data: SlippageData | null }) {
+  if (!data) return <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px' }}>No slippage data available.</div>
 
   function slipColor(avg: number): string {
     if (avg < 2) return 'var(--green)'
@@ -392,106 +344,41 @@ function SlippageTab({ orders }: { orders: Order[] }) {
     return 'var(--red)'
   }
 
-  const highSlip = slipOrders
-    .filter(o => Math.abs(o.slippage) > 5)
-    .sort((a, b) => Math.abs(b.slippage) - Math.abs(a.slippage))
-
   return (
     <div>
-
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-        <span style={{ fontSize: '11px', background: 'rgba(34,197,94,0.1)', color: 'var(--green)', padding: '3px 10px', borderRadius: '12px', border: '1px solid rgba(34,197,94,0.2)' }}>
-          {withRef.length} orders with ref price
-        </span>
-        <span style={{ fontSize: '11px', background: 'var(--bg-border)', color: 'var(--text-muted)', padding: '3px 10px', borderRadius: '12px' }}>
-          {withoutRef.length} without ref price (direct entry)
-        </span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
         <SummaryCard
-          label="Avg Slippage (pts)" value={fmtPts(avgSlip)}
-          valueColor={avgSlip < 2 ? 'var(--green)' : avgSlip <= 5 ? 'var(--amber)' : 'var(--red)'}
+          label="Avg Slippage (pts)" value={fmtPts(data.avg_slippage_pts)}
+          valueColor={data.avg_slippage_pts < 2 ? 'var(--green)' : data.avg_slippage_pts <= 5 ? 'var(--amber)' : 'var(--red)'}
         />
-        <SummaryCard
-          label="Total Slippage (₹)"
-          value={`${totalSlip >= 0 ? '+' : '-'}₹${Math.abs(Math.round(totalSlip)).toLocaleString('en-IN')}`}
-          valueColor={totalSlip <= 0 ? 'var(--green)' : 'var(--red)'}
-        />
-        <SummaryCard label="Best Fill (pts)"  value={fmtPts(bestFill)}  valueColor="var(--green)" />
-        <SummaryCard label="Worst Fill (pts)" value={fmtPts(worstFill)} valueColor={worstFill > 5 ? 'var(--red)' : 'var(--text)'} />
-      </div>
-
-      <div className="card" style={{ marginBottom: '12px' }}>
-        <div style={secHdr}>Slippage per Algo</div>
-        <div style={{ ...tblWrap, overflowX: 'auto' }}>
-          <table className="staax-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>Algo</th>
-                <th>Orders</th>
-                <th>Avg Slip (pts)</th>
-                <th>Total Slip (₹)</th>
-                <th>Best</th>
-                <th>Worst</th>
-              </tr>
-            </thead>
-            <tbody>
-              {algoRows.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No slippage data today</td></tr>
-              )}
-              {algoRows.map(r => (
-                <tr key={r.algo_name}>
-                  <td style={{ fontWeight: 600 }}>{r.algo_name}</td>
-                  <td>{r.orders}</td>
-                  <td style={{ fontWeight: 700, color: slipColor(r.avg) }}>{fmtPts(r.avg)}</td>
-                  <td style={{ color: r.total <= 0 ? 'var(--green)' : 'var(--red)' }}>
-                    {r.total >= 0 ? '+' : '-'}₹{Math.abs(Math.round(r.total)).toLocaleString('en-IN')}
-                  </td>
-                  <td style={{ color: 'var(--green)' }}>{fmtPts(r.best)}</td>
-                  <td style={{ color: r.worst > 5 ? 'var(--red)' : 'var(--text)' }}>{fmtPts(r.worst)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SummaryCard label="Orders with Ref Price" value={data.total_orders_with_ref.toString()} />
+        <SummaryCard label="Algos Tracked" value={data.per_algo.length.toString()} />
       </div>
 
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <div style={secHdr}>High Slippage Orders (&gt;5 pts)</div>
-          <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '8px' }}>{highSlip.length} orders</span>
-        </div>
+        <div style={secHdr}>Slippage per Algo (FY)</div>
         <div style={{ ...tblWrap, overflowX: 'auto' }}>
           <table className="staax-table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Algo</th>
-                <th>Symbol</th>
-                <th>Dir</th>
-                <th>Ref Price</th>
-                <th>Fill Price</th>
-                <th>Slippage</th>
+                <th>Algo</th><th>Orders</th><th>Avg Slip (pts)</th>
+                <th>Total Slip (₹)</th><th>Best</th><th>Worst</th>
               </tr>
             </thead>
             <tbody>
-              {highSlip.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No high-slippage orders today</td></tr>
+              {data.per_algo.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No slippage data on record</td></tr>
               )}
-              {highSlip.map(o => (
-                <tr key={o.id}>
-                  <td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{fmtDate(o.fill_time)}</td>
-                  <td style={{ fontWeight: 600 }}>{o.algo_name}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '11px' }}>{o.symbol}</td>
-                  <td>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: o.direction === 'buy' ? 'var(--green)' : 'var(--red)', textTransform: 'uppercase' }}>
-                      {o.direction}
-                    </span>
+              {data.per_algo.map(r => (
+                <tr key={r.algo}>
+                  <td style={{ fontWeight: 600 }}>{r.algo}</td>
+                  <td>{r.orders}</td>
+                  <td style={{ fontWeight: 700, color: slipColor(r.avg_slip_pts) }}>{fmtPts(r.avg_slip_pts)}</td>
+                  <td style={{ color: r.total_slip_inr <= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {r.total_slip_inr >= 0 ? '+' : '-'}₹{Math.abs(Math.round(r.total_slip_inr)).toLocaleString('en-IN')}
                   </td>
-                  <td>{Number(o.entry_reference ?? '0').toFixed(2)}</td>
-                  <td>{(o.fill_price ?? 0).toFixed(2)}</td>
-                  <td style={{ fontWeight: 700, color: o.slippage > 0 ? 'var(--red)' : 'var(--green)' }}>{fmtPts(o.slippage)}</td>
+                  <td style={{ color: 'var(--green)' }}>{fmtPts(r.best)}</td>
+                  <td style={{ color: r.worst > 5 ? 'var(--red)' : 'var(--text)' }}>{fmtPts(r.worst)}</td>
                 </tr>
               ))}
             </tbody>
@@ -506,22 +393,30 @@ function SlippageTab({ orders }: { orders: Order[] }) {
 export default function AnalyticsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const [activeTab, setActiveTab] = useState<Tab>(() => (localStorage.getItem('analytics_tab') as Tab) || 'Performance')
-  const [metrics, setMetrics]     = useState<MetricRow[]>([])
-  const [orders, setOrders]       = useState<Order[]>([])
-  const [algos, setAlgos]         = useState<Algo[]>([])
-  const [loading, setLoading]     = useState(true)
+  const [metrics, setMetrics]       = useState<MetricRow[]>([])
+  const [orders, setOrders]         = useState<Order[]>([])
+  const [algos, setAlgos]           = useState<Algo[]>([])
+  const [breakdown, setBreakdown]   = useState<Record<string, Record<string, { pnl: number; trades: number }>>>({})
+  const [errorsData, setErrorsData] = useState<ErrorsData | null>(null)
+  const [slippageData, setSlippageData] = useState<SlippageData | null>(null)
+  const [loading, setLoading]       = useState(true)
 
   useEffect(() => {
     setLoading(true)
     const today = new Date().toISOString().slice(0, 10)
 
-    Promise.all([
+    Promise.allSettled([
       reportsAPI.metrics({ fy: '2025-26', is_practix: isPractixMode }),
       ordersAPI.list(today, isPractixMode),
       algosAPI.list(),
-    ]).then(([mRes, oRes, aRes]) => {
+      reportsAPI.dayBreakdown({ fy: '2025-26', is_practix: isPractixMode }),
+      reportsAPI.errors({ fy: '2025-26', is_practix: isPractixMode }),
+      reportsAPI.slippage({ fy: '2025-26', is_practix: isPractixMode }),
+    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes]) => {
       // Map actual API field names → local MetricRow shape
-      const rawMetrics: any[] = Array.isArray(mRes.data) ? mRes.data : (mRes.data?.metrics || [])
+      const rawMetrics: any[] = mRes.status === 'fulfilled'
+        ? (Array.isArray(mRes.value.data) ? mRes.value.data : (mRes.value.data?.metrics || []))
+        : []
       setMetrics(rawMetrics.map((r: any) => ({
         algo_name: r.name || r.algo_name || '',
         trades:    r.trades || 0,
@@ -532,16 +427,24 @@ export default function AnalyticsPage() {
       })))
 
       // Orders come grouped — flatten to flat Order array
-      const oData = oRes.data
-      const rawGroups: any[] = Array.isArray(oData) ? [] : (oData?.groups || [])
-      const flat: Order[] = rawGroups.flatMap((g: any) =>
-        (g.orders || []).map((o: any) => ({ ...o, algo_name: o.algo_name || g.algo_name || '' }))
-      )
-      setOrders(flat)
+      if (oRes.status === 'fulfilled') {
+        const oData = oRes.value.data
+        const rawGroups: any[] = Array.isArray(oData) ? [] : (oData?.groups || [])
+        const flat: Order[] = rawGroups.flatMap((g: any) =>
+          (g.orders || []).map((o: any) => ({ ...o, algo_name: o.algo_name || g.algo_name || '' }))
+        )
+        setOrders(flat)
+      }
 
-      const aData = aRes.data
-      setAlgos(Array.isArray(aData) ? aData : (aData?.algos || aData?.results || []))
-    }).catch(() => {}).finally(() => setLoading(false))
+      if (aRes.status === 'fulfilled') {
+        const aData = aRes.value.data
+        setAlgos(Array.isArray(aData) ? aData : (aData?.algos || aData?.results || []))
+      }
+
+      setBreakdown(bdRes.status === 'fulfilled' ? (bdRes.value.data?.breakdown || bdRes.value.data || {}) : {})
+      setErrorsData(errRes.status === 'fulfilled' ? (errRes.value.data || null) : null)
+      setSlippageData(slipRes.status === 'fulfilled' ? (slipRes.value.data || null) : null)
+    }).finally(() => setLoading(false))
   }, [isPractixMode])
 
   return (
@@ -580,9 +483,9 @@ export default function AnalyticsPage() {
       ) : (
         <>
           {activeTab === 'Performance'  && <PerformanceTab metrics={metrics} orders={orders} algos={algos} />}
-          {activeTab === 'Risk Heatmap' && <HeatmapTab metrics={metrics} />}
-          {activeTab === 'Failures'     && <FailuresTab orders={orders} />}
-          {activeTab === 'Slippage'     && <SlippageTab orders={orders} />}
+          {activeTab === 'Risk Heatmap' && <HeatmapTab breakdown={breakdown} />}
+          {activeTab === 'Failures'     && <FailuresTab data={errorsData} />}
+          {activeTab === 'Slippage'     && <SlippageTab data={slippageData} />}
         </>
       )}
     </div>

@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from pydantic import BaseModel
 from typing import Optional
+import uuid as _uuid
 from app.core.database import get_db
-from app.models.account import Account, AccountStatus
+from app.models.account import Account, AccountStatus, BrokerType
 from app.models.order import MarginHistory
 
 router = APIRouter()
@@ -26,6 +27,15 @@ class GlobalRiskUpdate(BaseModel):
 
 class NicknameUpdate(BaseModel):
     nickname: str
+
+class AccountCreate(BaseModel):
+    broker:      str                    # "zerodha" | "angelone"
+    nickname:    str
+    client_id:   str                    # Zerodha user ID or AO client code
+    api_key:     Optional[str] = None
+    api_secret:  Optional[str] = None   # Zerodha: API secret | AO: PIN (password)
+    totp_secret: Optional[str] = None   # AO only — TOTP secret for auto-login
+    is_primary:  bool = False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -59,6 +69,40 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Account).order_by(Account.created_at))
     accounts = result.scalars().all()
     return [_account_to_dict(a) for a in accounts]
+
+
+@router.post("/")
+async def create_account(body: AccountCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Add a new broker account.
+    Status is set to DISCONNECTED — user must login after creation.
+    """
+    # Validate broker type
+    try:
+        broker_type = BrokerType(body.broker.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid broker '{body.broker}'. Use 'zerodha' or 'angelone'")
+
+    # Reject duplicate nickname
+    dup = await db.execute(select(Account).where(Account.nickname == body.nickname.strip()))
+    if dup.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail=f"Account nickname '{body.nickname}' already exists")
+
+    account = Account(
+        id=_uuid.uuid4(),
+        nickname=body.nickname.strip(),
+        broker=broker_type,
+        client_id=body.client_id.strip(),
+        api_key=body.api_key,
+        api_secret=body.api_secret,     # Zerodha: API secret | AO: PIN
+        totp_secret=body.totp_secret,   # AO: TOTP secret
+        status=AccountStatus.DISCONNECTED,
+        is_active=True,
+    )
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return _account_to_dict(account)
 
 
 @router.get("/status")
@@ -155,6 +199,16 @@ async def update_nickname(
     account.nickname = body.nickname.strip()
     await db.commit()
     return {"status": "ok", "nickname": account.nickname}
+
+
+@router.get("/{account_id}")
+async def get_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetch a single account by ID. Used for edit form pre-fill."""
+    result = await db.execute(select(Account).where(Account.id == account_id))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return _account_to_dict(account)
 
 
 # ── Zerodha Token Flow ────────────────────────────────────────────────────────

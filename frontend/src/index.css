@@ -229,6 +229,16 @@ body {
   box-shadow: 0 0 0 3px var(--accent-blue-dim);
 }
 
+/* ── Sticky table header separator (box-shadow is clipped by overflow:auto) ── */
+.grid-sticky-th::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--bg-border);
+  pointer-events: none;
+}
+
 /* ── Table ────────────────────────────────────────────────────────── */
 .staax-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .staax-table th {
