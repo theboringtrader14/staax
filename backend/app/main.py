@@ -76,6 +76,19 @@ async def lifespan(app: FastAPI):
 
     # ── 1. Database ───────────────────────────────────────────────────────────
     logger.info("🚀 STAAX starting up...")
+    # Wait for DB to be ready (handles startup race condition)
+    import asyncio as _asyncio
+    for _attempt in range(10):
+        try:
+            async with db_engine.begin() as _conn:
+                pass
+            break
+        except Exception as _e:
+            if _attempt == 9:
+                raise
+            print(f"⏳ DB not ready (attempt {_attempt+1}/10) — retrying in 2s...")
+            await _asyncio.sleep(2)
+
     async with db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("✅ Database ready")
