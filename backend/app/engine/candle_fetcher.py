@@ -12,12 +12,15 @@ IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 class Candle:
-    def __init__(self, open_: float, high: float, low: float, close: float, ts: datetime):
-        self.open  = open_
-        self.high  = high
-        self.low   = low
-        self.close = close
-        self.ts    = ts
+    def __init__(self, open_: float, high: float, low: float, close: float,
+                 ts: datetime, is_complete: bool = True):
+        self.open        = open_
+        self.high        = high
+        self.low         = low
+        self.close       = close
+        self.ts          = ts
+        self.timestamp   = ts          # alias used by strategy classes
+        self.is_complete = is_complete
 
     def __repr__(self):
         return f"Candle({self.ts.strftime('%H:%M')} O={self.open} H={self.high} L={self.low} C={self.close})"

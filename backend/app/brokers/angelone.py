@@ -750,6 +750,71 @@ class AngelOneBroker(BaseBroker):
             logger.error(f"[ANGEL ONE] get_order_book error: {e}")
             return []
 
+    # ── Historical candle data ────────────────────────────────────────────────
+
+    async def get_candle_data(
+        self,
+        symbol: str,
+        exchange: str = "MCX",
+        interval: str = "ONE_DAY",
+        days_back: int = 3,
+        symbol_token: str = "",
+    ) -> list:
+        """
+        Fetch OHLCV candle data via Angel One SmartAPI getCandleData.
+
+        Returns list of [timestamp, open, high, low, close, volume] sorted ASC.
+        Returns [] on failure.
+
+        interval options: ONE_MINUTE, THREE_MINUTE, FIVE_MINUTE, TEN_MINUTE,
+                          FIFTEEN_MINUTE, THIRTY_MINUTE, ONE_HOUR, ONE_DAY
+        """
+        from datetime import datetime, timedelta, timezone as _tz
+        client = self._get_client()
+        loop = asyncio.get_event_loop()
+
+        # Date range: days_back days ago → today
+        now      = datetime.now(_tz.utc)
+        from_dt  = (now - timedelta(days=days_back)).strftime("%Y-%m-%d %H:%M")
+        to_dt    = now.strftime("%Y-%m-%d %H:%M")
+
+        # Resolve token from instrument master if not supplied
+        if not symbol_token:
+            try:
+                master = await self.get_instrument_master()
+                matched = [
+                    r for r in master
+                    if r.get("tradingsymbol", "").startswith(symbol)
+                    and r.get("exch_seg") == exchange
+                ]
+                if matched:
+                    symbol_token = str(matched[0].get("symboltoken", ""))
+            except Exception as e:
+                logger.warning(f"[ANGEL ONE] Token lookup failed for {symbol}: {e}")
+
+        if not symbol_token:
+            logger.error(f"[ANGEL ONE] No symbol token for {symbol}/{exchange} — cannot fetch candles")
+            return []
+
+        params = {
+            "exchange":    exchange,
+            "symboltoken": symbol_token,
+            "interval":    interval,
+            "fromdate":    from_dt,
+            "todate":      to_dt,
+        }
+        try:
+            data = await loop.run_in_executor(
+                None, lambda: client.getCandleData(params)
+            )
+            if data and data.get("status"):
+                return data.get("data") or []
+            logger.warning(f"[ANGEL ONE] getCandleData returned non-success: {data}")
+            return []
+        except Exception as e:
+            logger.error(f"[ANGEL ONE] get_candle_data error for {symbol}: {e}")
+            return []
+
     # ── Profile ───────────────────────────────────────────────────────────────
 
     async def get_profile(self) -> dict:

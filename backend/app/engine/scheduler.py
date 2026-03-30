@@ -218,6 +218,19 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+    def add_bot_daily_data_job(self, bot_runner_instance):
+        """
+        Register 09:00 IST job that loads previous day OHLC for DTR bots.
+        Must be called after scheduler.start() and bot_runner.load_bots().
+        """
+        self._scheduler.add_job(
+            bot_runner_instance.load_daily_data,
+            CronTrigger(hour=9, minute=0, timezone=IST),
+            id="bot_daily_data",
+            replace_existing=True,
+        )
+        logger.info("BotRunner daily data job registered (09:00 IST)")
+
     def add_reconciler_job(self, coro_func):
         """Register the OrderReconciler to run every 15 seconds."""
         self._scheduler.add_job(

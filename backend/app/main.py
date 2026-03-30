@@ -18,6 +18,8 @@ Zerodha access token. It is started lazily when the user completes broker login
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI
@@ -211,6 +213,7 @@ async def lifespan(app: FastAPI):
     # ── 11. Add reconciler job (every 15s) ────────────────────────────────────
     scheduler.add_reconciler_job(order_reconciler.run)
     scheduler.add_daily_reset_job(daily_system_reset)
+    scheduler.add_bot_daily_data_job(bot_runner)
     logger.info("✅ OrderReconciler scheduled (every 15s)")
 
     # ── 11b. Re-register exit jobs for any today's algos that survived restart ─
@@ -220,9 +223,19 @@ async def lifespan(app: FastAPI):
     await position_rebuilder.run()
     # ── Bot runner ──────────────────────────────────────────────────────────
     from app.core.database import AsyncSessionLocal as _ASL
-    bot_runner.wire(ltp_consumer, order_placer, ws_manager, _ASL)
+    bot_runner.wire(
+        ltp_consumer, order_placer, ws_manager, _ASL,
+        angel_brokers=[angelone_mom, angelone_wife, angelone_karthik],
+    )
     await bot_runner.load_bots()
-    logger.info("✅ BotRunner started")
+
+    # Register bot_runner as an LTP callback — routes MCX ticks to candle aggregators
+    async def _bot_runner_tick(token: int, ltp: float, tick: dict):
+        ts = datetime.now(ZoneInfo("Asia/Kolkata"))
+        await bot_runner.on_tick(token, ltp, ts)
+    ltp_consumer.register_callback(_bot_runner_tick)
+
+    logger.info("✅ BotRunner started + LTP callback registered")
 
     # ── 13. Load all broker tokens from DB (independent of market feed) ─────
     await _load_all_broker_tokens(app)
