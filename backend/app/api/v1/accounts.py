@@ -243,6 +243,41 @@ _AO_ACCOUNT_MAP = {
 }
 
 
+async def _ao_perform_login(broker, pin: str, nickname: str, db) -> dict:
+    """
+    Core Angel One login: TOTP → jwt_token → DB persist → broker.load_token().
+
+    Reusable from both the API endpoint (angelone_login) and startup auto-login
+    (_ao_startup_auto_login in main.py).
+
+    Returns: { jwt_token, feed_token, refresh_token, client_code }
+    Raises:  RuntimeError / Exception from broker on failure — caller decides
+             whether to raise HTTPException or log a warning.
+    """
+    from datetime import datetime, timezone
+
+    result        = await broker.login_with_totp(password=pin)
+    jwt_token     = result.get("jwt_token", "")
+    feed_token    = result.get("feed_token", "")
+    refresh_token = result.get("refresh_token", "")
+
+    db_result = await db.execute(select(Account).where(Account.nickname == nickname))
+    account   = db_result.scalar_one_or_none()
+    if account:
+        account.access_token       = jwt_token
+        account.feed_token         = feed_token
+        account.token_generated_at = datetime.now(timezone.utc)
+        account.status             = AccountStatus.ACTIVE
+        await db.commit()
+
+    # Belt-and-suspenders: login_with_totp() already sets the token on the broker
+    # instance, but load_token() ensures feed/refresh tokens are also synced.
+    if jwt_token:
+        await broker.load_token(jwt_token, feed_token, refresh_token)
+
+    return result
+
+
 @router.post("/angelone/{account_nickname}/login")
 async def angelone_login(
     account_nickname: str,
@@ -268,27 +303,12 @@ async def angelone_login(
 
     pin = getattr(settings, pin_attr, "")
     try:
-        result = await broker.login_with_totp(password=pin)
+        result = await _ao_perform_login(broker, pin, nickname, db)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Angel One login failed: {str(e)}")
 
-    result_db = await db.execute(select(Account).where(Account.nickname == nickname))
-    account = result_db.scalar_one_or_none()
-    jwt_token     = result.get("jwt_token", "")
-    feed_token    = result.get("feed_token", "")
-    refresh_token = result.get("refresh_token", "")
-    if account:
-        account.access_token       = jwt_token
-        account.feed_token         = feed_token
-        account.token_generated_at = datetime.now(timezone.utc)
-        account.status             = AccountStatus.ACTIVE
-        await db.commit()
-
-    # Explicitly reload token into broker instance (belt-and-suspenders:
-    # login_with_totp() already sets it, but this ensures load_token() is
-    # called if any future code path writes to DB without going through login_with_totp)
-    if jwt_token:
-        await broker.load_token(jwt_token, feed_token, refresh_token)
+    jwt_token  = result.get("jwt_token", "")
+    feed_token = result.get("feed_token", "")
 
     from app.engine import event_logger as _ev
     await _ev.success(f"Angel One ({nickname}) connected", source="auth")
@@ -305,8 +325,8 @@ async def angelone_login(
                 import concurrent.futures as _cf
                 adapter = AngelOneTickerAdapter(
                     auth_token=jwt_token,
-                    api_key=broker.api_key if hasattr(broker, "api_key") else (account.api_key or ""),
-                    client_code=account.client_id,
+                    api_key=broker.api_key,
+                    client_code=broker.client_id,
                     feed_token=feed_token,
                 )
                 ltp_consumer.set_angel_adapter(adapter)

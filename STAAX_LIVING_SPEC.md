@@ -3465,3 +3465,48 @@ cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
 - Phase 3: Zerodha — needs static IP (purchase from Zerodha or third party)
 - Static IP: Angel One allows family mapping post 2-3 months (single IP for all AO accounts)
 - Accounts for live: Zerodha (Karthik), Mom AO, Wife AO (MCX)
+
+## Session Update — 2026-03-30 (Monday Live Test)
+
+### Major Progress Today
+- ✅ DB restored from pg16 backup to Docker DB
+- ✅ Startup auto-login for all 3 AO accounts (Wife/Mom/Karthik)
+- ✅ PositionMonitor instrument_token fix
+- ✅ W&T broker resolution fixed
+- ✅ Better error messages
+- ✅ Backup script fixed — now uses Docker DB directly
+- ✅ First successful NIFTY straddle: Test New-2
+  SELL NIFTY07APR2622500CE @ 411.15
+  SELL NIFTY07APR2622500PE @ 395.00
+
+### Confirmed Working
+- Algo execution (direct entry, straddle)
+- Strike selection (ATM correctly identified)
+- Both legs placed on exchange
+- SL calculation (30%)
+- Orders in DB and UI
+
+### Root Causes Found and Fixed
+- Morning failures: auto-login not before 09:15 → FIXED (startup auto-login)
+- PositionMonitor crash: instrument_token not passed → FIXED
+- W&T failure: broker resolved after W&T block → FIXED
+- Backup empty: backup_db.sh hitting pg16 → FIXED (Docker pg_dump)
+
+### Pending (Priority Order)
+- P1: DATABASE_URL → 127.0.0.1 (fix DB conflict permanently)
+- P2: recurring_days not saved on algo creation (AlgoPage.tsx)
+- P3: position_rebuilder crash (subscribe expects List[int] not int)
+- P4: LTP not updating (SmartStream not connecting)
+- P5: Option chain empty for existing algos (needs investigation)
+- P6: Account nickname hardcoded in broker routing
+- P7: All B/U/F items from previous spec
+
+### DB Recovery SOP
+If algos missing on restart:
+1. kill pg16 PID
+2. docker exec -i staax_db psql -U staax -d staax_db < latest_backup.sql
+3. Restart backend
+
+### Commits Today
+- 24d82c8: Engine fixes (PositionMonitor, W&T, startup auto-login)
+

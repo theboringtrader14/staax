@@ -217,6 +217,9 @@ async def lifespan(app: FastAPI):
     # ── 13b. Build Angel One broker map for per-account order routing ────────
     await _build_angel_broker_map(app, order_placer)
 
+    # ── 13c. Auto-login AO accounts whose token is stale/missing ─────────────
+    await _ao_startup_auto_login(app)
+
     # ── 14. Auto-start Market Feed if broker token exists in DB ──────────────
     await _auto_start_market_feed(app)
 
@@ -400,6 +403,81 @@ async def _subscribe_open_position_tokens(ltp_consumer) -> None:
             logger.info("[STARTUP MF] No open positions to subscribe")
     except Exception as e:
         logger.warning(f"[STARTUP MF] Open-position token subscription failed (non-fatal): {e}")
+
+
+async def _ao_startup_auto_login(app: "FastAPI") -> None:
+    """
+    For every active Angel One account whose token is stale or missing,
+    attempt a fresh TOTP login using PIN/password from .env.
+
+    Runs AFTER _load_all_broker_tokens so that accounts with a valid token today
+    are skipped (LTP > 0 check). Only re-logins accounts that genuinely need it.
+
+    Non-fatal: each account is wrapped in its own try/except so one failure
+    never blocks the others or crashes startup.
+    """
+    from app.core.config import settings
+    from app.core.database import AsyncSessionLocal
+    from app.api.v1.accounts import _ao_perform_login
+
+    # broker_key → (DB nickname, settings PIN attribute name)
+    _STARTUP_AO_LOGIN_MAP = {
+        "angelone_mom":     ("Mom",        "ANGELONE_MOM_PIN"),
+        "angelone_wife":    ("Wife",       "ANGELONE_WIFE_PIN"),
+        "angelone_karthik": ("Karthik AO", "ANGELONE_KARTHIK_PASSWORD"),
+    }
+
+    logger.info("[STARTUP] Checking Angel One tokens — will auto-login stale/missing accounts...")
+
+    for broker_key, (nickname, pin_attr) in _STARTUP_AO_LOGIN_MAP.items():
+        ao_broker = getattr(app.state, broker_key, None)
+        if not ao_broker:
+            continue
+
+        # ── Skip if token is already live (LTP > 0 from earlier validation) ──
+        if ao_broker.is_token_set():
+            try:
+                ltp = await ao_broker.get_ltp_by_token("NSE", "Nifty 50", "99926000")
+                if ltp > 0:
+                    logger.info(
+                        f"[STARTUP] {nickname} token is valid (NIFTY LTP={ltp:.2f}) "
+                        "— skipping auto-login"
+                    )
+                    continue
+            except Exception:
+                pass  # fall through to re-login
+
+        pin = getattr(settings, pin_attr, "") or ""
+        if not pin:
+            logger.warning(
+                f"[STARTUP] {nickname} needs re-login but {pin_attr} is not set in .env — skipping"
+            )
+            continue
+
+        logger.info(f"[STARTUP] Auto-login starting for {nickname}...")
+        try:
+            async with AsyncSessionLocal() as db:
+                await _ao_perform_login(ao_broker, pin, nickname, db)
+
+            logger.info(f"✅ [startup] Auto-login succeeded for {nickname}")
+
+            # Post-login LTP validation
+            try:
+                ltp = await ao_broker.get_ltp_by_token("NSE", "Nifty 50", "99926000")
+                if ltp > 0:
+                    logger.info(
+                        f"✅ [startup] {nickname} post-login validation OK — NIFTY LTP={ltp:.2f}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ [startup] {nickname} logged in but LTP still 0 "
+                        "— API key or session may still be invalid"
+                    )
+            except Exception as _ve:
+                logger.warning(f"[startup] {nickname} post-login LTP check failed: {_ve}")
+
+        except Exception as e:
+            logger.warning(f"[startup] Auto-login failed for {nickname} (non-fatal): {e}")
 
 
 import traceback
