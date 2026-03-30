@@ -52,8 +52,36 @@ async def algo_metrics(
     fy: str = Query("2024-25"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
 ):
-    conditions = _base_query(fy, account_id, is_practix)
+    # When start_date/end_date are provided, use them instead of the FY range
+    if start_date or end_date:
+        fy_start, fy_end = _fy_range(fy)
+        try:
+            range_start = datetime.strptime(start_date, "%Y-%m-%d").replace(hour=0, minute=0, second=0, tzinfo=IST) if start_date else fy_start
+        except ValueError:
+            range_start = fy_start
+        try:
+            range_end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=IST) if end_date else fy_end
+        except ValueError:
+            range_end = fy_end
+        conditions = [
+            Order.status == OrderStatus.CLOSED,
+            Order.pnl.isnot(None),
+            Order.fill_time >= range_start,
+            Order.fill_time <= range_end,
+        ]
+        if account_id:
+            import uuid as _uuid
+            try:
+                conditions.append(Order.account_id == _uuid.UUID(account_id))
+            except ValueError:
+                pass
+        if is_practix is not None:
+            conditions.append(Order.is_practix == is_practix)
+    else:
+        conditions = _base_query(fy, account_id, is_practix)
     result = await db.execute(
         select(Order, Algo)
         .join(Algo, Order.algo_id == Algo.id, isouter=True)

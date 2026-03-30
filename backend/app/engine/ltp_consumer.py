@@ -248,9 +248,11 @@ class LTPConsumer:
                 if self.ticker:
                     self.ticker.subscribe(new)
                     self.ticker.set_mode(self.ticker.MODE_LTP, new)
-                if self._angel_adapter:
-                    self._angel_adapter.subscribe([str(t) for t in new])
-                logger.info(f"Subscribed to {len(new)} new instruments")
+            # Always push to AO adapter — adapter.subscribe() guards internally with its own
+            # _running + _sws check, so this is safe even before SmartStream connects.
+            if self._angel_adapter:
+                self._angel_adapter.subscribe([str(t) for t in new])
+            logger.info(f"Subscribed to {len(new)} new instruments")
 
     def unsubscribe(self, tokens: List[int]):
         self._subscribed_tokens = [t for t in self._subscribed_tokens if t not in tokens]

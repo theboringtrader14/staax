@@ -111,7 +111,7 @@ export default function GridPage() {
   const [algos,    setAlgos]    = useState<Algo[]>([])
   const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>({})
   const [, setLoading]  = useState(true)
-  const [wk,       setWk]       = useState(false)
+  const [wk,       setWk]       = useState(() => localStorage.getItem('staax_show_weekends') === 'true')
   const [ed,       setEd]       = useState<{id:string;day:string} | null>(null)
   const [ev,       setEv]       = useState('')
   const [drag,     setDrag]     = useState<string | null>(null)
@@ -343,23 +343,6 @@ export default function GridPage() {
     }
   }
 
-  // ── Toggle practix / live ──────────────────────────────────────────────────────
-  const togMode = async (algoId: string, day: string) => {
-    const cell     = grid[algoId]?.[day]
-    const newMode: CM = cell?.mode === 'practix' ? 'live' : 'practix'
-
-    setGrid(g => ({ ...g, [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], mode: newMode } } }))
-
-    if (cell?.gridEntryId) {
-      try {
-        await gridAPI.setMode(cell.gridEntryId, { is_practix: newMode === 'practix' })
-      } catch {
-        setGrid(g => ({ ...g, [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], mode: cell.mode } } }))
-        flashError('Mode toggle failed')
-      }
-    }
-  }
-
   // ── Promote to live ──────────────────────────────────────────────────────────
   const promLive = async (algoId: string) => {
     await algosAPI.promote(algoId)
@@ -421,7 +404,11 @@ export default function GridPage() {
   const addAllToToday = async () => {
     const now = new Date()
     const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-    const todayDay = ['SUN','MON','TUE','WED','THU','FRI','SAT'][ist.getDay()]
+    const dow = ist.getDay()
+    // If weekend, navigate to previous Friday instead
+    const targetDow = dow === 0 ? 5 : dow === 6 ? 5 : dow
+    const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT']
+    const todayDay = dayNames[targetDow]
     if (!days.includes(todayDay)) { flashError('Today is not a trading day'); return }
     const tradingDate = weekDates[todayDay]
     const algosToAdd  = sortedActive.filter(a => !grid[a.id]?.[todayDay])
@@ -545,7 +532,7 @@ export default function GridPage() {
             <span style={{ fontSize:'11px', color:'var(--accent-blue)', fontWeight:600 }}>↻ {autoFillToast}</span>
           )}
           <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'var(--text-muted)', cursor:'pointer' }}>
-            <input type="checkbox" checked={wk} onChange={e => setWk(e.target.checked)} style={{ accentColor:'var(--accent-blue)' }}/>
+            <input type="checkbox" checked={wk} onChange={e => { setWk(e.target.checked); localStorage.setItem('staax_show_weekends', String(e.target.checked)) }} style={{ accentColor:'var(--accent-blue)' }}/>
             Show Weekends
           </label>
           <select value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('staax_grid_sort', e.target.value) }}
@@ -594,7 +581,7 @@ export default function GridPage() {
           </span>
         ))}
         <span style={{ marginLeft:'auto', fontSize:'10px', color:'var(--text-dim)' }}>
-          <span style={{ color:'var(--accent-amber)', fontWeight:600 }}>PRAC</span> / <span style={{ color:'var(--green)', fontWeight:600 }}>LIVE</span> — click to toggle · drag pie → day
+          drag pie → day to deploy
         </span>
       </div>
 
@@ -607,10 +594,10 @@ export default function GridPage() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
+              <th style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', borderBottom:'2px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   ALGO
-                  <button onClick={addAllToToday} title="Deploy all active algos to today"
+                  <button onClick={addAllToToday} title="Deploy all active algos to today (or Friday if weekend)"
                     style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer', fontWeight:600 }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -624,8 +611,8 @@ export default function GridPage() {
                 return (
                   <th key={d} style={{
                     position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center',
-                    background: isHoliday ? 'rgba(245,158,11,0.10)' : 'var(--bg-secondary)',
-                    border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700,
+                    background: isHoliday ? 'color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-amber) 12%)' : 'var(--bg-secondary)',
+                    border:'1px solid var(--bg-border)', borderBottom:'2px solid var(--bg-border)', fontSize:'10px', fontWeight:700,
                     letterSpacing:'0.08em', textTransform:'uppercase',
                     color: isHoliday ? 'var(--accent-amber)' : WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)',
                   }}>
@@ -729,7 +716,7 @@ export default function GridPage() {
                         onDragOver={e => e.preventDefault()}
                         onDrop={() => onDrop(algo.id, day)}
                         style={{ padding:'4px', border:'1px solid var(--bg-border)', verticalAlign:'top', overflow:'hidden',
-                          background: isHolDay && !cell ? 'rgba(245,158,11,0.04)' : WEEKENDS.includes(day) && !cell ? 'rgba(30,32,34,0.4)' : undefined,
+                          background: isHolDay && !cell ? 'color-mix(in srgb, var(--bg-secondary) 96%, var(--accent-amber) 4%)' : WEEKENDS.includes(day) && !cell ? 'rgba(30,32,34,0.4)' : undefined,
                           opacity: isHolDay && !cell ? 0.6 : undefined }}>
                         {cell && s
                           ? (
@@ -739,16 +726,8 @@ export default function GridPage() {
                                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
                                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-dim)')}>✕</button>
 
-                              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px', paddingRight:'12px' }}>
+                              <div style={{ display:'flex', alignItems:'center', marginBottom:'4px', paddingRight:'12px' }}>
                                 <span style={{ fontSize:'9px', fontWeight:700, color:s.col, background:s.bg, padding:'1px 5px', borderRadius:'3px' }}>{s.label.toUpperCase()}</span>
-                                <button onClick={() => togMode(algo.id, day)}
-                                  title={cell.mode === 'practix' ? 'PRACTIX — click for LIVE' : 'LIVE — click for PRACTIX'}
-                                  style={{ fontSize:'9px', fontWeight:700, padding:'1px 5px', borderRadius:'3px', border:'none', cursor:'pointer', lineHeight:'14px',
-                                    background: cell.mode === 'live' ? 'rgba(34,197,94,0.18)' : 'rgba(215,123,18,0.14)',
-                                    color:      cell.mode === 'live' ? 'var(--green)'          : 'var(--accent-amber)',
-                                    width:'34px', textAlign:'center' }}>
-                                  {cell.mode === 'live' ? 'LIVE' : 'PRAC'}
-                                </button>
                               </div>
 
                               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 4px', alignItems:'center' }}>

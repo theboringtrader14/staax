@@ -112,6 +112,9 @@ export default function ReportsPage(){
   const [metricFilter,setMetricFilter]=useState('fy')
   const [metricFy,setMetricFy]=useState('2025-26')
   const [metricMonth,setMetricMonth]=useState('Apr')
+  const [metricDate,setMetricDate]=useState('')
+  const [metricFrom,setMetricFrom]=useState('')
+  const [metricTo,setMetricTo]=useState('')
   const [downloading, setDownloading] = useState(false)
   const [algoMetrics, setAlgoMetrics] = useState<any[]>([])
   const [calendarData, setCalendarData] = useState<Record<string,number>>({})
@@ -119,7 +122,26 @@ export default function ReportsPage(){
   const [fyTotal, setFyTotal] = useState(0)
 
   useEffect(() => {
-    reportsAPI.metrics({ fy, is_practix: isPractixMode }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
+    // Derive date range from active metric filter
+    let metricParams: Record<string, any> = { fy: metricFy, is_practix: isPractixMode }
+    if (metricFilter === 'month') {
+      // Map month name to number within the FY
+      const monthIdx = MONTHS_FY.indexOf(metricMonth)
+      const fyYear = parseInt(metricFy.split('-')[0])
+      // Apr-Dec use fyYear; Jan-Mar use fyYear+1
+      const mNum = monthIdx + 4  // Apr=4, May=5, ... Dec=12, Jan=13... need to wrap
+      const actualMonth = mNum > 12 ? mNum - 12 : mNum
+      const actualYear  = mNum > 12 ? fyYear + 1 : fyYear
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const lastDay = new Date(actualYear, actualMonth, 0).getDate()
+      metricParams = { ...metricParams, start_date: `${actualYear}-${pad(actualMonth)}-01`, end_date: `${actualYear}-${pad(actualMonth)}-${lastDay}` }
+    } else if (metricFilter === 'date' && metricDate) {
+      metricParams = { ...metricParams, start_date: metricDate, end_date: metricDate }
+    } else if (metricFilter === 'custom' && metricFrom && metricTo) {
+      metricParams = { ...metricParams, start_date: metricFrom, end_date: metricTo }
+    }
+    reportsAPI.metrics(metricParams).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
+
     reportsAPI.calendar({ fy, is_practix: isPractixMode }).then(r => {
       const map: Record<string,number> = {}
       ;(r.data?.calendar || []).forEach((d: any) => { map[d.date] = d.pnl })
@@ -129,7 +151,7 @@ export default function ReportsPage(){
       setEquityCurve(r.data?.data || [])
       setFyTotal(r.data?.total || 0)
     }).catch(() => {})
-  }, [fy, isPractixMode])
+  }, [fy, isPractixMode, metricFilter, metricFy, metricMonth, metricDate, metricFrom, metricTo])
 
   const handleDownload = async (format: 'csv' | 'excel' = 'csv') => {
     setDownloading(true)
@@ -146,9 +168,6 @@ export default function ReportsPage(){
     finally { setDownloading(false) }
   }
 
-  const [metricDate,setMetricDate]=useState('')
-  const [metricFrom,setMetricFrom]=useState('')
-  const [metricTo,setMetricTo]=useState('')
   const [chartModal,setChartModal]=useState(false)
 
   const months=fyMonths(fy)
@@ -279,7 +298,6 @@ export default function ReportsPage(){
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>
             <span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'var(--green)',display:'inline-block'}}/> Profit</span>
             <span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'var(--red)',display:'inline-block'}}/> Loss</span>
-            <span style={{opacity:0.5,fontSize:'10px'}}>Click to expand</span>
           </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px'}}>

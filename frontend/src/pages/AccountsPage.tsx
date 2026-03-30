@@ -206,10 +206,9 @@ export default function AccountsPage() {
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Broker accounts & API tokens</p>
         </div>
         <div className="page-header-actions">
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Zerodha manual login is available in the{' '}
-            <b style={{ color: 'var(--accent-blue)' }}>Dashboard</b>
-          </span>
+          <button className="btn btn-ghost" style={{ fontSize: '12px' }} onClick={() => {}}>
+            + Add Account
+          </button>
         </div>
       </div>
 

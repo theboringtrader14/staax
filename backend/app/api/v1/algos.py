@@ -11,7 +11,7 @@ import uuid as uuid_lib
 from app.core.database import get_db
 from app.models.algo import Algo, AlgoLeg, StrategyMode, EntryType, OrderType, ReentryMode
 from app.models.account import Account
-from app.models.grid import GridEntry
+from app.models.grid import GridEntry, GridStatus
 from app.models.algo_state import AlgoState
 from app.models.order import Order
 from app.models.trade import Trade
@@ -73,6 +73,8 @@ class AlgoCreateRequest(BaseModel):
     exit_on_entry_failure: bool           = True
     base_lot_multiplier:   int            = 1
     notes:                 Optional[str]  = None
+    is_live:               bool           = False
+    recurring_days:        List[str]      = []
     legs:                  List[LegCreate] = []
 
 
@@ -244,6 +246,8 @@ async def create_algo(body: AlgoCreateRequest, db: AsyncSession = Depends(get_db
         exit_on_entry_failure=body.exit_on_entry_failure,
         base_lot_multiplier=body.base_lot_multiplier,
         notes=body.notes,
+        is_live=body.is_live,
+        recurring_days=body.recurring_days or [],
         is_active=True,
         is_archived=False,
     )
@@ -253,6 +257,43 @@ async def create_algo(body: AlgoCreateRequest, db: AsyncSession = Depends(get_db
     legs = [_build_leg(algo.id, l) for l in body.legs]
     for leg in legs:
         db.add(leg)
+
+    # ── Task 5: Auto-create GridEntry rows for current week ───────────────────
+    # Map day name → weekday index (Mon=0 … Fri=4)
+    _DAY_IDX = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4}
+    from datetime import date as _date, timedelta as _td
+    _today = _date.today()
+    _monday = _today - _td(days=_today.weekday())  # start of current week
+    _DOW_LABELS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+    for day_upper in (body.recurring_days or []):
+        idx = _DAY_IDX.get(day_upper.upper())
+        if idx is None:
+            continue
+        trading_date = _monday + _td(days=idx)
+        if trading_date < _today:
+            continue  # skip past days
+        # Skip if a grid entry already exists for this algo+date
+        dup = await db.execute(
+            select(GridEntry).where(
+                GridEntry.algo_id == algo.id,
+                GridEntry.trading_date == trading_date,
+            )
+        )
+        if dup.scalar_one_or_none():
+            continue
+        db.add(GridEntry(
+            id=uuid_lib.uuid4(),
+            algo_id=algo.id,
+            account_id=algo.account_id,
+            trading_date=trading_date,
+            day_of_week=_DOW_LABELS[idx],
+            lot_multiplier=1,
+            is_enabled=True,
+            is_practix=not body.is_live,
+            is_archived=False,
+            status=GridStatus.NO_TRADE,
+        ))
 
     await db.commit()
     await db.refresh(algo)
