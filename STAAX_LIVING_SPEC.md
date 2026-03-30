@@ -3545,3 +3545,34 @@ If algos missing on restart:
 1. Angel One API key (AG8004) — check SmartAPI portal for correct key
 2. SmartStream WebSocket — LTP not updating on open positions
 3. Option chain for existing algos (blocked by API key)
+
+## Session Update — 2026-03-30 (Evening)
+
+### Completed This Evening
+- ✅ Bot signals infrastructure (bot_signals table, endpoints)
+- ✅ Indicator engine: CandleAggregator, DTRStrategy, ChannelStrategy
+- ✅ MCX token for GOLDM = 58424839 (near-month, confirmed in instrument master)
+- ✅ LTP → BotRunner wiring (on_tick registered in ltp_consumer)
+- ✅ Daily OHLC fetch scheduled at 09:00 IST for DTR strategy
+- ✅ Accounts filter wired (Grid/Orders/Reports)
+- ✅ Analytics restructured (Performance/Failures/Slippage, Health in Performance)
+- ✅ AlgoPage: recurring_days from form, strike_offset added
+- ✅ Per-Algo Metrics scroll, MISSED status in Grid
+- ✅ DB retry logic (startup race condition fixed)
+- ✅ Add Account modal (Zerodha/AO form)
+- ✅ totp_secret column added to both DBs
+
+### Blocked by SmartStream
+- MCX ticks not flowing → bots can't generate signals
+- LTP not updating on open positions
+- Fix needed: SmartStream instrument_token subscription for GOLDM (58424839)
+
+### Tomorrow Priority
+1. Fix SmartStream WebSocket connection
+2. Subscribe GOLDM (58424839) to SmartStream
+3. Test indicator engine with live MCX ticks
+4. Test DTR/Channel signal generation
+5. Verify bot_signals table populates correctly
+
+### All Commits Today (30 March)
+24d82c8 → 995fa88 (14 commits, ~2500 lines changed)
