@@ -3510,3 +3510,38 @@ If algos missing on restart:
 ### Commits Today
 - 24d82c8: Engine fixes (PositionMonitor, W&T, startup auto-login)
 
+
+## End of Day — 2026-03-30
+
+### All Commits Today
+- 24d82c8: Engine fixes (PositionMonitor, W&T, startup auto-login)
+- 1b87b91: Living Spec update
+- 7e56ab0: recurring_days, position_rebuilder crash fixed
+- a4abf01: UI/Engine batch (LTP subscribe, algo creation, 8 UI fixes)
+- ce3e594: Grid/Orders/Analytics batch (weekend, no-trade, reports)
+- [pending]: Session A+B results
+
+### Confirmed Working End-to-End
+- ✅ Startup auto-login (all 3 AO accounts)
+- ✅ Algo creation → grid entries auto-created
+- ✅ Strike selection (ATM NIFTY straddle)
+- ✅ Both legs placed on exchange (PRACTIX mode)
+- ✅ SL monitoring registered (30%)
+- ✅ Auto square-off at exit time (15:06)
+- ✅ P&L calculated correctly (Test New-2: +₹23.70 net)
+- ✅ Orders page shows correct status
+- ✅ Backup script reliable (Docker DB, 26 tables)
+
+### Tomorrow Morning SOP
+1. Docker must be running (staax_db, staax_redis containers)
+2. cd ~/STAXX/staax/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+3. cd ~/STAXX/staax/frontend && npm run dev
+4. Open http://localhost:3000 — auto-login fires on startup
+5. Check Accounts page — all 4 should show Live ✅
+6. Market opens 09:15 — algos fire automatically
+7. Run ~/STAXX/backup_db.sh after session
+
+### Critical Remaining (must fix before live)
+1. Angel One API key (AG8004) — check SmartAPI portal for correct key
+2. SmartStream WebSocket — LTP not updating on open positions
+3. Option chain for existing algos (blocked by API key)
