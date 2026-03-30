@@ -341,7 +341,7 @@ export default function ReportsPage(){
             <thead>
               <tr>
                 <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)'}}>Key Metrics</th>
-                {algoMetrics.map((a:any)=><th key={a.algo_id}>{a.name}</th>)}
+                {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'80px'}}>{a.name}</th>)}
                 <th style={{color:'var(--accent-blue)',position:'sticky',right:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)'}}>Cumulative</th>
               </tr>
             </thead>

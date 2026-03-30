@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from app.core.database import get_db
-from app.models.bot import Bot, BotOrder, IndicatorType
+from app.models.bot import Bot, BotOrder, BotSignal, IndicatorType
 import uuid as uuid_lib
 
 router = APIRouter()
@@ -131,3 +131,63 @@ async def list_bot_orders(bot_id: str, db: AsyncSession = Depends(get_db)):
         "signal_type":  o.signal_type,
         "expiry":       o.expiry,
     } for o in orders]
+
+def _signal_dict(s: BotSignal) -> dict:
+    return {
+        "id":            str(s.id),
+        "bot_id":        str(s.bot_id),
+        "signal_type":   s.signal_type,
+        "direction":     s.direction,
+        "instrument":    s.instrument,
+        "expiry":        s.expiry,
+        "trigger_price": s.trigger_price,
+        "status":        s.status or "fired",
+        "bot_order_id":  str(s.bot_order_id) if s.bot_order_id else None,
+        "error_message": s.error_message,
+        "fired_at":      s.fired_at.isoformat() if s.fired_at else None,
+    }
+
+class BotSignalCreate(BaseModel):
+    signal_type:   str
+    direction:     Optional[str] = None
+    instrument:    str
+    expiry:        str
+    trigger_price: Optional[float] = None
+    status:        str = "fired"
+
+@router.post("/{bot_id}/signals")
+async def create_signal(bot_id: str, body: BotSignalCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Bot).where(Bot.id == bot_id))
+    bot = result.scalar_one_or_none()
+    if not bot: raise HTTPException(404, "Bot not found")
+    sig = BotSignal(
+        id=uuid_lib.uuid4(),
+        bot_id=uuid_lib.UUID(bot_id),
+        signal_type=body.signal_type,
+        direction=body.direction,
+        instrument=body.instrument,
+        expiry=body.expiry,
+        trigger_price=body.trigger_price,
+        status=body.status,
+        fired_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(sig)
+    await db.commit()
+    await db.refresh(sig)
+    return _signal_dict(sig)
+
+@router.get("/{bot_id}/signals")
+async def list_bot_signals(bot_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(BotSignal).where(BotSignal.bot_id == bot_id).order_by(desc(BotSignal.fired_at))
+    )
+    return [_signal_dict(s) for s in result.scalars().all()]
+
+@router.get("/signals/today")
+async def list_signals_today(db: AsyncSession = Depends(get_db)):
+    today_start = datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
+    result = await db.execute(
+        select(BotSignal).where(BotSignal.fired_at >= today_start).order_by(desc(BotSignal.fired_at))
+    )
+    return {"signals": [_signal_dict(s) for s in result.scalars().all()]}

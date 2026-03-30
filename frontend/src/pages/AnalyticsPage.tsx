@@ -19,7 +19,7 @@ interface HealthScore {
   trades: number; win_pct: number; total_pnl: number
 }
 
-const TABS = ['Performance', 'Failures', 'Slippage', 'Health'] as const
+const TABS = ['Performance', 'Failures', 'Slippage'] as const
 type Tab = typeof TABS[number]
 
 const HEATMAP_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
@@ -119,11 +119,13 @@ function SummaryCard({ label, value, sub, valueColor }: {
 }
 
 // ── Tab 1: Performance ─────────────────────────────────────────────────────────
-function PerformanceTab({ metrics, breakdown, allOrders, algos }: {
+function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore }: {
   metrics: MetricRow[]
   breakdown: Record<string, Record<string, { pnl: number; trades: number }>>
   allOrders: Order[]
   algos: Algo[]
+  scores: HealthScore[]
+  avgScore: number
 }) {
   const [entryFilter, setEntryFilter] = useState('fy')
   const [entryFy,     setEntryFy]     = useState('2025-26')
@@ -231,6 +233,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos }: {
           </div>
         )}
       </div>
+
+      {/* Algo Health Scores */}
+      {scores.length > 0 && <HealthTab scores={scores} avgScore={avgScore} />}
 
       {/* Entry Type Breakdown with period filter */}
       <div className="card">
@@ -610,10 +615,9 @@ export default function AnalyticsPage() {
         <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>Loading…</div>
       ) : (
         <>
-          {activeTab === 'Performance' && <PerformanceTab metrics={metrics} breakdown={breakdown} allOrders={allOrders} algos={algos} />}
+          {activeTab === 'Performance' && <PerformanceTab metrics={metrics} breakdown={breakdown} allOrders={allOrders} algos={algos} scores={healthScores} avgScore={healthAvg} />}
           {activeTab === 'Failures'    && <FailuresTab data={errorsData} />}
           {activeTab === 'Slippage'    && <SlippageTab data={slippageData} />}
-          {activeTab === 'Health'      && <HealthTab scores={healthScores} avgScore={healthAvg} />}
         </>
       )}
     </div>

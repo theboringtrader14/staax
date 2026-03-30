@@ -4,7 +4,7 @@ APP_SECRET_KEY=change-this-to-a-random-secret-key
 APP_PORT=8000
 
 # ── Database ──────────────────────────────────────
-DATABASE_URL=postgresql://staax:staax_password@localhost:5432/staax_db
+DATABASE_URL=postgresql+asyncpg://staax:staax_password@127.0.0.1:5432/staax_db
 
 # ── Redis ─────────────────────────────────────────
 REDIS_URL=redis://localhost:6379

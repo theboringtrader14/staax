@@ -455,6 +455,9 @@ export default function OrdersPage() {
   const filteredOrders = activeAccountNickname
     ? orders.filter(g => g.account === activeAccountNickname)
     : orders
+  const filteredWaiting = activeAccountNickname
+    ? waitingAlgos.filter(w => w.account_name === activeAccountNickname)
+    : waitingAlgos
   const sortedOrders = [...filteredOrders].sort((a, b) => {
     if (sortBy === 'name_asc')  return a.algoName.localeCompare(b.algoName)
     if (sortBy === 'name_desc') return b.algoName.localeCompare(a.algoName)
@@ -571,9 +574,9 @@ export default function OrdersPage() {
       {/* Scroll zone: waiting algos + all order groups */}
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
       <div style={{ height: '14px' }} />
-      {waitingAlgos.length > 0 && (
+      {filteredWaiting.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
-          {waitingAlgos.map(w => {
+          {filteredWaiting.map(w => {
             // Determine if entry time has passed on today's tab
             const isToday = activeDay === todayDay()
             const isMissed = isToday && !!w.entry_time && (() => {

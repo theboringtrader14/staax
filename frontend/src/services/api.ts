@@ -149,12 +149,15 @@ export const systemAPI = {
 }
 
 export const botsAPI = {
-  list:    () => api.get('/bots/'),
-  create:  (data: any) => api.post('/bots/', data),
-  update:  (id: string, data: any) => api.patch(`/bots/${id}`, data),
-  archive: (id: string) => api.post(`/bots/${id}/archive`, {}),
-  delete:  (id: string) => api.delete(`/bots/${id}`),
-  orders:  (id: string) => api.get(`/bots/${id}/orders`),
+  list:          () => api.get('/bots/'),
+  create:        (data: any) => api.post('/bots/', data),
+  update:        (id: string, data: any) => api.patch(`/bots/${id}`, data),
+  archive:       (id: string) => api.post(`/bots/${id}/archive`, {}),
+  delete:        (id: string) => api.delete(`/bots/${id}`),
+  orders:        (id: string) => api.get(`/bots/${id}/orders`),
+  signals:       (id: string) => api.get(`/bots/${id}/signals`),
+  signalsToday:  () => api.get('/bots/signals/today'),
+  createSignal:  (id: string, data: object) => api.post(`/bots/${id}/signals`, data),
 }
 
 export const holidaysAPI = {

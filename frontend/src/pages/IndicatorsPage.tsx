@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { accountsAPI } from '@/services/api'
+import { useState, useEffect, useRef } from 'react'
+import { accountsAPI, botsAPI } from '@/services/api'
 import axios from 'axios'
 import { useStore } from '@/store'
 
@@ -520,16 +520,24 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
 }
 
 type AggOrder = BotOrder & { botName: string }
+type BotSignal = {
+  id: string; bot_id: string; signal_type: string; direction: string | null
+  instrument: string; expiry: string; trigger_price: number | null
+  status: string; bot_order_id: string | null; error_message: string | null; fired_at: string | null
+}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function IndicatorsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
+  const [activeTab, setActiveTab] = useState<'Bots' | 'Signals'>('Bots')
   const [bots, setBots]           = useState<Bot[]>([])
   const [accounts, setAccounts]   = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading]     = useState(true)
   const [allBotOrders, setAllBotOrders] = useState<AggOrder[]>([])
+  const [signals, setSignals]     = useState<BotSignal[]>([])
+  const signalTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -537,6 +545,19 @@ export default function IndicatorsPage() {
       accountsAPI.list().then(r => setAccounts(r.data || [])),
     ]).finally(() => setLoading(false))
   }, [isPractixMode])
+
+  // Load today's signals + 30s auto-refresh when on Signals tab
+  useEffect(() => {
+    if (activeTab !== 'Signals') return
+    const fetchSignals = () => {
+      botsAPI.signalsToday()
+        .then(r => setSignals(r.data?.signals || []))
+        .catch(() => {})
+    }
+    fetchSignals()
+    signalTimerRef.current = setInterval(fetchSignals, 30000)
+    return () => { if (signalTimerRef.current) clearInterval(signalTimerRef.current) }
+  }, [activeTab])
 
   // Aggregate orders from all active bots
   useEffect(() => {
@@ -603,6 +624,68 @@ export default function IndicatorsPage() {
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Bot</button>
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--bg-border)', marginBottom: '16px' }}>
+        {(['Bots', 'Signals'] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            padding: '8px 20px', fontSize: '12px', fontWeight: 600,
+            background: activeTab === tab ? 'var(--bg-surface)' : 'transparent',
+            border: 'none', cursor: 'pointer',
+            color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-muted)',
+            borderBottom: activeTab === tab ? '2px solid var(--accent-blue)' : '2px solid transparent',
+            transition: 'all 0.12s',
+          }}>{tab}</button>
+        ))}
+      </div>
+
+      {activeTab === 'Signals' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Today's Signals · {signals.length} total
+            </span>
+            <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
+          </div>
+          <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
+            <table className="staax-table">
+              <thead>
+                <tr>
+                  <th>Signal</th><th>Instrument</th><th>Dir</th><th>Trigger ₹</th><th>Fired At</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signals.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                    No signals today
+                  </td></tr>
+                ) : signals.map(s => (
+                  <tr key={s.id}>
+                    <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px' }}>{s.signal_type}</td>
+                    <td style={{ fontSize: '11px' }}>{s.instrument} · {s.expiry}</td>
+                    <td style={{ fontSize: '11px', fontWeight: 700, color: s.direction === 'BUY' ? 'var(--green)' : s.direction === 'SELL' ? 'var(--red)' : 'var(--text-muted)' }}>
+                      {s.direction || '—'}
+                    </td>
+                    <td style={{ fontSize: '11px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
+                    <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {s.fired_at ? new Date(s.fired_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                    </td>
+                    <td>
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                        color: s.status === 'executed' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'missed' ? 'var(--accent-amber)' : 'var(--accent-blue)',
+                        background: s.status === 'executed' ? 'rgba(34,197,94,0.12)' : s.status === 'error' ? 'rgba(239,68,68,0.12)' : s.status === 'missed' ? 'rgba(215,123,18,0.12)' : 'rgba(0,176,240,0.12)',
+                      }}>{s.status.toUpperCase()}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'Bots' && (<>
 
       {/* Empty state */}
       {!loading && activeBots.length === 0 && (
@@ -685,13 +768,15 @@ export default function IndicatorsPage() {
             <tbody>
               <tr>
                 <td colSpan={5} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>
-                  No signals today — bot signal API coming soon
+                  No signals today
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
+
+      </>)}
 
       {showCreate && (
         <BotConfigurator accounts={accounts} onSave={handleSave} onClose={() => setShowCreate(false)} />

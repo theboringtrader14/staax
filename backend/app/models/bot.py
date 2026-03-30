@@ -42,6 +42,27 @@ class Bot(Base):
     created_at     = Column(DateTime(timezone=True))
     updated_at     = Column(DateTime(timezone=True))
 
+class BotSignalStatus:
+    FIRED    = "fired"
+    EXECUTED = "executed"
+    MISSED   = "missed"
+    ERROR    = "error"
+
+class BotSignal(Base):
+    __tablename__ = "bot_signals"
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bot_id         = Column(UUID(as_uuid=True), nullable=False)
+    signal_type    = Column(String(20),  nullable=False)   # entry / exit / rollover
+    direction      = Column(String(5),   nullable=True)    # BUY / SELL
+    instrument     = Column(String(20),  nullable=False)
+    expiry         = Column(String(20),  nullable=False)
+    trigger_price  = Column(Float,       nullable=True)
+    status         = Column(String(20),  nullable=False, server_default='fired')
+    bot_order_id   = Column(UUID(as_uuid=True), nullable=True)  # FK to bot_orders if executed
+    error_message  = Column(String(200), nullable=True)
+    fired_at       = Column(DateTime(timezone=True), nullable=False)
+    created_at     = Column(DateTime(timezone=True))
+
 class BotOrder(Base):
     __tablename__ = "bot_orders"
     id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
