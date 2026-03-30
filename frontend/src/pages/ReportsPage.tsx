@@ -107,6 +107,7 @@ function MonthDetail({month,year,label,calendarData}:{month:number,year:number,l
 
 export default function ReportsPage(){
   const isPractixMode = useStore(s => s.isPractixMode)
+  const activeAccount = useStore(s => s.activeAccount)
   const [fy,setFy]=useState('2025-26')
   const [expandedMonth,setExpandedMonth]=useState<string|null>(null)
   const [metricFilter,setMetricFilter]=useState('fy')
@@ -140,18 +141,19 @@ export default function ReportsPage(){
     } else if (metricFilter === 'custom' && metricFrom && metricTo) {
       metricParams = { ...metricParams, start_date: metricFrom, end_date: metricTo }
     }
-    reportsAPI.metrics(metricParams).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
+    const acctParam = activeAccount ? { account_id: activeAccount } : {}
+    reportsAPI.metrics({ ...metricParams, ...acctParam }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
 
-    reportsAPI.calendar({ fy, is_practix: isPractixMode }).then(r => {
+    reportsAPI.calendar({ fy, is_practix: isPractixMode, ...acctParam }).then(r => {
       const map: Record<string,number> = {}
       ;(r.data?.calendar || []).forEach((d: any) => { map[d.date] = d.pnl })
       setCalendarData(map)
     }).catch(() => {})
-    reportsAPI.equityCurve({ fy, is_practix: isPractixMode }).then(r => {
+    reportsAPI.equityCurve({ fy, is_practix: isPractixMode, ...acctParam }).then(r => {
       setEquityCurve(r.data?.data || [])
       setFyTotal(r.data?.total || 0)
     }).catch(() => {})
-  }, [fy, isPractixMode, metricFilter, metricFy, metricMonth, metricDate, metricFrom, metricTo])
+  }, [fy, isPractixMode, activeAccount, metricFilter, metricFy, metricMonth, metricDate, metricFrom, metricTo])
 
   const handleDownload = async (format: 'csv' | 'excel' = 'csv') => {
     setDownloading(true)

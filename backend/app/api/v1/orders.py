@@ -12,7 +12,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, exists as sa_exists
+from sqlalchemy import select, and_, or_
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timezone
@@ -316,14 +316,10 @@ async def get_waiting_algos(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Return algos scheduled for today that have not yet placed any orders.
-
-    Two cases:
-    - Before 09:15: GridEntry.status=NO_TRADE (not yet activated by scheduler)
-    - After 09:15:  GridEntry.status=ALGO_ACTIVE with AlgoState.status=WAITING
-                    (activated but entry time not yet reached / no order placed)
-
-    Both are shown as WAITING rows in the Orders page.
+    Return algos that have been activated today but not yet placed any orders.
+    GridEntry.status=ALGO_ACTIVE with AlgoState.status=WAITING
+    (entry time not yet reached / no order placed).
+    Pre-09:15 NO_TRADE entries are excluded — they clutter the Orders page.
     """
     target_date = _parse_date(trading_date) or date.today()
 
@@ -345,24 +341,6 @@ async def get_waiting_algos(
     )
     activated_rows = activated_result.all()
 
-    # Pre-09:15: GridEntry still in NO_TRADE with no AlgoState record yet
-    # Exclude entries already processed by recover_today_jobs (they have an AlgoState)
-    notrade_result = await db.execute(
-        select(GridEntry, Algo, Account)
-        .join(Algo, GridEntry.algo_id == Algo.id)
-        .join(Account, GridEntry.account_id == Account.id)
-        .where(
-            GridEntry.trading_date == target_date,
-            GridEntry.status == GridStatus.NO_TRADE,
-            GridEntry.is_archived == False,
-            GridEntry.is_enabled == True,
-            ~sa_exists().where(AlgoState.grid_entry_id == GridEntry.id),
-            *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
-        )
-        .order_by(Algo.entry_time)
-    )
-    notrade_rows = notrade_result.all()
-
     waiting = []
 
     for ge, a, acc, _state in activated_rows:
@@ -377,20 +355,6 @@ async def get_waiting_algos(
             "is_practix":     ge.is_practix,
             "lot_multiplier": ge.lot_multiplier,
             "phase":          "activated",   # post-09:15, waiting for entry_time
-        })
-
-    for ge, a, acc in notrade_rows:
-        waiting.append({
-            "grid_entry_id":  str(ge.id),
-            "algo_id":        str(a.id),
-            "algo_name":      a.name,
-            "account_id":     str(acc.id),
-            "account_name":   acc.nickname,
-            "entry_time":     a.entry_time,
-            "exit_time":      a.exit_time,
-            "is_practix":     ge.is_practix,
-            "lot_multiplier": ge.lot_multiplier,
-            "phase":          "pending",     # pre-09:15, not yet activated
         })
 
     # Sort combined list by entry_time

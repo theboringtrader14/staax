@@ -380,6 +380,7 @@ export default function AlgoPage() {
   const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([])
 
   const [legs, setLegs]             = useState<Leg[]>([mkLeg(1)])
+  const [recurringDays, setRecurringDays] = useState<string[]>(['MON','TUE','WED','THU','FRI'])
   const [algoName, setAlgoName]     = useState('')
   const [stratMode, setStratMode]   = useState('intraday')
   const [entryType, setEntryType]   = useState('direct')
@@ -474,6 +475,9 @@ export default function AlgoPage() {
         setMtmSL(a.mtm_sl != null ? String(a.mtm_sl) : '')
         setMtmTP(a.mtm_tp != null ? String(a.mtm_tp) : '')
         setOrderType(a.order_type?.toUpperCase() || 'MARKET')
+        if (Array.isArray(a.recurring_days) && a.recurring_days.length > 0) setRecurringDays(a.recurring_days)
+        if (a.exit_on_margin_error  != null) setErrorMargin(!!a.exit_on_margin_error)
+        if (a.exit_on_entry_failure != null) setErrorEntry(!!a.exit_on_entry_failure)
         // Map API legs to local Leg format
         const revCode: Record<string, string> = Object.fromEntries(
           Object.entries(INST_CODES).map(([k, v]) => [v, k])
@@ -601,10 +605,10 @@ export default function AlgoPage() {
     entry_delay_scope:   entryDelayScope,
     exit_delay_seconds:  parseInt(exitDelay) || 0,
     exit_delay_scope:    exitDelayScope,
-    on_margin_error:     errorMargin ? 'exit_all' : 'none',
-    on_entry_fail:       errorEntry  ? 'exit_all' : 'none',
+    exit_on_margin_error:  !!errorMargin,
+    exit_on_entry_failure: !!errorEntry,
     is_live:             !isPractixMode,
-    recurring_days:      ['MON','TUE','WED','THU','FRI'],
+    recurring_days:      recurringDays,
     legs: legs.map(l => ({
       leg_number:      l.no,
       direction:       l.direction.toLowerCase(),
@@ -613,6 +617,7 @@ export default function AlgoPage() {
       expiry:          l.expiry,
       strike_type:     l.strikeMode === 'premium' ? 'premium' : l.strikeMode === 'straddle' ? 'straddle_premium' : l.strikeType,
       strike_value:    (l.strikeMode === 'premium' || l.strikeMode === 'straddle') ? parseFloat(l.premiumVal) || undefined : undefined,
+      strike_offset:   0,
       lots:            parseInt(l.lots) || 1,
       opt_type:        l.optType.toLowerCase(),
       // Features

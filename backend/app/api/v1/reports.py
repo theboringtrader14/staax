@@ -7,7 +7,7 @@ from datetime import date, datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, Integer
 from app.core.database import get_db
 from app.models.order import Order, OrderStatus
 from app.models.algo import Algo
@@ -364,6 +364,60 @@ async def slippage_analytics(
         "total_orders_with_ref": len(all_slippages),
         "fy": fy,
     }
+
+
+@router.get("/health-scores")
+async def health_scores(
+    db: AsyncSession = Depends(get_db),
+    fy: str = Query("2024-25"),
+    account_id: str | None = Query(None),
+    is_practix: bool | None = Query(None),
+):
+    """Algo health scores 0-100 derived from metrics — no new DB queries beyond metrics."""
+    from app.models.algo import Algo
+    conditions = _base_query(fy, account_id, is_practix)
+
+    result = await db.execute(
+        select(
+            Algo.name,
+            func.count(Order.id).label('trades'),
+            func.sum(Order.pnl).label('total_pnl'),
+            func.sum(func.cast(Order.pnl > 0, Integer)).label('wins'),
+        )
+        .join(Algo, Order.algo_id == Algo.id)
+        .where(*conditions)
+        .group_by(Algo.name)
+    )
+    rows = result.all()
+
+    scores = []
+    for r in rows:
+        name, trades, total_pnl, wins = r[0], int(r[1] or 0), float(r[2] or 0), int(r[3] or 0)
+        losses = trades - wins
+        win_pct = (wins / trades * 100) if trades > 0 else 0.0
+
+        wr_pts   = win_pct * 0.4                             # 0-40
+        pnl_pts  = min(30.0, total_pnl / 500) if total_pnl > 0 else 0  # 0-30
+        con_pts  = 20 if trades >= 5 else (10 if trades >= 2 else 0)    # 0-20
+        loss_pts = 10 if wins >= losses else 5                          # 5 or 10
+
+        score = round(wr_pts + pnl_pts + con_pts + loss_pts, 1)
+        grade = 'A' if score >= 80 else 'B' if score >= 60 else 'C' if score >= 40 else 'D'
+
+        scores.append({
+            "algo_name": name,
+            "score": score,
+            "grade": grade,
+            "trades": trades,
+            "win_pct": round(win_pct, 1),
+            "total_pnl": round(total_pnl, 2),
+            "wins": wins,
+            "losses": losses,
+        })
+
+    scores.sort(key=lambda x: x["score"], reverse=True)
+    avg_score = round(sum(s["score"] for s in scores) / len(scores), 1) if scores else 0
+    return {"scores": scores, "avg_score": avg_score, "fy": fy}
 
 
 @router.get("/all-orders")

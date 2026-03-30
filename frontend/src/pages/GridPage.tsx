@@ -111,7 +111,8 @@ function worstStatus(cells: Record<string, Cell> | undefined): CS {
 export default function GridPage() {
   const nav = useNavigate()
   const weekDates = getWeekDates()
-  const isPractixMode = useStore(s => s.isPractixMode)
+  const isPractixMode  = useStore(s => s.isPractixMode)
+  const activeAccount  = useStore(s => s.activeAccount)
 
   const [algos,    setAlgos]    = useState<Algo[]>([])
   const [grid,     setGrid]     = useState<Record<string, Record<string, Cell>>>({})
@@ -162,7 +163,7 @@ export default function GridPage() {
       // Load grid entries for this week — pass SUN so SAT/SUN entries are returned
       const weekStart = weekDates['MON']
       const weekEnd   = weekDates['SUN']
-      const gridRes = await gridAPI.list({ week_start: weekStart, week_end: weekEnd, is_practix: isPractixMode })
+      const gridRes = await gridAPI.list({ week_start: weekStart, week_end: weekEnd, is_practix: isPractixMode, ...(activeAccount ? { account_id: activeAccount } : {}) })
       const entries: any[] = gridRes.data?.entries || gridRes.data || []
 
       if (true) {  // always rebuild grid from API
@@ -230,7 +231,7 @@ export default function GridPage() {
     } finally {
       setLoading(false)
     }
-  }, [isPractixMode])
+  }, [isPractixMode, activeAccount])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -590,9 +591,9 @@ export default function GridPage() {
         </span>
       </div>
 
-      {/* Grid table — flex:1 fills remaining height, overflow:auto scrolls X and Y */}
-      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width:'100%', minWidth:'1200px', borderCollapse:'collapse', tableLayout:'fixed' }}>
+      {/* Grid table — flex:1 fills remaining height, overflowX:auto scrolls when weekends shown */}
+      <div className="no-scrollbar" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', width: '100%' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <colgroup>
             <col style={{ width:'200px' }}/>
             {days.map(d => <col key={d} style={{ width:'140px' }}/>)}
@@ -715,6 +716,16 @@ export default function GridPage() {
                     const cell      = grid[algo.id]?.[day]
                     const s         = cell ? SC[cell.status] : null
                     const isHolDay  = weekDates[day] ? holidayDates.has(weekDates[day]) : false
+                    // MISSED: waiting cell for today where current IST time >= entry time
+                    const isToday   = weekDates[day] === weekDates[(() => {
+                      const IST_OFFSET_MS = 330 * 60 * 1000
+                      const ist = new Date(Date.now() + IST_OFFSET_MS)
+                      return ['SUN','MON','TUE','WED','THU','FRI','SAT'][ist.getUTCDay()]
+                    })()]
+                    const isMissed  = cell?.status === 'waiting' && isToday && !!cell.entry && (() => {
+                      const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
+                      return now >= cell.entry.slice(0, 5)
+                    })()
                     return (
                       <td key={day}
                         onDragOver={e => e.preventDefault()}
@@ -724,14 +735,19 @@ export default function GridPage() {
                           opacity: isHolDay && !cell ? 0.6 : undefined }}>
                         {cell && s
                           ? (
-                            <div style={{ background:'var(--bg-secondary)', borderLeft:`3px solid ${s.col}`, borderRadius:'5px', padding:'6px 8px', position:'relative', overflow:'hidden' }}>
+                            <div style={{ background:'var(--bg-secondary)', borderLeft:`3px solid ${isMissed ? 'var(--accent-amber)' : s.col}`, borderRadius:'5px', padding:'6px 8px', position:'relative', overflow:'hidden', opacity: isMissed ? 0.7 : 1 }}>
                               <button onClick={() => rmCell(algo.id, day)}
                                 style={{ position:'absolute', top:'2px', right:'2px', background:'none', border:'none', cursor:'pointer', color:'var(--text-dim)', fontSize:'10px', padding:'2px 3px', lineHeight:1 }}
                                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
                                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-dim)')}>✕</button>
 
                               <div style={{ display:'flex', alignItems:'center', marginBottom:'4px', paddingRight:'12px' }}>
-                                <span style={{ fontSize:'9px', fontWeight:700, color:s.col, background:s.bg, padding:'1px 5px', borderRadius:'3px' }}>{s.label.toUpperCase()}</span>
+                                <span style={{ fontSize:'9px', fontWeight:700,
+                                  color: isMissed ? 'var(--accent-amber)' : s.col,
+                                  background: isMissed ? 'rgba(215,123,18,0.12)' : s.bg,
+                                  padding:'1px 5px', borderRadius:'3px' }}>
+                                  {isMissed ? 'MISSED' : s.label.toUpperCase()}
+                                </span>
                               </div>
 
                               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 4px', alignItems:'center' }}>

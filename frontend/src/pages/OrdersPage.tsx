@@ -175,6 +175,8 @@ function getWeekDates(): Record<string, string> {
 
 export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
+  const activeAccount = useStore(s => s.activeAccount)
+  const storeAccounts = useStore(s => s.accounts)
   const weekDates = getWeekDates()
   const [orders, setOrders]           = useState<AlgoGroup[]>([])
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
@@ -446,7 +448,14 @@ export default function OrdersPage() {
     }
   }
 
-  const sortedOrders = [...orders].sort((a, b) => {
+  // Filter by active account — match group.account (nickname) to the selected account
+  const activeAccountNickname = activeAccount
+    ? (storeAccounts as any[]).find((a: any) => String(a.id) === activeAccount)?.nickname ?? null
+    : null
+  const filteredOrders = activeAccountNickname
+    ? orders.filter(g => g.account === activeAccountNickname)
+    : orders
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
     if (sortBy === 'name_asc')  return a.algoName.localeCompare(b.algoName)
     if (sortBy === 'name_desc') return b.algoName.localeCompare(a.algoName)
     if (sortBy === 'account')   return a.account.localeCompare(b.account)

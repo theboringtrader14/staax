@@ -53,7 +53,12 @@ export default function TopBar() {
 
   const location = useLocation()
   const accountDropdownActive = ['/grid', '/orders', '/reports'].some(p => location.pathname.startsWith(p))
-  const accountOptions = ['All Accounts', ...accounts.map((a: any) => a.nickname || a.name || a.id)]
+  // Options: { id: UUID | null, label: nickname }. Store UUID as activeAccount so pages can pass to backend.
+  const accountOptions: { id: string | null; label: string }[] = [
+    { id: null, label: 'All Accounts' },
+    ...accounts.map((a: any) => ({ id: String(a.id), label: a.nickname || a.name || String(a.id) })),
+  ]
+  const selectedLabel = accountOptions.find(o => o.id === activeAccount)?.label ?? 'All Accounts'
 
   return (
     <>
@@ -111,12 +116,16 @@ export default function TopBar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <select
             className="staax-select"
-            value={accountDropdownActive ? (activeAccount || 'All Accounts') : 'All Accounts'}
-            onChange={e => accountDropdownActive && setActiveAccount(e.target.value === 'All Accounts' ? null : e.target.value)}
+            value={accountDropdownActive ? selectedLabel : 'All Accounts'}
+            onChange={e => {
+              if (!accountDropdownActive) return
+              const opt = accountOptions.find(o => o.label === e.target.value)
+              setActiveAccount(opt?.id ?? null)
+            }}
             disabled={!accountDropdownActive}
             style={{ opacity: accountDropdownActive ? 1 : 0.38, cursor: accountDropdownActive ? 'pointer' : 'default', pointerEvents: accountDropdownActive ? 'auto' : 'none', width: '110px', fontSize: '11px' }}
           >
-            {accountOptions.map(a => <option key={a}>{a}</option>)}
+            {accountOptions.map(o => <option key={o.id ?? 'all'}>{o.label}</option>)}
           </select>
 
           <button onClick={() => setIsPractixMode(!isPractixMode)} style={{

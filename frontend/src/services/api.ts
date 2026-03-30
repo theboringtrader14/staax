@@ -69,7 +69,7 @@ export const algosAPI = {
 // ── Grid ──────────────────────────────────────────────────────────────────────
 export const gridAPI = {
   // Load all entries for a week — used by GridPage on mount
-  list: (params: { week_start: string; week_end: string; is_practix?: boolean }) =>
+  list: (params: { week_start: string; week_end: string; is_practix?: boolean; account_id?: string | null }) =>
     api.get('/grid/', { params }),
 
   // Deploy an algo to a day cell
@@ -134,9 +134,10 @@ export const reportsAPI = {
   metrics:      (params?: object) => api.get('/reports/metrics',        { params }),
   calendar:     (params?: object) => api.get('/reports/calendar',       { params }),
   download:     (params?: object) => api.get('/reports/download',       { params, responseType: 'blob' }),
-  dayBreakdown: (params?: object) => api.get('/reports/day-breakdown',  { params }),
-  errors:       (params?: object) => api.get('/reports/errors',         { params }),
-  slippage:     (params?: object) => api.get('/reports/slippage',       { params }),
+  dayBreakdown:  (params?: object) => api.get('/reports/day-breakdown',  { params }),
+  errors:        (params?: object) => api.get('/reports/errors',         { params }),
+  slippage:      (params?: object) => api.get('/reports/slippage',       { params }),
+  healthScores:  (params?: object) => api.get('/reports/health-scores',  { params }),
 }
 
 // ── System
