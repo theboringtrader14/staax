@@ -502,6 +502,43 @@ async def _ao_startup_auto_login(app: "FastAPI") -> None:
             except Exception as _ve:
                 logger.warning(f"[startup] {nickname} post-login LTP check failed: {_ve}")
 
+            # ── Start SmartStream immediately with fresh tokens ────────────────
+            try:
+                _ltp = getattr(app.state, "ltp_consumer", None)
+                if _ltp:
+                    _existing = getattr(_ltp, "_angel_adapter", None)
+                    _already_running = _existing and getattr(_existing, "_running", False)
+                    if not _already_running:
+                        _feed_tok = getattr(ao_broker, "_feed_token", "") or ""
+                        _auth_tok = getattr(ao_broker, "_access_token", "") or ""
+                        if _feed_tok:
+                            from app.engine.ltp_consumer import AngelOneTickerAdapter
+                            from app.engine.bot_runner import MCX_TOKENS
+                            import concurrent.futures as _cf3
+                            _adapter = AngelOneTickerAdapter(
+                                auth_token=_auth_tok,
+                                api_key=ao_broker.api_key,
+                                client_code=ao_broker.client_id,
+                                feed_token=_feed_tok,
+                            )
+                            _ltp.set_angel_adapter(_adapter)
+                            _ss_tokens = list({str(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values()})
+                            _mcx = [str(t) for t in MCX_TOKENS.values()]
+                            _adapter.register_mcx_tokens(_mcx)
+                            _ss_tokens.extend(_mcx)
+                            _ss_loop = asyncio.get_event_loop()
+                            _ss_exec = _cf3.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_ss_autologin")
+                            _ss_loop.run_in_executor(_ss_exec, lambda: _adapter.start(
+                                tokens=_ss_tokens,
+                                loop=_ss_loop,
+                                on_tick=_ltp._process_ticks,
+                            ))
+                            logger.info(f"✅ [STARTUP] SmartStream started for {nickname} after fresh login")
+                        else:
+                            logger.warning(f"[STARTUP] {nickname}: feed_token empty after login — SmartStream not started")
+            except Exception as _ss_err:
+                logger.warning(f"[STARTUP] SmartStream start failed for {nickname}: {_ss_err}")
+
         except Exception as e:
             logger.warning(f"[startup] Auto-login failed for {nickname} (non-fatal): {e}")
 
@@ -643,6 +680,12 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
             # Start market feed with the first valid account
             if not market_feed_started:
+                # Skip if SmartStream was already started by _ao_startup_auto_login
+                _ao_check = getattr(ltp_consumer, "_angel_adapter", None)
+                if _ao_check and getattr(_ao_check, "_running", False):
+                    logger.info("[STARTUP MF] SmartStream already running (started during auto-login) — skipping")
+                    market_feed_started = True
+                    continue
                 try:
                     logger.info("[AO-CONNECT] Creating AngelOneTickerAdapter...")
                     adapter = AngelOneTickerAdapter(

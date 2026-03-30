@@ -529,7 +529,7 @@ type BotSignal = {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function IndicatorsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
-  const [activeTab, setActiveTab] = useState<'Bots' | 'Signals'>('Bots')
+  const [activeTab, setActiveTab] = useState<'Bots' | 'Signals' | 'Orders'>('Bots')
   const [bots, setBots]           = useState<Bot[]>([])
   const [accounts, setAccounts]   = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
@@ -538,6 +538,7 @@ export default function IndicatorsPage() {
   const [allBotOrders, setAllBotOrders] = useState<AggOrder[]>([])
   const [signals, setSignals]     = useState<BotSignal[]>([])
   const signalTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
+  const ordersTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -546,22 +547,23 @@ export default function IndicatorsPage() {
     ]).finally(() => setLoading(false))
   }, [isPractixMode])
 
-  // Load today's signals + 30s auto-refresh when on Signals tab
+  // Load today's signals on mount (for green dot); re-fetch + 30s refresh when on Signals tab
   useEffect(() => {
-    if (activeTab !== 'Signals') return
     const fetchSignals = () => {
       botsAPI.signalsToday()
         .then(r => setSignals(r.data?.signals || []))
         .catch(() => {})
     }
     fetchSignals()
-    signalTimerRef.current = setInterval(fetchSignals, 30000)
-    return () => { if (signalTimerRef.current) clearInterval(signalTimerRef.current) }
+    if (activeTab === 'Signals') {
+      signalTimerRef.current = setInterval(fetchSignals, 30000)
+      return () => { if (signalTimerRef.current) clearInterval(signalTimerRef.current) }
+    }
   }, [activeTab])
 
   // Aggregate orders from all active bots
-  useEffect(() => {
-    const activeBotList = bots.filter(b => !b.is_archived)
+  const fetchAllBotOrders = (botList: Bot[]) => {
+    const activeBotList = botList.filter(b => !b.is_archived)
     if (activeBotList.length === 0) return
     Promise.allSettled(
       activeBotList.map(b =>
@@ -575,7 +577,18 @@ export default function IndicatorsPage() {
         .flatMap(r => (r as PromiseFulfilledResult<AggOrder[]>).value)
       setAllBotOrders(flat)
     })
+  }
+
+  useEffect(() => {
+    fetchAllBotOrders(bots)
   }, [bots])
+
+  // 30s auto-refresh for Orders tab
+  useEffect(() => {
+    if (activeTab !== 'Orders') return
+    ordersTimerRef.current = setInterval(() => fetchAllBotOrders(bots), 30000)
+    return () => { if (ordersTimerRef.current) clearInterval(ordersTimerRef.current) }
+  }, [activeTab, bots])
 
   const handleSave = async (form: any) => {
     const res = await apiPost('/bots/', { ...form, is_practix: isPractixMode })
@@ -627,16 +640,23 @@ export default function IndicatorsPage() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--bg-border)', marginBottom: '16px' }}>
-        {(['Bots', 'Signals'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            padding: '8px 20px', fontSize: '12px', fontWeight: 600,
-            background: activeTab === tab ? 'var(--bg-surface)' : 'transparent',
-            border: 'none', cursor: 'pointer',
-            color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-muted)',
-            borderBottom: activeTab === tab ? '2px solid var(--accent-blue)' : '2px solid transparent',
-            transition: 'all 0.12s',
-          }}>{tab}</button>
-        ))}
+        {(['Bots', 'Signals', 'Orders'] as const).map(tab => {
+          const hasDot = (tab === 'Signals' && signals.some(s => s.status === 'fired')) ||
+                         (tab === 'Orders' && allBotOrders.some(o => o.status === 'open'))
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{
+              flex: 1, padding: '8px 4px', fontSize: '12px', fontWeight: 600,
+              background: activeTab === tab ? 'var(--bg-surface)' : 'transparent',
+              border: 'none', cursor: 'pointer', position: 'relative',
+              color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-muted)',
+              borderBottom: activeTab === tab ? '2px solid var(--accent-blue)' : '2px solid transparent',
+              transition: 'all 0.12s',
+            }}>
+              {tab}
+              {hasDot && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', marginLeft: '5px', verticalAlign: 'middle', animation: 'pulse 1.5s infinite' }} />}
+            </button>
+          )
+        })}
       </div>
 
       {activeTab === 'Signals' && (
@@ -722,21 +742,19 @@ export default function IndicatorsPage() {
         </>
       )}
 
-      {/* ── Aggregated Orders ───────────────────────────────────────────────── */}
-      {allBotOrders.length > 0 && (
-        <div style={{ marginTop: '8px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
-            Orders · {allBotOrders.length} total
-          </div>
-          <div className="no-scrollbar" style={{ maxHeight: '320px', overflowY: 'auto', border: '1px solid var(--bg-border)', borderRadius: '7px' }}>
+      </>)}
+
+      {activeTab === 'Orders' && (() => {
+        const openOrders   = allBotOrders.filter(o => o.status === 'open')
+        const closedOrders = allBotOrders.filter(o => o.status !== 'open')
+        const renderOrdersTable = (rows: AggOrder[]) => (
+          <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
             <table className="staax-table">
-              <thead>
-                <tr>
-                  <th>Bot</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Bot</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th></tr></thead>
               <tbody>
-                {allBotOrders.map(o => (
+                {rows.length === 0 ? (
+                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>No orders</td></tr>
+                ) : rows.map(o => (
                   <tr key={o.id}>
                     <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{o.botName}</td>
                     <td style={{ fontSize: '11px', fontWeight: 700, color: o.direction === 'BUY' ? 'var(--green)' : 'var(--red)' }}>{o.direction}</td>
@@ -752,31 +770,24 @@ export default function IndicatorsPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {/* ── Signal Tracker ──────────────────────────────────────────────────── */}
-      <div style={{ marginTop: '24px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Signal Tracker</div>
-        <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
-          <table className="staax-table">
-            <thead>
-              <tr>
-                <th>Signal</th><th>Underlying</th><th>Direction</th><th>Triggered At</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>
-                  No signals today
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      </>)}
+        )
+        return (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {openOrders.length > 0 && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite', marginRight: '6px', verticalAlign: 'middle' }} />}
+                Open Positions · {openOrders.length}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
+            </div>
+            {renderOrdersTable(openOrders)}
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '20px', marginBottom: '8px' }}>
+              Closed · {closedOrders.length}
+            </div>
+            {renderOrdersTable(closedOrders)}
+          </div>
+        )
+      })()}
 
       {showCreate && (
         <BotConfigurator accounts={accounts} onSave={handleSave} onClose={() => setShowCreate(false)} />

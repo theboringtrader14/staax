@@ -127,6 +127,7 @@ export default function GridPage() {
   const [opError,       setOpError]      = useState<string>('')   // inline op error
   const [autoFillToast, setAutoFillToast] = useState<string>('')  // "Auto-filled N recurring day(s)"
   const [holidayDates,  setHolidayDates]  = useState<Set<string>>(new Set())  // ISO dates that are FO holidays
+  const [tick,          setTick]          = useState(0)  // for 1-min countdown refresh
   const [rmModal,       setRmModal]      = useState<{algoId:string; day:string} | null>(null)
   const [sortBy,        setSortBy]       = useState<string>(() => localStorage.getItem('staax_grid_sort') || 'date_desc')
 
@@ -243,6 +244,12 @@ export default function GridPage() {
         setHolidayDates(new Set(foHolidays.map((h: any) => h.date)))
       })
       .catch(() => {})
+  }, [])
+
+  // ── 1-min tick for countdown labels ──────────────────────────────────────────
+  useEffect(() => {
+    const t = setInterval(() => setTick(v => v + 1), 60000)
+    return () => clearInterval(t)
   }, [])
 
   // ── Drop (deploy) ─────────────────────────────────────────────────────────────
@@ -741,13 +748,21 @@ export default function GridPage() {
                                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
                                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-dim)')}>✕</button>
 
-                              <div style={{ display:'flex', alignItems:'center', marginBottom:'4px', paddingRight:'12px' }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'4px', paddingRight:'12px' }}>
                                 <span style={{ fontSize:'9px', fontWeight:700,
                                   color: isMissed ? 'var(--accent-amber)' : s.col,
                                   background: isMissed ? 'rgba(215,123,18,0.12)' : s.bg,
                                   padding:'1px 5px', borderRadius:'3px' }}>
                                   {isMissed ? 'MISSED' : s.label.toUpperCase()}
                                 </span>
+                                {!isMissed && isToday && cell.status === 'waiting' && cell.entry && tick >= 0 && (() => {
+                                  const istStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
+                                  const [nowH, nowM] = istStr.split(':').map(Number)
+                                  const [eh, em] = cell.entry.split(':').map(Number)
+                                  const diff = (eh * 60 + em) - (nowH * 60 + nowM)
+                                  if (diff <= 0 || diff > 240) return null
+                                  return <span style={{ fontSize:'9px', color:'var(--accent-amber)', fontWeight:600 }}>in {diff}m</span>
+                                })()}
                               </div>
 
                               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 4px', alignItems:'center' }}>

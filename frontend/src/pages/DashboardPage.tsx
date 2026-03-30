@@ -54,6 +54,13 @@ export default function DashboardPage() {
   const [killResult, setKillResult]               = useState<{ positions_squared: number; orders_cancelled: number; errors: string[]; per_account?: Record<string, { positions_squared: number; orders_cancelled: number }> } | null>(null)
   const [selectedKillAccounts, setSelectedKillAccounts] = useState<string[]>([])
   const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
+  const [now, setNow]                                   = useState(new Date())
+
+  // 30s clock tick for next-algo countdown
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(t)
+  }, [])
 
   // Load accounts on mount + derive zerodha token state
   useEffect(() => {
@@ -382,6 +389,30 @@ export default function DashboardPage() {
           )
         })}
       </div>
+
+      {/* Next Algo countdown widget */}
+      {(() => {
+        const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
+        const [nowH, nowM] = istStr.split(':').map(Number)
+        const nowMins = nowH * 60 + nowM
+        const upcoming = (algos as any[])
+          .filter(a => !a.is_archived && a.entry_time)
+          .map(a => {
+            const [eh, em] = (a.entry_time as string).split(':').map(Number)
+            return { name: a.name, diff: eh * 60 + em - nowMins }
+          })
+          .filter(x => x.diff > 0 && x.diff <= 240)
+          .sort((a, b) => a.diff - b.diff)
+        if (upcoming.length === 0) return null
+        const next = upcoming[0]
+        return (
+          <div className="card" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Next</span>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-blue)' }}>{next.name}</span>
+            <span style={{ fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600 }}>in {next.diff}m</span>
+          </div>
+        )
+      })()}
 
       {/* Market Holidays widget */}
       <div className="card" style={{ marginBottom: '12px' }}>

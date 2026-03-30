@@ -623,6 +623,26 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* Day summary bar */}
+      {(() => {
+        const closedLegs = sortedOrders.flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
+        if (closedLegs.length === 0) return null
+        const dayPnl = closedLegs.reduce((s, l) => s + (l.pnl ?? 0), 0)
+        const dayWins = closedLegs.filter(l => (l.pnl ?? 0) > 0).length
+        const dayWinRate = Math.round(dayWins / closedLegs.length * 100)
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 12px', marginBottom: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '6px', fontSize: '11px' }}>
+            <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>{closedLegs.length} trade{closedLegs.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: 'var(--text-dim)' }}>·</span>
+            <span style={{ fontWeight: 700, color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {dayPnl >= 0 ? '+' : ''}₹{Math.abs(Math.round(dayPnl)).toLocaleString('en-IN')}
+            </span>
+            <span style={{ color: 'var(--text-dim)' }}>·</span>
+            <span style={{ color: dayWinRate >= 50 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{dayWinRate}% win</span>
+          </div>
+        )
+      })()}
+
       {/* Algo groups */}
       {sortedOrders.map((group, gi) => (
         <div key={gi} style={{ marginBottom: '12px', opacity: group.terminated ? 0.65 : 1 }}>
@@ -666,7 +686,7 @@ export default function OrdersPage() {
             </span>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '4px' }}>{group.account}</span>
 
-            {!group.terminated && (group.mtmSL || group.mtmTP) && (
+            {!group.terminated && !!(group.mtmSL || group.mtmTP) && (
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 {group.mtmSL !== 0 && <>SL: <span style={{ color: 'var(--red)' }}>₹{Math.abs(group.mtmSL).toLocaleString('en-IN')}</span></>}
                 {group.mtmSL !== 0 && group.mtmTP !== 0 && <>&nbsp;·&nbsp;</>}

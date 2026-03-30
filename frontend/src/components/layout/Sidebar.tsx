@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../../store'
 
 // TradingView chart links for each index (opens in new tab on click)
@@ -100,6 +100,18 @@ export default function Sidebar() {
   const [pendingPath, setPendingPath] = useState<string | null>(null)
   const navigate = useNavigate()
   const toggle = (v: boolean) => { setCollapsed(v); localStorage.setItem('sidebar_collapsed', String(v)) }
+
+  const [hasBotActivity, setHasBotActivity] = useState(false)
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    fetch('http://localhost:8000/api/v1/bots/signals/today', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(d => setHasBotActivity((d?.signals || []).some((s: any) => s.status === 'fired')))
+      .catch(() => {})
+  }, [])
   const W = collapsed ? '56px' : '216px'
 
   // P0-A — intercept NavLink click when AlgoPage has unsaved changes
@@ -157,8 +169,11 @@ export default function Sidebar() {
                 fontSize: '13px', transition: 'all 0.12s',
                 fontWeight: isActive ? '600' : '400', whiteSpace: 'nowrap',
               })}>
-              <span style={{ width: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ width: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
                 <Icon />
+                {path === '/indicators' && hasBotActivity && (
+                  <span style={{ position: 'absolute', top: '-2px', right: '6px', width: '7px', height: '7px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite' }} />
+                )}
               </span>
               <span style={{ paddingRight: collapsed ? 0 : '16px', maxWidth: collapsed ? 0 : '200px', opacity: collapsed ? 0 : 1, transition: 'opacity 0.15s ease, max-width 0.18s ease, padding 0.18s ease', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }}>
                 {label}

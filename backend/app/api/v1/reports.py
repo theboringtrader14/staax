@@ -540,3 +540,73 @@ async def download_trades(
     return StreamingResponse(io.BytesIO(buf.getvalue().encode("utf-8-sig")),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename_base}.csv"'})
+
+
+@router.get("/strategy-breakdown")
+async def strategy_breakdown(
+    db: AsyncSession = Depends(get_db),
+    fy: str = Query("2025-26"),
+    is_practix: bool | None = Query(None),
+):
+    """
+    Group closed trades by strategy type.
+    Algos: grouped by strategy_mode (intraday/stbt/btst/positional) from Algo table.
+    Bots:  grouped by indicator field (dtr/channel) from Bot table.
+    Returns combined [{strategy_type, trades, total_pnl, avg_pnl, win_rate}].
+    """
+    groups: dict = {}
+
+    # ── Algo orders ───────────────────────────────────────────────────────────
+    conditions = _base_query(fy, None, is_practix)
+    stmt = (
+        select(Order, Algo.strategy_mode)
+        .outerjoin(Algo, Order.algo_id == Algo.id)
+        .where(*conditions)
+    )
+    result = await db.execute(stmt)
+    for order, strategy_mode in result.all():
+        stype = (strategy_mode or getattr(order, "entry_type", None) or "unknown").lower()
+        if stype not in groups:
+            groups[stype] = {"trades": 0, "total_pnl": 0.0, "wins": 0}
+        groups[stype]["trades"] += 1
+        groups[stype]["total_pnl"] += float(order.pnl or 0)
+        if (order.pnl or 0) > 0:
+            groups[stype]["wins"] += 1
+
+    # ── Bot orders ────────────────────────────────────────────────────────────
+    try:
+        from app.models.bot import BotOrder, BotOrderStatus, Bot
+        fy_start, fy_end = _fy_range(fy)
+        bot_stmt = (
+            select(BotOrder, Bot.indicator)
+            .outerjoin(Bot, BotOrder.bot_id == Bot.id)
+            .where(
+                BotOrder.status == BotOrderStatus.CLOSED,
+                BotOrder.pnl.isnot(None),
+                BotOrder.entry_time >= fy_start,
+                BotOrder.entry_time <= fy_end,
+            )
+        )
+        bot_result = await db.execute(bot_stmt)
+        for bot_order, indicator in bot_result.all():
+            stype = (indicator or "unknown").lower()
+            if stype not in groups:
+                groups[stype] = {"trades": 0, "total_pnl": 0.0, "wins": 0}
+            groups[stype]["trades"] += 1
+            groups[stype]["total_pnl"] += float(bot_order.pnl or 0)
+            if (bot_order.pnl or 0) > 0:
+                groups[stype]["wins"] += 1
+    except Exception:
+        pass  # bots table may not exist in all environments
+
+    breakdown = [
+        {
+            "strategy_type": k,
+            "trades": v["trades"],
+            "total_pnl": round(v["total_pnl"], 2),
+            "avg_pnl": round(v["total_pnl"] / v["trades"], 2) if v["trades"] > 0 else 0,
+            "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] > 0 else 0,
+        }
+        for k, v in sorted(groups.items(), key=lambda x: -x[1]["total_pnl"])
+    ]
+    return {"breakdown": breakdown}
