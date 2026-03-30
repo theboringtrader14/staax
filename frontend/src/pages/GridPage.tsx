@@ -154,9 +154,9 @@ export default function GridPage() {
       }))
       setAlgos(apiAlgos)
 
-      // Load grid entries for this week
+      // Load grid entries for this week — pass SUN so SAT/SUN entries are returned
       const weekStart = weekDates['MON']
-      const weekEnd   = weekDates['FRI']
+      const weekEnd   = weekDates['SUN']
       const gridRes = await gridAPI.list({ week_start: weekStart, week_end: weekEnd, is_practix: isPractixMode })
       const entries: any[] = gridRes.data?.entries || gridRes.data || []
 
@@ -594,7 +594,7 @@ export default function GridPage() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', borderBottom:'2px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
+              <th style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', boxShadow:'0 2px 0 var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   ALGO
                   <button onClick={addAllToToday} title="Deploy all active algos to today (or Friday if weekend)"
@@ -612,7 +612,7 @@ export default function GridPage() {
                   <th key={d} style={{
                     position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center',
                     background: isHoliday ? 'color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-amber) 12%)' : 'var(--bg-secondary)',
-                    border:'1px solid var(--bg-border)', borderBottom:'2px solid var(--bg-border)', fontSize:'10px', fontWeight:700,
+                    border:'1px solid var(--bg-border)', boxShadow:'0 2px 0 var(--bg-border)', fontSize:'10px', fontWeight:700,
                     letterSpacing:'0.08em', textTransform:'uppercase',
                     color: isHoliday ? 'var(--accent-amber)' : WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)',
                   }}>
@@ -633,7 +633,6 @@ export default function GridPage() {
           <tbody>
             {sortedActive
               .filter(algo => isPractixMode ? !algo.is_live : algo.is_live)
-              .filter(algo => Object.keys(grid[algo.id] || {}).length > 0 || !isPractixMode)
               .map(algo => {
               const st    = worstStatus(grid[algo.id])
               const cells = Object.values(grid[algo.id] || {})

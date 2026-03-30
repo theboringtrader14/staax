@@ -123,7 +123,7 @@ export default function ReportsPage(){
 
   useEffect(() => {
     // Derive date range from active metric filter
-    let metricParams: Record<string, any> = { fy: metricFy, is_practix: isPractixMode }
+    let metricParams: Record<string, any> = { fy: metricFy }
     if (metricFilter === 'month') {
       // Map month name to number within the FY
       const monthIdx = MONTHS_FY.indexOf(metricMonth)

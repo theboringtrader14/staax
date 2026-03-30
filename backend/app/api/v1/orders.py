@@ -115,7 +115,10 @@ async def list_orders(
     day_name = target_date.strftime('%a').lower()  # 'mon', 'tue', etc.
 
     grid_result = await db.execute(
-        select(GridEntry).where(GridEntry.trading_date == target_date)
+        select(GridEntry).where(
+            GridEntry.trading_date == target_date,
+            GridEntry.status != GridStatus.NO_TRADE,
+        )
     )
     grid_entries = grid_result.scalars().all()
     grid_entry_ids = [e.id for e in grid_entries]
@@ -125,6 +128,7 @@ async def list_orders(
         select(GridEntry).where(
             GridEntry.day_of_week == day_name,
             GridEntry.trading_date != target_date,
+            GridEntry.status != GridStatus.NO_TRADE,
         )
     )
     open_ge_ids = [e.id for e in open_ge_result.scalars().all()]

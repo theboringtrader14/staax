@@ -87,12 +87,18 @@ async def get_week_grid(
     db: AsyncSession = Depends(get_db),
 ):
     monday = _get_week_monday(week_start)
-    friday = monday + timedelta(days=4)
+    if week_end:
+        try:
+            range_end = datetime.strptime(week_end, "%Y-%m-%d").date()
+        except ValueError:
+            range_end = monday + timedelta(days=6)
+    else:
+        range_end = monday + timedelta(days=6)
 
     result = await db.execute(
         select(GridEntry).where(
             GridEntry.trading_date >= monday,
-            GridEntry.trading_date <= friday,
+            GridEntry.trading_date <= range_end,
             GridEntry.is_archived == False,
             *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
         ).order_by(GridEntry.trading_date, GridEntry.created_at)
@@ -118,7 +124,7 @@ async def get_week_grid(
 
     return {
         "week_start": monday.isoformat(),
-        "week_end":   friday.isoformat(),
+        "week_end":   range_end.isoformat(),
         "entries":    [_entry_to_dict(e, states.get(str(e.id))) for e in entries],
         "by_algo":    by_algo,
     }

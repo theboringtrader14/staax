@@ -354,6 +354,69 @@ async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = 
     return _algo_to_dict(algo, legs)
 
 
+@router.post("/{algo_id}/deploy-week")
+async def deploy_week(algo_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Auto-create GridEntry rows for the current week (today through Friday)
+    based on the algo's recurring_days. Skips past days and deduplicates.
+    """
+    from datetime import date as _date, timedelta as _td
+    result = await db.execute(select(Algo).where(Algo.id == algo_id))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+
+    _DAY_IDX   = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4}
+    _DOW_LABELS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    _today  = _date.today()
+    _monday = _today - _td(days=_today.weekday())
+
+    created = 0
+    skipped = 0
+    entries = []
+
+    for day_upper in (algo.recurring_days or []):
+        idx = _DAY_IDX.get(day_upper.upper())
+        if idx is None:
+            skipped += 1
+            continue
+        trading_date = _monday + _td(days=idx)
+        if trading_date < _today:
+            skipped += 1
+            continue
+        dup = await db.execute(
+            select(GridEntry).where(
+                GridEntry.algo_id == algo.id,
+                GridEntry.trading_date == trading_date,
+            )
+        )
+        if dup.scalar_one_or_none():
+            skipped += 1
+            continue
+        entry = GridEntry(
+            id=uuid_lib.uuid4(),
+            algo_id=algo.id,
+            account_id=algo.account_id,
+            trading_date=trading_date,
+            day_of_week=_DOW_LABELS[idx],
+            lot_multiplier=1,
+            is_enabled=True,
+            is_practix=not algo.is_live,
+            is_archived=False,
+            status=GridStatus.NO_TRADE,
+        )
+        db.add(entry)
+        created += 1
+        entries.append({
+            "trading_date": trading_date.isoformat(),
+            "day_of_week":  _DOW_LABELS[idx],
+            "is_practix":   not algo.is_live,
+        })
+
+    await db.commit()
+    return {"created": created, "skipped": skipped, "entries": entries}
+
+
 @router.delete("/{algo_id}")
 async def delete_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     """Delete an algo and all associated data permanently (cascade)."""

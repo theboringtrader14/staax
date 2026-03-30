@@ -564,9 +564,16 @@ export default function OrdersPage() {
       <div style={{ height: '14px' }} />
       {waitingAlgos.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
-          {waitingAlgos.map(w => (
+          {waitingAlgos.map(w => {
+            // Determine if entry time has passed on today's tab
+            const isToday = activeDay === todayDay()
+            const isMissed = isToday && !!w.entry_time && (() => {
+              const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
+              return now >= w.entry_time.slice(0, 5)
+            })()
+            return (
             <div key={w.grid_entry_id} style={{
-              marginBottom: '6px', opacity: 0.55,
+              marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
               background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
               borderRadius: '7px', padding: '8px 14px',
               display: 'flex', alignItems: 'center', gap: '12px',
@@ -580,9 +587,10 @@ export default function OrdersPage() {
               }}>{w.account_name}</span>
               <span style={{
                 fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
-                color: '#F59E0B', background: 'rgba(245,158,11,0.1)',
-                border: '1px solid rgba(245,158,11,0.25)',
-              }}>WAITING</span>
+                color: isMissed ? 'var(--accent-amber)' : '#F59E0B',
+                background: isMissed ? 'rgba(215,123,18,0.1)' : 'rgba(245,158,11,0.1)',
+                border: `1px solid ${isMissed ? 'rgba(215,123,18,0.25)' : 'rgba(245,158,11,0.25)'}`,
+              }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
               {w.entry_time && (
                 <span style={{ fontSize: '11px', color: 'var(--accent-blue)' }}>
                   E: {w.entry_time.slice(0, 5)}
@@ -598,7 +606,8 @@ export default function OrdersPage() {
                 color: w.is_practix ? 'var(--accent-amber)' : 'var(--accent-blue)',
               }}>{w.is_practix ? 'PRACTIX' : 'LIVE'}</span>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

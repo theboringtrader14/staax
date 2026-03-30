@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { algosAPI, accountsAPI } from '@/services/api'
+import { useStore } from '@/store'
 
 const INST_CODES: Record<string, string> = { NF: 'NIFTY', BN: 'BANKNIFTY', SX: 'SENSEX', MN: 'MIDCAPNIFTY', FN: 'FINNIFTY' }
 const EXPIRY_OPTIONS = [
@@ -371,8 +372,9 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
 }
 
 export default function AlgoPage() {
-  const navigate    = useNavigate()
-  const { id }      = useParams<{ id: string }>()
+  const navigate        = useNavigate()
+  const { id }          = useParams<{ id: string }>()
+  const isPractixMode   = useStore(s => s.isPractixMode)
   const isEdit      = !!id
   // Account list — populated from API on mount
   const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([])
@@ -601,6 +603,7 @@ export default function AlgoPage() {
     exit_delay_scope:    exitDelayScope,
     on_margin_error:     errorMargin ? 'exit_all' : 'none',
     on_entry_fail:       errorEntry  ? 'exit_all' : 'none',
+    is_live:             !isPractixMode,
     recurring_days:      ['MON','TUE','WED','THU','FRI'],
     legs: legs.map(l => ({
       leg_number:      l.no,
