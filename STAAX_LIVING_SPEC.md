@@ -3576,3 +3576,49 @@ If algos missing on restart:
 
 ### All Commits Today (30 March)
 24d82c8 → 995fa88 (14 commits, ~2500 lines changed)
+
+## Session Update — 2026-03-30 (Late Evening)
+
+### SmartStream Root Causes Fixed (5 bugs)
+- Bug A: Dead `continue` before adapter.start() — SmartStream never started
+- Bug B: api_key from empty DB field — now uses broker.api_key from .env
+- Bug C: MCX tokens using NFO exchange type — now MCX=5
+- Bug D: Bot tokens never subscribed to SmartStream — now included at login
+- Bug E: No reconnect on disconnect — auto-reconnect after 10s added
+- Remaining: SmartStream starts before feed_token available (fixing in next batch)
+
+### Platform State
+- GOLDM instrument token: 58424839 (confirmed in AO instrument master)
+- MCX exchange type for SmartStream: 5
+- Indicator engine: DTR + Channel strategies fully built
+- Signal pipeline: tick → candle → strategy → bot_signals → WebSocket (ready when SmartStream connects)
+
+### Pending for Next Market Day
+1. Verify SmartStream connects after fresh login (check _on_open in logs)
+2. Verify GOLDM ticks arrive (check backend logs for tick data)
+3. Create test strategy under Mom AO account
+4. Check option chain works with correct API key
+
+### Angel One API Key Issue
+ANGELONE_KARTHIK_API_KEY=bREnxDe5 returns AG8004 Invalid API Key
+Action needed: Log into SmartAPI portal and verify the correct API key
+URL: https://smartapi.angelbroking.com → My Apps → copy API key
+
+### Remaining Pending Items
+Critical:
+- C-1: SmartStream feed_token sequence fix (in progress)
+- C-2: Angel One API key AG8004 — manual fix needed in .env
+
+Medium:
+- M-2: Execution Guard before order placement
+- M-3: Startup Safety Check
+- M-4: get_option_chain caching
+- M-5: Global SL/TP verification
+- M-6: MCX holidays
+- M-7: Account nickname hardcoded in broker routing
+- M-8: Algo failures (W&T, ORB)
+
+UI/UX batch in progress:
+- Analytics page restructure (FY filter, 6 cards, chip toggle, strategy breakdown)
+- Indicator Bots page (Bots/Signals/Orders tabs)
+- UX enhancements (sidebar dot, countdown, day summary, dashboard next algo)
