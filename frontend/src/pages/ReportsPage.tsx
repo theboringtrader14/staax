@@ -294,7 +294,7 @@ export default function ReportsPage(){
       )}
 
       {/* FY Calendar */}
-      <div className="card" style={{marginBottom:'12px'}}>
+      <div className="card" style={{marginBottom:'12px', overflow:'hidden'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>
@@ -337,12 +337,12 @@ export default function ReportsPage(){
           </div>
         </div>
         <div style={{overflowX:'auto',padding:'0 16px 16px'}}>
-          <table className="staax-table" style={{borderCollapse:'separate',borderSpacing:0}}>
+          <table className="staax-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%'}}>
             <thead>
               <tr>
-                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)'}}>Key Metrics</th>
-                {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'80px'}}>{a.name}</th>)}
-                <th style={{color:'var(--accent-blue)',position:'sticky',right:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)'}}>Cumulative</th>
+                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Key Metrics</th>
+                {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px'}}>{a.name}</th>)}
+                <th style={{color:'var(--accent-blue)',position:'sticky',right:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Cumulative</th>
               </tr>
             </thead>
             <tbody>
@@ -354,9 +354,9 @@ export default function ReportsPage(){
                 const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
                 return(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'var(--bg-primary)',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)'}}>{row.label}</td>
-                    {algoMetrics.map((a:any)=><td key={a.algo_id} style={{color:(a as any)[row.key]<0?'var(--red)':'var(--green)',fontWeight:600}}>{fmt((a as any)[row.key])}</td>)}
-                    <td style={{color:'var(--accent-blue)',fontWeight:700,position:'sticky',right:0,background:'var(--bg-primary)',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)'}}>{cumFmt}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'var(--bg-secondary)',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
+                    {algoMetrics.map((a:any)=><td key={a.algo_id} style={{color:(a as any)[row.key]<0?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px'}}>{fmt((a as any)[row.key])}</td>)}
+                    <td style={{color:'var(--accent-blue)',fontWeight:700,position:'sticky',right:0,background:'var(--bg-secondary)',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
                   </tr>
                 )
               })}

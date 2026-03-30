@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -55,12 +55,26 @@ export default function DashboardPage() {
   const [selectedKillAccounts, setSelectedKillAccounts] = useState<string[]>([])
   const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
   const [now, setNow]                                   = useState(new Date())
+  const [todayGrid, setTodayGrid]                       = useState<any[]>([])
 
-  // 30s clock tick for next-algo countdown
+  // 1s tick for Xm Ys countdown accuracy
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000)
+    const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Fetch today's grid entries for Next Algo card
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const fetch = () => {
+      gridAPI.list({ week_start: today, week_end: today, is_practix: isPractixMode })
+        .then(r => setTodayGrid(r.data || []))
+        .catch(() => {})
+    }
+    fetch()
+    const t = setInterval(fetch, 30000)
+    return () => clearInterval(t)
+  }, [isPractixMode])
 
   // Load accounts on mount + derive zerodha token state
   useEffect(() => {
@@ -390,70 +404,99 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* Next Algo countdown widget */}
-      {(() => {
-        const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
-        const [nowH, nowM] = istStr.split(':').map(Number)
-        const nowMins = nowH * 60 + nowM
-        const upcoming = (algos as any[])
-          .filter(a => !a.is_archived && a.entry_time)
-          .map(a => {
-            const [eh, em] = (a.entry_time as string).split(':').map(Number)
-            return { name: a.name, diff: eh * 60 + em - nowMins }
-          })
-          .filter(x => x.diff > 0 && x.diff <= 240)
-          .sort((a, b) => a.diff - b.diff)
-        if (upcoming.length === 0) return null
-        const next = upcoming[0]
-        return (
-          <div className="card" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px' }}>
-            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Next</span>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-blue)' }}>{next.name}</span>
-            <span style={{ fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600 }}>in {next.diff}m</span>
-          </div>
-        )
-      })()}
+      {/* Next Algo + Holidays — two-card row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
 
-      {/* Market Holidays widget */}
-      <div className="card" style={{ marginBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Upcoming Market Holidays (F&O) — next 30 days
+        {/* Left: Next Algo countdown */}
+        <div className="card">
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
+            Next Algo
           </div>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: '10px', padding: '0 10px', height: '24px' }}
-            onClick={handleSyncHolidays}
-            disabled={syncingHolidays}
-          >
-            {syncingHolidays ? 'Syncing…' : '↻ Sync NSE'}
-          </button>
-        </div>
-        {holidays.length === 0 ? (
-          <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
-            No F&O holidays in the next 30 days — or sync to load from NSE.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {holidays.map((h: any) => {
-              const d   = new Date(h.date)
-              const day = d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })
-              const dt  = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })
-              return (
-                <div key={h.id} style={{
-                  display: 'flex', flexDirection: 'column', gap: '2px',
-                  padding: '6px 12px', borderRadius: '6px',
-                  background: 'rgba(245,158,11,0.08)',
-                  border: '1px solid rgba(245,158,11,0.2)',
-                  minWidth: '110px',
-                }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)' }}>{dt} · {day}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{h.description}</div>
+          {(() => {
+            const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+            const [h, m, s] = istStr.split(':').map(Number)
+            const nowSecs = h * 3600 + m * 60 + s
+            const marketOpen  = 9 * 3600
+            const marketClose = 15 * 3600 + 30 * 60
+            if (nowSecs < marketOpen || nowSecs > marketClose) {
+              return <div style={{ fontSize: '13px', color: 'var(--text-dim)', fontStyle: 'italic' }}>Market closed</div>
+            }
+            const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
+            const waiting = todayGrid
+              .filter(e => e.status === 'waiting' && e.entry_time)
+              .map(e => {
+                const algo = algoMap.get(e.algo_id)
+                const [eh, em] = (e.entry_time as string).split(':').map(Number)
+                return { name: algo?.name || e.algo_name || 'Unknown', entrySecs: eh * 3600 + em * 60, entry_time: e.entry_time as string }
+              })
+              .filter(x => x.entrySecs > nowSecs)
+              .sort((a, b) => a.entrySecs - b.entrySecs)
+            if (waiting.length === 0) {
+              return <div style={{ fontSize: '13px', color: 'var(--text-dim)', fontStyle: 'italic' }}>No algos scheduled today</div>
+            }
+            const next = waiting[0]
+            const diff = next.entrySecs - nowSecs
+            const mins = Math.floor(diff / 60)
+            const secs = diff % 60
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-blue)' }}>{next.name}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Entry {next.entry_time}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-amber)', fontVariantNumeric: 'tabular-nums' }}>
+                  in {mins}m {String(secs).padStart(2, '0')}s
                 </div>
-              )
-            })}
+                {waiting.length > 1 && (
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    +{waiting.length - 1} more scheduled
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* Right: Upcoming Holidays */}
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Upcoming Holidays (F&O)
+            </div>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: '10px', padding: '0 10px', height: '24px' }}
+              onClick={handleSyncHolidays}
+              disabled={syncingHolidays}
+            >
+              {syncingHolidays ? 'Syncing…' : '↻ Sync NSE'}
+            </button>
           </div>
-        )}
+          {holidays.length === 0 ? (
+            <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+              No F&O holidays in the next 30 days — or sync to load from NSE.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {holidays.map((h: any) => {
+                const d   = new Date(h.date)
+                const day = d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })
+                const dt  = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })
+                return (
+                  <div key={h.id} style={{
+                    display: 'flex', flexDirection: 'column', gap: '2px',
+                    padding: '6px 12px', borderRadius: '6px',
+                    background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.2)',
+                    minWidth: '110px',
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)' }}>{dt} · {day}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{h.description}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>

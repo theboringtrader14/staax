@@ -3622,3 +3622,37 @@ UI/UX batch in progress:
 - Analytics page restructure (FY filter, 6 cards, chip toggle, strategy breakdown)
 - Indicator Bots page (Bots/Signals/Orders tabs)
 - UX enhancements (sidebar dot, countdown, day summary, dashboard next algo)
+
+## End of Session — 2026-03-30 (Final)
+
+### All Commits Today (30 March 2026)
+24d82c8 → fec3a45+ (17+ commits, ~5000 lines changed)
+
+### Confirmed Working
+- ✅ First successful straddle executed (Test New-2: +₹23.70)
+- ✅ Auto square-off at exit time
+- ✅ Startup auto-login for all 3 AO accounts
+- ✅ SmartStream 5 bugs fixed (starts after login tomorrow)
+- ✅ Indicator engine built (DTR + Channel strategies)
+- ✅ Analytics page restructured (FY filter, 6 cards, chips)
+- ✅ Indicator Bots page (3 tabs: Bots/Signals/Orders)
+- ✅ UX: sidebar dot, grid countdown, day summary, next algo
+- ✅ DB retry logic, backup script fixed
+
+### Not Yet Implemented (from UX suggestions)
+- P&L Sparkline in Orders page
+- Live tickers bar in Dashboard (needs SmartStream)
+- Best time to trade heatmap in Analytics
+- Reports page Per-Algo Metrics scroll (overflow fix pending rebuild)
+
+### Tomorrow Morning SOP
+1. Docker must be running
+2. cd ~/STAXX/staax/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+3. cd ~/STAXX/staax/frontend && npm run dev
+4. Login → check Accounts page for SmartStream _on_open in logs
+5. If SmartStream connects → GOLDM ticks should flow → bots generate signals
+6. Run ~/STAXX/backup_db.sh after session
+
+### Angel One API Key Fix Needed
+ANGELONE_KARTHIK_API_KEY=bREnxDe5 returns AG8004
+Fix: Login to https://smartapi.angelbroking.com → My Apps → copy correct API key → update backend/.env
