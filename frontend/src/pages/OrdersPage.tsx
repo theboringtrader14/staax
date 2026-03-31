@@ -555,16 +555,16 @@ export default function OrdersPage() {
               flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               gap: '2px', padding: '8px 4px', fontSize: '12px', fontWeight: 600,
               border: 'none', cursor: 'pointer',
-              background: isSelected ? 'var(--bg-surface)' : 'transparent',
-              color: isSelected ? 'var(--accent-blue)' : isWeekend || isHoliday ? 'var(--text-dim)' : 'var(--text-muted)',
-              borderBottom: isSelected ? '2px solid var(--accent-blue)' : '2px solid transparent',
-              transition: 'all 0.12s',
+              background: isSelected ? 'rgba(99,102,241,0.08)' : 'transparent',
+              color: isSelected ? '#a78bfa' : isWeekend || isHoliday ? 'rgba(232,232,248,0.35)' : 'rgba(232,232,248,0.6)',
+              borderBottom: isSelected ? '2px solid #6366f1' : '2px solid transparent',
+              transition: 'all 0.2s ease',
               opacity: isHoliday && !isSelected ? 0.55 : 1,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>{d}</span>
                 {isToday && !isHoliday && (
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-blue)', flexShrink: 0 }} />
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 6px #6366f1', flexShrink: 0 }} />
                 )}
                 {isHoliday && (
                   <span style={{ fontSize: '9px', color: 'var(--accent-amber)' }} title="Market holiday">🏛</span>

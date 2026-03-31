@@ -646,11 +646,11 @@ export default function IndicatorsPage() {
           return (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
               flex: 1, padding: '8px 4px', fontSize: '12px', fontWeight: 600,
-              background: activeTab === tab ? 'var(--bg-surface)' : 'transparent',
+              background: activeTab === tab ? 'rgba(99,102,241,0.08)' : 'transparent',
               border: 'none', cursor: 'pointer', position: 'relative',
-              color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-muted)',
-              borderBottom: activeTab === tab ? '2px solid var(--accent-blue)' : '2px solid transparent',
-              transition: 'all 0.12s',
+              color: activeTab === tab ? '#a78bfa' : 'rgba(232,232,248,0.6)',
+              borderBottom: activeTab === tab ? '2px solid #6366f1' : '2px solid transparent',
+              transition: 'all 0.2s ease',
             }}>
               {tab}
               {hasDot && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', marginLeft: '5px', verticalAlign: 'middle', animation: 'pulse 1.5s infinite' }} />}

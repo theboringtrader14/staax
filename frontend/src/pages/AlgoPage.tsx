@@ -330,7 +330,15 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
 }
 
 function SubSection({ title }: { title: string }) {
-  return <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', marginTop: '2px', paddingBottom: '5px', borderBottom: '1px solid var(--bg-border)' }}>{title}</div>
+  return (
+    <div style={{
+      fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.7)',
+      textTransform: 'uppercase', letterSpacing: '1.5px',
+      marginBottom: '10px', marginTop: '6px', paddingBottom: '6px',
+      borderBottom: '1px solid rgba(99,102,241,0.12)',
+      borderLeft: '2px solid #6366f1', paddingLeft: '10px',
+    }}>{title}</div>
+  )
 }
 
 
