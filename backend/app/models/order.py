@@ -66,6 +66,11 @@ class Order(Base):
     fill_price      = Column(Float, nullable=True)
     fill_time       = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Order latency (added 0015_order_latency) ──────────────────────────────
+    placed_at  = Column(DateTime(timezone=True), nullable=True)   # when sent to broker
+    filled_at  = Column(DateTime(timezone=True), nullable=True)   # when broker confirmed
+    latency_ms = Column(Integer, nullable=True)                   # filled_at - placed_at in ms
+
     # ── Live tracking ─────────────────────────────────────────────────────────
     ltp           = Column(Float, nullable=True)
     sl_original   = Column(Float, nullable=True)

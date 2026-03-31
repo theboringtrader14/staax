@@ -138,6 +138,7 @@ export const reportsAPI = {
   errors:        (params?: object) => api.get('/reports/errors',         { params }),
   slippage:      (params?: object) => api.get('/reports/slippage',       { params }),
   healthScores:  (params?: object) => api.get('/reports/health-scores',  { params }),
+  timeHeatmap:   (params?: object) => api.get('/reports/time-heatmap',   { params }),
 }
 
 // ── System

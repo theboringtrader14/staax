@@ -63,16 +63,37 @@ class ExecutionManager:
 
     # ── Audit log (DB + structured logger) ────────────────────────────────────
 
+    # ── Event type derivation ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _derive_event_type(action: str, status: str) -> str:
+        """Map action+status to a human-readable event_type for the audit log."""
+        key = (action.upper(), status.upper())
+        return {
+            ("PLACE", "PENDING"): "entry_attempt",
+            ("PLACE", "OK"):      "entry_success",
+            ("PLACE", "FAILED"):  "entry_failed",
+            ("PLACE", "BLOCKED"): "entry_failed",
+            ("SQ",    "PENDING"): "exit_attempt",
+            ("SQ",    "OK"):      "exit_success",
+            ("SQ",    "FAILED"):  "exit_failed",
+            ("SQ",    "BLOCKED"): "exit_failed",
+        }.get(key, action.lower())
+
     async def _log(
         self,
         db,
-        action:     str,
-        status:     str,
-        algo_tag:   str  = "",
-        algo_id:    str  = "",
-        order_id:   str  = "",
-        account_id: str  = "",
-        reason:     str  = "",
+        action:        str,
+        status:        str,
+        algo_tag:      str  = "",
+        algo_id:       str  = "",
+        order_id:      str  = "",
+        account_id:    str  = "",
+        reason:        str  = "",
+        event_type:    str  = "",
+        details:       dict = None,
+        is_practix:    bool = None,
+        grid_entry_id: str  = "",
     ) -> None:
         """
         Write one ExecutionLog row. Never raises — audit must not break execution.
@@ -102,14 +123,18 @@ class ExecutionManager:
                     return None
 
             log = ExecutionLog(
-                id         = _uuid.uuid4(),
-                algo_tag   = algo_tag   or None,
-                algo_id    = _to_uuid(algo_id),
-                order_id   = _to_uuid(order_id),
-                account_id = _to_uuid(account_id),
-                action     = action,
-                status     = status,
-                reason     = reason or None,
+                id            = _uuid.uuid4(),
+                algo_tag      = algo_tag        or None,
+                algo_id       = _to_uuid(algo_id),
+                order_id      = _to_uuid(order_id),
+                account_id    = _to_uuid(account_id),
+                grid_entry_id = _to_uuid(grid_entry_id),
+                action        = action,
+                status        = status,
+                reason        = reason          or None,
+                event_type    = event_type      or self._derive_event_type(action, status),
+                details       = details,
+                is_practix    = is_practix,
             )
             db.add(log)
             await db.flush()
@@ -239,16 +264,20 @@ class ExecutionManager:
         broker_type:     str  = "zerodha",
         symbol_token:    str  = "",
     ) -> Optional[str]:
+        _entry_details = {"symbol": symbol, "direction": direction, "qty": quantity,
+                          "ltp": ltp, "broker_type": broker_type, "is_practix": is_practix}
         await self._log(db, "PLACE", "PENDING",
                         algo_tag=algo_tag, algo_id=algo_id,
-                        account_id=account_id)
+                        account_id=account_id, is_practix=is_practix,
+                        details=_entry_details)
 
         # ── Risk gate ─────────────────────────────────────────────────────────
         block_reason = self._check_risk(algo_id, account_id, algo_tag, is_practix)
         if block_reason:
             await self._log(db, "PLACE", "BLOCKED",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id, reason=block_reason)
+                            account_id=account_id, reason=block_reason,
+                            is_practix=is_practix)
             logger.error(f"[EM] ORDER BLOCKED — {block_reason}")
             return None
 
@@ -257,7 +286,8 @@ class ExecutionManager:
         if loss_reason:
             await self._log(db, "PLACE", "BLOCKED",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id, reason=loss_reason)
+                            account_id=account_id, reason=loss_reason,
+                            is_practix=is_practix)
             logger.error(f"[EM] ORDER BLOCKED — {loss_reason}")
             return None
 
@@ -265,7 +295,8 @@ class ExecutionManager:
             reason = "OrderPlacer not wired"
             await self._log(db, "PLACE", "BLOCKED",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id, reason=reason)
+                            account_id=account_id, reason=reason,
+                            is_practix=is_practix)
             logger.error(f"[EM] {reason}")
             return None
 
@@ -296,12 +327,13 @@ class ExecutionManager:
         if result:
             await self._log(db, "PLACE", "OK",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id,
-                            reason=f"broker_order_id={result}")
+                            account_id=account_id, is_practix=is_practix,
+                            reason=f"broker_order_id={result}",
+                            details={**_entry_details, "broker_order_id": result})
         else:
             await self._log(db, "PLACE", "FAILED",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id)
+                            account_id=account_id, is_practix=is_practix)
 
         # P2.3 — trigger reconciliation pass immediately after placement
         try:
@@ -363,9 +395,12 @@ class ExecutionManager:
         broker_type:     str  = "zerodha",
         symbol_token:    str  = "",
     ) -> Optional[str]:
+        _sq_details = {"symbol": symbol, "direction": direction, "qty": quantity,
+                       "broker_type": broker_type, "is_practix": is_practix}
         await self._log(db, "SQ", "PENDING",
                         algo_tag=algo_tag, algo_id=algo_id,
-                        account_id=account_id)
+                        account_id=account_id, is_practix=is_practix,
+                        details=_sq_details)
 
         # Cancel rate guard
         try:
@@ -373,7 +408,8 @@ class ExecutionManager:
         except CancelRateExceeded as e:
             await self._log(db, "SQ", "BLOCKED",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id, reason=str(e))
+                            account_id=account_id, reason=str(e),
+                            is_practix=is_practix)
             logger.error(str(e))
             return None
 
@@ -381,7 +417,8 @@ class ExecutionManager:
             reason = "OrderPlacer not wired"
             await self._log(db, "SQ", "BLOCKED",
                             algo_tag=algo_tag, algo_id=algo_id,
-                            account_id=account_id, reason=reason)
+                            account_id=account_id, reason=reason,
+                            is_practix=is_practix)
             logger.error(f"[EM] {reason}")
             return None
 
@@ -404,11 +441,12 @@ class ExecutionManager:
             algo_tag        = algo_tag,
         )
 
-        status = "OK" if result else "FAILED"
-        await self._log(db, "SQ", status,
+        sq_status = "OK" if result else "FAILED"
+        await self._log(db, "SQ", sq_status,
                         algo_tag=algo_tag, algo_id=algo_id,
-                        account_id=account_id,
-                        reason=f"broker_order_id={result}" if result else "")
+                        account_id=account_id, is_practix=is_practix,
+                        reason=f"broker_order_id={result}" if result else "",
+                        details={**_sq_details, "broker_order_id": result or ""})
 
         # P2.3 — trigger reconciliation pass immediately after square-off
         try:

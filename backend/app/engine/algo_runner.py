@@ -260,6 +260,20 @@ class AlgoRunner:
                 logger.error(
                     f"[PRE-EXEC] BLOCKED {algo.name} leg {leg.leg_number}: {reason}"
                 )
+                # Write pre_check_failed to execution audit log
+                if self._execution_manager:
+                    await self._execution_manager._log(
+                        db            = db,
+                        action        = "PLACE",
+                        status        = "BLOCKED",
+                        algo_id       = str(algo.id),
+                        account_id    = str(algo.account_id) if algo.account_id else "",
+                        grid_entry_id = str(grid_entry.id),
+                        reason        = reason,
+                        event_type    = "pre_check_failed",
+                        is_practix    = grid_entry.is_practix,
+                        details       = {"leg": leg.leg_number, "check": reason},
+                    )
                 await self._set_error(db, algo_state, grid_entry, reason)
                 return
 
@@ -575,6 +589,7 @@ class AlgoRunner:
         # ── Place order via ExecutionManager (single control point) ───────────
         idempotency_key = f"{grid_entry.id}:{leg.id}:{algo_state.reentry_count}"
 
+        _placed_at = datetime.now(IST)
         if self._execution_manager:
             order_id_str = await self._execution_manager.place(
                 db              = db,
@@ -612,6 +627,9 @@ class AlgoRunner:
                 algo_tag        = algo_tag,
                 account_id      = str(algo.account_id),
             )
+
+        _filled_at  = datetime.now(IST)
+        _latency_ms = int((_filled_at - _placed_at).total_seconds() * 1000)
 
         if not order_id_str:
             logger.warning(f"Order blocked or duplicate: {idempotency_key}")
@@ -659,6 +677,11 @@ class AlgoRunner:
 
         # Instrument token — stored for LTP lookup at exit and reconciliation
         order.instrument_token = instrument_token
+
+        # Order latency — time from request to broker confirmation
+        order.placed_at  = _placed_at
+        order.filled_at  = _filled_at
+        order.latency_ms = _latency_ms
 
         # SL/TP stored on order for display
         order.sl_original = leg.sl_value

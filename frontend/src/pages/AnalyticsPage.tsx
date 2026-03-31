@@ -91,7 +91,7 @@ function SummaryCard({ label, value, sub, valueColor }: {
 }
 
 // ── Tab 1: Performance ─────────────────────────────────────────────────────────
-function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore, fy }: {
+function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore, fy, timeSlots }: {
   metrics: MetricRow[]
   breakdown: Record<string, Record<string, { pnl: number; trades: number }>>
   allOrders: Order[]
@@ -99,6 +99,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   scores: HealthScore[]
   avgScore: number
   fy: string
+  timeSlots: any[]
 }) {
   const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
 
@@ -256,7 +257,48 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         )}
       </div>
 
-      {/* Row 3 — Strategy Type Breakdown */}
+      {/* Row 3 — Best Time to Trade */}
+      {timeSlots.length > 0 && (() => {
+        const maxAbsPnl = Math.max(...timeSlots.map((s: any) => Math.abs(s.total_pnl)), 1)
+        return (
+          <div className="card" style={{ marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+              <span style={{ ...secHdr, marginBottom: 0 }}>Best Time to Trade</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: '4px' }}>FY {fy}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px' }}>
+              {timeSlots.map((slot: any) => {
+                const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 60))
+                const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
+                const bg    = slot.total_pnl >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'
+                const title = `${slot.label}\n${slot.trades} trades · ${slot.win_rate}% win\n${slot.total_pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(slot.total_pnl)).toLocaleString('en-IN')}`
+                return (
+                  <div key={slot.hour} title={title} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'help' }}>
+                    <div style={{ fontSize: '9px', fontWeight: 700, color, textAlign: 'center' }}>
+                      {slot.total_pnl !== 0 ? `${slot.total_pnl >= 0 ? '+' : ''}${Math.abs(slot.total_pnl) >= 1000 ? (slot.total_pnl / 1000).toFixed(1) + 'k' : Math.round(slot.total_pnl)}` : '—'}
+                    </div>
+                    <div style={{ width: '100%', height: `${barH}px`, background: bg, border: `1px solid ${color}`, borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {slot.hour}AM
+                    </div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-dim)', textAlign: 'center' }}>
+                      {slot.trades > 0 ? `${slot.win_rate}%` : '—'}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginTop: '10px', fontSize: '10px', color: 'var(--text-dim)' }}>
+              <span>Bar height = P&L magnitude</span>
+              <span style={{ color: 'var(--green)' }}>■ Profit</span>
+              <span style={{ color: 'var(--red)' }}>■ Loss</span>
+              <span>% = win rate · hover for details</span>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Row 4 — Strategy Type Breakdown */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <span style={{ ...secHdr, marginBottom: 0 }}>Strategy Type Breakdown</span>
@@ -446,6 +488,7 @@ export default function AnalyticsPage() {
   const [slippageData, setSlippageData] = useState<SlippageData | null>(null)
   const [healthScores, setHealthScores] = useState<HealthScore[]>([])
   const [healthAvg, setHealthAvg]     = useState(0)
+  const [timeSlots, setTimeSlots]     = useState<any[]>([])
   const [loading, setLoading]         = useState(true)
   const [fy, setFy]                   = useState('2025-26')
 
@@ -460,7 +503,8 @@ export default function AnalyticsPage() {
       reportsAPI.errors({ fy, is_practix: isPractixMode }),
       reportsAPI.slippage({ fy, is_practix: isPractixMode }),
       reportsAPI.healthScores({ fy, is_practix: isPractixMode }),
-    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes]) => {
+      reportsAPI.timeHeatmap({ fy, is_practix: isPractixMode }),
+    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes, tRes]) => {
       const rawMetrics: any[] = mRes.status === 'fulfilled'
         ? (Array.isArray(mRes.value.data) ? mRes.value.data : (mRes.value.data?.metrics || []))
         : []
@@ -494,6 +538,9 @@ export default function AnalyticsPage() {
       if (hRes.status === 'fulfilled') {
         setHealthScores(hRes.value.data?.scores || [])
         setHealthAvg(hRes.value.data?.avg_score || 0)
+      }
+      if (tRes.status === 'fulfilled') {
+        setTimeSlots(tRes.value.data?.slots || [])
       }
     }).finally(() => setLoading(false))
   }, [isPractixMode, fy])
@@ -538,7 +585,7 @@ export default function AnalyticsPage() {
         <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>Loading…</div>
       ) : (
         <>
-          {activeTab === 'Performance' && <PerformanceTab metrics={metrics} breakdown={breakdown} allOrders={allOrders} algos={algos} scores={healthScores} avgScore={healthAvg} fy={fy} />}
+          {activeTab === 'Performance' && <PerformanceTab metrics={metrics} breakdown={breakdown} allOrders={allOrders} algos={algos} scores={healthScores} avgScore={healthAvg} fy={fy} timeSlots={timeSlots} />}
           {activeTab === 'Failures'    && <FailuresTab data={errorsData} />}
           {activeTab === 'Slippage'    && <SlippageTab data={slippageData} />}
         </>

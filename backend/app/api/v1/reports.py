@@ -470,6 +470,56 @@ async def all_orders(
     ]
     return {"orders": orders, "total": len(orders), "fy": fy}
 
+@router.get("/time-heatmap")
+async def time_heatmap(
+    db:         AsyncSession = Depends(get_db),
+    fy:         str          = Query("2025-26"),
+    account_id: str | None   = Query(None),
+    is_practix: bool | None  = Query(None),
+):
+    """
+    Group closed orders by IST entry hour (9–14).
+    Returns trade count, total P&L, and win rate per hour slot.
+    Used by Analytics → Best Time to Trade section.
+    """
+    conditions = _base_query(fy, account_id, is_practix)
+    result = await db.execute(
+        select(Order).where(*conditions)
+    )
+    orders = result.scalars().all()
+
+    # Bucket orders by IST entry hour
+    from collections import defaultdict
+    buckets: dict = defaultdict(lambda: {"trades": 0, "wins": 0, "total_pnl": 0.0})
+    for o in orders:
+        if not o.fill_time:
+            continue
+        ist_hour = o.fill_time.astimezone(IST).hour
+        if ist_hour < 9 or ist_hour > 14:
+            continue
+        b = buckets[ist_hour]
+        b["trades"]    += 1
+        b["total_pnl"] += float(o.pnl or 0)
+        if (o.pnl or 0) > 0:
+            b["wins"] += 1
+
+    HOUR_LABELS = {9: "9–10 AM", 10: "10–11 AM", 11: "11 AM–12 PM",
+                   12: "12–1 PM", 13: "1–2 PM",  14: "2–3 PM"}
+    slots = []
+    for hour in range(9, 15):
+        b = buckets[hour]
+        trades = b["trades"]
+        slots.append({
+            "hour":      hour,
+            "label":     HOUR_LABELS[hour],
+            "trades":    trades,
+            "total_pnl": round(b["total_pnl"], 2),
+            "win_rate":  round(b["wins"] / trades * 100, 1) if trades > 0 else 0.0,
+        })
+
+    return {"slots": slots, "fy": fy}
+
+
 @router.get("/download")
 async def download_trades(
     db: AsyncSession = Depends(get_db),

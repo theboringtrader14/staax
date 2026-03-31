@@ -309,7 +309,7 @@ export default function ReportsPage(){
       </div>
 
       {/* Per-Algo Metrics */}
-      <div className="card" style={{padding:0}}>
+      <div className="card" style={{padding:0, overflow:'hidden'}}>
         <div style={{padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Per-Algo Metrics</div>

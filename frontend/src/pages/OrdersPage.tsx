@@ -113,8 +113,8 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
     </tr>
     {leg.status === 'error' && leg.errorMessage && (
       <tr>
-        <td colSpan={COLS.length} style={{ padding: '3px 10px 5px 26px', background: 'rgba(239,68,68,0.08)', borderLeft: '2px solid #EF4444', borderBottom: '1px solid var(--bg-border)', fontSize: '10px', color: 'var(--red)' }}>
-          ⚠ {leg.errorMessage}
+        <td colSpan={COLS.length} title={leg.errorMessage} style={{ padding: '3px 10px 5px 26px', background: 'rgba(239,68,68,0.08)', borderLeft: '2px solid #EF4444', borderBottom: '1px solid var(--bg-border)', fontSize: '10px', color: 'var(--red)', fontStyle: 'italic', cursor: 'help' }}>
+          ⚠ {leg.errorMessage.length > 80 ? leg.errorMessage.slice(0, 80) + '…' : leg.errorMessage}
         </td>
       </tr>
     )}
@@ -670,10 +670,13 @@ export default function OrdersPage() {
 
             {/* Error badge — one or more legs failed */}
             {!group.terminated && group.legs.some(l => l.status === 'error') && (() => {
-              const errCount = group.legs.filter(l => l.status === 'error').length
+              const errLegs  = group.legs.filter(l => l.status === 'error')
+              const errCount = errLegs.length
+              const firstMsg = errLegs[0]?.errorMessage
+              const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
               return (
-                <span style={{ fontSize: '10px', fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 8px', borderRadius: '4px' }}>
-                  ⚠ {errCount} LEG{errCount > 1 ? 'S' : ''} FAILED
+                <span title={firstMsg || undefined} style={{ fontSize: '10px', fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 8px', borderRadius: '4px', cursor: firstMsg ? 'help' : 'default' }}>
+                  ⚠ {errCount} LEG{errCount > 1 ? 'S' : ''} FAILED{shortMsg}
                 </span>
               )
             })()}
@@ -724,6 +727,28 @@ export default function OrdersPage() {
                   {btn.label}
                 </button>
               ))}
+              {/* P&L Sparkline — show for fully-closed groups with fill + exit prices */}
+              {(() => {
+                const closedLegs = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
+                if (closedLegs.length === 0 || group.legs.some(l => l.status === 'open' || l.status === 'pending')) return null
+                // Build sparkline: one point per closed leg (entry → exit)
+                const pts = closedLegs.flatMap(l => [l.fillPrice!, l.exitPrice!])
+                const minP = Math.min(...pts), maxP = Math.max(...pts)
+                const range = maxP - minP || 1
+                const W = 60, H = 20, PAD = 2
+                const toX = (i: number) => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
+                const toY = (v: number) => H - PAD - ((v - minP) / range) * (H - PAD * 2)
+                const totalPnl = closedLegs.reduce((s, l) => s + (l.pnl ?? 0), 0)
+                const lineColor = totalPnl >= 0 ? '#22C55E' : '#EF4444'
+                const pathD = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
+                return (
+                  <svg width={W} height={H} style={{ flexShrink: 0, opacity: 0.9 }}>
+                    <title>{`P&L: ${totalPnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(totalPnl)).toLocaleString('en-IN')}`}</title>
+                    <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+                    <circle cx={toX(pts.length - 1).toFixed(1)} cy={toY(pts[pts.length - 1]).toFixed(1)} r="2.5" fill={lineColor} />
+                  </svg>
+                )
+              })()}
               <span style={{ minWidth: '90px', textAlign: 'right', fontWeight: 700, fontSize: '14px', marginLeft: '6px', color: group.mtm !== 0 ? (group.mtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent', opacity: group.terminated ? 0.6 : 1 }}>
                 {group.mtm !== 0 ? `${group.mtm >= 0 ? '+' : ''}₹${group.mtm.toLocaleString('en-IN')}` : ''}
               </span>
