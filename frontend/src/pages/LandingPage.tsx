@@ -1,3 +1,4 @@
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { useEffect } from 'react'
@@ -400,7 +401,7 @@ export default function LandingPage() {
           display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: '16px',
         }}>
           {STATS.map((stat, i) => (
-            <>
+            <div key={i} style={{display:"contents"}}>
               {i > 0 && <div key={`div-${i}`} style={{ width: '1px', height: '40px', background: 'rgba(99,102,241,0.15)', alignSelf: 'center' }} />}
               <div key={stat.label} style={{ textAlign: 'center' }}>
                 <div style={{
@@ -415,7 +416,7 @@ export default function LandingPage() {
                   {stat.label.toUpperCase()}
                 </div>
               </div>
-            </>
+            </div>
           ))}
         </div>
       </div>
