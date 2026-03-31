@@ -2,7 +2,6 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useStore } from '../../store'
 
-// TradingView chart links for each index (opens in new tab on click)
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 const iconSize = 18
 
@@ -55,8 +54,6 @@ const IconCandlestick = () => (
     <line x1="19" y1="15" x2="19" y2="19"/>
   </svg>
 )
-
-
 const IconPlus = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -70,13 +67,10 @@ const IconBarChart = () => (
   </svg>
 )
 
-
-
-// P2-A — nav order: Indicator Bots after Orders
 const nav = [
   { path: '/dashboard',  label: 'Dashboard',      Icon: IconHome        },
   { path: '/grid',       label: 'Smart Grid',      Icon: IconGrid        },
-  { path: '/algo/new', label: 'New Algo', Icon: IconPlus },
+  { path: '/algo/new',   label: 'New Algo',        Icon: IconPlus        },
   { path: '/orders',     label: 'Orders',          Icon: IconList        },
   { path: '/indicators', label: 'Indicator Bots',  Icon: IconCandlestick },
   { path: '/reports',    label: 'Reports',         Icon: IconChart       },
@@ -84,19 +78,9 @@ const nav = [
   { path: '/accounts',   label: 'Accounts',        Icon: IconUser        },
 ]
 
-function StaaxLogo({ size = 32 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" fill="rgba(0,176,240,0.15)" stroke="#00B0F0" strokeWidth="1.2"/>
-      <polyline points="11,12 16,10 21,12 11,20 16,22 21,20" fill="none" stroke="#00B0F0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
   const logout = useStore((s: any) => s.logout)
-  // P0-A — dirty-nav guard state
   const [pendingPath, setPendingPath] = useState<string | null>(null)
   const navigate = useNavigate()
   const toggle = (v: boolean) => { setCollapsed(v); localStorage.setItem('sidebar_collapsed', String(v)) }
@@ -114,7 +98,6 @@ export default function Sidebar() {
   }, [])
   const W = collapsed ? '56px' : '216px'
 
-  // P0-A — intercept NavLink click when AlgoPage has unsaved changes
   const handleNavClick = (e: React.MouseEvent, to: string) => {
     if ((window as any).__staaxDirty) {
       e.preventDefault()
@@ -126,8 +109,10 @@ export default function Sidebar() {
     <>
       <nav style={{
         width: W, minWidth: W,
-        background: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--bg-border)',
+        background: 'rgba(5,5,16,0.95)',
+        borderRight: '1px solid rgba(99,102,241,0.15)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         display: 'flex', flexDirection: 'column',
         transition: 'width 0.18s ease, min-width 0.18s ease',
         overflow: 'hidden',
@@ -138,22 +123,33 @@ export default function Sidebar() {
           height: '52px', display: 'flex', alignItems: 'center',
           padding: collapsed ? '0' : '0 14px',
           justifyContent: collapsed ? 'center' : 'space-between',
-          borderBottom: '1px solid var(--bg-border)',
+          borderBottom: '1px solid rgba(99,102,241,0.12)',
           flexShrink: 0, cursor: 'pointer', userSelect: 'none',
         }}>
           {!collapsed && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <StaaxLogo size={28} />
+              {/* LIFEX logo mark */}
+              <div style={{ width: 28, height: 28, borderRadius: '7px', background: 'linear-gradient(135deg, #6366f1, #a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 12px rgba(99,102,241,0.5)' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#fff', fontFamily: 'monospace', letterSpacing: '-0.5px' }}>LX</span>
+              </div>
               <div style={{ opacity: 1, transition: 'opacity 0.15s ease', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                <div style={{ fontFamily:"'ADLaM Display', serif", fontSize: '20px', color: 'var(--accent-blue)', letterSpacing: '0.05em', lineHeight: 1 }}>STAAX</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-dim)', marginTop: '1px', letterSpacing: '0.14em' }}>ALGO TRADING</div>
+                <div style={{
+                  fontFamily: "'ADLaM Display', serif", fontSize: '17px', letterSpacing: '0.08em', lineHeight: 1,
+                  background: 'linear-gradient(135deg, #fff 0%, #a78bfa 55%, #38bdf8 100%)',
+                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                }}>STAAX</div>
+                <div style={{ fontSize: '8px', color: 'rgba(99,102,241,0.7)', marginTop: '1px', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600 }}>LIFEX MODULE</div>
               </div>
             </div>
           )}
-          {collapsed && <StaaxLogo size={28} />}
+          {collapsed && (
+            <div style={{ width: 28, height: 28, borderRadius: '7px', background: 'linear-gradient(135deg, #6366f1, #a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 12px rgba(99,102,241,0.4)' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#fff', fontFamily: 'monospace' }}>LX</span>
+            </div>
+          )}
         </div>
 
-        {/* Nav links — P0-A: onClick intercepts when dirty */}
+        {/* Nav links */}
         <div style={{ flex: 1, paddingTop: '6px' }}>
           {nav.map(({ path, label, Icon }) => (
             <NavLink key={path} to={path} title={collapsed ? label : undefined}
@@ -161,18 +157,20 @@ export default function Sidebar() {
               style={({ isActive }) => ({
                 display: 'flex', alignItems: 'center',
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                padding: '10px 0',
+                padding: '9px 0',
                 textDecoration: 'none',
-                color: isActive ? 'var(--accent-blue)' : path === '/algo/new' ? '#D77B12' : 'var(--text-muted)',
-                background: isActive ? 'rgba(0,176,240,0.08)' : 'transparent',
-                borderLeft: isActive && !collapsed ? '2px solid var(--accent-blue)' : '2px solid transparent',
-                fontSize: '13px', transition: 'all 0.12s',
+                color: isActive ? '#a78bfa' : path === '/algo/new' ? '#f59e0b' : 'rgba(232,232,248,0.4)',
+                background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
+                borderLeft: isActive && !collapsed ? '3px solid #6366f1' : '3px solid transparent',
+                paddingLeft: isActive && !collapsed ? 'calc(0px)' : undefined,
+                fontSize: '13px', transition: 'all 0.2s ease',
                 fontWeight: isActive ? '600' : '400', whiteSpace: 'nowrap',
+                position: 'relative',
               })}>
               <span style={{ width: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
                 <Icon />
                 {path === '/indicators' && hasBotActivity && (
-                  <span style={{ position: 'absolute', top: '-2px', right: '6px', width: '7px', height: '7px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite' }} />
+                  <span style={{ position: 'absolute', top: '-2px', right: '6px', width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981', animation: 'pulse 1.5s infinite' }} />
                 )}
               </span>
               <span style={{ paddingRight: collapsed ? 0 : '16px', maxWidth: collapsed ? 0 : '200px', opacity: collapsed ? 0 : 1, transition: 'opacity 0.15s ease, max-width 0.18s ease, padding 0.18s ease', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }}>
@@ -183,18 +181,24 @@ export default function Sidebar() {
         </div>
 
         {/* Footer */}
-        <div style={{ borderTop: '1px solid var(--bg-border)' }}>
+        <div style={{ borderTop: '1px solid rgba(99,102,241,0.12)' }}>
+          {/* Module badge */}
+          {!collapsed && (
+            <div style={{ padding: '8px 20px 4px', fontSize: '8px', color: 'rgba(99,102,241,0.5)', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700 }}>
+              STAAX · v0.1.0 · Phase 1F
+            </div>
+          )}
           {/* Logout */}
           <button onClick={logout} title="Logout" style={{
             width: '100%', display: 'flex', alignItems: 'center',
             justifyContent: collapsed ? 'center' : 'flex-start',
-            gap: '10px', padding: collapsed ? '10px 0' : '10px 20px',
+            gap: '10px', padding: collapsed ? '10px 0' : '8px 20px',
             background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', fontSize: '13px', fontWeight: 500,
-            transition: 'all 0.15s',
+            color: 'rgba(232,232,248,0.35)', fontSize: '13px', fontWeight: 500,
+            transition: 'all 0.2s ease',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#EF4444'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.06)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.06)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(232,232,248,0.35)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -203,8 +207,6 @@ export default function Sidebar() {
             </svg>
             {!collapsed && <span>Logout</span>}
           </button>
-          {/* Version */}
-          <div style={{ padding: collapsed ? '6px 0' : '4px 20px 8px', fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.05em', opacity: collapsed ? 0 : 1, transition: 'opacity 0.12s', whiteSpace: 'nowrap', overflow: 'hidden' }}>v0.1.0 · Phase 1F</div>
         </div>
       </nav>
 

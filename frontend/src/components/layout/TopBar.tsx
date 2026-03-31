@@ -14,9 +14,7 @@ export default function TopBar() {
   const activeAccount     = useStore(s => s.activeAccount)
   const setActiveAccount  = useStore(s => s.setActiveAccount)
 
-  // Guard: ensure accounts is always a plain array regardless of what the API returned
   const accounts = Array.isArray(rawAccounts) ? rawAccounts : []
-
   const [time, setTime] = useState(new Date())
 
   useEffect(() => {
@@ -24,15 +22,12 @@ export default function TopBar() {
     return () => clearInterval(t)
   }, [])
 
-
-
-  // Poll /system/stats every 5s for live MTM — supplements WebSocket
+  // Poll /system/stats every 5s for live MTM
   useEffect(() => {
     const poll = () => {
       systemAPI.stats()
         .then(res => {
           const mtm = res.data?.mtm_total ?? res.data?.today_pnl ?? 0
-          console.log('[TopBar] stats poll:', mtm)
           if (typeof mtm === 'number') setLivePnl(mtm)
         })
         .catch(() => {})
@@ -53,36 +48,60 @@ export default function TopBar() {
 
   const location = useLocation()
   const accountDropdownActive = ['/grid', '/orders', '/reports'].some(p => location.pathname.startsWith(p))
-  // Options: { id: UUID | null, label: nickname }. Store UUID as activeAccount so pages can pass to backend.
   const accountOptions: { id: string | null; label: string }[] = [
     { id: null, label: 'All Accounts' },
     ...accounts.map((a: any) => ({ id: String(a.id), label: a.nickname || a.name || String(a.id) })),
   ]
   const selectedLabel = accountOptions.find(o => o.id === activeAccount)?.label ?? 'All Accounts'
 
+  const pnlPositive = livePnl >= 0
+  const pnlColor    = pnlPositive ? '#10b981' : '#ef4444'
+  const pnlGlow     = pnlPositive
+    ? '0 0 12px rgba(16,185,129,0.5)'
+    : '0 0 12px rgba(239,68,68,0.5)'
+
   return (
     <>
       <header style={{
         height: '52px', minHeight: '52px',
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--bg-border)',
+        background: 'rgba(5,5,16,0.92)',
+        borderBottom: '1px solid rgba(99,102,241,0.15)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 24px', gap: '16px',
+        position: 'sticky', top: 0, zIndex: 50,
       }}>
-        {/* Left */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-            Welcome, <span style={{ color: 'var(--text)', fontWeight: 600 }}>Karthikeyan</span>
+        {/* Left — welcome + time + P&L */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <span style={{ color: 'rgba(232,232,248,0.4)', fontSize: '12px' }}>
+            Welcome, <span style={{ color: '#e8e8f8', fontWeight: 600 }}>Karthikeyan</span>
           </span>
-          <span style={{ color: 'var(--bg-border)' }}>|</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>IST {timeStr}</span>
-          <span style={{ color: 'var(--bg-border)' }}>|</span>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: livePnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+
+          <span style={{ width: '1px', height: '16px', background: 'rgba(99,102,241,0.2)' }} />
+
+          <span style={{
+            fontSize: '12px', fontFamily: "'DM Mono', monospace",
+            color: '#6366f1', letterSpacing: '0.04em',
+          }}>
+            IST {timeStr}
+          </span>
+
+          <span style={{ width: '1px', height: '16px', background: 'rgba(99,102,241,0.2)' }} />
+
+          {/* Live P&L with glow */}
+          <span style={{
+            fontSize: '14px', fontWeight: 700,
+            color: pnlColor,
+            textShadow: pnlGlow,
+            fontFamily: "'DM Mono', monospace",
+            letterSpacing: '-0.01em',
+            transition: 'color 0.3s ease, text-shadow 0.3s ease',
+          }}>
             {livePnl >= 0 ? '+' : ''}₹{livePnl.toLocaleString('en-IN')}
           </span>
         </div>
-
 
         {/* Middle — TradingView Ticker Tape */}
         <div style={{ flex: 1, maxWidth: '600px', overflow: 'hidden', height: '36px' }}>
@@ -111,7 +130,6 @@ export default function TopBar() {
           </div>
         </div>
 
-
         {/* Right */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <select
@@ -128,41 +146,46 @@ export default function TopBar() {
             {accountOptions.map(o => <option key={o.id ?? 'all'}>{o.label}</option>)}
           </select>
 
+          {/* PRACTIX / LIVE pill */}
           <button onClick={() => setIsPractixMode(!isPractixMode)} style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
+            display: 'flex', alignItems: 'center', gap: '7px',
             height: 'var(--btn-h)',
-            background:  isPractixMode ? 'rgba(215,123,18,0.12)' : 'rgba(34,197,94,0.12)',
-            border: `1px solid ${isPractixMode ? 'rgba(215,123,18,0.4)' : 'rgba(34,197,94,0.4)'}`,
-            borderRadius: '5px', padding: '0 12px',
-            color: isPractixMode ? 'var(--accent-amber)' : 'var(--green)',
+            background: isPractixMode ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+            border: `1px solid ${isPractixMode ? 'rgba(245,158,11,0.35)' : 'rgba(239,68,68,0.35)'}`,
+            borderRadius: '20px', padding: '0 14px',
+            color: isPractixMode ? '#f59e0b' : '#ef4444',
             fontSize: '11px', fontWeight: '700', letterSpacing: '0.08em', cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: isPractixMode ? '0 0 10px rgba(245,158,11,0.2)' : '0 0 10px rgba(239,68,68,0.2)',
           }}>
             <span style={{
-              width: '6px', height: '6px', borderRadius: '50%',
-              background: isPractixMode ? 'var(--accent-amber)' : 'var(--green)',
-              boxShadow: isPractixMode ? '0 0 6px var(--accent-amber)' : '0 0 6px var(--green)',
+              width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+              background: isPractixMode ? '#f59e0b' : '#ef4444',
+              boxShadow: isPractixMode
+                ? '0 0 6px #f59e0b, 0 0 12px #f59e0b'
+                : '0 0 6px #ef4444, 0 0 12px #ef4444',
+              animation: !isPractixMode ? 'glowPulse 1.5s infinite' : 'none',
             }} />
             {isPractixMode ? 'PRACTIX' : 'LIVE'}
           </button>
 
+          {/* Theme toggle */}
           <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             style={{
-              background: 'transparent', border: '1px solid var(--bg-border)',
-              borderRadius: '5px', height: 'var(--btn-h)', width: 'var(--btn-h)',
-              cursor: 'pointer', color: 'var(--text-dim)', fontSize: '14px',
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(99,102,241,0.2)',
+              borderRadius: '6px', height: 'var(--btn-h)', width: 'var(--btn-h)',
+              cursor: 'pointer', color: 'rgba(232,232,248,0.4)', fontSize: '14px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.15s',
+              transition: 'all 0.2s ease',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-surface)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a78bfa'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(99,102,241,0.5)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(99,102,241,0.08)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(232,232,248,0.4)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(99,102,241,0.2)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)' }}
           >
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{theme === 'dark' ? '☀' : '☾'}</span>
+            <span style={{ fontSize: '13px' }}>{theme === 'dark' ? '☀' : '☾'}</span>
           </button>
-
-
         </div>
       </header>
-
     </>
   )
 }

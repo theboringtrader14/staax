@@ -40,8 +40,8 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
   const handleClick=()=>{ if(!isFutureMonth&&hasRealData) onToggle() }
   return(
     <div onClick={handleClick} style={{
-      background:selected?'rgba(0,176,240,0.08)':'var(--bg-secondary)',
-      border:`1px solid ${selected?'var(--accent-blue)':'var(--bg-border)'}`,
+      background:selected?'rgba(99,102,241,0.08)':'var(--bg-secondary)',
+      border:`1px solid ${selected?'var(--indigo)':'var(--bg-border)'}`,
       borderRadius:'8px',padding:'10px 10px 12px',
       cursor:isFutureMonth||!hasRealData?'default':'pointer',
       transition:'all 0.12s',height:`${CARD_H}px`,
@@ -49,7 +49,7 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
       opacity:isFutureMonth?0.35:1,
     }}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'4px',flexShrink:0}}>
-        <span style={{fontSize:'11px',fontWeight:700,letterSpacing:'0.06em',color:selected?'var(--accent-blue)':'var(--text)'}}>{label.toUpperCase()}</span>
+        <span style={{fontSize:'11px',fontWeight:700,letterSpacing:'0.06em',color:selected?'var(--indigo)':'var(--text)'}}>{label.toUpperCase()}</span>
         {hasRealData&&<span style={{fontSize:'10px',fontWeight:700,color:monthPnl>=0?'var(--green)':'var(--red)'}}>{monthPnl>=0?'+':''}{(monthPnl/1000).toFixed(1)}k</span>}
       </div>
       {hasRealData&&total>0&&<div style={{height:'3px',borderRadius:'2px',background:'var(--bg-border)',marginBottom:'6px',overflow:'hidden',display:'flex',flexShrink:0}}><div style={{width:`${(winDays/total)*100}%`,height:'100%',background:'var(--green)'}}/><div style={{width:`${(lossDays/total)*100}%`,height:'100%',background:'var(--red)'}}/></div>}
@@ -83,8 +83,8 @@ function MonthDetail({month,year,label,calendarData}:{month:number,year:number,l
   const tradingDays=Array.from({length:new Date(year,month,0).getDate()},(_,i)=>i+1).filter(d=>{const dow=new Date(year,month-1,d).getDay();return dow!==0&&dow!==6})
   const padded=[...Array(offset).fill(null),...tradingDays]
   return(
-    <div style={{background:'var(--bg-secondary)',border:'1px solid var(--accent-blue)',borderRadius:'8px',padding:'16px',marginTop:'12px'}}>
-      <div style={{fontSize:'12px',fontWeight:700,color:'var(--accent-blue)',marginBottom:'14px'}}>{label} {year} — Day View</div>
+    <div style={{background:'var(--bg-secondary)',border:'1px solid var(--indigo)',borderRadius:'8px',padding:'16px',marginTop:'12px'}}>
+      <div style={{fontSize:'12px',fontWeight:700,color:'var(--indigo)',marginBottom:'14px'}}>{label} {year} — Day View</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px',marginBottom:'4px'}}>
         {['Mon','Tue','Wed','Thu','Fri'].map(d=><div key={d} style={{textAlign:'center',fontSize:'10px',color:'var(--text-dim)',fontWeight:600}}>{d}</div>)}
       </div>
@@ -214,8 +214,8 @@ export default function ReportsPage(){
       {/* Top widgets — 4 columns: FY P&L (wider), Trades, Win Rate, Day P&L */}
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr',gap:'12px',marginBottom:'12px'}}>
         {/* FY P&L */}
-        <div className="card" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden'}} onClick={()=>setChartModal(true)}>
-          <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'4px'}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--accent-blue)'}}>↗</span></div>
+        <div className="card" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #10b981'}} onClick={()=>setChartModal(true)}>
+          <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'4px'}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--indigo)'}}>↗</span></div>
           <div style={{display:'flex',alignItems:'flex-end',gap:'12px'}}>
             <div>
               <div style={{fontSize:'22px',fontWeight:700,color:totalPnl>=0?'var(--green)':'var(--red)',letterSpacing:'-0.02em'}}>
@@ -225,21 +225,21 @@ export default function ReportsPage(){
             </div>
             <div style={{flex:1,height:'36px'}}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={equityCurve}><Line type="monotone" dataKey="cumulative" stroke="#00B0F0" strokeWidth={2} dot={false}/></LineChart>
+                <LineChart data={equityCurve}><Line type="monotone" dataKey="cumulative" stroke="#10b981" strokeWidth={2} dot={false}/></LineChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
 
         {/* Total Trades */}
-        <div className="card" style={{maxHeight:'127px', overflow:'hidden'}}>
+        <div className="card" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #6366f1'}}>
           <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px'}}>Total Trades</div>
-          <div style={{fontSize:'26px',fontWeight:700,color:'var(--accent-blue)',lineHeight:1}}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
+          <div style={{fontSize:'26px',fontWeight:700,color:'var(--indigo)',lineHeight:1}}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
           <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{algoMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
-        <div className="card" style={{maxHeight:'127px', overflow:'hidden'}}>
+        <div className="card" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #a78bfa'}}>
           <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px'}}>Win Rate</div>
           <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)>0?'var(--green)':'var(--text-muted)'}}>
             {algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)>0?(algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)/algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)*100).toFixed(1)+'%':'—'}
@@ -284,7 +284,7 @@ export default function ReportsPage(){
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
                   <XAxis dataKey="month" tick={{fill:'var(--text-muted)',fontSize:11}}/>
                   <YAxis tick={{fill:'var(--text-muted)',fontSize:11}} tickFormatter={v=>`₹${(v/1000).toFixed(0)}k`}/>
-                  <Tooltip formatter={(v:any)=>[`₹${v.toLocaleString('en-IN')}`,'Cumulative P&L']} contentStyle={{background:'var(--bg-surface)',border:'1px solid var(--bg-border)',borderRadius:'6px'}} labelStyle={{color:'var(--text-muted)'}} itemStyle={{color:'var(--accent-blue)'}}/>
+                  <Tooltip formatter={(v:any)=>[`₹${v.toLocaleString('en-IN')}`,'Cumulative P&L']} contentStyle={{background:'var(--bg-surface)',border:'1px solid var(--bg-border)',borderRadius:'6px'}} labelStyle={{color:'var(--text-muted)'}} itemStyle={{color:'var(--indigo)'}}/>
                   <Line type="monotone" dataKey="cumulative" stroke="#00B0F0" strokeWidth={2.5} dot={{fill:'#00B0F0',r:3}}/>
                 </LineChart>
               </ResponsiveContainer>
@@ -313,7 +313,7 @@ export default function ReportsPage(){
         <div style={{padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Per-Algo Metrics</div>
-            <span style={{fontSize:'11px',color:'var(--accent-blue)',background:'rgba(0,176,240,0.1)',padding:'2px 8px',borderRadius:'4px',fontWeight:600}}>{activePeriodLabel}</span>
+            <span style={{fontSize:'11px',color:'var(--indigo)',background:'rgba(99,102,241,0.12)',padding:'2px 8px',borderRadius:'4px',fontWeight:600}}>{activePeriodLabel}</span>
           </div>
           <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
             {[['fy','FY'],['month','Month'],['date','Date'],['custom','Custom']].map(([v,l])=>(
@@ -340,9 +340,9 @@ export default function ReportsPage(){
           <table className="staax-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%'}}>
             <thead>
               <tr>
-                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Key Metrics</th>
+                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'#0a0a1a',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Key Metrics</th>
                 {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px'}}>{a.name}</th>)}
-                <th style={{color:'var(--accent-blue)',position:'sticky',right:0,zIndex:2,background:'var(--bg-secondary)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Cumulative</th>
+                <th style={{color:'var(--indigo)',position:'sticky',right:0,zIndex:2,background:'#0a0a1a',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Cumulative</th>
               </tr>
             </thead>
             <tbody>
@@ -354,9 +354,9 @@ export default function ReportsPage(){
                 const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
                 return(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'var(--bg-secondary)',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'#0a0a1a',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
                     {algoMetrics.map((a:any)=><td key={a.algo_id} style={{color:(a as any)[row.key]<0?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px'}}>{fmt((a as any)[row.key])}</td>)}
-                    <td style={{color:'var(--accent-blue)',fontWeight:700,position:'sticky',right:0,background:'var(--bg-secondary)',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
+                    <td style={{color:'var(--indigo)',fontWeight:700,position:'sticky',right:0,background:'#0a0a1a',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
                   </tr>
                 )
               })}

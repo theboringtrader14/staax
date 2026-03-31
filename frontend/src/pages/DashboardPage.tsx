@@ -13,19 +13,19 @@ const INIT_SERVICES: Service[] = [
 ]
 
 const STATUS_COLOR: Record<ServiceStatus, string> = {
-  running: 'var(--green)', stopped: 'var(--text-dim)',
-  starting: 'var(--accent-amber)', stopping: 'var(--accent-amber)',
+  running: '#10b981', stopped: 'rgba(232,232,248,0.25)',
+  starting: '#f59e0b', stopping: '#f59e0b',
 }
 const STATUS_BG: Record<ServiceStatus, string> = {
-  running: 'rgba(34,197,94,0.12)', stopped: 'rgba(107,114,128,0.08)',
-  starting: 'rgba(245,158,11,0.12)', stopping: 'rgba(245,158,11,0.12)',
+  running: 'rgba(16,185,129,0.08)', stopped: 'rgba(255,255,255,0.02)',
+  starting: 'rgba(245,158,11,0.08)', stopping: 'rgba(245,158,11,0.08)',
 }
 
 const STAT_DEFS = [
-  { label: 'Active Algos',   key: 'active_algos',   color: 'var(--accent-blue)', format: (v: number) => String(v) },
-  { label: 'Open Positions', key: 'open_positions',  color: 'var(--green)',       format: (v: number) => String(v) },
-  { label: 'Today P&L',      key: 'today_pnl',       color: 'var(--green)',       format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
-  { label: 'FY P&L',         key: 'fy_pnl',          color: 'var(--green)',       format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+  { label: 'Active Algos',   key: 'active_algos',   accent: '#6366f1', format: (v: number) => String(v) },
+  { label: 'Open Positions', key: 'open_positions',  accent: '#10b981', format: (v: number) => String(v) },
+  { label: 'Today P&L',      key: 'today_pnl',       accent: '#10b981', format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+  { label: 'FY P&L',         key: 'fy_pnl',          accent: '#a78bfa', format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
 ]
 
 /** Returns true if current IST time is past 09:00 */
@@ -438,12 +438,13 @@ export default function DashboardPage() {
           { key: 'scheduler',        label: 'Scheduler running' },
         ]
 
-        const headerColor  = allReady ? 'var(--green)' : 'var(--accent-amber)'
-        const headerBg     = allReady ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)'
-        const headerBorder = allReady ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.3)'
+        const headerColor  = allReady ? '#10b981' : '#f59e0b'
+        const headerBg     = allReady ? 'rgba(16,185,129,0.06)' : 'rgba(245,158,11,0.06)'
+        const headerBorder = allReady ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.3)'
+        const headerGlow   = allReady ? '0 0 20px rgba(16,185,129,0.15)' : '0 0 20px rgba(245,158,11,0.1)'
 
         return (
-          <div style={{ background: headerBg, border: `1px solid ${headerBorder}`, borderRadius: '8px', marginBottom: '12px' }}>
+          <div style={{ background: headerBg, border: `1px solid ${headerBorder}`, borderRadius: '10px', marginBottom: '12px', backdropFilter: 'blur(20px)', boxShadow: headerGlow }}>
             {/* Header row */}
             <div
               onClick={() => setHealthCollapsed(p => !p)}
@@ -473,7 +474,7 @@ export default function DashboardPage() {
                   const v = c[key]
                   const ok = typeof v === 'object' ? v?.ok === true : false
                   return (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: ok ? 'var(--green)' : 'var(--red)' }}>
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: ok ? '#10b981' : '#ef4444' }}>
                       <span>{ok ? '✅' : '❌'}</span>
                       <span>{label}</span>
                       {typeof v === 'object' && v?.latency_ms !== undefined && (
@@ -492,13 +493,20 @@ export default function DashboardPage() {
         {STAT_DEFS.map(s => {
           const raw = stats[s.key]
           const display = raw != null ? s.format(raw) : '—'
-          const color = (s.key === 'today_pnl' || s.key === 'fy_pnl') && raw != null
-            ? (raw >= 0 ? 'var(--green)' : 'var(--red)')
-            : s.color
+          const isPnl = s.key === 'today_pnl' || s.key === 'fy_pnl'
+          const color = isPnl && raw != null ? (raw >= 0 ? '#10b981' : '#ef4444') : s.accent
+          const glow  = isPnl && raw != null ? (raw >= 0 ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)') : `${s.accent}66`
           return (
-            <div key={s.label} className="card">
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{s.label}</div>
-              <div style={{ fontSize: '20px', fontWeight: 700, color }}>{display}</div>
+            <div key={s.label} className="card" style={{ borderTop: `2px solid ${color}`, paddingTop: '14px', position: 'relative', overflow: 'hidden' }}>
+              {/* faint accent glow in bg */}
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '40px', background: `linear-gradient(to bottom, ${color}0a, transparent)`, pointerEvents: 'none' }} />
+              <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', fontWeight: 600 }}>{s.label}</div>
+              <div style={{
+                fontSize: '24px', fontWeight: 700, color,
+                textShadow: `0 0 16px ${glow}`,
+                fontFamily: "'DM Mono', monospace",
+                letterSpacing: '-0.02em',
+              }}>{display}</div>
             </div>
           )
         })}
@@ -508,9 +516,10 @@ export default function DashboardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
 
         {/* Left: Next Algo countdown */}
-        <div className="card">
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
-            Next Algo
+        <div className="card" style={{ borderLeft: '2px solid rgba(99,102,241,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 8px #6366f1', animation: 'glowPulse 2s infinite', flexShrink: 0 }} />
+            <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Next Algo</div>
           </div>
           {(() => {
             const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -519,7 +528,7 @@ export default function DashboardPage() {
             const marketOpen  = 9 * 3600
             const marketClose = 15 * 3600 + 30 * 60
             if (nowSecs < marketOpen || nowSecs > marketClose) {
-              return <div style={{ fontSize: '13px', color: 'var(--text-dim)', fontStyle: 'italic' }}>Market closed</div>
+              return <div style={{ fontSize: '13px', color: 'rgba(232,232,248,0.25)', fontStyle: 'italic' }}>Market closed</div>
             }
             const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
             const waiting = (Array.isArray(todayGrid) ? todayGrid : []).filter((e: any) => e.status === 'waiting' && e.entry_time)
@@ -531,7 +540,7 @@ export default function DashboardPage() {
               .filter(x => x.entrySecs > nowSecs)
               .sort((a, b) => a.entrySecs - b.entrySecs)
             if (waiting.length === 0) {
-              return <div style={{ fontSize: '13px', color: 'var(--text-dim)', fontStyle: 'italic' }}>No algos scheduled today</div>
+              return <div style={{ fontSize: '13px', color: 'rgba(232,232,248,0.25)', fontStyle: 'italic' }}>No algos scheduled today</div>
             }
             const next = waiting[0]
             const diff = next.entrySecs - nowSecs
@@ -539,13 +548,22 @@ export default function DashboardPage() {
             const secs = diff % 60
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-blue)' }}>{next.name}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Entry {next.entry_time}</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-amber)', fontVariantNumeric: 'tabular-nums' }}>
-                  in {mins}m {String(secs).padStart(2, '0')}s
+                <div style={{
+                  fontSize: '16px', fontWeight: 700,
+                  background: 'linear-gradient(135deg, #e8e8f8, #a78bfa)',
+                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                }}>{next.name}</div>
+                <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.4)' }}>Entry {next.entry_time}</div>
+                <div style={{
+                  fontSize: '22px', fontWeight: 700, color: '#f59e0b',
+                  fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', monospace",
+                  textShadow: '0 0 16px rgba(245,158,11,0.6)',
+                  letterSpacing: '-0.02em',
+                }}>
+                  {mins}m {String(secs).padStart(2, '0')}s
                 </div>
                 {waiting.length > 1 && (
-                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.3)', marginTop: '2px' }}>
                     +{waiting.length - 1} more scheduled
                   </div>
                 )}
@@ -648,17 +666,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="card" style={{ background: 'var(--bg-secondary)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>System Log</div>
-          <div style={{ fontFamily: 'monospace', fontSize: '11px', height: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <div className="card" style={{ background: 'rgba(5,5,16,0.8)', border: '1px solid rgba(99,102,241,0.15)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+            <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>System Log</div>
+          </div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', height: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', padding: '8px', background: '#020208', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.1)' }}>
             {log.map((line, i) => {
               const isSep = line.startsWith('──')
               return (
                 <div key={i} style={isSep ? {
-                  color: 'var(--text-dim)', textAlign: 'center', fontSize: '10px',
+                  color: 'rgba(99,102,241,0.35)', textAlign: 'center', fontSize: '10px',
                   letterSpacing: '0.06em', padding: '2px 0', userSelect: 'none',
                 } : {
-                  color: line.includes('✅') ? 'var(--green)' : line.includes('⛔') ? 'var(--red)' : line.includes('Starting') || line.includes('Stopping') ? 'var(--accent-amber)' : 'var(--text-muted)',
+                  color: line.includes('✅') ? '#10b981'
+                       : line.includes('⛔') ? '#ef4444'
+                       : line.includes('⚠️') ? '#f59e0b'
+                       : line.includes('Starting') || line.includes('Stopping') ? '#f59e0b'
+                       : 'rgba(232,232,248,0.45)',
+                  lineHeight: '1.6',
                 }}>
                   {line}
                 </div>
@@ -792,12 +818,12 @@ export default function DashboardPage() {
             { id: '2', nickname: 'Mom',     broker: 'angelone' as any, client_id: '', status: 'active'       as any },
             { id: '3', nickname: 'Wife',    broker: 'angelone' as any, client_id: '', status: 'disconnected' as any },
           ]).map((acc, i) => {
-            const colors = ['#00B0F0', '#22C55E', '#D77B12']
+            const colors = ['#6366f1', '#10b981', '#a78bfa']
             const color = colors[i] || '#6B7280'
             const brokerLabel = acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'
             const isActive = (acc as any).token_valid_today === true
             return (
-              <div key={acc.id} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '12px', borderLeft: `3px solid ${color}` }}>
+              <div key={acc.id} style={{ background: `${color}08`, borderRadius: '8px', padding: '12px', borderLeft: `3px solid ${color}`, border: `1px solid ${color}22`, borderLeftWidth: '3px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -813,11 +839,13 @@ export default function DashboardPage() {
                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{brokerLabel}</div>
                   </div>
                   <span style={{
-                    fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '3px',
-                    color: isActive ? 'var(--green)' : 'var(--accent-amber)',
-                    background: isActive ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)',
+                    fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px',
+                    color: isActive ? '#10b981' : '#f59e0b',
+                    background: isActive ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                    border: isActive ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.3)',
+                    boxShadow: isActive ? '0 0 8px rgba(16,185,129,0.2)' : 'none',
                   }}>
-                    {isActive ? '✅ Live' : '⚠️ Login'}
+                    {isActive ? '● Live' : '⚠ Login'}
                   </span>
                 </div>
               </div>

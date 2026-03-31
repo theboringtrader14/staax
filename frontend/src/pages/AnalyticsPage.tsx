@@ -47,10 +47,12 @@ function getOrderDate(o: any): string {
 // Section label
 const secHdr: CSSProperties = {
   fontSize: '11px', fontWeight: 700,
-  color: 'var(--text-dim)',
+  color: '#e8e8f8',
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
   marginBottom: '8px',
+  borderLeft: '2px solid #6366f1',
+  paddingLeft: '8px',
 }
 
 // Table wrapper
@@ -174,7 +176,6 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
         {activeView === 'heatmap' && (
           <>
-            <div style={secHdr}>P&amp;L by Day × Algo</div>
             {heatmapAlgos.length === 0
               ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No day-breakdown data available.</div>
               : <div style={tblWrap}>
@@ -262,7 +263,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         const maxAbsPnl = Math.max(...timeSlots.map((s: any) => Math.abs(s.total_pnl)), 1)
         return (
           <div className="card" style={{ marginBottom: '12px' }}>
-            <div style={{ marginBottom: '14px' }}>
+            <div style={{ marginBottom: '24px' }}>
               <span style={{ ...secHdr, marginBottom: 0 }}>Best Time to Trade</span>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px', paddingTop: '16px' }}>
@@ -478,7 +479,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   if (!data || data.total_orders === 0) {
     return (
       <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px', fontSize: '13px' }}>
-        No latency data yet — execute trades to see metrics
+        No latency data yet — execute trades to see metrics.<br />Latency tracking is active from today.
       </div>
     )
   }
@@ -671,10 +672,10 @@ export default function AnalyticsPage() {
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
             style={{
               flex: 1, padding: '8px 4px', fontSize: '12px', fontWeight: 600,
-              background: activeTab === tab ? 'var(--bg-surface)' : 'transparent',
-              border: 'none', cursor: 'pointer', transition: 'all 0.12s',
-              color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-muted)',
-              borderBottom: activeTab === tab ? '2px solid var(--accent-blue)' : '2px solid transparent',
+              background: activeTab === tab ? 'rgba(99,102,241,0.08)' : 'transparent',
+              border: 'none', cursor: 'pointer', transition: 'all 0.2s ease',
+              color: activeTab === tab ? '#a78bfa' : 'rgba(232,232,248,0.6)',
+              borderBottom: activeTab === tab ? '2px solid #6366f1' : '2px solid transparent',
             }}
           >
             {tab}

@@ -283,6 +283,24 @@ class AlgoScheduler:
         logger.info("⏰ 09:15 — activating today's algos")
         today = date.today()
 
+        # Holiday check — skip activation on market holidays
+        async with AsyncSessionLocal() as db:
+            try:
+                from app.models.market_holiday import MarketHoliday
+                holiday_result = await db.execute(
+                    select(MarketHoliday).where(
+                        and_(
+                            MarketHoliday.date == today,
+                            MarketHoliday.segment == "NSE",
+                        )
+                    )
+                )
+                if holiday_result.scalar_one_or_none():
+                    logger.info(f"🎌 Market holiday — skipped activation for {today}")
+                    return
+            except Exception as e:
+                logger.error(f"Holiday check failed: {e}")
+
         async with AsyncSessionLocal() as db:
             try:
                 result = await db.execute(
