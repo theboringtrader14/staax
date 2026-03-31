@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, ordersAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -27,6 +27,28 @@ const STAT_DEFS = [
   { label: 'Today P&L',      key: 'today_pnl',       accent: '#10b981', format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
   { label: 'FY P&L',         key: 'fy_pnl',          accent: '#a78bfa', format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
 ]
+
+// ── RadialRing — SVG arc progress indicator ────────────────────
+function RadialRing({ pct, color, size = 56, strokeWidth = 3.5 }: {
+  pct: number; color: string; size?: number; strokeWidth?: number
+}) {
+  const r = (size - strokeWidth * 2) / 2
+  const circ = 2 * Math.PI * r
+  const filled = (Math.min(Math.max(pct, 0), 100) / 100) * circ
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }} aria-hidden>
+      <circle cx={size/2} cy={size/2} r={r} fill="none"
+        stroke={`${color}28`} strokeWidth={strokeWidth} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none"
+        stroke={color} strokeWidth={strokeWidth}
+        strokeDasharray={`${filled} ${circ - filled}`}
+        strokeLinecap="round"
+        style={{ filter:`drop-shadow(0 0 4px ${color})`, transition:'stroke-dasharray 0.8s ease' }}
+      />
+    </svg>
+  )
+}
+
 
 /** Returns true if current IST time is past 09:00 */
 function isPast9am(): boolean {
@@ -58,6 +80,7 @@ export default function DashboardPage() {
   const [todayGrid, setTodayGrid]                       = useState<any>([])
   const [health, setHealth]                             = useState<any>(null)
   const [healthCollapsed, setHealthCollapsed]           = useState(false)
+  const [recentOrders, setRecentOrders]                 = useState<any[]>([])
 
   // 1s tick for Xm Ys countdown accuracy
   useEffect(() => {
@@ -185,6 +208,17 @@ export default function DashboardPage() {
     const t = setInterval(fetchHealth, 60000)
     return () => clearInterval(t)
   }, [])
+
+  // Fetch recent completed orders for Recent Trades widget + win/loss donut
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    ordersAPI.list(today, isPractixMode)
+      .then(r => {
+        const completed = (r.data || []).filter((o: any) => o.status === 'complete')
+        setRecentOrders(completed.slice(-6).reverse())
+      })
+      .catch(() => {})
+  }, [isPractixMode])
 
   // Load kill switch state on mount
   useEffect(() => {
@@ -498,7 +532,23 @@ export default function DashboardPage() {
           const glowRgb = isPnl && raw != null ? (raw >= 0 ? '16,185,129' : '239,68,68') : (
             s.accent === '#6366f1' ? '99,102,241' : s.accent === '#10b981' ? '16,185,129' : '167,139,250'
           )
-          const cardBoxShadow = `inset 0 1px 0 rgba(${glowRgb},0.3), 0 0 20px rgba(${glowRgb},0.12), 0 0 40px rgba(${glowRgb},0.06)`
+          const cardBoxShadow = `inset 0 1px 0 rgba(${glowRgb},0.3), 0 0 24px rgba(${glowRgb},0.14), 0 0 48px rgba(${glowRgb},0.07)`
+          // Ring pct: utilization for counts, health for P&L
+          const ringPct = s.key === 'active_algos'
+            ? (raw != null ? Math.min((raw / Math.max((algos as any[]).length, 1)) * 100, 100) : 0)
+            : s.key === 'open_positions'
+            ? (raw != null ? Math.min(raw / 10 * 100, 100) : 0)
+            : isPnl
+            ? (raw != null ? (raw >= 0 ? 82 : 28) : 0)
+            : 60
+          // Sub-label
+          const sub = s.key === 'active_algos'
+            ? `of ${(algos as any[]).length} algos`
+            : s.key === 'open_positions'
+            ? 'open lots'
+            : isPnl && raw != null
+            ? (raw >= 0 ? '▲ Profit' : '▼ Loss')
+            : ''
           return (
             <div key={s.label} className="card" style={{
               borderTop: `2px solid ${color}`,
@@ -506,19 +556,27 @@ export default function DashboardPage() {
               overflow: 'hidden',
               boxShadow: cardBoxShadow,
               borderColor: `rgba(${glowRgb},0.3)`,
+              minHeight: '110px',
             }}>
               {/* faint accent glow in bg */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(to bottom, rgba(${glowRgb},0.07), transparent)`, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70px', background: `linear-gradient(to bottom, rgba(${glowRgb},0.08), transparent)`, pointerEvents: 'none' }} />
               <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', fontWeight: 600 }}>{s.label}</div>
-              <div style={{
-                fontSize: '32px', fontWeight: 800,
-                fontFamily: "'DM Mono', monospace",
-                letterSpacing: '-0.02em',
-                background: `linear-gradient(135deg, ${color}, #fff)`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                filter: `drop-shadow(0 0 12px rgba(${glowRgb},0.5))`,
-              }}>{display}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div>
+                  <div style={{
+                    fontSize: '30px', fontWeight: 800,
+                    fontFamily: "'DM Mono', monospace",
+                    letterSpacing: '-0.02em',
+                    background: `linear-gradient(135deg, ${color}, #e8e8f8)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    filter: `drop-shadow(0 0 10px rgba(${glowRgb},0.5))`,
+                    lineHeight: 1,
+                  }}>{display}</div>
+                  {sub && <div style={{ fontSize: '10px', color: `rgba(${glowRgb},0.7)`, marginTop: '5px', fontWeight: 600 }}>{sub}</div>}
+                </div>
+                <RadialRing pct={ringPct} color={color} size={52} strokeWidth={3.5} />
+              </div>
             </div>
           )
         })}
@@ -628,7 +686,61 @@ export default function DashboardPage() {
 
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+      {/* ── Recent Trades + Services + System Log ─────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+
+        {/* Recent Trades */}
+        <div className="card card-violet" style={{ padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 6px #a78bfa', flexShrink: 0 }} />
+            <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Recent Trades · Today</div>
+          </div>
+          {recentOrders.length === 0 ? (
+            <div style={{ fontSize: '12px', color: 'rgba(232,232,248,0.25)', fontStyle: 'italic', paddingTop: '8px' }}>
+              No completed trades today
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {recentOrders.map((o: any, i: number) => {
+                const pnl     = o.pnl ?? 0
+                const isWin   = pnl > 0
+                const pnlStr  = `${pnl >= 0 ? '+' : ''}₹${Math.abs(pnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                const entryTs = o.entry_time ? new Date(o.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'
+                const algoName = o.algo_name || o.algo?.name || 'Unknown'
+                const side    = (o.direction || o.side || '').toUpperCase()
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '7px 10px', borderRadius: '6px',
+                    background: isWin ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+                    border: `1px solid ${isWin ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}`,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+                        background: isWin ? '#10b981' : '#ef4444',
+                        boxShadow: `0 0 4px ${isWin ? '#10b981' : '#ef4444'}`,
+                      }} />
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#e8e8f8' }}>{algoName}</div>
+                        <div style={{ fontSize: '9px', color: 'rgba(232,232,248,0.35)', marginTop: '1px' }}>
+                          {side && <span style={{ color: side === 'BUY' ? '#6366f1' : '#a78bfa', fontWeight: 700 }}>{side} · </span>}
+                          {entryTs}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize: '12px', fontWeight: 700, fontFamily: "'DM Mono', monospace",
+                      color: isWin ? '#10b981' : '#ef4444',
+                      textShadow: `0 0 8px ${isWin ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                    }}>{pnlStr}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="card">
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Services</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
