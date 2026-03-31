@@ -522,8 +522,7 @@ export default function DashboardPage() {
               return <div style={{ fontSize: '13px', color: 'var(--text-dim)', fontStyle: 'italic' }}>Market closed</div>
             }
             const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
-            const waiting = (Array.isArray(todayGrid) ? todayGrid : []) as any[]
-              .filter(e => e.status === 'waiting' && e.entry_time)
+            const waiting = (Array.isArray(todayGrid) ? todayGrid : []).filter((e: any) => e.status === 'waiting' && e.entry_time)
               .map(e => {
                 const algo = algoMap.get(e.algo_id)
                 const [eh, em] = (e.entry_time as string).split(':').map(Number)
