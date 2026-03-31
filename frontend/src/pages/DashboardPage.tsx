@@ -493,11 +493,10 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
                   onClick={e => { e.stopPropagation(); systemAPI.health().then(r => setHealth(r.data)).catch(() => {}) }}
-                  style={{ fontSize: '10px', padding: '2px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: 'var(--indigo)', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.04em', fontFamily: 'inherit' }}
                 >
                   Refresh
                 </button>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{isCollapsed ? '▸' : '▾'}</span>
               </div>
             </div>
 
@@ -550,14 +549,15 @@ export default function DashboardPage() {
             ? (raw >= 0 ? '▲ Profit' : '▼ Loss')
             : ''
           return (
-            <div key={s.label} className="card" style={{
+            <div key={s.label} className="card card-stat" style={{
               borderTop: `2px solid ${color}`,
               paddingTop: '14px',
               overflow: 'hidden',
               boxShadow: cardBoxShadow,
-              borderColor: `rgba(${glowRgb},0.3)`,
+              borderColor: `rgba(${glowRgb},0.45)`,
               minHeight: '110px',
-            }}>
+              '--stat-rgb': glowRgb,
+            } as React.CSSProperties}>
               {/* faint accent glow in bg */}
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70px', background: `linear-gradient(to bottom, rgba(${glowRgb},0.08), transparent)`, pointerEvents: 'none' }} />
               <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', fontWeight: 600 }}>{s.label}</div>
@@ -567,10 +567,8 @@ export default function DashboardPage() {
                     fontSize: '30px', fontWeight: 800,
                     fontFamily: "'DM Mono', monospace",
                     letterSpacing: '-0.02em',
-                    background: `linear-gradient(135deg, ${color}, #e8e8f8)`,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter: `drop-shadow(0 0 10px rgba(${glowRgb},0.5))`,
+                    color: color,
+                    textShadow: `0 0 20px rgba(${glowRgb},0.55), 0 0 40px rgba(${glowRgb},0.25)`,
                     lineHeight: 1,
                   }}>{display}</div>
                   {sub && <div style={{ fontSize: '10px', color: `rgba(${glowRgb},0.7)`, marginTop: '5px', fontWeight: 600 }}>{sub}</div>}
@@ -645,7 +643,7 @@ export default function DashboardPage() {
         {/* Right: Upcoming Holidays */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Upcoming Holidays (F&O)
             </div>
             <button
@@ -654,7 +652,7 @@ export default function DashboardPage() {
               onClick={handleSyncHolidays}
               disabled={syncingHolidays}
             >
-              {syncingHolidays ? 'Syncing…' : '↻ Sync NSE'}
+              {syncingHolidays ? 'Syncing…' : 'Sync NSE'}
             </button>
           </div>
           {holidays.length === 0 ? (
@@ -742,7 +740,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="card">
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Services</div>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Services</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {services.map(svc => (
               <div key={svc.id} style={{
@@ -935,19 +933,28 @@ export default function DashboardPage() {
 
       {/* Account Status */}
       <div className="card">
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Account Status</div>
+        <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Account Status</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
           {(accounts.length > 0 ? accounts : [
             { id: '1', nickname: 'Karthik', broker: 'zerodha'  as any, client_id: '', status: 'active'       as any },
             { id: '2', nickname: 'Mom',     broker: 'angelone' as any, client_id: '', status: 'active'       as any },
             { id: '3', nickname: 'Wife',    broker: 'angelone' as any, client_id: '', status: 'disconnected' as any },
-          ]).map((acc, i) => {
-            const colors = ['#6366f1', '#10b981', '#a78bfa']
-            const color = colors[i] || '#6B7280'
+          ]).map((acc) => {
             const brokerLabel = acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'
             const isActive = (acc as any).token_valid_today === true
+            const accColor = isActive ? '#10b981' : '#f59e0b'
+            const accRgb = isActive ? '16,185,129' : '245,158,11'
             return (
-              <div key={acc.id} style={{ background: `${color}08`, borderRadius: '8px', padding: '12px', borderLeft: `3px solid ${color}`, border: `1px solid ${color}22`, borderLeftWidth: '3px' }}>
+              <div key={acc.id} style={{
+                background: `rgba(${accRgb},0.05)`,
+                borderRadius: '8px', padding: '12px',
+                borderLeft: `3px solid ${accColor}`,
+                border: `1px solid rgba(${accRgb},0.25)`,
+                borderLeftWidth: '3px',
+                boxShadow: isActive
+                  ? `inset 3px 0 12px rgba(16,185,129,0.1), 0 0 16px rgba(16,185,129,0.12), inset 0 1px 0 rgba(16,185,129,0.15)`
+                  : `inset 3px 0 8px rgba(245,158,11,0.08), 0 0 10px rgba(245,158,11,0.08)`,
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

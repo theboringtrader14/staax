@@ -1,7 +1,7 @@
 import { useStore } from '@/store'
 import { reportsAPI } from '@/services/api'
 import { useState, useEffect } from 'react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const MONTHS_FY=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
 const DAY_NAMES=['Mon','Tue','Wed','Thu','Fri']
@@ -40,8 +40,10 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
   const handleClick=()=>{ if(!isFutureMonth&&hasRealData) onToggle() }
   return(
     <div onClick={handleClick} style={{
-      background:selected?'rgba(99,102,241,0.08)':'var(--bg-secondary)',
-      border:`1px solid ${selected?'var(--indigo)':'var(--bg-border)'}`,
+      background:selected?'rgba(5,5,28,0.85)':'rgba(5,5,18,0.7)',
+      border:`1px solid ${selected?'rgba(99,102,241,0.65)':'rgba(99,102,241,0.2)'}`,
+      boxShadow:selected?'0 0 20px rgba(99,102,241,0.25), inset 0 1px 0 rgba(167,139,250,0.2)':'inset 0 1px 0 rgba(99,102,241,0.1)',
+      backdropFilter:'blur(20px)',
       borderRadius:'8px',padding:'10px 10px 12px',
       cursor:isFutureMonth||!hasRealData?'default':'pointer',
       transition:'all 0.12s',height:`${CARD_H}px`,
@@ -214,34 +216,72 @@ export default function ReportsPage(){
       {/* Top widgets — 4 columns: FY P&L (wider), Trades, Win Rate, Day P&L */}
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr',gap:'12px',marginBottom:'12px'}}>
         {/* FY P&L */}
-        <div className="card" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #10b981'}} onClick={()=>setChartModal(true)}>
-          <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'4px'}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--indigo)'}}>↗</span></div>
+        <div className="card card-stat" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #10b981',
+          '--stat-rgb': totalPnl>=0?'16,185,129':'239,68,68',
+          boxShadow: `inset 0 1px 0 rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.25), 0 0 22px rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.2), 0 6px 24px rgba(0,0,0,0.5)`,
+        } as React.CSSProperties} onClick={()=>setChartModal(true)}>
+          <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'4px',fontWeight:600}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--indigo)'}}>↗</span></div>
           <div style={{display:'flex',alignItems:'flex-end',gap:'12px'}}>
             <div>
-              <div style={{fontSize:'22px',fontWeight:700,color:totalPnl>=0?'var(--green)':'var(--red)',letterSpacing:'-0.02em'}}>
+              <div style={{
+                fontSize:'22px',fontWeight:700,letterSpacing:'-0.02em',
+                background: totalPnl>=0?'linear-gradient(135deg, #10b981, #d4f4e8)':'linear-gradient(135deg, #ef4444, #ffd4d4)',
+                WebkitBackgroundClip:'text', backgroundClip:'text',
+                WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
+              }}>
                 {totalPnl!==0?(Math.abs(totalPnl)>=100000?'₹'+(Math.abs(totalPnl)/100000).toFixed(2)+'L':'₹'+Math.abs(totalPnl).toLocaleString('en-IN',{maximumFractionDigits:2})):'—'}
               </div>
               <div style={{fontSize:'10px',color:totalPnl>=0?'var(--green)':'var(--red)',marginTop:'2px'}}>{totalPnl!==0?(totalPnl>0?'▲ Profit':'▼ Loss'):'No trades'}</div>
             </div>
-            <div style={{flex:1,height:'36px'}}>
+            <div style={{flex:1,height:'44px'}}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={equityCurve}><Line type="monotone" dataKey="cumulative" stroke="#10b981" strokeWidth={2} dot={false}/></LineChart>
+                <AreaChart data={equityCurve} margin={{top:2,right:0,bottom:0,left:0}}>
+                  <defs>
+                    <linearGradient id="miniEqGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={totalPnl>=0?'#10b981':'#ef4444'} stopOpacity={0.5}/>
+                      <stop offset="95%" stopColor={totalPnl>=0?'#10b981':'#ef4444'} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="cumulative"
+                    stroke={totalPnl>=0?'#10b981':'#ef4444'}
+                    strokeWidth={2}
+                    fill="url(#miniEqGrad)"
+                    dot={false}/>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
 
         {/* Total Trades */}
-        <div className="card" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #6366f1'}}>
-          <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px'}}>Total Trades</div>
-          <div style={{fontSize:'26px',fontWeight:700,color:'var(--indigo)',lineHeight:1}}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
+        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #6366f1',
+          '--stat-rgb': '99,102,241',
+          boxShadow: 'inset 0 1px 0 rgba(99,102,241,0.25), 0 0 20px rgba(99,102,241,0.18), 0 6px 24px rgba(0,0,0,0.5)',
+        } as React.CSSProperties}>
+          <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Total Trades</div>
+          <div style={{
+            fontSize:'26px',fontWeight:700,lineHeight:1,
+            background:'linear-gradient(135deg, #6366f1, #c4c4f8)',
+            WebkitBackgroundClip:'text', backgroundClip:'text',
+            WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
+          }}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
           <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{algoMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
-        <div className="card" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #a78bfa'}}>
-          <div style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'6px'}}>Win Rate</div>
-          <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)>0?'var(--green)':'var(--text-muted)'}}>
+        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #a78bfa',
+          '--stat-rgb': '167,139,250',
+          boxShadow: 'inset 0 1px 0 rgba(167,139,250,0.25), 0 0 20px rgba(167,139,250,0.18), 0 6px 24px rgba(0,0,0,0.5)',
+        } as React.CSSProperties}>
+          <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Win Rate</div>
+          <div style={{
+            fontSize:'26px',fontWeight:700,lineHeight:1,
+            background: algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)>0
+              ? 'linear-gradient(135deg, #10b981, #d4f4e8)'
+              : 'linear-gradient(135deg, rgba(232,232,248,0.3), rgba(232,232,248,0.1))',
+            WebkitBackgroundClip:'text', backgroundClip:'text',
+            WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
+          }}>
             {algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)>0?(algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)/algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)*100).toFixed(1)+'%':'—'}
           </div>
           <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)}W · {algoMetrics.reduce((s:number,a:any)=>s+a.losses,0)}L</div>
@@ -249,7 +289,7 @@ export default function ReportsPage(){
 
         {/* Day-of-week P&L — compact horizontal bars */}
         <div className="card">
-        <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'12px'}}>P&L by Day</div>
+        <div style={{fontSize:'10px',fontWeight:600,color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px',borderLeft:'3px solid #6366f1',paddingLeft:'8px'}}>P&L by Day</div>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-around',height:'64px',gap:'6px'}}>
           {DAY_NAMES.map(day=>{
             const pnl=dowPnl[day]||0
@@ -258,7 +298,14 @@ export default function ReportsPage(){
               <div key={day} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',flex:1}}>
                 <div style={{display:'flex',alignItems:'flex-end',height:'48px',width:'100%',justifyContent:'center'}}>
                   {pnl!==0
-                    ?<div style={{width:'60%',height:`${barH}px`,borderRadius:'3px 3px 0 0',background:pnl>0?'var(--green)':'var(--red)',opacity:0.75,transition:'height 0.3s'}}/>
+                    ?<div style={{
+                      width:'60%',height:`${barH}px`,borderRadius:'3px 3px 0 0',
+                      background: pnl>0
+                        ? 'linear-gradient(to top, rgba(16,185,129,0.5), rgba(16,185,129,0.9))'
+                        : 'linear-gradient(to top, rgba(239,68,68,0.5), rgba(239,68,68,0.9))',
+                      boxShadow: pnl>0?'0 0 10px rgba(16,185,129,0.45)':'0 0 10px rgba(239,68,68,0.45)',
+                      transition:'height 0.4s cubic-bezier(0.4,0,0.2,1)',
+                    }}/>
                     :<div style={{width:'60%',height:'2px',borderRadius:'2px',background:'var(--bg-border)',opacity:0.4}}/>
                   }
                 </div>
@@ -281,11 +328,17 @@ export default function ReportsPage(){
             <div style={{height:'320px'}}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={equityCurve} margin={{top:10,right:20,bottom:10,left:40}}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.12)"/>
                   <XAxis dataKey="month" tick={{fill:'var(--text-muted)',fontSize:11}}/>
                   <YAxis tick={{fill:'var(--text-muted)',fontSize:11}} tickFormatter={v=>`₹${(v/1000).toFixed(0)}k`}/>
                   <Tooltip formatter={(v:any)=>[`₹${v.toLocaleString('en-IN')}`,'Cumulative P&L']} contentStyle={{background:'var(--bg-surface)',border:'1px solid var(--bg-border)',borderRadius:'6px'}} labelStyle={{color:'var(--text-muted)'}} itemStyle={{color:'var(--indigo)'}}/>
-                  <Line type="monotone" dataKey="cumulative" stroke="#00B0F0" strokeWidth={2.5} dot={{fill:'#00B0F0',r:3}}/>
+                  <Line type="monotone" dataKey="cumulative"
+                    stroke={fyTotal>=0?'#6366f1':'#ef4444'}
+                    strokeWidth={2.5}
+                    dot={{ fill: fyTotal>=0?'#a78bfa':'#ef4444', r: 4, strokeWidth: 0,
+                           filter: `drop-shadow(0 0 4px ${fyTotal>=0?'rgba(99,102,241,0.8)':'rgba(239,68,68,0.8)'})` }}
+                    activeDot={{ r: 6, fill: '#e8e8f8', strokeWidth: 2, stroke: fyTotal>=0?'#6366f1':'#ef4444' }}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -352,10 +405,31 @@ export default function ReportsPage(){
                 const isCurrency=row.key==='total_pnl'||row.key==='max_profit'||row.key==='max_loss'
                 const fmt=(n:number)=>isPct?(Math.abs(n).toFixed(1)+"%"):isCurrency?((n<0?"-":"")+"₹"+Math.abs(n).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(n)))
                 const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
+                // For currency rows: compute max abs value for proportional bar width
+                const maxAbs = isCurrency
+                  ? Math.max(...algoMetrics.map((a:any)=>Math.abs((a as any)[row.key]||0)), 1)
+                  : 1
                 return(
                   <tr key={row.key}>
                     <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'#0a0a1a',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
-                    {algoMetrics.map((a:any)=><td key={a.algo_id} style={{color:(a as any)[row.key]<0?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px'}}>{fmt((a as any)[row.key])}</td>)}
+                    {algoMetrics.map((a:any)=>{
+                      const val=(a as any)[row.key]
+                      const barPct=isCurrency?Math.round(Math.abs(val||0)/maxAbs*100):0
+                      const isNeg=(val||0)<0
+                      return(
+                        <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',position:'relative'}}>
+                          {isCurrency&&barPct>0&&(
+                            <div style={{
+                              position:'absolute',bottom:0,left:0,height:'3px',
+                              width:`${barPct}%`,
+                              background:isNeg?'rgba(239,68,68,0.45)':'rgba(16,185,129,0.45)',
+                              borderRadius:'0 2px 0 0',
+                            }}/>
+                          )}
+                          {fmt(val)}
+                        </td>
+                      )
+                    })}
                     <td style={{color:'var(--indigo)',fontWeight:700,position:'sticky',right:0,background:'#0a0a1a',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
                   </tr>
                 )
