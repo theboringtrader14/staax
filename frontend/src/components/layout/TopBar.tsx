@@ -8,8 +8,6 @@ export default function TopBar() {
   const setIsPractixMode  = useStore(s => s.setIsPractixMode)
   const livePnl           = useStore(s => s.livePnl)
   const setLivePnl        = useStore(s => s.setLivePnl)
-  const theme             = useStore(s => s.theme)
-  const toggleTheme       = useStore(s => s.toggleTheme)
   const rawAccounts       = useStore(s => s.accounts)
   const activeAccount     = useStore(s => s.activeAccount)
   const setActiveAccount  = useStore(s => s.setActiveAccount)
@@ -169,21 +167,6 @@ export default function TopBar() {
             {isPractixMode ? 'PRACTIX' : 'LIVE'}
           </button>
 
-          {/* Theme toggle */}
-          <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(99,102,241,0.2)',
-              borderRadius: '6px', height: 'var(--btn-h)', width: 'var(--btn-h)',
-              cursor: 'pointer', color: 'rgba(232,232,248,0.4)', fontSize: '14px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a78bfa'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(99,102,241,0.5)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(99,102,241,0.08)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(232,232,248,0.4)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(99,102,241,0.2)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)' }}
-          >
-            <span style={{ fontSize: '13px' }}>{theme === 'dark' ? '☀' : '☾'}</span>
-          </button>
         </div>
       </header>
     </>

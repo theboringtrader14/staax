@@ -495,17 +495,29 @@ export default function DashboardPage() {
           const display = raw != null ? s.format(raw) : '—'
           const isPnl = s.key === 'today_pnl' || s.key === 'fy_pnl'
           const color = isPnl && raw != null ? (raw >= 0 ? '#10b981' : '#ef4444') : s.accent
-          const glow  = isPnl && raw != null ? (raw >= 0 ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)') : `${s.accent}66`
+          const glowRgb = isPnl && raw != null ? (raw >= 0 ? '16,185,129' : '239,68,68') : (
+            s.accent === '#6366f1' ? '99,102,241' : s.accent === '#10b981' ? '16,185,129' : '167,139,250'
+          )
+          const cardBoxShadow = `inset 0 1px 0 rgba(${glowRgb},0.3), 0 0 20px rgba(${glowRgb},0.12), 0 0 40px rgba(${glowRgb},0.06)`
           return (
-            <div key={s.label} className="card" style={{ borderTop: `2px solid ${color}`, paddingTop: '14px', position: 'relative', overflow: 'hidden' }}>
+            <div key={s.label} className="card" style={{
+              borderTop: `2px solid ${color}`,
+              paddingTop: '14px',
+              overflow: 'hidden',
+              boxShadow: cardBoxShadow,
+              borderColor: `rgba(${glowRgb},0.3)`,
+            }}>
               {/* faint accent glow in bg */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '40px', background: `linear-gradient(to bottom, ${color}0a, transparent)`, pointerEvents: 'none' }} />
-              <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', fontWeight: 600 }}>{s.label}</div>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(to bottom, rgba(${glowRgb},0.07), transparent)`, pointerEvents: 'none' }} />
+              <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', fontWeight: 600 }}>{s.label}</div>
               <div style={{
-                fontSize: '24px', fontWeight: 700, color,
-                textShadow: `0 0 16px ${glow}`,
+                fontSize: '32px', fontWeight: 800,
                 fontFamily: "'DM Mono', monospace",
                 letterSpacing: '-0.02em',
+                background: `linear-gradient(135deg, ${color}, #fff)`,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                filter: `drop-shadow(0 0 12px rgba(${glowRgb},0.5))`,
               }}>{display}</div>
             </div>
           )

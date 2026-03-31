@@ -9,6 +9,7 @@ const MODULES = [
     description: 'Deploy, monitor, and analyse trading algorithms with real-time P&L, SmartStream execution, and per-algo analytics.',
     accent: '#6366f1',
     accentDim: 'rgba(99,102,241,0.12)',
+    accentKey: 'indigo',
     status: 'LIVE',
     statusColor: '#10b981',
     path: '/dashboard',
@@ -19,6 +20,7 @@ const MODULES = [
     description: 'Track long-term holdings, rebalance portfolios, and visualise compound growth across equity and debt.',
     accent: '#10b981',
     accentDim: 'rgba(16,185,129,0.12)',
+    accentKey: 'emerald',
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
@@ -29,6 +31,7 @@ const MODULES = [
     description: 'Categorise expenses, set smart budgets, and surface spending patterns with AI-powered insights.',
     accent: '#f59e0b',
     accentDim: 'rgba(245,158,11,0.12)',
+    accentKey: 'amber',
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
@@ -39,6 +42,7 @@ const MODULES = [
     description: 'Log workouts, track nutrition, and monitor biomarkers with integrated wearable data.',
     accent: '#ef4444',
     accentDim: 'rgba(239,68,68,0.12)',
+    accentKey: 'red',
     status: 'COMING SOON',
     statusColor: 'rgba(232,232,248,0.4)',
     path: null,
@@ -49,6 +53,7 @@ const MODULES = [
     description: 'Define life goals, break them into milestones, and track progress with structured habit loops.',
     accent: '#38bdf8',
     accentDim: 'rgba(56,189,248,0.12)',
+    accentKey: 'sky',
     status: 'COMING SOON',
     statusColor: 'rgba(232,232,248,0.4)',
     path: null,
@@ -100,24 +105,31 @@ export default function LandingPage() {
       {/* Ambient orbs */}
       <div style={{
         position: 'fixed', top: '-200px', left: '-200px',
-        width: '600px', height: '600px', borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
+        width: '700px', height: '700px', borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
         animation: 'float 8s ease-in-out infinite',
       }} />
       <div style={{
         position: 'fixed', top: '30%', right: '-150px',
-        width: '500px', height: '500px', borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 70%)',
+        width: '600px', height: '600px', borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(167,139,250,0.15) 0%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
         animation: 'float 10s ease-in-out infinite reverse',
       }} />
       <div style={{
         position: 'fixed', bottom: '-100px', left: '30%',
-        width: '400px', height: '400px', borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(56,189,248,0.06) 0%, transparent 70%)',
+        width: '500px', height: '500px', borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(56,189,248,0.12) 0%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
         animation: 'float 12s ease-in-out infinite',
+      }} />
+      <div style={{
+        position: 'fixed', bottom: '10%', right: '10%',
+        width: '400px', height: '400px', borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(167,139,250,0.10) 0%, transparent 70%)',
+        pointerEvents: 'none', zIndex: 0,
+        animation: 'float 9s ease-in-out infinite reverse',
       }} />
 
       {/* Animations */}
@@ -134,18 +146,61 @@ export default function LandingPage() {
           0%,100% { opacity:1; }
           50%      { opacity:0.4; }
         }
-        .landing-module-card:hover {
-          transform: translateY(-4px);
-          border-color: var(--card-accent) !important;
+        @keyframes scan {
+          0%   { transform: translateY(-100%); opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 1; }
+          100% { transform: translateY(600%); opacity: 0; }
+        }
+        .landing-module-card {
+          position: relative;
+          transition: all 0.25s ease;
+        }
+        .landing-module-card::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1px;
+          background: linear-gradient(135deg, rgba(99,102,241,0.3) 0%, transparent 40%, transparent 60%, rgba(167,139,250,0.15) 100%);
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+          opacity: 0.6;
+          transition: opacity 0.25s ease;
+        }
+        .landing-module-card:hover { transform: translateY(-6px); }
+        .landing-module-card:hover::before { opacity: 1; }
+        .landing-module-card[data-accent="indigo"]:hover  { box-shadow: 0 0 40px rgba(99,102,241,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="emerald"]:hover { box-shadow: 0 0 40px rgba(16,185,129,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="amber"]:hover   { box-shadow: 0 0 40px rgba(245,158,11,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="red"]:hover     { box-shadow: 0 0 40px rgba(239,68,68,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="sky"]:hover     { box-shadow: 0 0 40px rgba(56,189,248,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-terminal { position: relative; overflow: hidden; }
+        .landing-terminal::after {
+          content: '';
+          position: absolute;
+          left: 0; right: 0;
+          height: 60px;
+          background: linear-gradient(to bottom, transparent, rgba(99,102,241,0.06), transparent);
+          animation: scan 4s linear infinite;
+          pointer-events: none;
         }
         .landing-cta-primary:hover {
           transform: translateY(-2px);
-          box-shadow: 0 0 32px rgba(99,102,241,0.7) !important;
+          box-shadow: 0 0 40px rgba(99,102,241,0.8) !important;
         }
         .landing-cta-ghost:hover {
           background: rgba(99,102,241,0.08) !important;
           border-color: rgba(99,102,241,0.4) !important;
           color: #f0f0ff !important;
+        }
+        .landing-nav-line {
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(99,102,241,0.4), rgba(167,139,250,0.3), transparent);
         }
       `}</style>
 
@@ -155,11 +210,11 @@ export default function LandingPage() {
         background: 'rgba(5,5,16,0.92)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(99,102,241,0.15)',
         padding: '0 32px',
         height: '52px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
+        <div className="landing-nav-line" />
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
@@ -287,12 +342,12 @@ export default function LandingPage() {
         </div>
 
         {/* Right: terminal widget */}
-        <div style={{
+        <div className="landing-terminal" style={{
           background: 'rgba(2,2,8,0.9)',
-          border: '1px solid rgba(99,102,241,0.2)',
+          border: '1px solid rgba(99,102,241,0.25)',
           borderRadius: '12px',
           padding: '20px',
-          boxShadow: '0 0 40px rgba(99,102,241,0.1), 0 20px 60px rgba(0,0,0,0.8)',
+          boxShadow: '0 0 60px rgba(99,102,241,0.2), 0 0 120px rgba(99,102,241,0.08), 0 20px 60px rgba(0,0,0,0.8)',
         }}>
           {/* Terminal chrome */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
@@ -344,19 +399,23 @@ export default function LandingPage() {
           maxWidth: '1100px', margin: '0 auto',
           display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: '16px',
         }}>
-          {STATS.map(stat => (
-            <div key={stat.label} style={{ textAlign: 'center' }}>
-              <div style={{
-                fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em',
-                fontFamily: "'DM Mono', monospace",
-                background: 'linear-gradient(135deg, #a78bfa, #38bdf8)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}>{stat.value}</div>
-              <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', fontWeight: 600, letterSpacing: '0.05em', marginTop: '2px' }}>
-                {stat.label.toUpperCase()}
+          {STATS.map((stat, i) => (
+            <>
+              {i > 0 && <div key={`div-${i}`} style={{ width: '1px', height: '40px', background: 'rgba(99,102,241,0.15)', alignSelf: 'center' }} />}
+              <div key={stat.label} style={{ textAlign: 'center' }}>
+                <div style={{
+                  fontSize: '36px', fontWeight: 800, letterSpacing: '-0.02em',
+                  fontFamily: "'DM Mono', monospace",
+                  background: 'linear-gradient(135deg, #a78bfa, #38bdf8)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.4))',
+                }}>{stat.value}</div>
+                <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', fontWeight: 600, letterSpacing: '0.05em', marginTop: '2px' }}>
+                  {stat.label.toUpperCase()}
+                </div>
               </div>
-            </div>
+            </>
           ))}
         </div>
       </div>
@@ -392,17 +451,18 @@ export default function LandingPage() {
             <div
               key={mod.id}
               className="landing-module-card"
+              data-accent={mod.accentKey}
               onClick={() => mod.path && navigate(mod.path)}
               style={{
-                background: mod.accentDim,
-                border: `1px solid ${mod.accent}22`,
+                background: `rgba(10,10,26,0.7)`,
+                border: `1px solid ${mod.accent}30`,
                 borderRadius: '12px',
                 padding: '20px',
                 cursor: mod.path ? 'pointer' : 'default',
-                transition: 'all 0.25s ease',
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
-                borderTop: `3px solid ${mod.accent}`,
+                borderTop: `2px solid ${mod.accent}`,
+                boxShadow: `inset 0 1px 0 ${mod.accent}20, 0 4px 24px rgba(0,0,0,0.4)`,
               } as React.CSSProperties}
             >
               {/* Header */}
