@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const [selectedKillAccounts, setSelectedKillAccounts] = useState<string[]>([])
   const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
   const [now, setNow]                                   = useState(new Date())
-  const [todayGrid, setTodayGrid]                       = useState<any[]>([])
+  const [todayGrid, setTodayGrid]                       = useState<any>([])
   const [health, setHealth]                             = useState<any>(null)
   const [healthCollapsed, setHealthCollapsed]           = useState(false)
 
@@ -174,7 +174,7 @@ export default function DashboardPage() {
           setHealth(res.data)
           // Auto-expand if any check is not ok
           const checks = res.data?.checks || {}
-          const anyFail = Object.entries(checks).some(([k, v]: [string, any]) =>
+          const anyFail = Object.entries(checks).some(([_, v]: [string, any]) =>
             typeof v === 'object' && v !== null && v.ok === false
           )
           if (anyFail) setHealthCollapsed(false)
@@ -522,7 +522,7 @@ export default function DashboardPage() {
               return <div style={{ fontSize: '13px', color: 'var(--text-dim)', fontStyle: 'italic' }}>Market closed</div>
             }
             const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
-            const waiting = todayGrid
+            const waiting = (Array.isArray(todayGrid) ? todayGrid : []) as any[]
               .filter(e => e.status === 'waiting' && e.entry_time)
               .map(e => {
                 const algo = algoMap.get(e.algo_id)
