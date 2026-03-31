@@ -146,6 +146,7 @@ export const systemAPI = {
   killSwitchStatus:   () => api.get("/system/kill-switch/status"),
   ticker:             () => api.get("/system/ticker"),
   stats:              (isPractix?: boolean) => api.get("/system/stats", { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
+  health:             () => api.get("/system/health"),
 }
 
 export const botsAPI = {

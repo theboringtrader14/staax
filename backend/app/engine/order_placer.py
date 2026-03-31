@@ -63,6 +63,16 @@ class OrderPlacer:
             logger.warning(f"Duplicate order blocked: {idempotency_key}")
             return None
 
+        # Hard block: LIVE trading only on production server
+        if not is_practix:
+            from app.core.config import settings as _settings
+            if _settings.APP_ENV != "production":
+                raise ValueError(
+                    "LIVE trading blocked in development environment. "
+                    "Deploy to production server first. "
+                    "Set APP_ENV=production in .env to override (use with caution)."
+                )
+
         # SEBI: every live order must carry an algo_tag
         if not is_practix and not algo_tag:
             logger.error(

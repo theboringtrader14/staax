@@ -56,6 +56,8 @@ export default function DashboardPage() {
   const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
   const [now, setNow]                                   = useState(new Date())
   const [todayGrid, setTodayGrid]                       = useState<any[]>([])
+  const [health, setHealth]                             = useState<any>(null)
+  const [healthCollapsed, setHealthCollapsed]           = useState(false)
 
   // 1s tick for Xm Ys countdown accuracy
   useEffect(() => {
@@ -68,7 +70,7 @@ export default function DashboardPage() {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     const fetch = () => {
       gridAPI.list({ week_start: today, week_end: today, is_practix: isPractixMode })
-        .then(r => setTodayGrid(r.data || []))
+        .then(r => setTodayGrid(r.data?.entries || r.data?.groups || r.data || []))
         .catch(() => {})
     }
     fetch()
@@ -163,6 +165,26 @@ export default function DashboardPage() {
       setSyncingHolidays(false)
     }
   }
+
+  // Fetch system health every 60s
+  useEffect(() => {
+    const fetchHealth = () => {
+      systemAPI.health()
+        .then(res => {
+          setHealth(res.data)
+          // Auto-expand if any check is not ok
+          const checks = res.data?.checks || {}
+          const anyFail = Object.entries(checks).some(([k, v]: [string, any]) =>
+            typeof v === 'object' && v !== null && v.ok === false
+          )
+          if (anyFail) setHealthCollapsed(false)
+        })
+        .catch(() => {})
+    }
+    fetchHealth()
+    const t = setInterval(fetchHealth, 60000)
+    return () => clearInterval(t)
+  }, [])
 
   // Load kill switch state on mount
   useEffect(() => {
@@ -353,6 +375,17 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Task 2 — LIVE mode blocked on localhost */}
+      {!isPractixMode && typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
+        <div style={{
+          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+          borderRadius: '8px', padding: '10px 16px', marginBottom: '12px',
+          fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600,
+        }}>
+          ⚠️ LIVE mode blocked on local — deploy to production server for live trading.
+        </div>
+      )}
+
       {/* F8 — Late session warning */}
       {showLateWarning && (
         <div style={{
@@ -387,6 +420,73 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Morning Checklist — System Health */}
+      {health && (() => {
+        const c = health.checks || {}
+        const allReady = health.status === 'ready'
+        const isCollapsed = healthCollapsed && allReady
+
+        const CHECKLIST = [
+          { key: 'database',         label: 'Database connected' },
+          { key: 'redis',            label: 'Redis running' },
+          { key: 'broker_karthik_ao',label: 'Karthik AO token valid' },
+          { key: 'broker_mom_ao',    label: 'Mom AO token valid' },
+          { key: 'broker_wife_ao',   label: 'Wife AO token valid' },
+          { key: 'broker_zerodha',   label: 'Zerodha token valid' },
+          { key: 'smartstream',      label: 'Market Feed (SmartStream) connected' },
+          { key: 'scheduler',        label: 'Scheduler running' },
+        ]
+
+        const headerColor  = allReady ? 'var(--green)' : 'var(--accent-amber)'
+        const headerBg     = allReady ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)'
+        const headerBorder = allReady ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.3)'
+
+        return (
+          <div style={{ background: headerBg, border: `1px solid ${headerBorder}`, borderRadius: '8px', marginBottom: '12px' }}>
+            {/* Header row */}
+            <div
+              onClick={() => setHealthCollapsed(p => !p)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', cursor: 'pointer' }}
+            >
+              <span style={{ fontWeight: 700, fontSize: '12px', color: headerColor }}>
+                {allReady ? '✅ System Ready' : '⚠️ System Not Ready'}
+                <span style={{ fontWeight: 400, fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                  {health.timestamp ? new Date(health.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+                </span>
+              </span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={e => { e.stopPropagation(); systemAPI.health().then(r => setHealth(r.data)).catch(() => {}) }}
+                  style={{ fontSize: '10px', padding: '2px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  Refresh
+                </button>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{isCollapsed ? '▸' : '▾'}</span>
+              </div>
+            </div>
+
+            {/* Checklist body */}
+            {!isCollapsed && (
+              <div style={{ padding: '0 14px 12px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '6px' }}>
+                {CHECKLIST.map(({ key, label }) => {
+                  const v = c[key]
+                  const ok = typeof v === 'object' ? v?.ok === true : false
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: ok ? 'var(--green)' : 'var(--red)' }}>
+                      <span>{ok ? '✅' : '❌'}</span>
+                      <span>{label}</span>
+                      {typeof v === 'object' && v?.latency_ms !== undefined && (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>{v.latency_ms}ms</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '12px' }}>
         {STAT_DEFS.map(s => {

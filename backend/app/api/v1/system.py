@@ -321,6 +321,109 @@ async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)
     return {"status": "ok", "account": chosen_acc.nickname, "broker_key": broker_key}
 
 
+@router.get("/health")
+async def system_health(request: Request):
+    """
+    Comprehensive health check for all STAAX dependencies.
+
+    Returns:
+      status = "ready"     — DB + Redis + at least 1 broker OK
+      status = "degraded"  — some checks fail
+      status = "not_ready" — DB or Redis fail
+    """
+    import asyncio
+    import time
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.core.config import settings
+
+    IST = ZoneInfo("Asia/Kolkata")
+    checks: dict = {}
+    state = request.app.state
+
+    # ── Database ──────────────────────────────────────────────────────────────
+    try:
+        from app.core.database import engine as _db_engine
+        from sqlalchemy import text as _text
+        t0 = time.monotonic()
+        async with _db_engine.connect() as _c:
+            await _c.execute(_text("SELECT 1"))
+        checks["database"] = {"ok": True, "latency_ms": round((time.monotonic() - t0) * 1000)}
+    except Exception as e:
+        checks["database"] = {"ok": False, "error": str(e)}
+
+    # ── Redis ─────────────────────────────────────────────────────────────────
+    redis = getattr(state, "redis_client", None)
+    if redis:
+        try:
+            t0 = time.monotonic()
+            await redis.ping()
+            checks["redis"] = {"ok": True, "latency_ms": round((time.monotonic() - t0) * 1000)}
+        except Exception as e:
+            checks["redis"] = {"ok": False, "error": str(e)}
+    else:
+        checks["redis"] = {"ok": False, "error": "not initialised"}
+
+    # ── Brokers ───────────────────────────────────────────────────────────────
+    broker_map = {
+        "broker_karthik_ao": getattr(state, "angelone_karthik", None),
+        "broker_mom_ao":     getattr(state, "angelone_mom", None),
+        "broker_wife_ao":    getattr(state, "angelone_wife", None),
+        "broker_zerodha":    getattr(state, "zerodha", None),
+    }
+    broker_ok_count = 0
+    for key, broker in broker_map.items():
+        if broker is None:
+            checks[key] = {"ok": False, "token_valid": False, "error": "not initialised"}
+            continue
+        try:
+            token_ok = bool(broker.is_token_set())
+            checks[key] = {"ok": token_ok, "token_valid": token_ok}
+            if token_ok:
+                broker_ok_count += 1
+        except Exception as e:
+            checks[key] = {"ok": False, "token_valid": False, "error": str(e)}
+
+    # ── SmartStream (LTPConsumer) ─────────────────────────────────────────────
+    ltp_consumer = getattr(state, "ltp_consumer", None)
+    if ltp_consumer:
+        connected = bool(getattr(ltp_consumer, "_running", False))
+        checks["smartstream"] = {"ok": connected, "connected": connected}
+    else:
+        checks["smartstream"] = {"ok": False, "connected": False, "error": "not initialised"}
+
+    # ── Scheduler ────────────────────────────────────────────────────────────
+    scheduler = getattr(state, "scheduler", None)
+    if scheduler:
+        try:
+            jobs = scheduler._scheduler.get_jobs()
+            checks["scheduler"] = {"ok": True, "jobs": len(jobs)}
+        except Exception as e:
+            checks["scheduler"] = {"ok": False, "error": str(e)}
+    else:
+        checks["scheduler"] = {"ok": False, "error": "not initialised"}
+
+    # ── App environment ───────────────────────────────────────────────────────
+    checks["app_env"] = settings.APP_ENV
+
+    # ── Overall status ────────────────────────────────────────────────────────
+    db_ok    = checks["database"].get("ok", False)
+    redis_ok = checks["redis"].get("ok", False)
+
+    if not db_ok or not redis_ok:
+        status = "not_ready"
+    elif broker_ok_count == 0 or not checks["smartstream"].get("ok") or not checks["scheduler"].get("ok"):
+        status = "degraded"
+    else:
+        status = "ready"
+
+    return {
+        "status":    status,
+        "checks":    checks,
+        "timestamp": datetime.now(IST).isoformat(),
+    }
+
+
 async def daily_system_reset():
     """
     Called at 08:00 IST every day.

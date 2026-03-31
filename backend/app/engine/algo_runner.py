@@ -253,6 +253,16 @@ class AlgoRunner:
             await self._set_no_trade(db, algo_state, grid_entry, "no_legs")
             return
 
+        # ── 3b. Pre-execution validation ───────────────────────────────────────
+        for leg in legs:
+            ok, reason = await self._pre_execution_check(algo, grid_entry, leg)
+            if not ok:
+                logger.error(
+                    f"[PRE-EXEC] BLOCKED {algo.name} leg {leg.leg_number}: {reason}"
+                )
+                await self._set_error(db, algo_state, grid_entry, reason)
+                return
+
         # ── 4. Transition AlgoState to ACTIVE ─────────────────────────────────
         algo_state.status       = AlgoRunStatus.ACTIVE
         algo_state.activated_at = datetime.now(IST)
@@ -343,6 +353,56 @@ class AlgoRunner:
         logger.info(
             f"✅ Entry complete: {algo.name} | {len(placed_orders)} orders placed"
         )
+
+    async def _pre_execution_check(
+        self, algo: "Algo", grid_entry: "GridEntry", leg: "AlgoLeg"
+    ) -> tuple[bool, str]:
+        """
+        Returns (ok, reason). Blocks execution if not ok.
+        Called before any leg is placed — gates on broker token + SmartStream.
+        PRACTIX entries skip live-only checks.
+        """
+        is_practix = grid_entry.is_practix
+
+        # 1. Broker token check for live orders
+        if not is_practix:
+            from app.models.account import BrokerType
+            account_broker = None
+            if hasattr(algo, "account_id") and algo.account_id:
+                from app.models.account import Account
+                from app.core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as _db:
+                    from sqlalchemy import select as _select
+                    _res = await _db.execute(_select(Account).where(Account.id == algo.account_id))
+                    _acc = _res.scalar_one_or_none()
+                if _acc and _acc.broker == BrokerType.ANGELONE:
+                    account_broker = self._angel_broker_map.get(_acc.client_id)
+                else:
+                    account_broker = self._zerodha_broker
+
+            if account_broker is not None and not account_broker.is_token_set():
+                return False, (
+                    f"Broker token not set for {algo.name} — complete broker login first"
+                )
+
+        # 2. SmartStream check for W&T legs and ORB algos (live only)
+        if not is_practix:
+            needs_stream = (
+                getattr(leg, "wt_enabled", False)
+                or getattr(algo, "entry_type", None) == "orb"
+            )
+            if needs_stream:
+                ltp_running = (
+                    self._ltp_consumer is not None
+                    and getattr(self._ltp_consumer, "_running", False)
+                )
+                if not ltp_running:
+                    return False, (
+                        f"SmartStream not connected — W&T/ORB requires live ticks "
+                        f"(algo={algo.name} leg={leg.leg_number})"
+                    )
+
+        return True, "ok"
 
     async def _place_leg(
         self,
@@ -772,23 +832,42 @@ class AlgoRunner:
                         logger.info(f"Exit delay: {exit_delay_secs}s for {order.symbol}")
                         await asyncio.sleep(exit_delay_secs)
 
-                # Place closing order (opposite direction)
-                close_dir = "sell" if order.direction == "buy" else "buy"
-                await self._order_placer.place(
-                    idempotency_key=f"exit:{order.id}:{reason}",
-                    algo_id=str(order.algo_id),
-                    symbol=order.symbol,
-                    exchange=order.exchange or "NFO",
-                    direction=close_dir,
-                    quantity=order.quantity,
-                    order_type="market",
-                    ltp=ltp,
-                    is_practix=order.is_practix,
-                    is_overnight=False,           # exit is always intraday
-                    broker_type=exit_broker_type,
-                    symbol_token=str(getattr(order, "instrument_token", None) or ""),
-                    account_id=str(order.account_id),
-                )
+                # Place closing order via ExecutionManager (single control point)
+                if self._execution_manager:
+                    await self._execution_manager.square_off(
+                        db              = db,
+                        idempotency_key = f"exit:{order.id}:{reason}",
+                        algo_id         = str(order.algo_id),
+                        account_id      = str(order.account_id),
+                        symbol          = order.symbol,
+                        exchange        = order.exchange or "NFO",
+                        direction       = order.direction,
+                        quantity        = order.quantity,
+                        algo_tag        = order.algo_tag or "",
+                        is_practix      = order.is_practix,
+                        broker_type     = exit_broker_type,
+                        symbol_token    = str(getattr(order, "instrument_token", None) or ""),
+                    )
+                else:
+                    # Fallback: direct OrderPlacer (execution_manager not wired)
+                    logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer for exit")
+                    close_dir = "sell" if order.direction == "buy" else "buy"
+                    await self._order_placer.place(
+                        idempotency_key = f"exit:{order.id}:{reason}",
+                        algo_id         = str(order.algo_id),
+                        symbol          = order.symbol,
+                        exchange        = order.exchange or "NFO",
+                        direction       = close_dir,
+                        quantity        = order.quantity,
+                        order_type      = "market",
+                        ltp             = ltp,
+                        is_practix      = order.is_practix,
+                        is_overnight    = False,
+                        broker_type     = exit_broker_type,
+                        symbol_token    = str(getattr(order, "instrument_token", None) or ""),
+                        account_id      = str(order.account_id),
+                        algo_tag        = order.algo_tag or "",
+                    )
 
                 # F9 — cancel broker SL orders
                 if cancel_broker_sl and not order.is_practix and self._order_placer:

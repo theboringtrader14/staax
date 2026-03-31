@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine as db_engine, Base
+from app.core.logging_config import setup_logging
 
 # ── API routers ────────────────────────────────────────────────────────────────
 from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots, holidays as holidays_api
@@ -76,8 +77,15 @@ ltp_consumer: LTPConsumer       = None
 async def lifespan(app: FastAPI):
     global redis_client, ws_manager, scheduler, ltp_cache, ltp_consumer
 
+    # ── 0. File logging ───────────────────────────────────────────────────────
+    setup_logging()
+
     # ── 1. Database ───────────────────────────────────────────────────────────
     logger.info("🚀 STAAX starting up...")
+    logger.info(f"🌍 Environment: {settings.APP_ENV.upper()}")
+    if settings.APP_ENV != "production":
+        logger.warning("⚠️ LIVE trading BLOCKED — development environment")
+        logger.warning("⚠️ Set APP_ENV=production in .env for live trading")
     # Wait for DB to be ready (handles startup race condition)
     import asyncio as _asyncio
     for _attempt in range(10):
@@ -93,7 +101,28 @@ async def lifespan(app: FastAPI):
 
     async with db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("✅ Database ready")
+
+    # Log which DB we are connected to (guards against pg16/Docker mix-up)
+    _db_url = settings.DATABASE_URL
+    try:
+        _host_part = _db_url.split("@")[-1] if "@" in _db_url else _db_url
+        logger.info(f"✅ [DB] Connected to: {_host_part}")
+    except Exception:
+        logger.info("✅ Database ready")
+
+    # Warn loudly if DB looks empty (connected to wrong instance)
+    try:
+        from sqlalchemy import text as _text
+        async with db_engine.connect() as _c:
+            _algo_count  = (await _c.execute(_text("SELECT COUNT(*) FROM algos"))).scalar() or 0
+            _acct_count  = (await _c.execute(_text("SELECT COUNT(*) FROM accounts"))).scalar() or 0
+        if _algo_count == 0 and _acct_count == 0:
+            logger.warning("⚠️ [DB] EMPTY DATABASE DETECTED — likely connected to wrong instance")
+            logger.warning("⚠️ [DB] Expected Docker staax_db. Check DATABASE_URL in .env")
+        else:
+            logger.info(f"✅ [DB] algos={_algo_count} accounts={_acct_count}")
+    except Exception as _e:
+        logger.warning(f"[DB] Empty-DB check failed (non-fatal): {_e}")
 
     # ── 2. Redis ──────────────────────────────────────────────────────────────
     redis_client = aioredis.from_url(
@@ -102,6 +131,7 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
     )
     await redis_client.ping()
+    app.state.redis_client = redis_client
     logger.info("✅ Redis connected")
 
     # ── 3. WebSocket manager ──────────────────────────────────────────────────
