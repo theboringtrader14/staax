@@ -3656,3 +3656,57 @@ UI/UX batch in progress:
 ### Angel One API Key Fix Needed
 ANGELONE_KARTHIK_API_KEY=bREnxDe5 returns AG8004
 Fix: Login to https://smartapi.angelbroking.com → My Apps → copy correct API key → update backend/.env
+
+## Session Update — 2026-03-31 (Evening)
+
+### Server Setup Complete
+- AWS EC2 t3.small launched: i-00a73ee84fac5b0be
+- Static IP (Elastic): 13.202.164.243 (ap-south-1 Mumbai)
+- SSH key: ~/.ssh/lifex-key.pem
+- Server stack: Ubuntu 24.04, Docker 29.3.1, Node v20.20.2, Python 3.12.3, Redis
+- DB: postgres:16 container running on server (staax_db)
+- Angel One app created with IP 13.202.164.243 registered
+- Mom's API key updated in .env
+
+### LIFEX Brand
+- Platform name: LIFEX (lifex.in)
+- STAAX, INVEX, BUDGEX are LIFEX modules
+- Design: dark (#050510), neon indigo glassmorphism
+- Landing page built: frontend/src/pages/LandingPage.tsx
+- Module accents: STAAX=indigo, INVEX=emerald, BUDGEX=amber
+
+### Deployment Status
+- Code cloned to server at ~/staax
+- Python venv being set up
+- .env needs to be created on server
+- DB migrations pending on server
+
+### SSH Access
+ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
+
+## Session Update — 2026-03-31 (Evening)
+
+### Server Setup Complete
+- AWS EC2 t3.small launched: i-00a73ee84fac5b0be
+- Static IP (Elastic): 13.202.164.243 (ap-south-1 Mumbai)
+- SSH key: ~/.ssh/lifex-key.pem
+- Server stack: Ubuntu 24.04, Docker 29.3.1, Node v20.20.2, Python 3.12.3, Redis
+- DB: postgres:16 container running on server (staax_db)
+- Angel One app created with IP 13.202.164.243 registered
+- Mom's API key updated in .env
+
+### LIFEX Brand
+- Platform name: LIFEX (lifex.in)
+- STAAX, INVEX, BUDGEX are LIFEX modules
+- Design: dark (#050510), neon indigo glassmorphism
+- Landing page built: frontend/src/pages/LandingPage.tsx
+- Module accents: STAAX=indigo, INVEX=emerald, BUDGEX=amber
+
+### Deployment Status
+- Code cloned to server at ~/staax
+- Python venv being set up
+- .env needs to be created on server
+- DB migrations pending on server
+
+### SSH Access
+ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
