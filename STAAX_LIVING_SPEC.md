@@ -3710,3 +3710,33 @@ ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
 
 ### SSH Access
 ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
+
+## Session Update — 2026-03-31 (Night)
+
+### Server Deployment Progress
+- EC2 t3.small: 13.202.164.243 (ap-south-1)
+- Code cloned: ~/staax on server
+- Python venv + deps installed
+- .env copied to server (APP_ENV=production)
+- Redis enabled on boot
+- Migrations: pending (psycopg2-binary fix in progress)
+- nginx + systemd: infra/ files created, not yet deployed
+
+### LIFEX UI Progress
+- Dark-only mode enforced (light mode removed)
+- Glassmorphism cards with ::before gradient corners
+- Aggressive neon glow on cards + hover
+- Landing page live at /
+- Auth removed — all routes open
+- Phase 1+2 (Dashboard radial rings, donuts, area charts, outer frame): in progress
+
+### Angel One API Key
+- Mom's account: new app created, IP 13.202.164.243 registered, new API key saved
+- Will work FROM server only (local Mac will get AG8004)
+- Karthik/Wife accounts: still need new apps registered with same IP
+
+### Pending
+- Server: complete migrations + start backend + nginx
+- LIFEX Phase 1-5: UI overhaul (Dashboard, Analytics, Reports)
+- Domain: lifex.in purchase pending
+- Karthik + Wife AO apps: register 13.202.164.243
