@@ -167,7 +167,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       {/* Row 2 — chip toggle: P&L heatmap vs Health Scores */}
       <div className="card" style={{ marginBottom: '12px', overflowX: 'auto' }}>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-          {([['heatmap', 'P&L by Day × Algo'], ['health', 'Algo Health Scores']] as const).map(([v, l]) => (
+          {([['heatmap', 'P&L Heatmap'], ['health', 'Health Scores']] as const).map(([v, l]) => (
             <button key={v} onClick={() => setActiveView(v)}
               className={`chip ${activeView === v ? 'chip-active' : 'chip-inactive'}`}
               style={{ height: '28px', padding: '0 14px', fontSize: '11px' }}>{l}</button>
