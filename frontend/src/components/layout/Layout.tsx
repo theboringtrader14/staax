@@ -10,7 +10,7 @@ export default function Layout() {
   return (
     <div style={{ display:'flex', minHeight:'100vh' }}>
       <Sidebar />
-      <div style={{ flex:1, display:'flex', flexDirection:'column' }}>
+      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
         <TopBar />
         <main style={{ flex:1, padding:'20px 24px' }}>
           <Outlet />

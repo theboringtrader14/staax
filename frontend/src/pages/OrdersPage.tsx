@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { algosAPI, ordersAPI, openPositionsAPI } from '@/services/api'
+import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI } from '@/services/api'
 
 const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
 
@@ -194,12 +194,17 @@ export default function OrdersPage() {
   const [exitSaving, setExitSaving]   = useState(false)
   const [algoPopup, setAlgoPopup]     = useState<{ algoName: string; data: any } | null>(null)
   const [openPositions, setOpenPositions] = useState<OpenPosition[]>([])
+  const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
 
-  // Fetch open positions once on mount
+  // Fetch open positions + holidays once on mount
   useEffect(() => {
     openPositionsAPI.list(isPractixMode)
       .then(res => setOpenPositions(res.data?.open_positions || []))
       .catch(() => {})
+    holidaysAPI.list().then(res => {
+      const dates = new Set<string>((res.data || []).map((h: any) => h.date as string))
+      setHolidayDates(dates)
+    }).catch(() => {})
   }, [isPractixMode])
 
   // Load orders + waiting algos from API — re-fetch when day tab changes
@@ -543,6 +548,7 @@ export default function OrdersPage() {
           const isWeekend  = d === 'SAT' || d === 'SUN'
           const isToday    = d === todayDay()
           const isSelected = activeDay === d
+          const isHoliday  = !!weekDates[d] && holidayDates.has(weekDates[d])
           const pnl: number | null = null
           return (
             <button key={d} onClick={() => setActiveDay(d)} style={{
@@ -550,14 +556,18 @@ export default function OrdersPage() {
               gap: '2px', padding: '8px 4px', fontSize: '12px', fontWeight: 600,
               border: 'none', cursor: 'pointer',
               background: isSelected ? 'var(--bg-surface)' : 'transparent',
-              color: isSelected ? 'var(--accent-blue)' : isWeekend ? 'var(--text-dim)' : 'var(--text-muted)',
+              color: isSelected ? 'var(--accent-blue)' : isWeekend || isHoliday ? 'var(--text-dim)' : 'var(--text-muted)',
               borderBottom: isSelected ? '2px solid var(--accent-blue)' : '2px solid transparent',
               transition: 'all 0.12s',
+              opacity: isHoliday && !isSelected ? 0.55 : 1,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>{d}</span>
-                {isToday && (
+                {isToday && !isHoliday && (
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-blue)', flexShrink: 0 }} />
+                )}
+                {isHoliday && (
+                  <span style={{ fontSize: '9px', color: 'var(--accent-amber)' }} title="Market holiday">🏛</span>
                 )}
               </div>
               {pnl != null && (
@@ -574,7 +584,14 @@ export default function OrdersPage() {
       {/* Scroll zone: waiting algos + all order groups */}
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
       <div style={{ height: '14px' }} />
-      {filteredWaiting.length > 0 && (
+      {!!weekDates[activeDay] && holidayDates.has(weekDates[activeDay]) && (
+        <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(215,123,18,0.08)', border: '1px solid rgba(215,123,18,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px' }}>🏛</span>
+          <span style={{ fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600 }}>Market Holiday</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>— No trading scheduled for {weekDates[activeDay]}</span>
+        </div>
+      )}
+      {filteredWaiting.length > 0 && !holidayDates.has(weekDates[activeDay] || '') && (
         <div style={{ marginBottom: '16px' }}>
           {filteredWaiting.map(w => {
             // Determine if entry time has passed on today's tab

@@ -19,7 +19,7 @@ interface HealthScore {
   trades: number; win_pct: number; total_pnl: number
 }
 
-const TABS = ['Performance', 'Failures', 'Slippage'] as const
+const TABS = ['Performance', 'Failures', 'Slippage', 'Latency'] as const
 type Tab = typeof TABS[number]
 
 const HEATMAP_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
@@ -174,7 +174,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
         {activeView === 'heatmap' && (
           <>
-            <div style={secHdr}>P&amp;L by Day × Algo · FY {fy}</div>
+            <div style={secHdr}>P&amp;L by Day × Algo</div>
             {heatmapAlgos.length === 0
               ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No day-breakdown data available.</div>
               : <div style={tblWrap}>
@@ -262,11 +262,10 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         const maxAbsPnl = Math.max(...timeSlots.map((s: any) => Math.abs(s.total_pnl)), 1)
         return (
           <div className="card" style={{ marginBottom: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+            <div style={{ marginBottom: '14px' }}>
               <span style={{ ...secHdr, marginBottom: 0 }}>Best Time to Trade</span>
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: '4px' }}>FY {fy}</span>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px', paddingTop: '16px' }}>
               {timeSlots.map((slot: any) => {
                 const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 60))
                 const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
@@ -300,9 +299,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
       {/* Row 4 — Strategy Type Breakdown */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <div style={{ marginBottom: '12px' }}>
           <span style={{ ...secHdr, marginBottom: 0 }}>Strategy Type Breakdown</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: '4px' }}>FY {fy}</span>
         </div>
         <div style={tblWrap}>
           <table className="staax-table" style={{ width: '100%' }}>
@@ -355,7 +353,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
       </div>
 
       <div className="card" style={{ marginBottom: '12px' }}>
-        <div style={secHdr}>Errors per Algo (FY)</div>
+        <div style={secHdr}>Errors per Algo</div>
         <div style={tblWrap}>
           <table className="staax-table" style={{ width: '100%' }}>
             <thead><tr><th>Algo</th><th>Errors</th><th>Last Error</th></tr></thead>
@@ -432,7 +430,7 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
       </div>
 
       <div className="card">
-        <div style={secHdr}>Slippage per Algo (FY)</div>
+        <div style={secHdr}>Slippage per Algo</div>
         <div style={{ ...tblWrap, overflowX: 'auto' }}>
           <table className="staax-table" style={{ width: '100%' }}>
             <thead>
@@ -465,7 +463,105 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
   )
 }
 
-// ── Tab 4: Health Scores — from /reports/health-scores ────────────────────────
+// ── Tab 4: Latency Tracker — from /reports/latency ────────────────────────────
+interface LatencyData {
+  avg_latency_ms: number
+  p50_latency_ms: number
+  p95_latency_ms: number
+  max_latency_ms: number
+  total_orders: number
+  by_broker: { broker: string; avg_ms: number; count: number }[]
+  by_algo:   { algo_name: string; avg_ms: number; count: number; total_orders: number }[]
+}
+
+function LatencyTab({ data }: { data: LatencyData | null }) {
+  if (!data || data.total_orders === 0) {
+    return (
+      <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px', fontSize: '13px' }}>
+        No latency data yet — execute trades to see metrics
+      </div>
+    )
+  }
+
+  const maxBrokerMs = Math.max(...data.by_broker.map(b => b.avg_ms), 1)
+  const maxAlgoMs   = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
+
+  function latencyColor(ms: number): string {
+    if (ms < 500)  return 'var(--green)'
+    if (ms < 2000) return 'var(--accent-amber)'
+    return 'var(--red)'
+  }
+
+  return (
+    <div>
+      {/* Row 1 — 4 summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
+        <SummaryCard label="Avg Latency" value={`${data.avg_latency_ms} ms`}
+          valueColor={latencyColor(data.avg_latency_ms)} sub={`${data.total_orders} orders`} />
+        <SummaryCard label="P50 (Median)" value={`${data.p50_latency_ms} ms`}
+          valueColor={latencyColor(data.p50_latency_ms)} />
+        <SummaryCard label="P95" value={`${data.p95_latency_ms} ms`}
+          valueColor={latencyColor(data.p95_latency_ms)} />
+        <SummaryCard label="Max" value={`${data.max_latency_ms} ms`}
+          valueColor={latencyColor(data.max_latency_ms)} />
+      </div>
+
+      {/* Row 2 — By Broker */}
+      {data.by_broker.length > 0 && (
+        <div className="card" style={{ marginBottom: '12px' }}>
+          <div style={secHdr}>By Broker</div>
+          <div style={tblWrap}>
+            <table className="staax-table" style={{ width: '100%' }}>
+              <thead>
+                <tr><th>Broker</th><th>Avg (ms)</th><th>Orders</th><th style={{ width: '160px' }}>Bar</th></tr>
+              </thead>
+              <tbody>
+                {data.by_broker.map(b => (
+                  <tr key={b.broker}>
+                    <td style={{ fontWeight: 600 }}>{b.broker}</td>
+                    <td style={{ fontWeight: 700, color: latencyColor(b.avg_ms) }}>{b.avg_ms}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{b.count}</td>
+                    <td>
+                      <div style={{ width: `${Math.round(b.avg_ms / maxBrokerMs * 140)}px`, height: '8px', background: 'rgba(245,158,11,0.6)', borderRadius: '3px', transition: 'width 0.3s' }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Row 3 — By Algo */}
+      {data.by_algo.length > 0 && (
+        <div className="card">
+          <div style={secHdr}>By Algo</div>
+          <div style={tblWrap}>
+            <table className="staax-table" style={{ width: '100%' }}>
+              <thead>
+                <tr><th>Algo</th><th>Avg (ms)</th><th>Orders</th><th style={{ width: '160px' }}>Bar</th></tr>
+              </thead>
+              <tbody>
+                {data.by_algo.map(a => (
+                  <tr key={a.algo_name}>
+                    <td style={{ fontWeight: 600 }}>{a.algo_name}</td>
+                    <td style={{ fontWeight: 700, color: latencyColor(a.avg_ms) }}>{a.avg_ms}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{a.count}</td>
+                    <td>
+                      <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 140)}px`, height: '8px', background: 'rgba(245,158,11,0.6)', borderRadius: '3px', transition: 'width 0.3s' }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Grade Colors — shared ──────────────────────────────────────────────────────
 const GRADE_COLORS: Record<string, { color: string; bg: string; border: string }> = {
   A: { color: 'var(--green)',        bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)'    },
   B: { color: 'var(--accent-blue)',  bg: 'rgba(0,176,240,0.12)',    border: 'rgba(0,176,240,0.3)'    },
@@ -489,6 +585,7 @@ export default function AnalyticsPage() {
   const [healthScores, setHealthScores] = useState<HealthScore[]>([])
   const [healthAvg, setHealthAvg]     = useState(0)
   const [timeSlots, setTimeSlots]     = useState<any[]>([])
+  const [latencyData, setLatencyData] = useState<LatencyData | null>(null)
   const [loading, setLoading]         = useState(true)
   const [fy, setFy]                   = useState('2025-26')
 
@@ -504,7 +601,8 @@ export default function AnalyticsPage() {
       reportsAPI.slippage({ fy, is_practix: isPractixMode }),
       reportsAPI.healthScores({ fy, is_practix: isPractixMode }),
       reportsAPI.timeHeatmap({ fy, is_practix: isPractixMode }),
-    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes, tRes]) => {
+      reportsAPI.latency({ fy, is_practix: isPractixMode }),
+    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes, tRes, latRes]) => {
       const rawMetrics: any[] = mRes.status === 'fulfilled'
         ? (Array.isArray(mRes.value.data) ? mRes.value.data : (mRes.value.data?.metrics || []))
         : []
@@ -541,6 +639,9 @@ export default function AnalyticsPage() {
       }
       if (tRes.status === 'fulfilled') {
         setTimeSlots(tRes.value.data?.slots || [])
+      }
+      if (latRes.status === 'fulfilled') {
+        setLatencyData(latRes.value.data || null)
       }
     }).finally(() => setLoading(false))
   }, [isPractixMode, fy])
@@ -588,6 +689,7 @@ export default function AnalyticsPage() {
           {activeTab === 'Performance' && <PerformanceTab metrics={metrics} breakdown={breakdown} allOrders={allOrders} algos={algos} scores={healthScores} avgScore={healthAvg} fy={fy} timeSlots={timeSlots} />}
           {activeTab === 'Failures'    && <FailuresTab data={errorsData} />}
           {activeTab === 'Slippage'    && <SlippageTab data={slippageData} />}
+          {activeTab === 'Latency'     && <LatencyTab data={latencyData} />}
         </>
       )}
     </div>

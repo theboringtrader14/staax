@@ -520,6 +520,90 @@ async def time_heatmap(
     return {"slots": slots, "fy": fy}
 
 
+@router.get("/latency")
+async def latency_analytics(
+    db:         AsyncSession = Depends(get_db),
+    fy:         str          = Query("2025-26"),
+    account_id: str | None   = Query(None),
+    is_practix: bool | None  = Query(None),
+):
+    """Order latency analytics — avg/p50/p95/max + breakdown by broker and algo."""
+    from app.models.algo import Algo
+    from app.models.account import Account
+    fy_start, fy_end = _fy_range(fy)
+    conditions = [
+        Order.latency_ms.isnot(None),
+        Order.placed_at >= fy_start,
+        Order.placed_at <= fy_end,
+    ]
+    if account_id:
+        import uuid as _uuid
+        try:
+            conditions.append(Order.account_id == _uuid.UUID(account_id))
+        except ValueError:
+            pass
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
+
+    result = await db.execute(
+        select(Order, Algo.name.label("algo_name"), Account.nickname.label("broker"))
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
+        .join(Account, Order.account_id == Account.id, isouter=True)
+        .where(*conditions)
+    )
+    rows = result.all()
+
+    if not rows:
+        return {
+            "avg_latency_ms": 0, "p50_latency_ms": 0, "p95_latency_ms": 0,
+            "max_latency_ms": 0, "total_orders": 0,
+            "by_broker": [], "by_algo": [], "fy": fy,
+        }
+
+    all_ms = sorted(int(r.Order.latency_ms) for r in rows)
+    total  = len(all_ms)
+
+    def percentile(data: list, pct: float) -> float:
+        idx = max(0, int(len(data) * pct / 100) - 1)
+        return float(data[idx])
+
+    # By broker
+    broker_map: dict = {}
+    for r in rows:
+        b = r.broker or "unknown"
+        broker_map.setdefault(b, []).append(int(r.Order.latency_ms))
+    by_broker = sorted([
+        {"broker": b, "avg_ms": round(sum(v) / len(v), 1), "count": len(v)}
+        for b, v in broker_map.items()
+    ], key=lambda x: x["avg_ms"])
+
+    # By algo
+    algo_map: dict = {}
+    for r in rows:
+        name = r.algo_name or str(r.Order.algo_id)
+        algo_map.setdefault(name, []).append(int(r.Order.latency_ms))
+    by_algo = sorted([
+        {
+            "algo_name": name,
+            "avg_ms": round(sum(v) / len(v), 1),
+            "count": len(v),
+            "total_orders": len(v),
+        }
+        for name, v in algo_map.items()
+    ], key=lambda x: x["avg_ms"])
+
+    return {
+        "avg_latency_ms": round(sum(all_ms) / total, 1),
+        "p50_latency_ms": percentile(all_ms, 50),
+        "p95_latency_ms": percentile(all_ms, 95),
+        "max_latency_ms": float(all_ms[-1]),
+        "total_orders": total,
+        "by_broker": by_broker,
+        "by_algo":   by_algo,
+        "fy":        fy,
+    }
+
+
 @router.get("/download")
 async def download_trades(
     db: AsyncSession = Depends(get_db),
