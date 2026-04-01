@@ -37,6 +37,7 @@ class PositionMonitor:
     tsl_trail_count:   int   = 0
     orb_high:          float = 0.0   # ORB range high — used as SL for sell legs
     orb_low:           float = 0.0   # ORB range low  — used as SL for buy legs
+    symbol:            str   = ""    # trading symbol — for debug logging
 
     def compute_levels(self):
         """Compute initial SL and TP levels from entry price."""
@@ -142,6 +143,7 @@ class SLTPMonitor:
             if not m.is_active or m.instrument_token != token:
                 continue
             ul = self._underlying_ltps.get(m.underlying_token)
+            logger.debug(f"[SLTPMON] tick {m.symbol or order_id}: ltp={ltp}, sl={m.sl_actual:.2f}, tp={m.tp_level:.2f}")
 
             # Push unrealised PNL to MTMMonitor for algo-level SL/TP breach checks.
             # This is the only place where per-token LTP is matched to a position,

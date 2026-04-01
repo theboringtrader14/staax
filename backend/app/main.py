@@ -214,6 +214,7 @@ async def lifespan(app: FastAPI):
         mtm_monitor   = mtm_monitor,
         ltp_consumer  = ltp_consumer,
         zerodha       = zerodha,
+        angel_broker  = angelone_karthik,  # instrument master is pre-warmed on this instance
     )
 
     order_reconciler.wire(

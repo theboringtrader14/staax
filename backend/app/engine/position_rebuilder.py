@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from app.engine.mtm_monitor    import MTMMonitor
     from app.engine.ltp_consumer   import LTPConsumer
     from app.brokers.zerodha       import ZerodhaBroker
+    from app.brokers.angelone      import AngelOneBroker
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class PositionRebuilder:
         self._mtm_monitor:   Optional["MTMMonitor"]    = None
         self._ltp_consumer:  Optional["LTPConsumer"]   = None
         self._zerodha:       Optional["ZerodhaBroker"] = None
+        self._angel_broker:  Optional["AngelOneBroker"] = None
 
     def wire(
         self,
@@ -59,6 +61,7 @@ class PositionRebuilder:
         mtm_monitor,
         ltp_consumer,
         zerodha,
+        angel_broker=None,
     ) -> None:
         self._sl_tp_monitor = sl_tp_monitor
         self._tsl_engine    = tsl_engine
@@ -66,7 +69,64 @@ class PositionRebuilder:
         self._mtm_monitor   = mtm_monitor
         self._ltp_consumer  = ltp_consumer
         self._zerodha       = zerodha
+        self._angel_broker  = angel_broker
         logger.info("[REBUILDER] Wired to all engines")
+
+    async def backfill_instrument_tokens(self, db: AsyncSession) -> None:
+        """
+        One-time startup pass: fill NULL instrument_token on open Orders using AO master.
+        Also re-subscribes any newly resolved tokens so ticks flow immediately.
+        """
+        if not self._angel_broker:
+            logger.warning("[BACKFILL] No angel_broker wired — skipping instrument_token backfill")
+            return
+
+        result = await db.execute(
+            select(Order).where(
+                Order.status == OrderStatus.OPEN,
+                Order.instrument_token.is_(None),
+            )
+        )
+        orders_missing = result.scalars().all()
+        if not orders_missing:
+            logger.info("[BACKFILL] All open orders already have instrument_token — nothing to backfill")
+            return
+
+        logger.info("[BACKFILL] %d open orders have NULL instrument_token — fetching AO master", len(orders_missing))
+        try:
+            master = await self._angel_broker.get_instrument_master()
+        except Exception as e:
+            logger.error("[BACKFILL] Could not fetch AO instrument master: %s — skipping backfill", e)
+            return
+
+        # Build symbol → token lookup (keep first match per tradingsymbol)
+        sym_to_token: dict = {}
+        for row in master:
+            sym = row.get("tradingsymbol", "")
+            tok = row.get("token") or row.get("instrument_token")
+            if sym and tok and sym not in sym_to_token:
+                try:
+                    sym_to_token[sym] = int(tok)
+                except (ValueError, TypeError):
+                    pass
+
+        filled = 0
+        for order in orders_missing:
+            token = sym_to_token.get(order.symbol or "")
+            if not token:
+                logger.warning("[BACKFILL] No token found in AO master for symbol '%s' (order %s)", order.symbol, order.id)
+                continue
+            order.instrument_token = token
+            filled += 1
+            if self._ltp_consumer:
+                self._ltp_consumer.subscribe([token])
+                logger.info("[BACKFILL] order %s sym=%s → token=%s (subscribed)", order.id, order.symbol, token)
+            else:
+                logger.info("[BACKFILL] order %s sym=%s → token=%s (ltp_consumer not wired)", order.id, order.symbol, token)
+
+        if filled:
+            await db.commit()
+        logger.info("[BACKFILL] instrument_token backfill complete — %d/%d orders updated", filled, len(orders_missing))
 
     async def run(self) -> None:
         """
@@ -78,6 +138,9 @@ class PositionRebuilder:
 
         try:
             async with AsyncSessionLocal() as db:
+                # ── Backfill NULL instrument_token before recovery loop ────────
+                await self.backfill_instrument_tokens(db)
+
                 # ── Fetch all open orders from DB ─────────────────────────────
                 result = await db.execute(
                     select(Order).where(Order.status == OrderStatus.OPEN)

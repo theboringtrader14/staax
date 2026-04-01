@@ -769,6 +769,7 @@ class AlgoRunner:
                 tp_value=leg.tp_value,
                 orb_high=orb_high,
                 orb_low=orb_low,
+                symbol=symbol,
             )
             self._sl_tp_monitor.add_position(
                 pos_monitor,
@@ -1195,9 +1196,21 @@ class AlgoRunner:
         underlying = _legs[0].underlying.upper()
         underlying_token = self._ORB_UNDERLYING_TOKENS.get(underlying, 0)
         if not underlying_token:
+            # MCX instruments (GOLDM etc.) use rolling futures tokens — look up from bot_runner
+            try:
+                from app.engine.bot_runner import MCX_TOKENS as _MCX
+                underlying_token = _MCX.get(underlying, 0)
+                if underlying_token:
+                    logger.info(
+                        f"[ORB] {underlying} resolved via MCX_TOKENS → {underlying_token} "
+                        f"(rolls monthly — bot_runner.MCX_TOKENS is the source of truth)"
+                    )
+            except ImportError:
+                pass
+        if not underlying_token:
             logger.error(
                 f"[ORB] Unknown underlying '{underlying}' for algo {algo.name} — "
-                f"supported: {list(self._ORB_UNDERLYING_TOKENS)}"
+                f"add to _ORB_UNDERLYING_TOKENS (NSE index) or MCX_TOKENS (MCX futures)"
             )
             return
 
