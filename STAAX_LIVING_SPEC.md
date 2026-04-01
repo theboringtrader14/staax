@@ -3777,3 +3777,24 @@ Action: Update bot_runner.py MCX_TOKENS with May contracts before expiry
 - Karthik AO: needs new SmartAPI app with server IP
 - Wife AO: MCX only, deferred to AO family integration
 - MCX token rotation: must update monthly
+
+## Session Closeout — 2026-04-01 (Night)
+
+### Final State
+- GOLDM: ₹1,51,245 live at 9:32 PM IST ✅
+- SmartStream: connected, 7 tokens ✅
+- Server: production, migrations 0001-0019, 21 algos, 37 legs ✅
+- MCX auto-rotation: active, fires daily 06:00 IST ✅
+
+### April 3 Action (GOLDM expiry — AUTOMATED)
+- Auto-rotation will pick GOLDM May token 487819 at 06:00 IST
+- Just restart backend and verify:
+  curl http://localhost:8000/api/v1/bots/ltp?symbol=GOLDM
+- Expected: token=487819, ltp > 0
+
+### Next Session Priorities
+1. Test Mom Test-1 algo in PRACTIX mode (create via UI)
+2. Verify Channel strategy signal generation end-to-end
+3. DTR signal verification with real GOLDM daily data
+4. Server full deploy (git pull + rebuild)
+5. Fix Zerodha UUID mismatch in export_seed_data.py
