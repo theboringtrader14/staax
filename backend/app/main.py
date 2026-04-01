@@ -278,6 +278,14 @@ async def lifespan(app: FastAPI):
     # ── 13c. Auto-login AO accounts whose token is stale/missing ─────────────
     await _ao_startup_auto_login(app)
 
+    # ── 13d. MCX contract expiry check ───────────────────────────────────────
+    try:
+        from app.core.mcx_holidays import check_mcx_expiry_warnings
+        for _msg in check_mcx_expiry_warnings():
+            logger.warning(_msg)
+    except Exception as _mcx_e:
+        logger.warning(f"[STARTUP] MCX expiry check failed (non-fatal): {_mcx_e}")
+
     # ── 14. Auto-start Market Feed if broker token exists in DB ──────────────
     await _auto_start_market_feed(app)
 

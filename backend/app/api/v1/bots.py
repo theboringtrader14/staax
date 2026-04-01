@@ -1,10 +1,11 @@
 """Bots API — Indicator Systems CRUD."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone, date
+from zoneinfo import ZoneInfo
 from app.core.database import get_db
 from app.models.bot import Bot, BotOrder, BotSignal, IndicatorType
 import uuid as uuid_lib
@@ -82,6 +83,34 @@ async def create_bot(body: BotCreate, db: AsyncSession = Depends(get_db)):
     except Exception: pass
     return _bot_dict(bot)
 
+@router.get("/ltp")
+async def get_bot_ltp(symbol: str = Query(..., description="MCX symbol, e.g. GOLDM"), request: Request = None):
+    """
+    Return current LTP from Redis cache for a bot instrument token.
+    Exchange: MCX (exchangeType=5). Token sourced from MCX_TOKENS in bot_runner.
+    """
+    from app.engine.bot_runner import MCX_TOKENS
+    symbol_upper = symbol.upper()
+    token = MCX_TOKENS.get(symbol_upper)
+    if token is None:
+        raise HTTPException(status_code=404, detail=f"Unknown symbol: {symbol!r}. Known symbols: {list(MCX_TOKENS.keys())}")
+
+    ltp_cache = getattr(request.app.state, "ltp_cache", None) if request else None
+    if not ltp_cache:
+        return {"symbol": symbol_upper, "token": token, "ltp": None, "last_updated": None, "reason": "LTP cache not available"}
+
+    ltp = await ltp_cache.get(token)
+    if ltp is None:
+        return {"symbol": symbol_upper, "token": token, "ltp": None, "last_updated": None, "reason": "No tick data received yet — SmartStream may not be connected"}
+
+    return {
+        "symbol":       symbol_upper,
+        "token":        token,
+        "ltp":          ltp,
+        "last_updated": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+    }
+
+
 @router.patch("/{bot_id}")
 async def update_bot(bot_id: str, body: dict, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Bot).where(Bot.id == bot_id))
@@ -131,6 +160,89 @@ async def list_bot_orders(bot_id: str, db: AsyncSession = Depends(get_db)):
         "signal_type":  o.signal_type,
         "expiry":       o.expiry,
     } for o in orders]
+
+
+@router.get("/{bot_id}/candles")
+async def get_bot_candles(bot_id: str, limit: int = Query(5, ge=1, le=100)):
+    """Return last N completed candles from the in-memory CandleAggregator for this bot."""
+    from app.engine.bot_runner import bot_runner
+    agg = bot_runner._aggregators.get(bot_id)
+    if agg is None:
+        raise HTTPException(404, detail=f"Bot {bot_id!r} not in bot_runner — may not be active or loaded")
+    candles = agg.candles[-limit:]
+    if not candles:
+        return {
+            "bot_id":        bot_id,
+            "timeframe_mins": agg._tf,
+            "candles":       [],
+            "note": "No completed candles yet — waiting for first bar boundary",
+        }
+    return {
+        "bot_id":         bot_id,
+        "timeframe_mins": agg._tf,
+        "count":          len(candles),
+        "candles": [
+            {
+                "timestamp": c.ts.isoformat(),
+                "open":      c.open,
+                "high":      c.high,
+                "low":       c.low,
+                "close":     c.close,
+            }
+            for c in candles
+        ],
+    }
+
+
+@router.post("/{bot_id}/fetch-daily-data")
+async def fetch_bot_daily_data(bot_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Manually fetch daily OHLC from Angel One and load DTR pivots for this bot.
+    Normally runs via scheduler at 09:00 IST. Use this to load data mid-session
+    or verify pivot levels.
+    """
+    from app.engine.bot_runner import bot_runner
+    from app.models.bot import IndicatorType
+
+    result = await db.execute(select(Bot).where(Bot.id == bot_id))
+    bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(404, "Bot not found")
+    if bot.indicator != IndicatorType.DTR:
+        raise HTTPException(400, f"Bot indicator is {bot.indicator!r} — only DTR bots use daily data")
+
+    broker = next((b for b in bot_runner._angel_brokers if b.is_token_set()), None)
+    if not broker:
+        raise HTTPException(503, "No Angel One broker with a valid token — complete login first")
+
+    data = await bot_runner.fetch_daily_candles(bot.instrument, broker)
+    if not data:
+        raise HTTPException(502, f"fetch_daily_candles returned no data for {bot.instrument!r}")
+
+    strategy = bot_runner._strategies.get(bot_id)
+    if strategy:
+        strategy.set_daily_data(
+            day_open   = data["day_open"],
+            prev_high  = data["prev_high"],
+            prev_low   = data["prev_low"],
+            prev_close = data["prev_close"],
+        )
+
+    upper_pivot = getattr(strategy, "upper_pivot", None) if strategy else None
+    lower_pivot = getattr(strategy, "lower_pivot", None) if strategy else None
+
+    return {
+        "bot_id":          bot_id,
+        "instrument":      bot.instrument,
+        "day_open":        data["day_open"],
+        "prev_high":       data["prev_high"],
+        "prev_low":        data["prev_low"],
+        "prev_close":      data["prev_close"],
+        "upper_pivot":     upper_pivot,
+        "lower_pivot":     lower_pivot,
+        "strategy_loaded": strategy is not None,
+    }
+
 
 def _signal_dict(s: BotSignal) -> dict:
     return {

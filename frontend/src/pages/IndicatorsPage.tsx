@@ -362,10 +362,28 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   const [showEdit, setShowEdit]   = useState(false)
   const [showDel, setShowDel]     = useState(false)
   const [showArch, setShowArch]   = useState(false)
+  const [ltp, setLtp]             = useState<number | null>(null)
+  const [prevLtp, setPrevLtp]     = useState<number | null>(null)
 
   useEffect(() => {
     apiGet(`/bots/${bot.id}/orders`).then(r => setOrders(r.data || [])).catch(() => {})
   }, [bot.id])
+
+  // Live LTP for MCX instruments — poll every 5 s
+  const isMcx = ['GOLDM', 'SILVERMIC'].includes(bot.instrument)
+  useEffect(() => {
+    if (!isMcx) return
+    const fetch = () =>
+      apiGet(`/bots/ltp?symbol=${bot.instrument}`)
+        .then(r => {
+          const val: number | null = r.data?.ltp ?? null
+          setLtp(prev => { setPrevLtp(prev); return val })
+        })
+        .catch(() => {})
+    fetch()
+    const id = setInterval(fetch, 5000)
+    return () => clearInterval(id)
+  }, [bot.instrument, isMcx])
 
   const openOrder = orders.find(o => o.status === 'open')
   const accountName = accounts.find((a: any) => a.id === bot.account_id)?.nickname || '—'
@@ -411,13 +429,32 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
 
         {/* Name + meta */}
         <div onClick={() => setShowEdit(true)} style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', cursor: 'pointer', transition: 'color 0.12s' }} onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--accent-blue)'} onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--text)'}>{bot.name}</div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: isMcx ? '6px' : '10px', display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span>{bot.instrument}</span><span>·</span><span>{indLabel}</span><span>·</span><span>{tfLabel}</span>
           <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '20px',
             background: 'var(--accent-blue-dim)', color: 'var(--accent-blue)', border: '1px solid rgba(0,176,240,0.2)' }}>
             {accountName}
           </span>
         </div>
+
+        {/* Live LTP for MCX instruments */}
+        {isMcx && (() => {
+          if (ltp === null) return (
+            <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '8px' }}>—</div>
+          )
+          const diff   = prevLtp !== null ? ltp - prevLtp : 0
+          const pct    = prevLtp ? (diff / prevLtp) * 100 : 0
+          const up     = diff >= 0
+          const color  = diff === 0 ? 'var(--text-muted)' : up ? 'var(--green)' : 'var(--red)'
+          const arrow  = diff === 0 ? '' : up ? ' ↑' : ' ↓'
+          const fmtLtp = `₹${ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+          const fmtPct = prevLtp ? ` ${up ? '+' : ''}${pct.toFixed(2)}%` : ''
+          return (
+            <div style={{ fontSize: '13px', fontWeight: 700, color, marginBottom: '8px', letterSpacing: '0.01em' }}>
+              {fmtLtp}{arrow}{fmtPct && <span style={{ fontSize: '11px', fontWeight: 600 }}>{fmtPct}</span>}
+            </div>
+          )
+        })()}
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: '8px', marginBottom: '12px' }}>
@@ -662,7 +699,7 @@ export default function IndicatorsPage() {
       {activeTab === 'Signals' && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Today's Signals · {signals.length} total
             </span>
             <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
@@ -774,14 +811,14 @@ export default function IndicatorsPage() {
         return (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {openOrders.length > 0 && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite', marginRight: '6px', verticalAlign: 'middle' }} />}
                 Open Positions · {openOrders.length}
               </span>
               <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
             </div>
             {renderOrdersTable(openOrders)}
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '20px', marginBottom: '8px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '20px', marginBottom: '8px' }}>
               Closed · {closedOrders.length}
             </div>
             {renderOrdersTable(closedOrders)}

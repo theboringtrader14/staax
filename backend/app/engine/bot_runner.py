@@ -143,6 +143,9 @@ class BotRunner:
             logger.info("MCX session closed — skipping tick")
             return
 
+        bots_watching = sum(1 for b in self._bots if MCX_TOKENS.get(b.instrument) == token)
+        logger.debug(f"[BOT TICK] token={token} price={price:.2f} bots_watching={bots_watching}")
+
         for bot in self._bots:
             if MCX_TOKENS.get(bot.instrument) != token:
                 continue

@@ -65,6 +65,8 @@ class AngelOneTickerAdapter:
         self._loop:       Optional[asyncio.AbstractEventLoop] = None
         self._subscribed: List[str]         = []
         self._running                       = False
+        self._connected                     = False   # True while WebSocket is open
+        self._last_tick_at: Optional[str]   = None    # ISO timestamp of last tick received
         self._corr_id                       = "staax_ltp"
         self._mcx_tokens: Set[str]          = set()   # tokens that need exchangeType=5
 
@@ -170,17 +172,40 @@ class AngelOneTickerAdapter:
         return token_list
 
     def _on_open(self, ws):
-        logger.info(f"[AO-DEBUG] _on_open fired — ws={ws!r}")
+        self._connected = True
+        logger.info("[AO-DEBUG] _on_open fired — SmartStream connected ✅")
         if self._subscribed and self._sws:
             try:
-                self._sws.subscribe(self._corr_id, 1, self._build_token_list(self._subscribed))
-                logger.info(f"[AO] Subscribed {len(self._subscribed)} tokens on connect")
+                token_list = self._build_token_list(self._subscribed)
+                # Verify GOLDM MCX routing
+                goldm_str      = "58424839"
+                goldm_in_sub   = goldm_str in self._subscribed
+                goldm_in_mcx   = goldm_str in self._mcx_tokens
+                logger.info(
+                    f"[AO-DEBUG] Subscription payload ({len(self._subscribed)} tokens): {token_list}"
+                )
+                logger.info(
+                    f"[AO-DEBUG] MCX tokens registered: {sorted(self._mcx_tokens)}"
+                )
+                logger.info(
+                    f"[AO-DEBUG] GOLDM(58424839) in subscription={goldm_in_sub}, "
+                    f"registered as MCX/exchangeType=5={goldm_in_mcx}"
+                )
+                if goldm_in_sub and not goldm_in_mcx:
+                    logger.warning(
+                        "[AO-DEBUG] ⚠️ GOLDM subscribed but NOT in MCX set — "
+                        "will use exchangeType=2 (NFO) instead of 5 (MCX)!"
+                    )
+                self._sws.subscribe(self._corr_id, 1, token_list)
+                logger.info(f"[AO] ✅ Subscribed {len(self._subscribed)} tokens on connect")
             except Exception as e:
                 logger.error(f"[AO] Subscription error on connect: {e}")
 
     def _on_data(self, ws, message):
         """Hot path — normalise Angel One tick and dispatch to async loop."""
         logger.debug(f"[AO-DEBUG] _on_data — raw message type={type(message).__name__}, len={len(message) if hasattr(message, '__len__') else 'N/A'}")
+        from datetime import datetime, timezone
+        self._last_tick_at = datetime.now(timezone.utc).isoformat()
         if not self._loop or not self._on_tick_cb:
             return
         try:
@@ -206,7 +231,8 @@ class AngelOneTickerAdapter:
 
     def _on_close(self, ws):
         logger.warning("[AO] ⚠️ SmartStream connection closed")
-        self._running = False
+        self._running   = False
+        self._connected = False
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._reconnect(), self._loop)
 

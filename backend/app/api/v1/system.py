@@ -237,6 +237,148 @@ async def get_ticker(request: Request):
     return result
 
 
+@router.get("/smartstream/status")
+async def smartstream_status(request: Request):
+    """
+    Returns current SmartStream (Angel One) connection state.
+    connected     — True while WebSocket is open (set in _on_open / _on_close)
+    subscribed_tokens — all integer tokens currently subscribed
+    mcx_tokens    — subset routed as MCX (exchangeType=5)
+    last_tick_at  — ISO timestamp of the most recent tick received (UTC), or null
+    """
+    ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+    adapter      = getattr(ltp_consumer, "_angel_adapter", None) if ltp_consumer else None
+
+    if adapter is None:
+        return {
+            "connected":          False,
+            "subscribed_tokens":  [],
+            "mcx_tokens":         [],
+            "last_tick_at":       None,
+            "detail":             "No SmartStream adapter — login to Angel One first",
+        }
+
+    subscribed_ints = []
+    for t in getattr(adapter, "_subscribed", []):
+        try:
+            subscribed_ints.append(int(t))
+        except (ValueError, TypeError):
+            pass
+
+    mcx_ints = []
+    for t in getattr(adapter, "_mcx_tokens", set()):
+        try:
+            mcx_ints.append(int(t))
+        except (ValueError, TypeError):
+            pass
+
+    return {
+        "connected":         getattr(adapter, "_connected", False),
+        "subscribed_tokens": sorted(subscribed_ints),
+        "mcx_tokens":        sorted(mcx_ints),
+        "last_tick_at":      getattr(adapter, "_last_tick_at", None),
+    }
+
+
+@router.post("/smartstream/start")
+async def smartstream_start(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Manually start SmartStream using the first AO account that has a valid
+    feed_token for today.  Idempotent — returns 'already_running' if connected.
+    """
+    from app.models.account import Account, BrokerType
+    from app.engine.ltp_consumer import AngelOneTickerAdapter
+    from app.api.v1.services import _service_states, ServiceStatus
+    from app.engine.bot_runner import MCX_TOKENS as _MCX_TOKENS
+    from sqlalchemy import select
+    from datetime import date, timezone
+    import asyncio as _aio
+    import concurrent.futures as _cf
+    from app.core.config import settings as _settings
+
+    ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+    if not ltp_consumer:
+        raise HTTPException(status_code=503, detail="ltp_consumer not initialised — restart backend")
+
+    # If already connected, return early
+    adapter = getattr(ltp_consumer, "_angel_adapter", None)
+    if adapter and getattr(adapter, "_connected", False):
+        return {"status": "already_running", "message": "SmartStream is already connected"}
+
+    _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+        (_settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+        (_settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (_settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+    ] if k}
+
+    result = await db.execute(
+        select(Account).where(Account.broker == BrokerType.ANGELONE, Account.is_active == True)
+    )
+    ao_accounts = result.scalars().all()
+
+    chosen_acc  = None
+    chosen_key  = None
+    for acc in ao_accounts:
+        if not acc.access_token or not acc.token_generated_at:
+            continue
+        if acc.token_generated_at.astimezone(timezone.utc).date() != date.today():
+            continue
+        feed_token = acc.feed_token or ""
+        if not feed_token:
+            continue
+        bkey = _CLIENT_ID_TO_BROKER_KEY.get(acc.client_id)
+        if not bkey:
+            continue
+        chosen_acc = acc
+        chosen_key = bkey
+        break
+
+    if not chosen_acc:
+        return {"status": "no_feed_token", "message": "No AO account with a valid feed_token for today — login first"}
+
+    ao_broker = getattr(request.app.state, chosen_key, None)
+    if ao_broker:
+        await ao_broker.load_token(chosen_acc.access_token, chosen_acc.feed_token or "", "")
+
+    new_adapter = AngelOneTickerAdapter(
+        auth_token  = chosen_acc.access_token,
+        api_key     = chosen_acc.api_key or "",
+        client_code = chosen_acc.client_id,
+        feed_token  = chosen_acc.feed_token or "",
+    )
+    ltp_consumer.set_angel_adapter(new_adapter)
+
+    # Build token list: NSE indices + MCX bot tokens
+    all_tokens: list = []
+    try:
+        all_tokens.extend(int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values())
+    except Exception as e:
+        logger.warning(f"[SMARTSTREAM-START] Index token build failed: {e}")
+
+    try:
+        mcx_int_tokens = list(_MCX_TOKENS.values())
+        all_tokens.extend(mcx_int_tokens)
+        new_adapter.register_mcx_tokens([str(t) for t in mcx_int_tokens])
+    except Exception as e:
+        logger.warning(f"[SMARTSTREAM-START] MCX token registration failed: {e}")
+
+    loop     = _aio.get_event_loop()
+    executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_smartstream_manual")
+    loop.run_in_executor(executor, lambda: new_adapter.start(
+        tokens  = [str(t) for t in all_tokens],
+        loop    = loop,
+        on_tick = ltp_consumer._process_ticks,
+    ))
+
+    _service_states["ws"] = ServiceStatus.RUNNING
+    logger.warning(f"[SMARTSTREAM-START] Started via {chosen_acc.nickname} ({len(all_tokens)} tokens)")
+
+    return {
+        "status":  "started",
+        "message": f"SmartStream started — {len(all_tokens)} tokens via {chosen_acc.nickname}",
+    }
+
+
 @router.post("/start-market-feed")
 async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)):
     """
