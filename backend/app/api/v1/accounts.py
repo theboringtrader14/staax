@@ -249,7 +249,7 @@ async def zerodha_set_token(
 
     # Save token to DB account record
     result = await db.execute(
-        select(Account).where(Account.nickname == "Karthik")
+        select(Account).where(Account.broker == BrokerType.ZERODHA, Account.is_active == True)
     )
     account = result.scalar_one_or_none()
     if account:
@@ -269,7 +269,7 @@ async def zerodha_token_status(db: AsyncSession = Depends(get_db)):
     """Check if today's Zerodha token is valid."""
     from datetime import datetime, timezone, date
     result = await db.execute(
-        select(Account).where(Account.nickname == "Karthik")
+        select(Account).where(Account.broker == BrokerType.ZERODHA, Account.is_active == True)
     )
     account = result.scalar_one_or_none()
     if not account or not account.token_generated_at:
@@ -315,13 +315,21 @@ async def _ao_perform_login(broker, pin: str, nickname: str, db) -> dict:
     feed_token    = result.get("feed_token", "")
     refresh_token = result.get("refresh_token", "")
 
-    db_result = await db.execute(select(Account).where(Account.nickname == nickname))
+    if broker.client_id:
+        db_result = await db.execute(select(Account).where(Account.client_id == broker.client_id))
+    else:
+        db_result = await db.execute(select(Account).where(Account.nickname == nickname))
     account   = db_result.scalar_one_or_none()
     if account:
         account.access_token       = jwt_token
         account.feed_token         = feed_token
         account.token_generated_at = datetime.now(timezone.utc)
         account.status             = AccountStatus.ACTIVE
+        # Persist client_id if it was missing — enables startup token-load after restart.
+        if broker.client_id and not account.client_id:
+            account.client_id = broker.client_id
+        if broker.api_key and not account.api_key:
+            account.api_key = broker.api_key
         await db.commit()
 
     # Belt-and-suspenders: login_with_totp() already sets the token on the broker

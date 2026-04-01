@@ -30,6 +30,7 @@ class PositionMonitor:
     sl_value:          Optional[float]
     tp_type:           Optional[str]
     tp_value:          Optional[float]
+    quantity:          int   = 1     # lot_size × lots × multiplier — for ₹ MTM PNL
     sl_actual:         float = 0.0   # updated by TSLEngine
     tp_level:          float = 0.0
     is_active:         bool  = True
@@ -92,7 +93,9 @@ class PositionMonitor:
         return False
 
     def unrealised_pnl(self, ltp: float) -> float:
-        return (ltp - self.entry_price) if self.direction == "buy" else (self.entry_price - ltp)
+        """Per-unit × quantity P&L. Used by MTMMonitor for ₹ breach checks."""
+        per_unit = (ltp - self.entry_price) if self.direction == "buy" else (self.entry_price - ltp)
+        return per_unit * self.quantity
 
 
 class SLTPMonitor:
@@ -103,6 +106,11 @@ class SLTPMonitor:
         self._sl_callbacks: Dict[str, Callable]     = {}
         self._tp_callbacks: Dict[str, Callable]     = {}
         self._underlying_ltps: Dict[int, float]     = {}
+        self._mtm_monitor = None   # set via set_mtm_monitor() after both are created
+
+    def set_mtm_monitor(self, mtm_monitor) -> None:
+        """Wire MTMMonitor so on_tick() can push per-leg PNL for algo-level breach checks."""
+        self._mtm_monitor = mtm_monitor
 
     def add_position(self, monitor: PositionMonitor, on_sl: Callable, on_tp: Callable):
         monitor.compute_levels()
@@ -134,6 +142,16 @@ class SLTPMonitor:
             if not m.is_active or m.instrument_token != token:
                 continue
             ul = self._underlying_ltps.get(m.underlying_token)
+
+            # Push unrealised PNL to MTMMonitor for algo-level SL/TP breach checks.
+            # This is the only place where per-token LTP is matched to a position,
+            # so it's the right place to compute and forward PNL.
+            if self._mtm_monitor:
+                pnl = m.unrealised_pnl(ltp)
+                try:
+                    await self._mtm_monitor.update_pnl(m.algo_id, order_id, pnl)
+                except Exception as _mtm_err:
+                    logger.warning(f"[MTM] update_pnl failed for {order_id}: {_mtm_err}")
 
             if m.is_sl_hit(ltp, ul):
                 m.is_active = False

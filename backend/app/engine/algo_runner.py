@@ -255,26 +255,31 @@ class AlgoRunner:
 
         # ── 3b. Pre-execution validation ───────────────────────────────────────
         for leg in legs:
-            ok, reason = await self._pre_execution_check(algo, grid_entry, leg)
+            ok, reason, is_waiting = await self._pre_execution_check(algo, grid_entry, leg)
             if not ok:
-                logger.error(
-                    f"[PRE-EXEC] BLOCKED {algo.name} leg {leg.leg_number}: {reason}"
+                log_level = "warning" if is_waiting else "error"
+                getattr(logger, log_level)(
+                    f"[PRE-EXEC] {'WAITING' if is_waiting else 'BLOCKED'} "
+                    f"{algo.name} leg {leg.leg_number}: {reason}"
                 )
                 # Write pre_check_failed to execution audit log
                 if self._execution_manager:
                     await self._execution_manager._log(
                         db            = db,
                         action        = "PLACE",
-                        status        = "BLOCKED",
+                        status        = "WAITING" if is_waiting else "BLOCKED",
                         algo_id       = str(algo.id),
                         account_id    = str(algo.account_id) if algo.account_id else "",
                         grid_entry_id = str(grid_entry.id),
                         reason        = reason,
-                        event_type    = "pre_check_failed",
+                        event_type    = "pre_check_waiting" if is_waiting else "pre_check_failed",
                         is_practix    = grid_entry.is_practix,
                         details       = {"leg": leg.leg_number, "check": reason},
                     )
-                await self._set_error(db, algo_state, grid_entry, reason)
+                if is_waiting:
+                    await self._set_waiting(db, algo_state, grid_entry, reason)
+                else:
+                    await self._set_error(db, algo_state, grid_entry, reason)
                 return
 
         # ── 4. Transition AlgoState to ACTIVE ─────────────────────────────────
@@ -384,9 +389,11 @@ class AlgoRunner:
 
     async def _pre_execution_check(
         self, algo: "Algo", grid_entry: "GridEntry", leg: "AlgoLeg"
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool, str, bool]:
         """
-        Returns (ok, reason). Blocks execution if not ok.
+        Returns (ok, reason, is_waiting).
+        - ok=False, is_waiting=False  → hard block → _set_error
+        - ok=False, is_waiting=True   → soft block → _set_waiting (W&T/ORB stream not up yet)
         Called before any leg is placed — gates on broker token + SmartStream.
         PRACTIX entries skip live-only checks.
         """
@@ -411,7 +418,7 @@ class AlgoRunner:
             if account_broker is not None and not account_broker.is_token_set():
                 return False, (
                     f"Broker token not set for {algo.name} — complete broker login first"
-                )
+                ), False
 
             # 1b. Live API key validation — is_token_set() only checks string is non-empty.
             # An expired/invalid token (AG8004) passes that check but fails on real API calls.
@@ -429,16 +436,18 @@ class AlgoRunner:
                         return False, (
                             f"Broker API key invalid — {_underlying} LTP=0 "
                             f"(AG8004 / expired session). Re-login at SmartAPI portal."
-                        )
+                        ), False
                 except Exception as _ltp_err:
                     logger.warning(
                         f"⚠️ [PRE-CHECK] Broker API key check failed for {algo.name}: {_ltp_err}"
                     )
                     return False, (
                         f"Broker API key invalid — {_ltp_err}. Re-login at SmartAPI portal."
-                    )
+                    ), False
 
         # 2. SmartStream check for W&T legs and ORB algos (live only)
+        # Returns is_waiting=True so _enter_with_db uses WAITING (not ERROR) status —
+        # the algo will trigger once SmartStream connects and ticks arrive.
         if not is_practix:
             needs_stream = (
                 getattr(leg, "wt_enabled", False)
@@ -450,12 +459,17 @@ class AlgoRunner:
                     and getattr(self._ltp_consumer, "_running", False)
                 )
                 if not ltp_running:
-                    return False, (
-                        f"SmartStream not connected — W&T/ORB requires live ticks "
-                        f"(algo={algo.name} leg={leg.leg_number})"
+                    logger.warning(
+                        f"⚠️ [W&T/ORB] SmartStream not connected for {algo.name} "
+                        f"leg {leg.leg_number} — marking WAITING. "
+                        "Will trigger on tick arrival once stream connects."
                     )
+                    return False, (
+                        f"SmartStream not connected — W&T/ORB blocked "
+                        f"(algo={algo.name} leg={leg.leg_number})"
+                    ), True   # is_waiting=True
 
-        return True, "ok"
+        return True, "ok", False
 
     async def _place_leg(
         self,
@@ -748,6 +762,7 @@ class AlgoRunner:
                 instrument_token=instrument_token,
                 underlying_token=underlying_token,
                 entry_price=fill_price,
+                quantity=quantity,   # lot_size × lots × multiplier — for ₹ MTM PNL
                 sl_type=leg.sl_type,
                 sl_value=leg.sl_value,
                 tp_type=leg.tp_type,
@@ -1141,24 +1156,59 @@ class AlgoRunner:
 
     # ── ORB Registration (called from Scheduler._job_activate_all) ───────────
 
+    # Angel One index tokens for ORB underlying tracking.
+    # For Zerodha the tokens differ; this map covers the Angel One feed which is
+    # the active broker. Both token sets pass through the same LTPConsumer pipeline.
+    _ORB_UNDERLYING_TOKENS = {
+        "NIFTY":       99926000,
+        "BANKNIFTY":   99926009,
+        "FINNIFTY":    99926037,
+        "MIDCAPNIFTY": 99926014,
+        "SENSEX":      99919000,
+    }
+
     async def register_orb(self, grid_entry_id: str, algo: Algo, grid_entry):
         """
-        Register an ORB window at 09:15 activation.
+        Register an ORB window at orb_start_time activation.
         Called from scheduler._job_activate_all when entry_type == ORB.
 
         ORB tracks the UNDERLYING index token during the window,
         not the option itself. The option is selected at breakout time.
-        The underlying token must already be subscribed via LTPConsumer.
+        Underlying is resolved from the first leg (Algo model has no underlying field).
         """
         if not self._orb_tracker:
             return
 
-        underlying_token = getattr(algo, "underlying_token", 0) or 0
+        # Load first leg to get underlying name — Algo model has no underlying field
+        async with AsyncSessionLocal() as _db:
+            _legs_res = await _db.execute(
+                select(AlgoLeg)
+                .where(AlgoLeg.algo_id == algo.id)
+                .order_by(AlgoLeg.leg_number)
+            )
+            _legs = _legs_res.scalars().all()
+
+        if not _legs:
+            logger.error(f"[ORB] Cannot register — no legs for algo {algo.id}")
+            return
+
+        underlying = _legs[0].underlying.upper()
+        underlying_token = self._ORB_UNDERLYING_TOKENS.get(underlying, 0)
+        if not underlying_token:
+            logger.error(
+                f"[ORB] Unknown underlying '{underlying}' for algo {algo.name} — "
+                f"supported: {list(self._ORB_UNDERLYING_TOKENS)}"
+            )
+            return
+
+        # Direction from first leg (algo has no default_direction field)
+        direction = _legs[0].direction or "buy"
+
         window = ORBWindow(
             grid_entry_id=str(grid_entry_id),
             algo_id=str(algo.id),
-            direction=algo.default_direction or "buy",
-            start_time=self._parse_time("09:15"),
+            direction=direction,
+            start_time=self._parse_time(algo.orb_start_time or "09:15"),
             end_time=self._parse_time(algo.orb_end_time or "11:16"),
             instrument_token=underlying_token,
             wt_value=0.0,   # ORB uses range breakout, not W&T buffer
@@ -1168,9 +1218,12 @@ class AlgoRunner:
             window,
             on_entry=self._make_orb_callback(str(grid_entry_id)),
         )
-        if self._ltp_consumer and underlying_token:
+        if self._ltp_consumer:
             self._ltp_consumer.subscribe([underlying_token])
-        logger.info(f"ORB registered: {algo.name} | window closes {algo.orb_end_time}")
+        logger.info(
+            f"ORB registered: {algo.name} | underlying={underlying} token={underlying_token} "
+            f"direction={direction} window={algo.orb_start_time or '09:15'}–{algo.orb_end_time or '11:16'}"
+        )
 
     # ── Overnight SL check ───────────────────────────────────────────────────
 
@@ -1319,6 +1372,16 @@ class AlgoRunner:
         await _ev.error(
             f"{getattr(algo_state, 'algo_id', '')} · {msg}",
             algo_name=str(getattr(algo_state, "algo_id", "")), source="engine",
+        )
+
+    async def _set_waiting(self, db, algo_state, grid_entry, msg):
+        """Mark algo as WAITING (not ERROR) — used when SmartStream is down for W&T/ORB.
+        Algo stays in WAITING state; ticks will fire W&T/ORB once stream connects."""
+        algo_state.status  = AlgoRunStatus.WAITING
+        grid_entry.status  = GridStatus.ALGO_ACTIVE
+        await db.commit()
+        logger.warning(
+            f"⚠️ [W&T/ORB] {getattr(algo_state, 'algo_id', '')} set to WAITING: {msg}"
         )
 
     async def _mark_error(self, grid_entry_id: str, msg: str):

@@ -178,6 +178,7 @@ async def lifespan(app: FastAPI):
     ttp_engine_ins = TTPEngine(sl_tp_monitor)
     journey_eng    = journey_engine_singleton
     mtm_monitor    = MTMMonitor()
+    sl_tp_monitor.set_mtm_monitor(mtm_monitor)   # route per-leg PNL → MTM breach checks
     wt_evaluator   = WTEvaluator()
     orb_tracker    = ORBTracker()
     strike_sel     = StrikeSelector(zerodha)
@@ -279,6 +280,9 @@ async def lifespan(app: FastAPI):
     # ── 14. Auto-start Market Feed if broker token exists in DB ──────────────
     await _auto_start_market_feed(app)
 
+    # ── 15. Print account status summary ─────────────────────────────────────
+    await _print_account_status_summary(app)
+
     logger.info("✅ STAAX engine operational — awaiting broker login to start LTP feed")
 
     yield  # ── Application running ─────────────────────────────────────────
@@ -305,11 +309,11 @@ async def _load_all_broker_tokens(app: "FastAPI") -> None:
     from sqlalchemy import select
     from datetime import date, timezone
 
-    _NICKNAME_TO_BROKER_KEY = {
-        "Mom":        "angelone_mom",
-        "Wife":       "angelone_wife",
-        "Karthik AO": "angelone_karthik",
-    }
+    _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+        (settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+        (settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+    ] if k}
 
     logger.info("[STARTUP] Loading broker tokens from DB...")
 
@@ -363,9 +367,9 @@ async def _load_all_broker_tokens(app: "FastAPI") -> None:
                 logger.info(f"[STARTUP] No token for {ao_acc.nickname} — token date {token_date} is not today")
                 continue
 
-            broker_key = _NICKNAME_TO_BROKER_KEY.get(ao_acc.nickname)
+            broker_key = _CLIENT_ID_TO_BROKER_KEY.get(ao_acc.client_id)
             if not broker_key:
-                logger.warning(f"[STARTUP] Unknown nickname {ao_acc.nickname!r} — skipping")
+                logger.warning(f"[STARTUP] No broker key for client_id={ao_acc.client_id!r} ({ao_acc.nickname}) — skipping")
                 continue
 
             ao_broker = getattr(app.state, broker_key, None)
@@ -377,6 +381,36 @@ async def _load_all_broker_tokens(app: "FastAPI") -> None:
             refresh_token = getattr(ao_acc, "refresh_token", "") or ""
             await ao_broker.load_token(ao_acc.access_token, feed_token, refresh_token)
             logger.info(f"[STARTUP] Loaded token for {ao_acc.nickname}")
+
+            # Sync credentials from DB/JWT to broker instance when .env values are empty.
+            # Handles accounts configured via the UI (DB) rather than .env.
+            # JWT is preferred for api_key (it contains the key used for this session).
+            _jwt_api_key   = ""
+            _jwt_client_id = ""
+            if ao_acc.access_token:
+                try:
+                    import base64 as _b64j, json as _jsonj
+                    _parts = ao_acc.access_token.split(".")
+                    if len(_parts) == 3:
+                        _payload = _jsonj.loads(_b64j.b64decode(_parts[1] + "=="))
+                        _jwt_api_key   = _payload.get("API-KEY", "")
+                        _jwt_client_id = _payload.get("username", "")
+                except Exception as _je:
+                    logger.warning(f"[STARTUP] {ao_acc.nickname}: JWT decode failed: {_je}")
+
+            if not ao_broker.api_key:
+                # JWT api_key is preferred — it is the key that generated this session
+                _resolved_key = _jwt_api_key or ao_acc.api_key or ""
+                if _resolved_key:
+                    ao_broker.api_key = _resolved_key
+                    _src = "JWT" if _jwt_api_key else "DB"
+                    logger.warning(f"[STARTUP] {ao_acc.nickname}: api_key synced from {_src} ({_resolved_key[:6]}...)")
+            if not ao_broker.client_id:
+                _resolved_cid = _jwt_client_id or ao_acc.client_id or ""
+                if _resolved_cid:
+                    ao_broker.client_id = _resolved_cid
+                    _src = "JWT" if _jwt_client_id else "DB"
+                    logger.warning(f"[STARTUP] {ao_acc.nickname}: client_id={_resolved_cid!r} synced from {_src}")
 
             # Validate token is live by calling a lightweight LTP check
             try:
@@ -404,11 +438,11 @@ async def _build_angel_broker_map(app: "FastAPI", order_placer) -> None:
     from app.models.account import Account, BrokerType
     from sqlalchemy import select
 
-    _NICKNAME_TO_BROKER_KEY = {
-        "Mom":        "angelone_mom",
-        "Wife":       "angelone_wife",
-        "Karthik AO": "angelone_karthik",
-    }
+    _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+        (settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+        (settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+    ] if k}
 
     try:
         async with AsyncSessionLocal() as db:
@@ -421,7 +455,7 @@ async def _build_angel_broker_map(app: "FastAPI", order_placer) -> None:
             accounts = result.scalars().all()
 
         for acc in accounts:
-            broker_key = _NICKNAME_TO_BROKER_KEY.get(acc.nickname)
+            broker_key = _CLIENT_ID_TO_BROKER_KEY.get(acc.client_id)
             if not broker_key:
                 continue
             broker = getattr(app.state, broker_key, None)
@@ -495,11 +529,19 @@ async def _ao_startup_auto_login(app: "FastAPI") -> None:
             try:
                 ltp = await ao_broker.get_ltp_by_token("NSE", "Nifty 50", "99926000")
                 if ltp > 0:
-                    logger.info(
-                        f"[STARTUP] {nickname} token is valid (NIFTY LTP={ltp:.2f}) "
-                        "— skipping auto-login"
-                    )
-                    continue
+                    _feed_tok_check = getattr(ao_broker, "_feed_token", "") or ""
+                    if _feed_tok_check:
+                        logger.info(
+                            f"[STARTUP] {nickname} token is valid (NIFTY LTP={ltp:.2f}) "
+                            "— skipping auto-login"
+                        )
+                        continue
+                    else:
+                        logger.info(
+                            f"[STARTUP] {nickname} token is valid (NIFTY LTP={ltp:.2f}) "
+                            "but feed_token is EMPTY — forcing re-login to obtain SmartStream token"
+                        )
+                        # fall through to re-login
             except Exception:
                 pass  # fall through to re-login
 
@@ -654,11 +696,11 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
         from app.engine.ltp_consumer import AngelOneTickerAdapter
 
         # Explicit DB-nickname → app.state key mapping (avoids space/casing issues)
-        _NICKNAME_TO_BROKER_KEY = {
-            "Mom":        "angelone_mom",
-            "Wife":       "angelone_wife",
-            "Karthik AO": "angelone_karthik",
-        }
+        _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+            (settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+            (settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+            (settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+        ] if k}
 
         async with AsyncSessionLocal() as db:
             ao_result = await db.execute(
@@ -686,9 +728,9 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             if token_date != date.today():
                 continue
 
-            broker_key = _NICKNAME_TO_BROKER_KEY.get(ao_acc.nickname)
+            broker_key = _CLIENT_ID_TO_BROKER_KEY.get(ao_acc.client_id)
             if not broker_key:
-                logger.warning(f"[STARTUP MF] Unknown nickname {ao_acc.nickname!r} — skipping")
+                logger.warning(f"[STARTUP MF] No broker key for client_id={ao_acc.client_id!r} ({ao_acc.nickname}) — skipping")
                 continue
             ao_broker = getattr(app.state, broker_key, None)
             if not ao_broker:
@@ -710,18 +752,39 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
             # Start market feed with the first valid account
             if not market_feed_started:
-                # Skip if SmartStream was already started by _ao_startup_auto_login
+                # Skip if SmartStream adapter was already created by _ao_startup_auto_login.
+                # Check adapter existence, not _running — start() runs in an executor thread
+                # and _running may still be False when we arrive here (race condition).
                 _ao_check = getattr(ltp_consumer, "_angel_adapter", None)
-                if _ao_check and getattr(_ao_check, "_running", False):
-                    logger.info("[STARTUP MF] SmartStream already running (started during auto-login) — skipping")
+                if _ao_check:
+                    if getattr(_ao_check, "_running", False):
+                        logger.info("[STARTUP MF] SmartStream already running (started during auto-login) — skipping")
+                    else:
+                        logger.info("[STARTUP MF] SmartStream adapter already initializing (started during auto-login) — skipping duplicate start")
                     market_feed_started = True
+                    continue
+                if not feed_token:
+                    logger.warning(
+                        f"[STARTUP MF] {ao_acc.nickname}: feed_token is EMPTY — "
+                        "SmartStream cannot start. Will start after manual login."
+                    )
                     continue
                 try:
                     logger.info("[AO-CONNECT] Creating AngelOneTickerAdapter...")
+                    # ao_broker.api_key / client_id are already synced from DB/JWT in
+                    # _load_all_broker_tokens; use them as the authoritative source.
+                    _eff_api_key     = ao_broker.api_key or ao_acc.api_key or ""
+                    _eff_client_code = ao_broker.client_id or ao_acc.client_id or ""
+                    logger.info(
+                        f"[AO-CONNECT] {ao_acc.nickname}: "
+                        f"api_key={'SET' if _eff_api_key else 'EMPTY'}, "
+                        f"client_code={_eff_client_code!r}, "
+                        f"feed_token_len={len(feed_token)}"
+                    )
                     adapter = AngelOneTickerAdapter(
                         auth_token=ao_acc.access_token,
-                        api_key=ao_broker.api_key,
-                        client_code=ao_acc.client_id,
+                        api_key=_eff_api_key,
+                        client_code=_eff_client_code,
                         feed_token=feed_token,
                     )
                     logger.info("[AO-CONNECT] Calling set_angel_adapter...")
@@ -787,6 +850,86 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
     except Exception as e:
         logger.warning(f"[STARTUP MF] Market Feed auto-start failed (non-fatal): {e}")
+
+
+async def _print_account_status_summary(app: "FastAPI") -> None:
+    """
+    Print a clean account status table after all startup tasks complete.
+    Non-fatal — never raises.
+    """
+    try:
+        now_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%H:%M:%S IST")
+        lines   = [f"=== Account Status ({now_str}) ==="]
+
+        # ── Zerodha ───────────────────────────────────────────────────────────
+        zerodha = getattr(app.state, "zerodha", None)
+        if zerodha and getattr(zerodha, "_access_token", None):
+            lines.append("✅ Zerodha              — token set")
+        else:
+            lines.append("❌ Zerodha              — no token today")
+
+        # ── Angel One accounts ────────────────────────────────────────────────
+        _AO_ENTRIES = [
+            ("angelone_mom",     settings.ANGELONE_MOM_CLIENT_ID,     "Mom AO"),
+            ("angelone_karthik", settings.ANGELONE_KARTHIK_CLIENT_ID, "Karthik AO"),
+            ("angelone_wife",    settings.ANGELONE_WIFE_CLIENT_ID,    "Wife AO"),
+        ]
+
+        for state_key, client_id, label in _AO_ENTRIES:
+            broker = getattr(app.state, state_key, None)
+            if not broker:
+                lines.append(f"❌ {label:<14} — broker not initialised")
+                continue
+            if not client_id:
+                lines.append(f"⚠️  {label:<14} — client_id not in .env (inactive)")
+                continue
+
+            display    = f"{label} ({client_id})"
+            token_set  = broker.is_token_set()
+            feed_token = getattr(broker, "_feed_token", "") or ""
+
+            if not token_set:
+                lines.append(f"❌ {display:<28} — no token today")
+                continue
+
+            ltp_val = 0.0
+            try:
+                ltp_val = await broker.get_ltp_by_token("NSE", "Nifty 50", "99926000")
+            except Exception:
+                pass
+
+            if ltp_val > 0 and feed_token:
+                lines.append(f"✅ {display:<28} — token valid, NIFTY={ltp_val:.0f}, feed_token ready")
+            elif ltp_val > 0:
+                lines.append(f"⚠️  {display:<28} — token valid, NIFTY={ltp_val:.0f}, feed_token EMPTY")
+            elif feed_token:
+                lines.append(f"⚠️  {display:<28} — token set but LTP=0 (API key issue?)")
+            else:
+                lines.append(f"❌ {display:<28} — token set, LTP=0, feed_token EMPTY")
+
+        # ── SmartStream ───────────────────────────────────────────────────────
+        ltp_c   = getattr(app.state, "ltp_consumer", None)
+        adapter = ltp_c and getattr(ltp_c, "_angel_adapter", None)
+        if adapter:
+            ss_running   = getattr(adapter, "_running", False)
+            active_label = "unknown"
+            for _sk, _cid, _lbl in _AO_ENTRIES:
+                if not _cid:
+                    continue
+                _b = getattr(app.state, _sk, None)
+                if _b and _b.is_token_set() and (getattr(_b, "_feed_token", "") or ""):
+                    active_label = _lbl
+                    break
+            ss_status = "active" if ss_running else "initialising"
+            lines.append(f"=== SmartStream: {active_label} — {ss_status} ===")
+        else:
+            lines.append("=== SmartStream: not started ===")
+
+        for line in lines:
+            logger.info(line)
+
+    except Exception as _e:
+        logger.warning(f"[STARTUP] Account status summary failed (non-fatal): {_e}")
 
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────

@@ -202,13 +202,15 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
 # ── NR-3: Instrument ticker — live LTP for sidebar display ───────────────────
 
 # Zerodha instrument tokens for index instruments
+# GOLDM is pulled from bot_runner.MCX_TOKENS so it tracks the live rolling contract.
+from app.engine.bot_runner import MCX_TOKENS as _MCX_TOKENS  # noqa: E402
 TICKER_INSTRUMENTS = {
-    "NIFTY":     256265,
-    "BANKNIFTY": 260105,
-    "SENSEX":    265,
-    "FINNIFTY":  257801,
+    "NIFTY":      256265,
+    "BANKNIFTY":  260105,
+    "SENSEX":     265,
+    "FINNIFTY":   257801,
     "MIDCPNIFTY": 288009,
-    "GOLDM":     58424839,   # MCX GOLDM continuous futures
+    "GOLDM":      _MCX_TOKENS.get("GOLDM", 477904),   # live rolling MCX contract
 }
 
 @router.get("/ticker")
@@ -252,22 +254,30 @@ async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)
     if not ltp_consumer:
         raise HTTPException(status_code=503, detail="ltp_consumer not initialised — restart backend")
 
-    _NICKNAME_TO_BROKER_KEY = {
-        "Karthik AO": "angelone_karthik",
-        "Wife":       "angelone_wife",
-        "Mom":        "angelone_mom",
-    }
-    _PRIORITY = ["Karthik AO", "Wife", "Mom"]
+    from app.core.config import settings as _settings
+
+    _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+        (_settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+        (_settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (_settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+    ] if k}
+    _PRIORITY_CLIENT_IDS = [
+        _settings.ANGELONE_KARTHIK_CLIENT_ID,
+        _settings.ANGELONE_WIFE_CLIENT_ID,
+        _settings.ANGELONE_MOM_CLIENT_ID,
+    ]
 
     result = await db.execute(
         select(Account).where(Account.broker == BrokerType.ANGELONE, Account.is_active == True)
     )
     ao_accounts = result.scalars().all()
-    ao_map = {a.nickname: a for a in ao_accounts}
+    ao_map = {a.client_id: a for a in ao_accounts}
 
     chosen_acc = None
-    for nick in _PRIORITY:
-        acc = ao_map.get(nick)
+    for cid in _PRIORITY_CLIENT_IDS:
+        if not cid:
+            continue
+        acc = ao_map.get(cid)
         if not acc or not acc.access_token or not acc.token_generated_at:
             continue
         token_date = acc.token_generated_at.astimezone(timezone.utc).date()
@@ -278,7 +288,7 @@ async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)
     if not chosen_acc:
         raise HTTPException(status_code=400, detail="No valid Angel One token found for today — login first")
 
-    broker_key = _NICKNAME_TO_BROKER_KEY[chosen_acc.nickname]
+    broker_key = _CLIENT_ID_TO_BROKER_KEY.get(chosen_acc.client_id)
     ao_broker  = getattr(request.app.state, broker_key, None)
     if not ao_broker:
         raise HTTPException(status_code=503, detail=f"Broker instance {broker_key!r} not found on app.state")
