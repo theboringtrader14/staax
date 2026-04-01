@@ -30,14 +30,14 @@ from datetime import date as _date  # noqa: E402
 
 MCX_CONTRACT_SCHEDULE: dict = {
     "GOLDM": {
-        "token":       477904,
-        "expiry_date": _date(2026, 4, 3),    # GOLDM03APR26FUT
-        "next_month":  "May 2026 (~GOLDM05MAY26FUT, token 487819)",
+        "token":       487819,
+        "expiry_date": _date(2026, 5, 5),    # GOLDM05MAY26FUT (rolled from Apr 03)
+        "next_month":  "Jun 2026 (~GOLDM05JUN26FUT, token 491727)",
     },
     "SILVERMIC": {
         "token":       466029,
-        "expiry_date": _date(2026, 4, 30),   # SILVERMIC30APR26FUT
-        "next_month":  "May 2026 (~SILVERMIC29MAY26FUT)",
+        "expiry_date": _date(2026, 4, 30),   # SILVERMIC30APR26FUT — no May contract, next is Jun
+        "next_month":  "Jun 2026 (~SILVERMIC30JUN26FUT, token 477177)",
     },
 }
 

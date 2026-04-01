@@ -12,20 +12,31 @@ Each bot gets its own CandleAggregator and strategy instance so state
 
 Order placement is NOT implemented here — signals only.
 """
+import json
 import logging
 import asyncio
 from datetime import datetime, timezone, date, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 from typing import Dict, Optional, List, Any
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
-# MCX instrument tokens (Angel One SmartStream)
-# Verify these against the AO instrument master before going live.
+# Path to Angel One instrument master (downloaded at broker login time).
+_INSTRUMENT_MASTER = Path(__file__).parent.parent.parent / "instrument_master_cache.json"
+
+# Roll to the next contract this many days before the near-month expires.
+# E.g. 2 means: on Apr 1, skip Apr 3 expiry and move to May.
+_MCX_ROLL_DAYS_BEFORE = 2
+
+# MCX instrument tokens (Angel One SmartStream).
+# Auto-updated at startup and 06:00 IST daily by refresh_mcx_tokens().
+# Fallback values here are the last known-good tokens; they are overwritten
+# immediately on first startup if the instrument master is present.
 MCX_TOKENS = {
-    "GOLDM":     477904,   # GOLDM03APR26FUT (updated 2026-04-01; was 58424839 = Mar-26 expired)
-    "SILVERMIC": 466029,   # SILVERMIC30APR26FUT (updated 2026-04-01; was 58457095 = Mar-26 expired)
+    "GOLDM":     487819,   # GOLDM05MAY26FUT — updated 2026-04-01 (Apr expired 03APR)
+    "SILVERMIC": 466029,   # SILVERMIC30APR26FUT — current until 30APR, then auto-rotates
 }
 
 # MCX exchange type for Angel One SmartStream subscription
@@ -61,11 +72,73 @@ class BotRunner:
 
     # ── Startup ───────────────────────────────────────────────────────────────
 
+    async def refresh_mcx_tokens(self):
+        """
+        Scan instrument master for nearest active MCX FUTCOM contracts and
+        update MCX_TOKENS in-place.
+
+        Called at startup (inside load_bots) and via 06:00 IST cron so tokens
+        rotate automatically on contract expiry without a manual deploy.
+        """
+        if not _INSTRUMENT_MASTER.exists():
+            logger.warning("[BOT] refresh_mcx_tokens: instrument master not found at %s", _INSTRUMENT_MASTER)
+            return
+
+        try:
+            with open(_INSTRUMENT_MASTER) as fh:
+                master = json.load(fh)
+        except Exception as e:
+            logger.error("[BOT] refresh_mcx_tokens: failed to load instrument master: %s", e)
+            return
+
+        today = date.today()
+        # Roll to next contract if near-month expires within _MCX_ROLL_DAYS_BEFORE days.
+        roll_cutoff = today + timedelta(days=_MCX_ROLL_DAYS_BEFORE)
+        for symbol in list(MCX_TOKENS.keys()):
+            candidates = []
+            for row in master:
+                if row.get("exch_seg") != "MCX":
+                    continue
+                if row.get("instrumenttype") != "FUTCOM":
+                    continue
+                if row.get("name") != symbol:
+                    continue
+                try:
+                    expiry = datetime.strptime(row["expiry"], "%d%b%Y").date()
+                except (ValueError, KeyError):
+                    continue
+                # Skip contracts expiring within the roll window.
+                if expiry > roll_cutoff:
+                    candidates.append((expiry, int(row["token"]), row["symbol"]))
+
+            if not candidates:
+                logger.warning("[BOT] refresh_mcx_tokens: no future contracts found for %s", symbol)
+                continue
+
+            candidates.sort()
+            new_expiry, new_token, new_sym = candidates[0]
+            old_token = MCX_TOKENS[symbol]
+
+            if new_token != old_token:
+                MCX_TOKENS[symbol] = new_token
+                logger.info(
+                    "[BOT] MCX token auto-updated: %s %s → %s (%s, expires %s)",
+                    symbol, old_token, new_token, new_sym, new_expiry,
+                )
+            else:
+                logger.info(
+                    "[BOT] MCX token current: %s %s (%s, expires %s)",
+                    symbol, new_token, new_sym, new_expiry,
+                )
+
     async def load_bots(self):
         """Load all active bots from DB and set up their strategy instances."""
         from app.core.database import AsyncSessionLocal
         from app.models.bot import Bot
         from sqlalchemy import select
+
+        # Refresh tokens from instrument master before subscribing bots.
+        await self.refresh_mcx_tokens()
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -309,11 +382,16 @@ class BotRunner:
         broker: AngelOneBroker instance with a valid session token
         """
         try:
+            # Pass the known MCX token directly — instrument master lookup fails
+            # for MCX (exch_seg mismatch or wrong contract picked).
+            # MCX_TOKENS always holds the live rolling contract token.
+            symbol_token = str(MCX_TOKENS.get(symbol, ""))
             candles = await broker.get_candle_data(
                 symbol=symbol,
                 exchange="MCX",
                 interval="ONE_DAY",
                 days_back=3,      # fetch 3 days so we always have prev + today
+                symbol_token=symbol_token,
             )
             if not candles or len(candles) < 2:
                 logger.warning(f"[BOT] Not enough daily candles for {symbol}: {candles}")

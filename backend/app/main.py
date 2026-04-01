@@ -245,6 +245,7 @@ async def lifespan(app: FastAPI):
     # ── 11. Add reconciler job (every 15s) ────────────────────────────────────
     scheduler.add_reconciler_job(order_reconciler.run)
     scheduler.add_daily_reset_job(daily_system_reset)
+    scheduler.add_mcx_token_refresh_job(bot_runner)
     scheduler.add_bot_daily_data_job(bot_runner)
     logger.info("✅ OrderReconciler scheduled (every 15s)")
 

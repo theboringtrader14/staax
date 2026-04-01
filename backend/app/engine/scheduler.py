@@ -218,6 +218,20 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+    def add_mcx_token_refresh_job(self, bot_runner_instance):
+        """
+        Register 06:00 IST daily job that scans instrument master for the
+        nearest active MCX contract and auto-rotates MCX_TOKENS on expiry.
+        Runs before market open so subscriptions are always to the live contract.
+        """
+        self._scheduler.add_job(
+            bot_runner_instance.refresh_mcx_tokens,
+            CronTrigger(hour=6, minute=0, timezone=IST),
+            id="mcx_token_refresh",
+            replace_existing=True,
+        )
+        logger.info("MCX token refresh job registered (06:00 IST)")
+
     def add_bot_daily_data_job(self, bot_runner_instance):
         """
         Register 09:00 IST job that loads previous day OHLC for DTR bots.

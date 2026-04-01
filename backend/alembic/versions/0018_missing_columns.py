@@ -9,6 +9,7 @@ Changes:
   - accounts.fy_margin      FLOAT NULL      — FY trading margin ₹ (ROI calc)
   - algos.recurring_days    JSON NULL       — ["MON","WED"] auto-grid days
   - algos.strategy_type     VARCHAR(50) NULL — already in 0010 (no-op guard)
+  - algos.is_live           BOOLEAN NOT NULL — live vs paper flag (default false)
 """
 from alembic import op
 import sqlalchemy as sa
@@ -49,9 +50,16 @@ def upgrade():
             "algos", sa.Column("strategy_type", sa.String(50), nullable=True)
         )
 
+    if "is_live" not in algo_cols:
+        op.add_column(
+            "algos",
+            sa.Column("is_live", sa.Boolean(), nullable=False, server_default="false"),
+        )
+
 
 def downgrade():
     op.drop_column("accounts", "totp_secret")
     op.drop_column("accounts", "fy_margin")
     op.drop_column("algos", "recurring_days")
+    op.drop_column("algos", "is_live")
     # strategy_type owned by 0010 — do not drop here to avoid breaking 0010 downgrade

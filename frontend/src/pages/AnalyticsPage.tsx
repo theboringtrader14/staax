@@ -46,13 +46,15 @@ function getOrderDate(o: any): string {
 
 // Section label
 const secHdr: CSSProperties = {
-  fontSize: '11px', fontWeight: 700,
-  color: '#e8e8f8',
+  fontSize: '10px', fontWeight: 700,
+  color: 'rgba(232,232,248,0.7)',
   textTransform: 'uppercase',
-  letterSpacing: '0.08em',
+  letterSpacing: '0.1em',
   marginBottom: '8px',
-  borderLeft: '2px solid #6366f1',
-  paddingLeft: '8px',
+  borderLeft: '3px solid #6366f1',
+  paddingLeft: '10px',
+  textShadow: '0 0 20px rgba(99,102,241,0.5)',
+  boxShadow: 'none',
 }
 
 // Table wrapper
@@ -79,15 +81,31 @@ function PractixChip({ isPractix }: { isPractix: boolean }) {
 function SummaryCard({ label, value, sub, valueColor }: {
   label: string; value: string; sub?: string; valueColor?: string
 }) {
+  const isGreen = valueColor?.includes('green') || valueColor === 'var(--green)'
+  const isRed   = valueColor?.includes('red')   || valueColor === 'var(--red)'
+  const isBlue  = valueColor?.includes('blue')  || valueColor === 'var(--accent-blue)'
+  const accentColor = isGreen ? '#10b981' : isRed ? '#ef4444' : isBlue ? '#38bdf8' : '#6366f1'
+  const accentRgb   = isGreen ? '16,185,129' : isRed ? '239,68,68' : isBlue ? '56,189,248' : '99,102,241'
   return (
-    <div className="card">
-      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+    <div className="card card-stat" style={{
+      borderTop: `2px solid ${accentColor}`,
+      '--stat-rgb': accentRgb,
+      boxShadow: `inset 0 1px 0 rgba(${accentRgb},0.2), 0 0 18px rgba(${accentRgb},0.18), 0 0 40px rgba(${accentRgb},0.07), 0 6px 24px rgba(0,0,0,0.5)`,
+    } as React.CSSProperties}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50px', background: `linear-gradient(to bottom, rgba(${accentRgb},0.07), transparent)`, pointerEvents: 'none', borderRadius: 'inherit' }} />
+      <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontWeight: 600 }}>
         {label}
       </div>
-      <div style={{ fontSize: '20px', fontWeight: 700, color: valueColor || 'var(--text)', lineHeight: 1.2, wordBreak: 'break-word' }}>
+      <div style={{
+        fontSize: '20px', fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word',
+        background: `linear-gradient(135deg, ${accentColor} 0%, #d4d4f8 100%)`,
+        WebkitBackgroundClip: 'text', backgroundClip: 'text',
+        WebkitTextFillColor: 'transparent', color: 'transparent',
+        display: 'inline-block',
+      }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '10px', color: `rgba(${accentRgb},0.6)`, marginTop: '4px' }}>{sub}</div>}
     </div>
   )
 }
@@ -198,9 +216,15 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                               const cell = row[d]
                               return (
                                 <td key={d} style={{ textAlign: 'center', padding: '6px 4px' }}>
-                                  <div style={{ background: cellBg(cell?.pnl), borderRadius: '5px', padding: '5px 4px',
-                                    fontSize: '10px', fontWeight: 700,
-                                    color: cell ? (cell.pnl > 0 ? 'var(--green)' : cell.pnl < 0 ? 'var(--red)' : 'var(--text-dim)') : 'var(--text-dim)' }}>
+                                  <div style={{
+                                  background: cellBg(cell?.pnl), borderRadius: '5px', padding: '5px 4px',
+                                  fontSize: '10px', fontWeight: 700,
+                                  color: cell ? (cell.pnl > 0 ? 'var(--green)' : cell.pnl < 0 ? 'var(--red)' : 'var(--text-dim)') : 'var(--text-dim)',
+                                  boxShadow: cell && cell.pnl !== 0
+                                    ? `0 0 8px ${cell.pnl > 0 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`
+                                    : 'none',
+                                  transition: 'all 0.2s ease',
+                                }}>
                                     {cell ? (cell.pnl >= 0 ? '+' : '') + (cell.pnl / 1000).toFixed(1) + 'k' : '—'}
                                     {cell && <div style={{ fontSize: '9px', fontWeight: 400, color: 'var(--text-dim)', marginTop: '1px' }}>{cell.trades}t</div>}
                                   </div>
@@ -240,8 +264,21 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                           </td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: '80px', height: '6px', background: 'var(--bg-border)', borderRadius: '3px', flexShrink: 0 }}>
-                                <div style={{ width: `${Math.min(s.score, 100)}%`, height: '100%', background: scoreBarColor(s.score), borderRadius: '3px', transition: 'width 0.3s' }} />
+                              <div style={{ width: '80px', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', flexShrink: 0, overflow: 'hidden' }}>
+                                <div style={{
+                                  width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: '3px',
+                                  background: s.score >= 70
+                                    ? 'linear-gradient(90deg, #10b981, #34d399)'
+                                    : s.score >= 40
+                                    ? 'linear-gradient(90deg, #f59e0b, #fcd34d)'
+                                    : 'linear-gradient(90deg, #ef4444, #f87171)',
+                                  boxShadow: s.score >= 70
+                                    ? '0 0 8px rgba(16,185,129,0.7)'
+                                    : s.score >= 40
+                                    ? '0 0 8px rgba(245,158,11,0.7)'
+                                    : '0 0 8px rgba(239,68,68,0.7)',
+                                  transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)',
+                                }} />
                               </div>
                               <span style={{ fontSize: '12px', fontWeight: 700, color: scoreBarColor(s.score) }}>{s.score}</span>
                             </div>
@@ -270,14 +307,22 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
               {timeSlots.map((slot: any) => {
                 const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 60))
                 const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
-                const bg    = slot.total_pnl >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'
                 const title = `${slot.label}\n${slot.trades} trades · ${slot.win_rate}% win\n${slot.total_pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(slot.total_pnl)).toLocaleString('en-IN')}`
                 return (
                   <div key={slot.hour} title={title} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'help' }}>
                     <div style={{ fontSize: '9px', fontWeight: 700, color, textAlign: 'center' }}>
                       {slot.total_pnl !== 0 ? `${slot.total_pnl >= 0 ? '+' : ''}${Math.abs(slot.total_pnl) >= 1000 ? (slot.total_pnl / 1000).toFixed(1) + 'k' : Math.round(slot.total_pnl)}` : '—'}
                     </div>
-                    <div style={{ width: '100%', height: `${barH}px`, background: bg, border: `1px solid ${color}`, borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                    <div style={{
+                      width: '100%', height: `${barH}px`,
+                      background: slot.total_pnl >= 0
+                        ? 'linear-gradient(to top, rgba(16,185,129,0.5), rgba(16,185,129,0.85))'
+                        : 'linear-gradient(to top, rgba(239,68,68,0.5), rgba(239,68,68,0.85))',
+                      border: `1px solid ${color}`,
+                      borderRadius: '3px 3px 0 0',
+                      boxShadow: slot.total_pnl !== 0 ? `0 0 8px ${slot.total_pnl >= 0 ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}` : 'none',
+                      transition: 'height 0.4s cubic-bezier(0.4,0,0.2,1)',
+                    }} />
                     <div style={{ fontSize: '9px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {slot.hour}AM
                     </div>

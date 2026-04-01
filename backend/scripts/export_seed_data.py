@@ -68,7 +68,7 @@ TABLE_COLUMNS = {
         # 0010
         "strategy_type",
         # 0018
-        "recurring_days",
+        "recurring_days", "is_live",
     ],
     "algo_legs": [
         # 0001 base
@@ -99,16 +99,20 @@ def build_insert_query(table: str, columns: list) -> str:
 
     Uses quote_nullable() so NULL values become the literal NULL token and
     strings are properly escaped and quoted. Output is one INSERT per row.
+
+    market_holidays uses ON CONFLICT DO NOTHING so reimporting holidays from a
+    fresh local DB does not error if the server already has the same rows.
     """
     col_list = ", ".join(columns)
     # Build: quote_nullable(col1::text) || ', ' || quote_nullable(col2::text) || ...
     values_parts = " || ', ' || ".join(
         f"COALESCE(quote_nullable({col}::text), 'NULL')" for col in columns
     )
+    suffix = " ON CONFLICT DO NOTHING" if table == "market_holidays" else ""
     return (
         f"SELECT 'INSERT INTO {table} ({col_list}) VALUES (' "
         f"|| {values_parts} "
-        f"|| ');' "
+        f"|| '){suffix};' "
         f"FROM {table} ORDER BY created_at NULLS LAST;"
     )
 
