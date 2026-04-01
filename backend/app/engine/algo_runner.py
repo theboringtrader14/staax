@@ -327,6 +327,20 @@ class AlgoRunner:
                 )
                 entry_error = True
 
+                if self._execution_manager:
+                    await self._execution_manager._log(
+                        db            = db,
+                        action        = "PLACE",
+                        status        = "FAILED",
+                        algo_id       = str(algo.id),
+                        account_id    = str(algo.account_id) if algo.account_id else "",
+                        grid_entry_id = str(grid_entry.id),
+                        reason        = str(e),
+                        event_type    = "entry_failed",
+                        is_practix    = grid_entry.is_practix,
+                        details       = {"leg": leg.leg_number, "error": str(e)},
+                    )
+
                 if algo.exit_on_entry_failure:
                     logger.warning(
                         f"on_entry_fail=exit_all — squaring off {len(placed_orders)} placed legs"
@@ -539,6 +553,9 @@ class AlgoRunner:
                 symbol           = instrument.get("tradingsymbol", "")
                 instrument_token = instrument.get("instrument_token", 0)
                 ltp              = instrument.get("last_price", 0.0)
+                # Store resolved token on the leg so monitors/W&T callbacks
+                # can access leg.instrument_token without AttributeError.
+                leg.instrument_token = instrument_token
 
                 # Angel One instrument master has no live prices — fetch LTP for ALL orders
                 if ltp == 0.0 and broker_type == "angelone" and account_broker:

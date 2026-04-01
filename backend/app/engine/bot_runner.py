@@ -130,6 +130,19 @@ class BotRunner:
         Called on every LTP tick. Routes tick to each bot watching this token.
         When a candle completes, passes it to the bot's strategy.
         """
+        # ── MCX session + holiday guard ───────────────────────────────────────
+        from app.core.mcx_holidays import MCX_HOLIDAYS_2026
+        now = datetime.now(IST)
+        t = (now.hour, now.minute)
+        morning = (9, 0) <= t <= (11, 30)
+        evening = (15, 30) <= t <= (23, 30)
+        if not (morning or evening):
+            logger.debug("MCX session closed — skipping tick")
+            return
+        if now.date().isoformat() in MCX_HOLIDAYS_2026:
+            logger.info("MCX session closed — skipping tick")
+            return
+
         for bot in self._bots:
             if MCX_TOKENS.get(bot.instrument) != token:
                 continue
