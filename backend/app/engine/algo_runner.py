@@ -413,6 +413,31 @@ class AlgoRunner:
                     f"Broker token not set for {algo.name} — complete broker login first"
                 )
 
+            # 1b. Live API key validation — is_token_set() only checks string is non-empty.
+            # An expired/invalid token (AG8004) passes that check but fails on real API calls.
+            # Test with a single underlying LTP call. Cost: ~200ms.
+            if account_broker is not None and account_broker.is_token_set():
+                _underlying = leg.underlying if hasattr(leg, "underlying") else "NIFTY"
+                try:
+                    _spot = await account_broker.get_underlying_ltp(_underlying)
+                    if _spot == 0.0:
+                        logger.warning(
+                            f"⚠️ [PRE-CHECK] Broker API key invalid for {algo.name} "
+                            f"— LTP returned 0.0 for {_underlying} "
+                            f"(likely AG8004 / expired session). Check SmartAPI portal."
+                        )
+                        return False, (
+                            f"Broker API key invalid — {_underlying} LTP=0 "
+                            f"(AG8004 / expired session). Re-login at SmartAPI portal."
+                        )
+                except Exception as _ltp_err:
+                    logger.warning(
+                        f"⚠️ [PRE-CHECK] Broker API key check failed for {algo.name}: {_ltp_err}"
+                    )
+                    return False, (
+                        f"Broker API key invalid — {_ltp_err}. Re-login at SmartAPI portal."
+                    )
+
         # 2. SmartStream check for W&T legs and ORB algos (live only)
         if not is_practix:
             needs_stream = (

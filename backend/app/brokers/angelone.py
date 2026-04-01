@@ -55,6 +55,10 @@ class AngelOneBroker(BaseBroker):
     _master_cache: Optional[List[dict]] = None
     _master_date:  Optional[_date]      = None
 
+    # Per-call option chain cache — avoids double 209k-record scan for CE+PE legs
+    # in a straddle entry. Key: (underlying, expiry_ao). TTL: 60 seconds.
+    _chain_cache: dict = {}  # { (underlying, expiry): (timestamp, chain_dict) }
+
     # 'name' field in master differs from our underlying names in two cases
     UNDERLYING_TO_MASTER_NAME: Dict[str, str] = {
         "NIFTY":       "NIFTY",
@@ -438,6 +442,21 @@ class AngelOneBroker(BaseBroker):
         else:
             expiry_ao = expiry
 
+        # Per-call 60s cache — CE and PE legs in a straddle share the same chain.
+        # Key: (underlying, expiry_ao) — option_type is NOT in the key because
+        # this function returns ALL strikes (CE + PE) in one dict.
+        import time as _time
+        _cache_key = (underlying.upper(), expiry_ao)
+        _cached = AngelOneBroker._chain_cache.get(_cache_key)
+        if _cached:
+            _ts, _chain = _cached
+            if _time.monotonic() - _ts < 60:
+                logger.debug(
+                    f"[AO master] chain cache hit: {underlying} {expiry_ao} "
+                    f"({len(_chain)} strikes)"
+                )
+                return _chain
+
         logger.info(
             f"[AO master] get_option_chain: {underlying} expiry={expiry_ao} "
             f"master_name={master_name} exchange={exchange}"
@@ -528,6 +547,8 @@ class AngelOneBroker(BaseBroker):
             f"[AO master] ✅ Option chain built: {len(chain)} strikes for {underlying} {expiry_ao}"
             + (f" — sample strike: {next(iter(chain))}" if chain else "")
         )
+        if chain:
+            AngelOneBroker._chain_cache[_cache_key] = (_time.monotonic(), chain)
         return chain
 
     # ── Order placement ───────────────────────────────────────────────────────

@@ -180,4 +180,8 @@ class AlgoLeg(Base):
     reentry_mode    = Column(Enum(ReentryMode, values_callable=lambda x: [e.value for e in x]), nullable=True)
     reentry_max     = Column(Integer, default=0)   # 0–5
 
+    # ── Runtime strike resolution (set by algo_runner after strike selection) ──
+    # Stored so LTP tracking and position monitors can access it via leg reference.
+    instrument_token = Column(Integer, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
