@@ -3740,3 +3740,40 @@ ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
 - LIFEX Phase 1-5: UI overhaul (Dashboard, Analytics, Reports)
 - Domain: lifex.in purchase pending
 - Karthik + Wife AO apps: register 13.202.164.243
+
+## Session Update — 2026-04-01
+
+### GOLDM LIVE ✅
+- MCX token issue found: March 2026 contracts expired
+- GOLDM: 477904 (GOLDM03APR26FUT) — April 2026
+- SILVERMIC: 466029 (SILVERMIC30APR26FUT) — April 2026
+- GOLDM LTP confirmed: ₹1,50,533 at 8:56 PM IST
+- SmartStream connecting after fresh login + correct tokens
+
+### ⚠️ MCX Token Monthly Rotation Required
+GOLDM April contract expires ~April 3, 2026
+SILVERMIC April contract expires ~April 30, 2026
+Action: Update bot_runner.py MCX_TOKENS with May contracts before expiry
+
+### Major Backend Fixes Applied
+- MTM SL/TP: was silently dead — now wired via SLTPMonitor
+- W&T: returns WAITING (not ERROR) when SmartStream down
+- ORB: 3 bugs fixed (underlying_token, default_direction, start_time)
+- AlgoLeg.instrument_token: column added, backfill on startup
+- Account routing: client_id based (not nickname)
+- Option chain: 60s TTL cache, pre-check validates API key
+- Execution audit: entry_failed logged in exception handler
+- MCX session/holiday guard in bot_runner
+
+### Server Status
+- Backend: running at 13.202.164.243:8000
+- Frontend: served via nginx at 13.202.164.243
+- DB: migrations 0001-0017 applied
+- Need: seed_data import (algos + accounts from local)
+- Need: git pull + rebuild after latest commits
+
+### Pending (Non-UI)
+- Zerodha: static IP needed
+- Karthik AO: needs new SmartAPI app with server IP
+- Wife AO: MCX only, deferred to AO family integration
+- MCX token rotation: must update monthly
