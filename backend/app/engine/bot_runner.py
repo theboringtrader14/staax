@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 # MCX instrument tokens (Angel One SmartStream)
 # Verify these against the AO instrument master before going live.
 MCX_TOKENS = {
-    "GOLDM":     58424839,
-    "SILVERMIC": 58457095,
+    "GOLDM":     477904,   # GOLDM03APR26FUT (updated 2026-04-01; was 58424839 = Mar-26 expired)
+    "SILVERMIC": 466029,   # SILVERMIC30APR26FUT (updated 2026-04-01; was 58457095 = Mar-26 expired)
 }
 
 # MCX exchange type for Angel One SmartStream subscription
