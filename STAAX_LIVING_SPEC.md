@@ -3466,335 +3466,242 @@ cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
 - Static IP: Angel One allows family mapping post 2-3 months (single IP for all AO accounts)
 - Accounts for live: Zerodha (Karthik), Mom AO, Wife AO (MCX)
 
-## Session Update — 2026-03-30 (Monday Live Test)
+## CURRENT SYSTEM STATE (2026-04-02)
 
-### Major Progress Today
-- ✅ DB restored from pg16 backup to Docker DB
-- ✅ Startup auto-login for all 3 AO accounts (Wife/Mom/Karthik)
-- ✅ PositionMonitor instrument_token fix
-- ✅ W&T broker resolution fixed
-- ✅ Better error messages
-- ✅ Backup script fixed — now uses Docker DB directly
-- ✅ First successful NIFTY straddle: Test New-2
-  SELL NIFTY07APR2622500CE @ 411.15
-  SELL NIFTY07APR2622500PE @ 395.00
+> **This section replaces all session logs below it. It reflects actual current state.**
 
-### Confirmed Working
-- Algo execution (direct entry, straddle)
-- Strike selection (ATM correctly identified)
-- Both legs placed on exchange
-- SL calculation (30%)
-- Orders in DB and UI
+---
 
-### Root Causes Found and Fixed
-- Morning failures: auto-login not before 09:15 → FIXED (startup auto-login)
-- PositionMonitor crash: instrument_token not passed → FIXED
-- W&T failure: broker resolved after W&T block → FIXED
-- Backup empty: backup_db.sh hitting pg16 → FIXED (Docker pg_dump)
+### Execution Safety Layer — FULLY IMPLEMENTED
+All checks run inside `_pre_execution_check()` in `algo_runner.py` BEFORE any order is placed.
 
-### Pending (Priority Order)
-- P1: DATABASE_URL → 127.0.0.1 (fix DB conflict permanently)
-- P2: recurring_days not saved on algo creation (AlgoPage.tsx)
-- P3: position_rebuilder crash (subscribe expects List[int] not int)
-- P4: LTP not updating (SmartStream not connecting)
-- P5: Option chain empty for existing algos (needs investigation)
-- P6: Account nickname hardcoded in broker routing
-- P7: All B/U/F items from previous spec
+| Check | Implementation | Status |
+|-------|---------------|--------|
+| Broker token loaded in runtime | `is_token_set()` on broker instance | ✅ Done |
+| API key valid (not expired/AG8004) | `get_underlying_ltp()` returns 0 → blocks with `[PRE-CHECK]` log | ✅ Done |
+| SmartStream active (W&T/ORB only) | Returns `is_waiting=True` → algo set to WAITING not ERROR | ✅ Done |
+| Option chain available | Returns None → blocks entry, logs clearly | ✅ Done |
+| Strike selection returns valid token | `leg.instrument_token` set after strike resolution | ✅ Done |
+| `instrument_token` on AlgoLeg | Column exists (migration 0017), backfilled on startup | ✅ Done |
+| DB healthy | `/api/v1/system/health` checks DB latency | ✅ Done |
 
-### DB Recovery SOP
-If algos missing on restart:
-1. kill pg16 PID
-2. docker exec -i staax_db psql -U staax -d staax_db < latest_backup.sql
-3. Restart backend
+**Log format for blocked executions:**
+```
+⚠️  [PRE-CHECK] Karthik AO API key invalid — AG8004 / expired session
+[BLOCKED] Algo-3 entry blocked: TOKEN_INVALID
+```
 
-### Commits Today
-- 24d82c8: Engine fixes (PositionMonitor, W&T, startup auto-login)
+**Design note:** Non-W&T/ORB algos do NOT require SmartStream active — they use option chain LTP directly from broker API. This is intentional.
 
+---
 
-## End of Day — 2026-03-30
+### Broker Token Injection — IMPLEMENTED
+- On startup: `_ao_startup_auto_login()` in `main.py` logs into all AO accounts with valid TOTP
+- Token stored in DB AND injected into runtime broker instance via `broker.load_token()`
+- `client_id` and `api_key` backfilled to DB row on each successful login
+- All routing uses `client_id` (not nickname) — `_CLIENT_ID_TO_BROKER_KEY` dict
+- Zerodha routing uses `Account.broker == BrokerType.ZERODHA` (not hardcoded "Karthik")
+- Startup prints account status summary:
+```
+=== Account Status (09:00:03 IST) ===
+✅ Mom AO (KRAH1029) — token valid, feed_token ready
+⚠️  Karthik AO — client_id not in .env (inactive)
+⚠️  Wife AO — client_id not in .env (inactive)
+❌ Zerodha — no token today
+```
 
-### All Commits Today
-- 24d82c8: Engine fixes (PositionMonitor, W&T, startup auto-login)
-- 1b87b91: Living Spec update
-- 7e56ab0: recurring_days, position_rebuilder crash fixed
-- a4abf01: UI/Engine batch (LTP subscribe, algo creation, 8 UI fixes)
-- ce3e594: Grid/Orders/Analytics batch (weekend, no-trade, reports)
-- [pending]: Session A+B results
+---
 
-### Confirmed Working End-to-End
-- ✅ Startup auto-login (all 3 AO accounts)
-- ✅ Algo creation → grid entries auto-created
-- ✅ Strike selection (ATM NIFTY straddle)
-- ✅ Both legs placed on exchange (PRACTIX mode)
-- ✅ SL monitoring registered (30%)
-- ✅ Auto square-off at exit time (15:06)
-- ✅ P&L calculated correctly (Test New-2: +₹23.70 net)
-- ✅ Orders page shows correct status
-- ✅ Backup script reliable (Docker DB, 26 tables)
+### SmartStream (Angel One WebSocket) — IMPLEMENTED
+- Connects automatically after auto-login using fresh `feed_token`
+- 7 tokens subscribed: NIFTY, BANKNIFTY, FINNIFTY, SENSEX, MIDCPNIFTY + GOLDM + SILVERMIC
+- `_connected` flag: set True in `_on_open`, False in `_on_close`
+- `_last_tick_at`: ISO timestamp updated on every tick in `_on_data`
+- Root cause of past failures: stale MCX contract tokens (expired March 2026 contracts) → fixed
+- Manual endpoints:
+  - `GET /api/v1/system/smartstream/status` → connected, subscribed_tokens, mcx_tokens, last_tick_at
+  - `POST /api/v1/system/smartstream/start` → start using first valid AO feed_token
 
-### Tomorrow Morning SOP
-1. Docker must be running (staax_db, staax_redis containers)
-2. cd ~/STAXX/staax/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-3. cd ~/STAXX/staax/frontend && npm run dev
-4. Open http://localhost:3000 — auto-login fires on startup
-5. Check Accounts page — all 4 should show Live ✅
-6. Market opens 09:15 — algos fire automatically
-7. Run ~/STAXX/backup_db.sh after session
+---
 
-### Critical Remaining (must fix before live)
-1. Angel One API key (AG8004) — check SmartAPI portal for correct key
-2. SmartStream WebSocket — LTP not updating on open positions
-3. Option chain for existing algos (blocked by API key)
+### MCX Token Auto-Rotation — IMPLEMENTED
+- `MCX_TOKENS` dict in `bot_runner.py` holds current contract tokens
+- `refresh_mcx_tokens()` scans `instrument_master_cache.json`, picks nearest expiry ≥ today, skips within 2 days of expiry (`_MCX_ROLL_DAYS_BEFORE = 2`)
+- Called: on startup in `load_bots()` + daily at 06:00 IST via scheduler
+- `check_mcx_expiry_warnings()` on startup: logs warning if contract expires within 3 days
+- MCX session guard in `bot_runner.on_tick()`: skips signal generation outside 09:00–11:30 / 15:30–23:30 IST
+- MCX holiday list: `backend/app/core/mcx_holidays.py`
 
-## Session Update — 2026-03-30 (Evening)
+**Current tokens (2026-04-02):**
+| Symbol | Token | Contract | Expiry |
+|--------|-------|----------|--------|
+| GOLDM | 487819 | GOLDM05MAY26FUT | May 5, 2026 |
+| SILVERMIC | 466029 | SILVERMIC30APR26FUT | Apr 30, 2026 |
+| GOLDM (next) | 491727 | GOLDM05JUN26FUT | Jun 5, 2026 |
+| SILVERMIC (next) | 477177 | SILVERMIC30JUN26FUT | Jun 30, 2026 |
 
-### Completed This Evening
-- ✅ Bot signals infrastructure (bot_signals table, endpoints)
-- ✅ Indicator engine: CandleAggregator, DTRStrategy, ChannelStrategy
-- ✅ MCX token for GOLDM = 58424839 (near-month, confirmed in instrument master)
-- ✅ LTP → BotRunner wiring (on_tick registered in ltp_consumer)
-- ✅ Daily OHLC fetch scheduled at 09:00 IST for DTR strategy
-- ✅ Accounts filter wired (Grid/Orders/Reports)
-- ✅ Analytics restructured (Performance/Failures/Slippage, Health in Performance)
-- ✅ AlgoPage: recurring_days from form, strike_offset added
-- ✅ Per-Algo Metrics scroll, MISSED status in Grid
-- ✅ DB retry logic (startup race condition fixed)
-- ✅ Add Account modal (Zerodha/AO form)
-- ✅ totp_secret column added to both DBs
+---
 
-### Blocked by SmartStream
-- MCX ticks not flowing → bots can't generate signals
-- LTP not updating on open positions
-- Fix needed: SmartStream instrument_token subscription for GOLDM (58424839)
+### Global MTM SL/TP — IMPLEMENTED (fixed 2026-04-01, was silently dead)
+- `MTMMonitor` wired into `SLTPMonitor.on_tick()` — receives LTP on every tick
+- `PositionMonitor` has `quantity` field for correct ₹ P&L
+- `sl_tp_monitor.set_mtm_monitor(mtm_monitor)` called at startup in `main.py`
+- Breach fires `exit_all()` — full algo exit
+- Debug log: `[SLTPMON] tick {symbol}: ltp={ltp}, sl={sl_actual}, tp={tp_level}`
 
-### Tomorrow Priority
-1. Fix SmartStream WebSocket connection
-2. Subscribe GOLDM (58424839) to SmartStream
-3. Test indicator engine with live MCX ticks
-4. Test DTR/Channel signal generation
-5. Verify bot_signals table populates correctly
+---
 
-### All Commits Today (30 March)
-24d82c8 → 995fa88 (14 commits, ~2500 lines changed)
+### W&T (Wait and Trade) — IMPLEMENTED
+- When SmartStream not connected: algo set to `WAITING` not `ERROR`
+- `_pre_execution_check()` returns 3-tuple `(ok, reason, is_waiting)`
+- `_enter_with_db()` routes to `_set_waiting()` vs `_set_error()`
+- Log: `⚠️  [W&T] SmartStream not connected — entry WAITING`
 
-## Session Update — 2026-03-30 (Late Evening)
+---
 
-### SmartStream Root Causes Fixed (5 bugs)
-- Bug A: Dead `continue` before adapter.start() — SmartStream never started
-- Bug B: api_key from empty DB field — now uses broker.api_key from .env
-- Bug C: MCX tokens using NFO exchange type — now MCX=5
-- Bug D: Bot tokens never subscribed to SmartStream — now included at login
-- Bug E: No reconnect on disconnect — auto-reconnect after 10s added
-- Remaining: SmartStream starts before feed_token available (fixing in next batch)
+### ORB (Opening Range Breakout) — IMPLEMENTED (3 bugs fixed 2026-04-01)
+- `_ORB_UNDERLYING_TOKENS` dict: NIFTY→99926000, BANKNIFTY→99926009, FINNIFTY→99926037, SENSEX→99919000, MIDCAPNIFTY→99926014
+- MCX underlyings fall back to `MCX_TOKENS` (GOLDM→487819)
+- `default_direction` reads from `legs[0].direction` (was AttributeError)
+- `orb_start_time` reads from `algo.orb_start_time` (was hardcoded "09:15")
+- ORB range stored per `grid_entry_id` (not global)
 
-### Platform State
-- GOLDM instrument token: 58424839 (confirmed in AO instrument master)
-- MCX exchange type for SmartStream: 5
-- Indicator engine: DTR + Channel strategies fully built
-- Signal pipeline: tick → candle → strategy → bot_signals → WebSocket (ready when SmartStream connects)
+---
 
-### Pending for Next Market Day
-1. Verify SmartStream connects after fresh login (check _on_open in logs)
-2. Verify GOLDM ticks arrive (check backend logs for tick data)
-3. Create test strategy under Mom AO account
-4. Check option chain works with correct API key
+### Option Chain — IMPLEMENTED
+- 60s TTL cache keyed by `(underlying, expiry)` — CE+PE share same cache
+- Empty results never cached (retry gets fresh fetch)
+- Eliminates double 209k-record master scan for straddle entries
 
-### Angel One API Key Issue
-ANGELONE_KARTHIK_API_KEY=bREnxDe5 returns AG8004 Invalid API Key
-Action needed: Log into SmartAPI portal and verify the correct API key
-URL: https://smartapi.angelbroking.com → My Apps → copy API key
+---
 
-### Remaining Pending Items
-Critical:
-- C-1: SmartStream feed_token sequence fix (in progress)
-- C-2: Angel One API key AG8004 — manual fix needed in .env
+### Execution Audit Log — IMPLEMENTED
+All events logged to `execution_logs` table:
+- `entry_attempt`, `entry_success`, `entry_failed`, `pre_check_failed`
+- Exceptions before `ExecutionManager` also log `entry_failed`
 
-Medium:
-- M-2: Execution Guard before order placement
-- M-3: Startup Safety Check
-- M-4: get_option_chain caching
-- M-5: Global SL/TP verification
-- M-6: MCX holidays
-- M-7: Account nickname hardcoded in broker routing
-- M-8: Algo failures (W&T, ORB)
+---
 
-UI/UX batch in progress:
-- Analytics page restructure (FY filter, 6 cards, chip toggle, strategy breakdown)
-- Indicator Bots page (Bots/Signals/Orders tabs)
-- UX enhancements (sidebar dot, countdown, day summary, dashboard next algo)
+### Indicator Bot Pipeline — IMPLEMENTED
+```
+SmartStream tick
+  → ltp_consumer._process_ticks()
+    → _bot_runner_tick() [registered in main.py]
+      → bot_runner.on_tick()
+        → MCX session guard (09:00–11:30 / 15:30–23:30 IST)
+          → CandleAggregator.on_tick()
+            → bar boundary hit → completed Candle
+              → DTRStrategy.on_candle() / ChannelStrategy.on_candle()
+                → Signal → bot_signals DB + WebSocket
+```
 
-## End of Session — 2026-03-30 (Final)
+**Endpoints:**
+- `GET /api/v1/bots/ltp?symbol=GOLDM` — current LTP from Redis
+- `GET /api/v1/bots/{bot_id}/candles?limit=5` — in-memory candles
+- `POST /api/v1/bots/{bot_id}/fetch-daily-data` — manually load DTR daily pivots
 
-### All Commits Today (30 March 2026)
-24d82c8 → fec3a45+ (17+ commits, ~5000 lines changed)
+**DTR fetch_daily_candles:** Fixed for MCX — passes `symbol_token` from `MCX_TOKENS` directly (instrument master lookup fails for MCX futures).
 
-### Confirmed Working
-- ✅ First successful straddle executed (Test New-2: +₹23.70)
-- ✅ Auto square-off at exit time
-- ✅ Startup auto-login for all 3 AO accounts
-- ✅ SmartStream 5 bugs fixed (starts after login tomorrow)
-- ✅ Indicator engine built (DTR + Channel strategies)
-- ✅ Analytics page restructured (FY filter, 6 cards, chips)
-- ✅ Indicator Bots page (3 tabs: Bots/Signals/Orders)
-- ✅ UX: sidebar dot, grid countdown, day summary, next algo
-- ✅ DB retry logic, backup script fixed
+---
 
-### Not Yet Implemented (from UX suggestions)
-- P&L Sparkline in Orders page
-- Live tickers bar in Dashboard (needs SmartStream)
-- Best time to trade heatmap in Analytics
-- Reports page Per-Algo Metrics scroll (overflow fix pending rebuild)
+### Position Rebuilder — IMPLEMENTED
+- `backfill_instrument_tokens()` on startup: fills NULL instrument_token on open orders using AO master
+- After backfill: re-subscribes each resolved token to ltp_consumer
 
-### Tomorrow Morning SOP
-1. Docker must be running
-2. cd ~/STAXX/staax/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-3. cd ~/STAXX/staax/frontend && npm run dev
-4. Login → check Accounts page for SmartStream _on_open in logs
-5. If SmartStream connects → GOLDM ticks should flow → bots generate signals
-6. Run ~/STAXX/backup_db.sh after session
+---
 
-### Angel One API Key Fix Needed
-ANGELONE_KARTHIK_API_KEY=bREnxDe5 returns AG8004
-Fix: Login to https://smartapi.angelbroking.com → My Apps → copy correct API key → update backend/.env
+## ACTIVE ACCOUNTS (2026-04-02)
 
-## Session Update — 2026-03-31 (Evening)
+| Account | Broker | client_id | Status | Notes |
+|---------|--------|-----------|--------|-------|
+| Mom | Angel One | KRAH1029 | ✅ Fully operational | Auto-login + SmartStream |
+| Wife | Angel One | KRAH1008 | ⚠️ Token loads | IP not whitelisted for server |
+| Karthik AO | Angel One | PEAN1003 | ❌ AG8004 | Needs new SmartAPI app |
+| Karthik | Zerodha | — | ❌ Manual | Needs static IP |
 
-### Server Setup Complete
-- AWS EC2 t3.small launched: i-00a73ee84fac5b0be
-- Static IP (Elastic): 13.202.164.243 (ap-south-1 Mumbai)
-- SSH key: ~/.ssh/lifex-key.pem
-- Server stack: Ubuntu 24.04, Docker 29.3.1, Node v20.20.2, Python 3.12.3, Redis
-- DB: postgres:16 container running on server (staax_db)
-- Angel One app created with IP 13.202.164.243 registered
-- Mom's API key updated in .env
+**Rule:** Only Mom's AO account is fully operational. Each AO account needs its own static IP whitelisted in SmartAPI portal.
 
-### LIFEX Brand
-- Platform name: LIFEX (lifex.in)
-- STAAX, INVEX, BUDGEX are LIFEX modules
-- Design: dark (#050510), neon indigo glassmorphism
-- Landing page built: frontend/src/pages/LandingPage.tsx
-- Module accents: STAAX=indigo, INVEX=emerald, BUDGEX=amber
+---
 
-### Deployment Status
-- Code cloned to server at ~/staax
-- Python venv being set up
-- .env needs to be created on server
-- DB migrations pending on server
+## SERVER (13.202.164.243)
 
-### SSH Access
-ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
+| Item | Value |
+|------|-------|
+| Instance | EC2 t3.small, ap-south-1 |
+| Static IP | 13.202.164.243 (Elastic) |
+| SSH | `ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243` |
+| Backend | uvicorn via systemd (`staax-backend.service`) |
+| Frontend | nginx port 80, serving `~/staax/frontend/dist/` |
+| DB | postgres:16-alpine Docker container (`staax_db`) |
+| Migrations | 0001–0019 applied |
+| Data | 4 accounts, 21 algos, 37 legs, 40 holidays |
+| APP_ENV | production |
 
-## Session Update — 2026-03-31 (Evening)
+**Deploy command (run on server):**
+```bash
+cd ~/staax && git pull && cd backend && source venv/bin/activate && alembic upgrade head && sudo systemctl restart staax-backend && cd ../frontend && npm run build && sudo systemctl reload nginx
+```
 
-### Server Setup Complete
-- AWS EC2 t3.small launched: i-00a73ee84fac5b0be
-- Static IP (Elastic): 13.202.164.243 (ap-south-1 Mumbai)
-- SSH key: ~/.ssh/lifex-key.pem
-- Server stack: Ubuntu 24.04, Docker 29.3.1, Node v20.20.2, Python 3.12.3, Redis
-- DB: postgres:16 container running on server (staax_db)
-- Angel One app created with IP 13.202.164.243 registered
-- Mom's API key updated in .env
+---
 
-### LIFEX Brand
-- Platform name: LIFEX (lifex.in)
-- STAAX, INVEX, BUDGEX are LIFEX modules
-- Design: dark (#050510), neon indigo glassmorphism
-- Landing page built: frontend/src/pages/LandingPage.tsx
-- Module accents: STAAX=indigo, INVEX=emerald, BUDGEX=amber
+## MIGRATIONS
 
-### Deployment Status
-- Code cloned to server at ~/staax
-- Python venv being set up
-- .env needs to be created on server
-- DB migrations pending on server
+| # | Description | Status |
+|---|-------------|--------|
+| 0001–0009 | Initial schema | ✅ |
+| 0010 | SEBI layer, strategy_type, execution_logs | ✅ |
+| 0011 | orders.instrument_token | ✅ |
+| 0012 | algo_legs.reentry_on_sl/tp | ✅ |
+| 0013 | bot_signals | ✅ |
+| 0014 | execution_log_v2 | ✅ |
+| 0015 | order_latency | ✅ |
+| 0016 | bots.is_practix (idempotent) | ✅ |
+| 0017 | algo_legs.instrument_token | ✅ |
+| 0018 | accounts.totp_secret, fy_margin; algos.recurring_days, is_live | ✅ |
+| 0019 | Fix algos column types (recurring_days JSON, is_live bool) | ✅ |
 
-### SSH Access
-ssh -i ~/.ssh/lifex-key.pem ubuntu@13.202.164.243
+---
 
-## Session Update — 2026-03-31 (Night)
+## PENDING ITEMS (2026-04-02)
 
-### Server Deployment Progress
-- EC2 t3.small: 13.202.164.243 (ap-south-1)
-- Code cloned: ~/staax on server
-- Python venv + deps installed
-- .env copied to server (APP_ENV=production)
-- Redis enabled on boot
-- Migrations: pending (psycopg2-binary fix in progress)
-- nginx + systemd: infra/ files created, not yet deployed
+### 🔴 Critical
+None.
 
-### LIFEX UI Progress
-- Dark-only mode enforced (light mode removed)
-- Glassmorphism cards with ::before gradient corners
-- Aggressive neon glow on cards + hover
-- Landing page live at /
-- Auth removed — all routes open
-- Phase 1+2 (Dashboard radial rings, donuts, area charts, outer frame): in progress
+### 🟠 High Priority
+| # | Item | Notes |
+|---|------|-------|
+| H-1 | Test Mom Test-1 algo in PRACTIX mode | Create via UI, verify full execution |
+| H-2 | Verify Channel strategy signals end-to-end | Pipeline wired, not verified |
+| H-3 | DTR signal verification | Daily data works, signal output not verified |
+| H-4 | Server full deploy | Latest commits (7ece36c) not yet on server |
 
-### Angel One API Key
-- Mom's account: new app created, IP 13.202.164.243 registered, new API key saved
-- Will work FROM server only (local Mac will get AG8004)
-- Karthik/Wife accounts: still need new apps registered with same IP
+### 🟡 Medium
+| # | Item | Notes |
+|---|------|-------|
+| M-1 | Fix Zerodha UUID mismatch in export_seed_data.py | 2 algos missing on server |
+| M-2 | Wife AO | Needs separate static IP |
+| M-3 | Karthik AO | Needs new SmartAPI app with server IP |
+| M-4 | Zerodha | Needs static IP |
+| M-5 | Bot candle verification | Verify after 1 full timeframe boundary |
 
-### Pending
-- Server: complete migrations + start backend + nginx
-- LIFEX Phase 1-5: UI overhaul (Dashboard, Analytics, Reports)
-- Domain: lifex.in purchase pending
-- Karthik + Wife AO apps: register 13.202.164.243
+### 🎨 UI Backlog (deferred)
+- Blue accent remnants (popups, algo chips, Orders page buttons)
+- Account card left neon line
+- Orders page buttons (RUN/RE/SYNC/SQ/T) styling
+- Sparklines, ring blur, font inconsistency
 
-## Session Update — 2026-04-01
+---
 
-### GOLDM LIVE ✅
-- MCX token issue found: March 2026 contracts expired
-- GOLDM: 477904 (GOLDM03APR26FUT) — April 2026
-- SILVERMIC: 466029 (SILVERMIC30APR26FUT) — April 2026
-- GOLDM LTP confirmed: ₹1,50,533 at 8:56 PM IST
-- SmartStream connecting after fresh login + correct tokens
+## KEY FACTS
 
-### ⚠️ MCX Token Monthly Rotation Required
-GOLDM April contract expires ~April 3, 2026
-SILVERMIC April contract expires ~April 30, 2026
-Action: Update bot_runner.py MCX_TOKENS with May contracts before expiry
-
-### Major Backend Fixes Applied
-- MTM SL/TP: was silently dead — now wired via SLTPMonitor
-- W&T: returns WAITING (not ERROR) when SmartStream down
-- ORB: 3 bugs fixed (underlying_token, default_direction, start_time)
-- AlgoLeg.instrument_token: column added, backfill on startup
-- Account routing: client_id based (not nickname)
-- Option chain: 60s TTL cache, pre-check validates API key
-- Execution audit: entry_failed logged in exception handler
-- MCX session/holiday guard in bot_runner
-
-### Server Status
-- Backend: running at 13.202.164.243:8000
-- Frontend: served via nginx at 13.202.164.243
-- DB: migrations 0001-0017 applied
-- Need: seed_data import (algos + accounts from local)
-- Need: git pull + rebuild after latest commits
-
-### Pending (Non-UI)
-- Zerodha: static IP needed
-- Karthik AO: needs new SmartAPI app with server IP
-- Wife AO: MCX only, deferred to AO family integration
-- MCX token rotation: must update monthly
-
-## Session Closeout — 2026-04-01 (Night)
-
-### Final State
-- GOLDM: ₹1,51,245 live at 9:32 PM IST ✅
-- SmartStream: connected, 7 tokens ✅
-- Server: production, migrations 0001-0019, 21 algos, 37 legs ✅
-- MCX auto-rotation: active, fires daily 06:00 IST ✅
-
-### April 3 Action (GOLDM expiry — AUTOMATED)
-- Auto-rotation will pick GOLDM May token 487819 at 06:00 IST
-- Just restart backend and verify:
-  curl http://localhost:8000/api/v1/bots/ltp?symbol=GOLDM
-- Expected: token=487819, ltp > 0
-
-### Next Session Priorities
-1. Test Mom Test-1 algo in PRACTIX mode (create via UI)
-2. Verify Channel strategy signal generation end-to-end
-3. DTR signal verification with real GOLDM daily data
-4. Server full deploy (git pull + rebuild)
-5. Fix Zerodha UUID mismatch in export_seed_data.py
+| Item | Value |
+|------|-------|
+| Local backend | port 8000 |
+| Local frontend | port 3000 (npm run dev) |
+| DB backup | `~/STAXX/backup_db.sh` |
+| Local DB | Docker `staax_db`, TCP 127.0.0.1:5432 |
+| NSE tokens | NIFTY=99926000, BANKNIFTY=99926009, FINNIFTY=99926037, SENSEX=99919000 |
+| MCX exchange type | 5 (not NFO=2) |
+| Instrument master | `backend/instrument_master_cache.json` |
+| Git org | github.com/theboringtrader14 |
+| Repos | staax, invex, budgex |
