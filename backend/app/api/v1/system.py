@@ -558,21 +558,38 @@ async def system_health(request: Request):
     # ── App environment ───────────────────────────────────────────────────────
     checks["app_env"] = settings.APP_ENV
 
-    # ── Overall status ────────────────────────────────────────────────────────
-    db_ok    = checks["database"].get("ok", False)
-    redis_ok = checks["redis"].get("ok", False)
+    # ── Overall readiness ─────────────────────────────────────────────────────
+    db_ok     = checks["database"].get("ok", False)
+    redis_ok  = checks["redis"].get("ok", False)
+    stream_ok = checks["smartstream"].get("connected", False)
 
-    if not db_ok or not redis_ok:
-        status = "not_ready"
-    elif broker_ok_count == 0 or not checks["smartstream"].get("ok") or not checks["scheduler"].get("ok"):
-        status = "degraded"
-    else:
-        status = "ready"
+    # SmartStream required only during market hours:
+    # NSE session: 09:00–15:30 IST | MCX session: 00:00–23:30 IST
+    now_ist = datetime.now(IST)
+    _hm = now_ist.hour * 60 + now_ist.minute
+    _nse_open = 9 * 60 <= _hm <= 15 * 60 + 30
+    _mcx_open = _hm < 23 * 60 + 30
+    smartstream_required = _nse_open or _mcx_open
+
+    ready_reason = None
+    if not db_ok:
+        ready_reason = "DB_DOWN"
+    elif not redis_ok:
+        ready_reason = "REDIS_DOWN"
+    elif broker_ok_count == 0:
+        ready_reason = "NO_BROKER_TOKEN"
+    elif smartstream_required and not stream_ok:
+        ready_reason = "FEED_INACTIVE"
+
+    ready  = ready_reason is None
+    status = "ok" if ready else "degraded"
 
     return {
-        "status":    status,
-        "checks":    checks,
-        "timestamp": datetime.now(IST).isoformat(),
+        "ready":        ready,
+        "ready_reason": ready_reason,
+        "status":       status,
+        "checks":       checks,
+        "timestamp":    now_ist.isoformat(),
     }
 
 

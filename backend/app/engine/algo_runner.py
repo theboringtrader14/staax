@@ -52,6 +52,7 @@ from app.engine.mtm_monitor import MTMMonitor, AlgoMTMState
 from app.engine.wt_evaluator import WTEvaluator, WTWindow
 from app.engine.orb_tracker import ORBTracker, ORBWindow
 from app.engine.reentry_engine import ReentryEngine
+from app.engine.execution_errors import ExecutionErrorCode
 from app.engine.ltp_consumer import LTPConsumer
 from app.engine import event_logger as _ev
 
@@ -259,8 +260,7 @@ class AlgoRunner:
             if not ok:
                 log_level = "warning" if is_waiting else "error"
                 getattr(logger, log_level)(
-                    f"[PRE-EXEC] {'WAITING' if is_waiting else 'BLOCKED'} "
-                    f"{algo.name} leg {leg.leg_number}: {reason}"
+                    f"[{'WAITING' if is_waiting else 'BLOCKED'}] {algo.name} — {reason}"
                 )
                 # Write pre_check_failed to execution audit log
                 if self._execution_manager:
@@ -389,9 +389,9 @@ class AlgoRunner:
 
     async def _pre_execution_check(
         self, algo: "Algo", grid_entry: "GridEntry", leg: "AlgoLeg"
-    ) -> tuple[bool, str, bool]:
+    ) -> tuple[bool, ExecutionErrorCode, bool]:
         """
-        Returns (ok, reason, is_waiting).
+        Returns (ok, ExecutionErrorCode, is_waiting).
         - ok=False, is_waiting=False  → hard block → _set_error
         - ok=False, is_waiting=True   → soft block → _set_waiting (W&T/ORB stream not up yet)
         Called before any leg is placed — gates on broker token + SmartStream.
@@ -416,9 +416,7 @@ class AlgoRunner:
                     account_broker = self._zerodha_broker
 
             if account_broker is not None and not account_broker.is_token_set():
-                return False, (
-                    f"Broker token not set for {algo.name} — complete broker login first"
-                ), False
+                return False, ExecutionErrorCode.TOKEN_INVALID, False
 
             # 1b. Live API key validation — is_token_set() only checks string is non-empty.
             # An expired/invalid token (AG8004) passes that check but fails on real API calls.
@@ -433,17 +431,12 @@ class AlgoRunner:
                             f"— LTP returned 0.0 for {_underlying} "
                             f"(likely AG8004 / expired session). Check SmartAPI portal."
                         )
-                        return False, (
-                            f"Broker API key invalid — {_underlying} LTP=0 "
-                            f"(AG8004 / expired session). Re-login at SmartAPI portal."
-                        ), False
+                        return False, ExecutionErrorCode.API_KEY_INVALID, False
                 except Exception as _ltp_err:
                     logger.warning(
                         f"⚠️ [PRE-CHECK] Broker API key check failed for {algo.name}: {_ltp_err}"
                     )
-                    return False, (
-                        f"Broker API key invalid — {_ltp_err}. Re-login at SmartAPI portal."
-                    ), False
+                    return False, ExecutionErrorCode.API_KEY_INVALID, False
 
         # 2. SmartStream check for W&T legs and ORB algos (live only)
         # Returns is_waiting=True so _enter_with_db uses WAITING (not ERROR) status —
@@ -464,12 +457,9 @@ class AlgoRunner:
                         f"leg {leg.leg_number} — marking WAITING. "
                         "Will trigger on tick arrival once stream connects."
                     )
-                    return False, (
-                        f"SmartStream not connected — W&T/ORB blocked "
-                        f"(algo={algo.name} leg={leg.leg_number})"
-                    ), True   # is_waiting=True
+                    return False, ExecutionErrorCode.FEED_INACTIVE, True   # is_waiting=True
 
-        return True, "ok", False
+        return True, ExecutionErrorCode.UNKNOWN, False
 
     async def _place_leg(
         self,

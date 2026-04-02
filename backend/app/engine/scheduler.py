@@ -94,6 +94,14 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+        # 09:14 — pre-market validation sweep (warn-only, no state changes)
+        self._scheduler.add_job(
+            self._job_premarkt_sweep,
+            CronTrigger(hour=9, minute=14, timezone=IST),
+            id="premarkt_sweep",
+            replace_existing=True,
+        )
+
         # 15:35 — EOD safety net: close any stale intraday algos
         self._scheduler.add_job(
             self._job_eod_cleanup,
@@ -111,7 +119,7 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, activate_all, overnight_sl_check, eod_cleanup, broker_reconnect")
+        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, eod_cleanup, broker_reconnect")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -285,6 +293,98 @@ class AlgoScheduler:
                 await service.refresh_all()
             except Exception as e:
                 logger.error(f"Token refresh failed: {e}")
+
+    async def _job_premarkt_sweep(self):
+        """
+        09:14 — pre-market validation sweep.
+        Checks every algo scheduled for today: broker token, LTP, legs, SmartStream.
+        Logs a summary. Does NOT modify any state or mark algos as error.
+        """
+        logger.info("⏰ 09:14 — pre-market validation sweep")
+        today = date.today()
+        ready_count = 0
+        total_count = 0
+
+        async with AsyncSessionLocal() as db:
+            try:
+                from app.models.algo import AlgoLeg
+                from app.models.account import Account, BrokerType
+
+                result = await db.execute(
+                    select(GridEntry, Algo)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(
+                        and_(
+                            GridEntry.trading_date == today,
+                            GridEntry.is_enabled == True,
+                            GridEntry.is_archived == False,
+                            Algo.is_active == True,
+                        )
+                    )
+                )
+                rows = result.all()
+
+                logger.info("=== Pre-market Validation (09:14) ===")
+
+                for grid_entry, algo in rows:
+                    total_count += 1
+                    issues = []
+
+                    # 1. Legs exist?
+                    legs_res = await db.execute(
+                        select(AlgoLeg).where(AlgoLeg.algo_id == algo.id)
+                    )
+                    legs = legs_res.scalars().all()
+                    if not legs:
+                        issues.append("no legs configured")
+
+                    # 2. Broker token + LTP check (live algos only)
+                    if not grid_entry.is_practix and self._algo_runner:
+                        account_broker = None
+                        if algo.account_id:
+                            acc_res = await db.execute(
+                                select(Account).where(Account.id == algo.account_id)
+                            )
+                            acc = acc_res.scalar_one_or_none()
+                            if acc:
+                                if acc.broker == BrokerType.ANGELONE:
+                                    account_broker = self._algo_runner._angel_broker_map.get(acc.client_id)
+                                else:
+                                    account_broker = self._algo_runner._zerodha_broker
+
+                        if account_broker is None:
+                            issues.append("broker not initialised")
+                        elif not account_broker.is_token_set():
+                            issues.append("broker token invalid")
+                        else:
+                            underlying = legs[0].underlying if legs else "NIFTY"
+                            try:
+                                ltp = await account_broker.get_underlying_ltp(underlying)
+                                if ltp == 0.0:
+                                    issues.append("API key invalid (LTP=0)")
+                            except Exception as _e:
+                                issues.append(f"LTP check failed: {_e}")
+
+                    # 3. SmartStream check (live only)
+                    if not grid_entry.is_practix and self._algo_runner:
+                        ltp_consumer = self._algo_runner._ltp_consumer
+                        stream_ok = (
+                            ltp_consumer is not None
+                            and getattr(ltp_consumer, "_running", False)
+                        )
+                        if not stream_ok:
+                            issues.append("SmartStream not connected")
+
+                    if issues:
+                        logger.warning(f"⚠️  {algo.name} — {', '.join(issues)}")
+                    else:
+                        logger.info(f"✅ {algo.name} — ready")
+                        ready_count += 1
+
+                logger.info(f"=== {ready_count}/{total_count} algos ready ===")
+
+            except Exception as e:
+                logger.error(f"[PREMARKT-SWEEP] failed: {e}")
 
     async def _job_activate_all(self):
         """

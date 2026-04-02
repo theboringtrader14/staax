@@ -79,7 +79,7 @@ async def create_bot(body: BotCreate, db: AsyncSession = Depends(get_db)):
     try:
         from app.engine.bot_runner import bot_runner
         bot_runner._bots.append(bot)
-        bot_runner._subscribe_bot(bot)
+        bot_runner._init_bot(bot)
     except Exception: pass
     return _bot_dict(bot)
 
@@ -290,9 +290,9 @@ async def create_signal(bot_id: str, body: BotSignalCreate, db: AsyncSession = D
     return _signal_dict(sig)
 
 @router.get("/{bot_id}/signals")
-async def list_bot_signals(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def list_bot_signals(bot_id: str, limit: int = Query(50), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(BotSignal).where(BotSignal.bot_id == bot_id).order_by(desc(BotSignal.fired_at))
+        select(BotSignal).where(BotSignal.bot_id == bot_id).order_by(desc(BotSignal.fired_at)).limit(limit)
     )
     return [_signal_dict(s) for s in result.scalars().all()]
 

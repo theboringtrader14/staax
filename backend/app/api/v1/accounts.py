@@ -380,7 +380,7 @@ async def angelone_login(
         ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
         if ltp_consumer and jwt_token and feed_token:
             existing = getattr(ltp_consumer, "_angel_adapter", None)
-            already_running = existing and getattr(existing, "_running", False)
+            already_running = existing and getattr(existing, "_connected", False)
             if not already_running:
                 from app.engine.ltp_consumer import AngelOneTickerAdapter
                 import asyncio as _aio
@@ -409,7 +409,7 @@ async def angelone_login(
                     on_tick=ltp_consumer._process_ticks,
                 ))
                 import logging as _log
-                _log.getLogger(__name__).info(f"[AO-LOGIN] SmartStream auto-started via {nickname}")
+                _log.getLogger(__name__).info(f"[LOGIN] SmartStream auto-started after {nickname} AO login")
     except Exception as _e:
         import logging as _log
         _log.getLogger(__name__).warning(f"[AO-LOGIN] SmartStream auto-start failed (non-fatal): {_e}")
