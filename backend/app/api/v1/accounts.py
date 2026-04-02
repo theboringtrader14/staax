@@ -381,6 +381,12 @@ async def angelone_login(
         if ltp_consumer and jwt_token and feed_token:
             existing = getattr(ltp_consumer, "_angel_adapter", None)
             already_running = existing and getattr(existing, "_connected", False)
+            if already_running and existing and feed_token:
+                # SmartStream live — refresh feed_token in-place so the next
+                # reconnect uses today's credential without a full restart.
+                # Guard: only call if feed_token is non-empty to avoid clearing live credential.
+                if feed_token:
+                    existing.update_feed_token(feed_token)
             if not already_running:
                 from app.engine.ltp_consumer import AngelOneTickerAdapter
                 import asyncio as _aio
@@ -413,6 +419,15 @@ async def angelone_login(
     except Exception as _e:
         import logging as _log
         _log.getLogger(__name__).warning(f"[AO-LOGIN] SmartStream auto-start failed (non-fatal): {_e}")
+
+    # Auto-load DTR daily data for all active DTR bots after login
+    try:
+        from app.engine.bot_runner import bot_runner as _br
+        import asyncio as _aio
+        _aio.ensure_future(_br.load_daily_data())
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger(__name__).warning(f"[DTR] Auto-load after login failed (non-fatal): {_e}")
 
     return {
         "status": "success",

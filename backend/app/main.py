@@ -276,6 +276,9 @@ async def lifespan(app: FastAPI):
     # ── 13b. Build Angel One broker map for per-account order routing ────────
     await _build_angel_broker_map(app, order_placer)
 
+    # ── 13b2. Register global MTM SL/TP monitors for accounts that have them ──
+    await _register_global_mtm(mtm_monitor)
+
     # ── 13c. Auto-login AO accounts whose token is stale/missing ─────────────
     await _ao_startup_auto_login(app)
 
@@ -438,6 +441,58 @@ async def _load_all_broker_tokens(app: "FastAPI") -> None:
             logger.warning(f"[STARTUP] Token load failed for {ao_acc.nickname}: {e}")
 
 
+async def _register_global_mtm(mtm_monitor) -> None:
+    """
+    For each active account with global_sl or global_tp configured, register
+    an account-level MTM breach monitor. On breach, fires a CRITICAL log alarm.
+    (Full stop-all wiring is deferred — operator responds to the alarm manually.)
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.account import Account
+    from sqlalchemy import select
+
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Account).where(Account.is_active == True)
+            )
+            accounts = result.scalars().all()
+
+        registered = 0
+        for acc in accounts:
+            if not (acc.global_sl or acc.global_tp):
+                continue
+
+            acc_id   = str(acc.id)
+            client   = acc.client_id
+            g_sl     = acc.global_sl
+            g_tp     = acc.global_tp
+
+            async def _on_breach(account_id, reason, total_pnl,
+                                 _client=client, _g_sl=g_sl, _g_tp=g_tp):
+                logger.critical(
+                    f"🚨 GLOBAL MTM BREACH — client={_client} account={account_id} "
+                    f"reason={reason} pnl=₹{total_pnl:,.0f} "
+                    f"(global_sl={_g_sl} global_tp={_g_tp}) — manual intervention required"
+                )
+
+            mtm_monitor.register_global(
+                account_id=acc_id,
+                global_sl=g_sl,
+                global_tp=g_tp,
+                on_breach=_on_breach,
+            )
+            logger.info(
+                f"[MTM] Global monitor: client={client} "
+                f"SL={g_sl or '—'} TP={g_tp or '—'}"
+            )
+            registered += 1
+
+        logger.info(f"[MTM] Global monitors registered: {registered} account(s)")
+    except Exception as e:
+        logger.warning(f"[MTM] _register_global_mtm failed (non-fatal): {e}")
+
+
 async def _build_angel_broker_map(app: "FastAPI", order_placer) -> None:
     """
     Build OrderPlacer.angel_broker_map: { account_id_str → AngelOneBroker }.
@@ -589,7 +644,7 @@ async def _ao_startup_auto_login(app: "FastAPI") -> None:
                 _ltp = getattr(app.state, "ltp_consumer", None)
                 if _ltp:
                     _existing = getattr(_ltp, "_angel_adapter", None)
-                    _already_running = _existing and getattr(_existing, "_running", False)
+                    _already_running = _existing and getattr(_existing, "_connected", False)
                     if not _already_running:
                         _feed_tok = getattr(ao_broker, "_feed_token", "") or ""
                         _auth_tok = getattr(ao_broker, "_access_token", "") or ""
@@ -615,7 +670,7 @@ async def _ao_startup_auto_login(app: "FastAPI") -> None:
                                 loop=_ss_loop,
                                 on_tick=_ltp._process_ticks,
                             ))
-                            logger.info(f"✅ [STARTUP] SmartStream started for {nickname} after fresh login")
+                            logger.info(f"[STARTUP] SmartStream start initiated for {nickname} — connecting…")
                         else:
                             logger.warning(f"[STARTUP] {nickname}: feed_token empty after login — SmartStream not started")
             except Exception as _ss_err:

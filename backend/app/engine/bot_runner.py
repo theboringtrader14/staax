@@ -300,6 +300,7 @@ class BotRunner:
     async def _enter_trade(self, bot, price: float, signal=None):
         """Record entry order for bot."""
         logger.info(f"[BOT] ENTRY — {bot.name} BUY {bot.lots} lots {bot.instrument} @ ~{price:.2f}")
+        logger.info(f"[BOT] Signal-only mode — order NOT placed (observation only)")
         try:
             from app.core.database import AsyncSessionLocal
             from app.models.bot import BotOrder, BotOrderStatus
@@ -394,6 +395,15 @@ class BotRunner:
                 symbol_token=symbol_token,
             )
             if not candles or len(candles) < 2:
+                logger.warning(f"[BOT] <2 candles with days_back=3 for {symbol} — retrying days_back=5 (holiday?)")
+                candles = await broker.get_candle_data(
+                    symbol=symbol,
+                    exchange="MCX",
+                    interval="ONE_DAY",
+                    days_back=5,
+                    symbol_token=symbol_token,
+                )
+            if not candles or len(candles) < 2:
                 logger.warning(f"[BOT] Not enough daily candles for {symbol}: {candles}")
                 return None
 
@@ -413,7 +423,7 @@ class BotRunner:
 
     async def load_daily_data(self):
         """
-        Called at 09:00 IST each morning.
+        Called at 09:00 IST each morning and after AO login.
         Fetches previous day OHLC for all DTR bots and calls set_daily_data().
         Requires at least one Angel One broker with a valid token.
         """
@@ -426,10 +436,13 @@ class BotRunner:
             logger.warning("[BOT] load_daily_data: no angel broker with token — DTR levels not set")
             return
 
-        for bot in self._bots:
-            if bot.indicator != IndicatorType.DTR:
-                continue
+        dtr_bots = [b for b in self._bots if b.indicator == IndicatorType.DTR]
+        if not dtr_bots:
+            logger.warning("[DTR] No DTR bots found — check bot configuration")
+            return
+        loaded = 0
 
+        for bot in dtr_bots:
             bot_id   = str(bot.id)
             strategy = self._strategies.get(bot_id)
             if strategy is None:
@@ -443,11 +456,16 @@ class BotRunner:
                     prev_low=data["prev_low"],
                     prev_close=data["prev_close"],
                 )
+                upper = getattr(strategy, "upper_pivot", None)
+                lower = getattr(strategy, "lower_pivot", None)
                 logger.info(
-                    f"[BOT] DTR daily data loaded for {bot.name}: "
-                    f"open={data['day_open']:.2f} "
-                    f"prev_H={data['prev_high']:.2f} prev_L={data['prev_low']:.2f}"
+                    f"[DTR] Daily data loaded for {bot.name}: "
+                    f"open={data['day_open']:.2f}, "
+                    f"upper={upper:.2f}, lower={lower:.2f}"
                 )
+                loaded += 1
+
+        logger.info(f"[DTR] Daily data refreshed for {loaded}/{len(dtr_bots)} bots")
 
     # ── Rollover ──────────────────────────────────────────────────────────────
 

@@ -412,6 +412,12 @@ class AlgoRunner:
                     _acc = _res.scalar_one_or_none()
                 if _acc and _acc.broker == BrokerType.ANGELONE:
                     account_broker = self._angel_broker_map.get(_acc.client_id)
+                    if account_broker is None:
+                        logger.error(
+                            f"[BROKER] No broker found for client_id={getattr(_acc, 'client_id', '?')} "
+                            f"— order blocked (AO broker not wired)"
+                        )
+                        return False, ExecutionErrorCode.TOKEN_INVALID, False
                 else:
                     account_broker = self._zerodha_broker
 
@@ -1300,6 +1306,9 @@ class AlgoRunner:
                         grid_entry.status      = GridStatus.ALGO_CLOSED
                         await db.commit()
                         logger.info(f"✅ All legs closed — AlgoState closed: {grid_entry_id}")
+                        # Clean up MTM tracking to prevent memory leak over long uptime
+                        if self._mtm_monitor:
+                            self._mtm_monitor.deregister_algo(str(algo_state.algo_id))
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1386,6 +1395,23 @@ class AlgoRunner:
         logger.warning(
             f"⚠️ [W&T/ORB] {getattr(algo_state, 'algo_id', '')} set to WAITING: {msg}"
         )
+        # Defensive: deregister any SL/TP monitors that may be armed for this algo.
+        # In the normal W&T/ORB flow this runs before orders are placed (empty loop),
+        # but guards edge-cases where WAITING is triggered after partial fills.
+        if self._sl_tp_monitor:
+            try:
+                open_res = await db.execute(
+                    select(Order).where(
+                        and_(
+                            Order.grid_entry_id == grid_entry.id,
+                            Order.status == OrderStatus.OPEN,
+                        )
+                    )
+                )
+                for _ord in open_res.scalars().all():
+                    self._sl_tp_monitor.remove_position(str(_ord.id))
+            except Exception as _e:
+                logger.warning(f"[W&T] SL/TP deregister on _set_waiting failed (non-fatal): {_e}")
 
     async def _mark_error(self, grid_entry_id: str, msg: str):
         async with AsyncSessionLocal() as db:

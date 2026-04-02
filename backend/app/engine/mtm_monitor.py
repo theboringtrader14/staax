@@ -49,6 +49,12 @@ class MTMMonitor:
         if global_tp: self._global_tp[account_id] = global_tp
         self._global_cbs[account_id] = on_breach
 
+    def deregister_algo(self, algo_id: str):
+        """Remove all tracking state for a completed/closed algo."""
+        self._algos.pop(algo_id, None)
+        self._sq_callbacks.pop(algo_id, None)
+        self._live_pnls.pop(algo_id, None)
+
     async def update_pnl(self, algo_id: str, order_id: str, pnl: float):
         """Called on every tick with updated unrealised P&L for one leg."""
         if algo_id not in self._live_pnls:
@@ -60,6 +66,7 @@ class MTMMonitor:
         if not state:
             return
 
+        # ── Algo-level MTM check ──────────────────────────────────────────────
         sl_thresh = self._threshold(state, state.mtm_sl)
         tp_thresh = self._threshold(state, state.mtm_tp)
 
@@ -72,6 +79,29 @@ class MTMMonitor:
             logger.info(f"🟢 MTM TP HIT: {algo_id} | total={total:.2f}")
             if cb := self._sq_callbacks.get(algo_id):
                 await cb(algo_id, "mtm_tp", total)
+
+        # ── Account-level global SL/TP check ─────────────────────────────────
+        account_id = state.account_id
+        if account_id in self._global_sl or account_id in self._global_tp:
+            acct_total = sum(
+                sum(pnls.values())
+                for a_id, pnls in self._live_pnls.items()
+                if self._algos.get(a_id) and self._algos[a_id].account_id == account_id
+            )
+            g_sl = self._global_sl.get(account_id)
+            g_tp = self._global_tp.get(account_id)
+            if g_sl and acct_total <= -abs(g_sl):
+                logger.critical(
+                    f"🚨 GLOBAL SL HIT: account={account_id} | acct_pnl={acct_total:.2f} | global_sl={g_sl}"
+                )
+                if cb := self._global_cbs.get(account_id):
+                    await cb(account_id, "global_sl", acct_total)
+            elif g_tp and acct_total >= g_tp:
+                logger.critical(
+                    f"🚨 GLOBAL TP HIT: account={account_id} | acct_pnl={acct_total:.2f} | global_tp={g_tp}"
+                )
+                if cb := self._global_cbs.get(account_id):
+                    await cb(account_id, "global_tp", acct_total)
 
     def _threshold(self, state: AlgoMTMState, value: Optional[float]) -> Optional[float]:
         if not value:
