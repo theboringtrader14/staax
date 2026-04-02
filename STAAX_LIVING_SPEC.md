@@ -2347,6 +2347,9 @@ GET  /api/v1/health/insights?date=YYYY-MM-DD  — today's insights
 - Edit algo loads correct legs
 - EOD cleanup at 15:35 IST
 - Cascade delete algos
+- Execution safety layer: readiness flag (`ready` + `ready_reason` in health endpoint), ExecutionErrorCode enum (10 codes), `_pre_execution_check` in algo_runner uses error codes
+- Pre-market validation sweep at 09:14 IST (scheduler)
+- SmartStream auto-start on AO login uses `_connected` (WebSocket open) not `_running` (start() called) — prevents double-start during handshake
 
 ### What is FAILING ❌
 1. **Strike selection fails for Angel One** — root cause of every ERROR
@@ -3670,10 +3673,9 @@ None.
 ### 🟠 High Priority
 | # | Item | Notes |
 |---|------|-------|
-| H-1 | Test Mom Test-1 algo in PRACTIX mode | Create via UI, verify full execution |
+| H-1 | Test Mom Test-1 algo in PRACTIX mode | Deferred to Tuesday April 7 — NSE closed today |
 | H-2 | Verify Channel strategy signals end-to-end | Pipeline wired, not verified |
 | H-3 | DTR signal verification | Daily data works, signal output not verified |
-| H-4 | Server full deploy | Latest commits (7ece36c) not yet on server |
 
 ### 🟡 Medium
 | # | Item | Notes |
