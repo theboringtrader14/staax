@@ -636,14 +636,14 @@ export default function GridPage() {
                               <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center' }}
                                 onClick={e => e.stopPropagation()}>
                                 <button onClick={() => changeCardMult(algo.id, mult - 1)}
-                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
+                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
                                   onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
                                   onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>−</button>
                                 <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'#F0F0FF', minWidth:28, textAlign:'center', fontWeight:700 }}>
                                   {mult}×
                                 </span>
                                 <button onClick={() => changeCardMult(algo.id, mult + 1)}
-                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
+                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
                                   onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
                                   onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>+</button>
                               </div>
@@ -709,13 +709,13 @@ export default function GridPage() {
                                 onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 16px', background:'transparent', border:'none',
+                                  gap:4, padding:'0 16px', background:'rgba(255,107,0,0.05)', border:'none',
                                   borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
                                   color: isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)',
                                   minWidth:64, transition:'all 150ms',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color = isPractixMode ? '#22DD88' : '#F0F0FF'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color = isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'transparent' }}>
+                                onMouseEnter={e => { e.currentTarget.style.color = isPractixMode ? '#22DD88' : '#F0F0FF'; e.currentTarget.style.background = 'rgba(255,107,0,0.12)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color = isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'rgba(255,107,0,0.05)' }}>
                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                                   {isPractixMode
                                     ? <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -732,12 +732,12 @@ export default function GridPage() {
                                 onClick={() => setArchConfirm(algo.id)}
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 14px', background:'transparent', border:'none',
+                                  gap:4, padding:'0 14px', background:'rgba(96,165,250,0.05)', border:'none',
                                   borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
                                   color:'rgba(96,165,250,0.6)', minWidth:52, transition:'all 150ms',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color='#60A5FA'; e.currentTarget.style.background='rgba(96,165,250,0.06)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color='rgba(96,165,250,0.6)'; e.currentTarget.style.background='transparent' }}>
+                                onMouseEnter={e => { e.currentTarget.style.color='#60A5FA'; e.currentTarget.style.background='rgba(96,165,250,0.12)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color='rgba(96,165,250,0.6)'; e.currentTarget.style.background='rgba(96,165,250,0.05)' }}>
                                 <ArchiveIcon/>
                                 <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>ARCHIVE</span>
                               </button>
@@ -747,11 +747,11 @@ export default function GridPage() {
                                 onClick={() => setDel(algo.id)}
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 14px', background:'transparent', border:'none',
+                                  gap:4, padding:'0 14px', background:'rgba(255,68,68,0.05)', border:'none',
                                   cursor:'pointer', color:'rgba(255,68,68,0.6)', minWidth:52, transition:'all 150ms',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color='#FF4444'; e.currentTarget.style.background='rgba(255,68,68,0.06)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color='rgba(255,68,68,0.6)'; e.currentTarget.style.background='transparent' }}>
+                                onMouseEnter={e => { e.currentTarget.style.color='#FF4444'; e.currentTarget.style.background='rgba(255,68,68,0.12)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color='rgba(255,68,68,0.6)'; e.currentTarget.style.background='rgba(255,68,68,0.05)' }}>
                                 <TrashIcon/>
                                 <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>DELETE</span>
                               </button>

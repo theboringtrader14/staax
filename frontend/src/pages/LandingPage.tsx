@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { useEffect } from 'react'
@@ -37,6 +37,7 @@ const MODULES = [
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
+    externalUrl: 'http://localhost:3002',
   },
   {
     id: 'HEALTHEX',
@@ -70,16 +71,20 @@ const STATS = [
   { value: '100%', label: 'Private' },
 ]
 
-const TERMINAL_LINES = [
-  { color: '#10b981', text: '✓ STAAX Engine  — connected' },
-  { color: '#6366f1', text: '↻ SmartStream   — active [3 algos]' },
-  { color: '#a78bfa', text: '⬡ Portfolio     — synced 08:42 IST' },
-  { color: '#38bdf8', text: '⊕ Market open   — NSE/BSE live' },
-  { color: '#f59e0b', text: '◈ Next algo     — NIFTY-BFLY 09:20' },
-]
 
 const CosmosBackground = () => (
   <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      backgroundImage: "url('https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=2560&q=80')",
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      opacity: 0.12,
+      zIndex: -1,
+      pointerEvents: 'none'
+    }} />
     <div className="cosmos-milkyway" />
     <div className="cosmos-nebula" />
     <div className="cosmos-stars-1" />
@@ -95,6 +100,39 @@ export default function LandingPage() {
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
   }, [isAuthenticated, navigate])
+
+  useEffect(() => {
+    history.scrollRestoration = 'manual'
+    window.scrollTo(0, 0)
+  }, [])
+
+  const [sysLines, setSysLines] = useState([
+    { color: 'rgba(232,232,248,0.35)', text: '⟳ loading system status...' },
+  ])
+
+  useEffect(() => {
+    const ok = '#10b981'
+    const err = '#ef4444'
+    const unk = 'rgba(232,232,248,0.35)'
+    fetch('http://localhost:8000/api/v1/system/health')
+      .then(r => r.json())
+      .then((data: Record<string, string>) => {
+        setSysLines([
+          { color: data.staax === 'ok' ? ok : err, text: `${data.staax === 'ok' ? '✓' : '✗'} STAAX Engine  — ${data.staax === 'ok' ? 'connected' : 'degraded'}` },
+          { color: data.smartstream === 'ok' ? ok : err, text: `${data.smartstream === 'ok' ? '✓' : '✗'} SmartStream   — ${data.smartstream === 'ok' ? 'active' : 'down'}` },
+          { color: data.db === 'ok' ? ok : err, text: `${data.db === 'ok' ? '✓' : '✗'} Database      — ${data.db === 'ok' ? 'connected' : 'down'}` },
+          { color: data.redis === 'ok' ? ok : err, text: `${data.redis === 'ok' ? '✓' : '✗'} Redis         — ${data.redis === 'ok' ? 'connected' : 'down'}` },
+        ])
+      })
+      .catch(() => {
+        setSysLines([
+          { color: err, text: '✗ STAAX Engine  — unreachable' },
+          { color: unk, text: '— SmartStream   — unknown' },
+          { color: unk, text: '— Database      — unknown' },
+          { color: unk, text: '— Redis         — unknown' },
+        ])
+      })
+  }, [])
 
   const handleEnter = () => navigate(isAuthenticated ? '/dashboard' : '/login')
 
@@ -334,6 +372,7 @@ export default function LandingPage() {
               className="landing-cta-primary"
             >Enter LIFEX →</button>
             <button
+              onClick={() => document.getElementById('roadmap')?.scrollIntoView({ behavior: 'smooth' })}
               style={{
                 background: 'transparent', border: '1px solid rgba(99,102,241,0.25)',
                 color: 'rgba(232,232,248,0.7)', borderRadius: '8px',
@@ -362,7 +401,7 @@ export default function LandingPage() {
               lifex — system status
             </span>
           </div>
-          {TERMINAL_LINES.map((line, i) => (
+          {sysLines.map((line, i) => (
             <div key={i} style={{
               fontFamily: "'DM Mono', monospace",
               fontSize: '12px', color: line.color,
@@ -489,7 +528,7 @@ export default function LandingPage() {
               <div style={{ fontSize: '11px', fontWeight: 600, color: '#e8e8f8', marginBottom: '8px' }}>
                 {mod.tagline}
               </div>
-              <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', lineHeight: 1.6 }}>
+              <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
                 {mod.description}
               </div>
               {(mod.path || ('externalUrl' in mod && mod.externalUrl)) && (
@@ -500,6 +539,161 @@ export default function LandingPage() {
                   Open module →
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Roadmap */}
+      <section id="roadmap" style={{
+        position: 'relative', zIndex: 1,
+        maxWidth: '1100px', margin: '0 auto',
+        padding: '60px 32px 80px',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+          <div style={{
+            display: 'inline-block',
+            fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em',
+            color: 'rgba(167,139,250,0.7)', textTransform: 'uppercase',
+            marginBottom: '12px',
+          }}>ROADMAP</div>
+          <h2 style={{
+            fontSize: '28px', fontWeight: 800, letterSpacing: '-0.02em',
+            color: '#f0f0ff', marginBottom: '12px',
+          }}>What's coming to LIFEX</h2>
+          <p style={{ fontSize: '14px', color: 'rgba(232,232,248,0.55)', maxWidth: '460px', margin: '0 auto' }}>
+            A living plan — from where we are to where we're going.
+          </p>
+        </div>
+
+        <style>{`
+          @keyframes roadmapPulse {
+            0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(255,107,0,0.4); }
+            50%      { opacity:0.7; box-shadow: 0 0 0 6px rgba(255,107,0,0); }
+          }
+        `}</style>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+          {[
+            {
+              phase: 'Phase 1',
+              title: 'Foundation',
+              status: 'complete',
+              statusLabel: 'COMPLETE',
+              statusColor: '#10b981',
+              items: [
+                'STAAX algo engine — deploy, monitor, SmartStream execution',
+                'INVEX portfolio tracker — holdings, growth charts',
+                'LIFEX dashboard — unified suite landing page',
+                'Multi-account support with practix/live mode',
+              ],
+            },
+            {
+              phase: 'Phase 2',
+              title: 'Expansion',
+              status: 'active',
+              statusLabel: 'IN PROGRESS',
+              statusColor: '#FF6B00',
+              items: [
+                'BUDGEX — expense categorisation and budget tracking',
+                'STAAX analytics — per-algo P&L breakdown and reports',
+                'Mobile-responsive layouts across all modules',
+                'Notification system — alerts for SL/TP hits and events',
+              ],
+            },
+            {
+              phase: 'Phase 3',
+              title: 'Intelligence',
+              status: 'planned',
+              statusLabel: 'PLANNED',
+              statusColor: 'rgba(167,139,250,0.6)',
+              items: [
+                'HEALTHEX — workouts, nutrition, wearable integration',
+                'GOALEX — life goals, milestones, and habit loops',
+                'AI-powered spending and portfolio insights',
+                'Cross-module unified P&L and net worth view',
+              ],
+            },
+            {
+              phase: 'Phase 4',
+              title: 'Horizon',
+              status: 'future',
+              statusLabel: 'FUTURE',
+              statusColor: 'rgba(232,232,248,0.25)',
+              items: [
+                'Collaborative family dashboard',
+                'Tax-aware rebalancing suggestions',
+                'Voice + natural language queries',
+                'Open API for external integrations',
+              ],
+            },
+          ].map((phase, i, arr) => (
+            <div key={phase.phase} style={{ display: 'flex', gap: '0' }}>
+              {/* Timeline spine */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '40px', flexShrink: 0 }}>
+                <div style={{
+                  width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0,
+                  marginTop: '20px',
+                  background: phase.status === 'complete' ? '#10b981'
+                    : phase.status === 'active' ? '#FF6B00'
+                    : phase.status === 'planned' ? 'rgba(167,139,250,0.4)'
+                    : 'rgba(232,232,248,0.12)',
+                  border: `2px solid ${phase.status === 'complete' ? '#10b981' : phase.status === 'active' ? '#FF6B00' : phase.status === 'planned' ? 'rgba(167,139,250,0.35)' : 'rgba(232,232,248,0.1)'}`,
+                  boxShadow: phase.status === 'active' ? '0 0 12px rgba(255,107,0,0.5)' : 'none',
+                  animation: phase.status === 'active' ? 'roadmapPulse 2s ease-in-out infinite' : 'none',
+                }} />
+                {i < arr.length - 1 && (
+                  <div style={{
+                    width: '2px', flex: 1, marginTop: '4px', marginBottom: '4px',
+                    background: phase.status === 'complete'
+                      ? 'linear-gradient(to bottom, #10b981, rgba(99,102,241,0.3))'
+                      : 'rgba(99,102,241,0.15)',
+                  }} />
+                )}
+              </div>
+
+              {/* Card */}
+              <div style={{
+                flex: 1, marginLeft: '20px', marginBottom: i < arr.length - 1 ? '24px' : '0',
+                background: phase.status === 'future' ? 'rgba(10,10,26,0.3)' : 'rgba(10,10,26,0.65)',
+                border: `1px solid ${phase.statusColor}30`,
+                borderLeft: `3px solid ${phase.statusColor}`,
+                borderRadius: '10px',
+                padding: '20px 24px',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                opacity: phase.status === 'future' ? 0.6 : 1,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div>
+                    <span style={{
+                      fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em',
+                      color: 'rgba(167,139,250,0.6)', textTransform: 'uppercase',
+                    }}>{phase.phase}</span>
+                    <h3 style={{
+                      fontSize: '17px', fontWeight: 800, color: '#f0f0ff',
+                      margin: '2px 0 0', letterSpacing: '-0.01em',
+                    }}>{phase.title}</h3>
+                  </div>
+                  <span style={{
+                    fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em',
+                    color: phase.statusColor,
+                    background: `${phase.statusColor}18`,
+                    border: `1px solid ${phase.statusColor}40`,
+                    borderRadius: '20px', padding: '3px 9px',
+                  }}>{phase.statusLabel}</span>
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  {phase.items.map((item, j) => (
+                    <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', color: phase.status === 'future' ? 'rgba(232,232,248,0.35)' : 'rgba(232,232,248,0.65)', lineHeight: 1.5 }}>
+                      <span style={{ color: phase.statusColor, flexShrink: 0, marginTop: '1px', fontSize: '12px' }}>
+                        {phase.status === 'complete' ? '✓' : phase.status === 'active' ? '›' : '○'}
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           ))}
         </div>
