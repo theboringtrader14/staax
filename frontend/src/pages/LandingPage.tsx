@@ -78,6 +78,16 @@ const TERMINAL_LINES = [
   { color: '#f59e0b', text: '◈ Next algo     — NIFTY-BFLY 09:20' },
 ]
 
+const CosmosBackground = () => (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div className="cosmos-milkyway" />
+    <div className="cosmos-nebula" />
+    <div className="cosmos-stars-1" />
+    <div className="cosmos-stars-2" />
+    <div className="cosmos-stars-3" />
+  </div>
+)
+
 export default function LandingPage() {
   const navigate = useNavigate()
   const isAuthenticated = useStore(s => s.isAuthenticated)
@@ -97,6 +107,8 @@ export default function LandingPage() {
       overflowX: 'hidden',
       position: 'relative',
     }}>
+      <CosmosBackground />
+
       {/* Dot grid overlay */}
       <div style={{
         position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
@@ -285,6 +297,7 @@ export default function LandingPage() {
           <h1 style={{
             fontSize: '42px', fontWeight: 800, lineHeight: 1.15,
             letterSpacing: '-0.02em', marginBottom: '20px',
+            textShadow: '0 0 40px rgba(255,107,0,0.15)',
           }}>
             <span style={{
               background: 'linear-gradient(135deg, #f0f0ff 0%, #a78bfa 50%, #38bdf8 100%)',

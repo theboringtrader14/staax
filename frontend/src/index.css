@@ -423,6 +423,15 @@ body::before {
   box-shadow: 0 0 0 2px rgba(255,107,0,0.12);
   outline: none;
 }
+.algo-page .staax-select option {
+  background: #0A0A0B;
+  color: #F0F0FF;
+}
+.algo-page .staax-select option:checked,
+.algo-page .staax-select option:hover {
+  background: rgba(255,107,0,0.20);
+  color: #FF6B00;
+}
 
 /* Dropdown + checkbox accent override */
 input[type="checkbox"] { accent-color: #FF6B00; }
@@ -643,17 +652,6 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   animation: twinkle3 7s ease-in-out infinite alternate;
 }
 
-.shooting-star-wrap { position: absolute; inset: 0; overflow: hidden; }
-.shooting-star {
-  position: absolute;
-  width: 100px; height: 1px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.8), transparent);
-  animation: shoot 8s ease-in infinite;
-  transform-origin: left center;
-}
-.shooting-star:nth-child(1) { top: 15%; left: -100px; animation-delay: 2s; transform: rotate(-20deg); }
-.shooting-star:nth-child(2) { top: 40%; left: -100px; animation-delay: 6s; transform: rotate(-15deg); }
-
 /* ── COSMOS KEYFRAMES ── */
 @keyframes twinkle1 { from { opacity: 0.5; } to { opacity: 1; } }
 @keyframes twinkle2 { from { opacity: 0.7; } to { opacity: 0.3; } }
@@ -661,11 +659,6 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 @keyframes nebulaShift {
   from { transform: scale(1) translate(0, 0); opacity: 0.8; }
   to   { transform: scale(1.05) translate(-15px, 10px); opacity: 1; }
-}
-@keyframes shoot {
-  0%   { left: -100px; opacity: 1; }
-  70%  { opacity: 1; }
-  100% { left: 110%; opacity: 0; }
 }
 
 /* Module card cosmos shimmer on hover */
