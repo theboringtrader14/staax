@@ -25,6 +25,7 @@ const MODULES = [
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
+    externalUrl: 'http://localhost:3001',
   },
   {
     id: 'BUDGEX',
@@ -250,17 +251,6 @@ export default function LandingPage() {
             }}
             className="landing-cta-ghost"
           >Sign In</button>
-          <button
-            onClick={handleEnter}
-            style={{
-              background: '#6366f1', border: 'none',
-              color: '#fff', borderRadius: '6px',
-              padding: '0 16px', height: '32px', fontSize: '12px', fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.2s',
-              boxShadow: '0 0 16px rgba(99,102,241,0.4)',
-            }}
-            className="landing-cta-primary"
-          >Launch STAAX →</button>
         </div>
       </nav>
 
@@ -453,13 +443,16 @@ export default function LandingPage() {
               key={mod.id}
               className="landing-module-card"
               data-accent={mod.accentKey}
-              onClick={() => mod.path && navigate(mod.path)}
+              onClick={() => {
+                if (mod.path) navigate(mod.path)
+                else if ('externalUrl' in mod && mod.externalUrl) window.open(mod.externalUrl, '_blank')
+              }}
               style={{
                 background: `rgba(10,10,26,0.7)`,
                 border: `1px solid ${mod.accent}30`,
                 borderRadius: '12px',
                 padding: '20px',
-                cursor: mod.path ? 'pointer' : 'default',
+                cursor: mod.path || ('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default',
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
                 borderTop: `2px solid ${mod.accent}`,
@@ -486,7 +479,7 @@ export default function LandingPage() {
               <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', lineHeight: 1.6 }}>
                 {mod.description}
               </div>
-              {mod.path && (
+              {(mod.path || ('externalUrl' in mod && mod.externalUrl)) && (
                 <div style={{
                   marginTop: '14px', fontSize: '11px', fontWeight: 700,
                   color: mod.accent, display: 'flex', alignItems: 'center', gap: '4px',
