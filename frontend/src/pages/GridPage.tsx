@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI, holidaysAPI } from '@/services/api'
 import { useStore } from '@/store'
@@ -178,8 +178,6 @@ export default function GridPage() {
   const [algos,         setAlgos]        = useState<Algo[]>([])
   const [grid,          setGrid]         = useState<Record<string,Record<string,Cell>>>({})
   const [,              setLoading]      = useState(true)
-  const [ed,            setEd]           = useState<{id:string;day:string}|null>(null)
-  const [ev,            setEv]           = useState('')
   const [showArch,      setShowArch]     = useState(false)
   const [del,           setDel]          = useState<string|null>(null)
   const [archConfirm,   setArchConfirm]  = useState<string|null>(null)
@@ -432,17 +430,6 @@ export default function GridPage() {
     </svg>
   )
 
-  // ── Icon button ───────────────────────────────────────────────────────────────
-  const IBtn = ({ onClick, icon, dc, hc, hoverBg, hoverBorder, title }: { onClick:()=>void; icon:ReactNode; dc:string; hc:string; hoverBg:string; hoverBorder:string; title:string }) => (
-    <button onClick={onClick} title={title}
-      style={{ width:'30px', height:'30px', borderRadius:'8px', background:'transparent',
-        border:'0.5px solid rgba(255,255,255,0.08)', color:dc,
-        cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 150ms ease' }}
-      onMouseEnter={e => { const b=e.currentTarget; b.style.color=hc; b.style.background=hoverBg; b.style.borderColor=hoverBorder }}
-      onMouseLeave={e => { const b=e.currentTarget; b.style.color=dc; b.style.background='transparent'; b.style.borderColor='rgba(255,255,255,0.08)' }}>
-      {icon}
-    </button>
-  )
 
   const active   = algos.filter(a => !a.arch)
   const archived = algos.filter(a => a.arch)
@@ -603,12 +590,13 @@ export default function GridPage() {
                             <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'18px 24px' }}>
 
                               {/* ── Info block ── */}
-                              <div style={{ display:'flex', gap:'10px', width:'240px', flexShrink:0, alignItems:'flex-start' }}>
+                              <div style={{ display:'flex', gap:'16px', width:'240px', flexShrink:0, alignItems:'flex-start' }}>
                                 <div style={{ display:'flex', flexDirection:'column', gap:'3px', minWidth:0, flex:1 }}>
                                   <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
                                     style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
                                       cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                                      textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)' }}>
+                                      textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)',
+                                      marginRight:'8px' }}>
                                     {algo.name}
                                   </span>
                                   <span style={{ fontSize:'11px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
@@ -645,27 +633,19 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:'5px', width:'80px', flexShrink:0, justifyContent:'center' }}
+                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center' }}
                                 onClick={e => e.stopPropagation()}>
                                 <button onClick={() => changeCardMult(algo.id, mult - 1)}
-                                  style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
-                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,107,0,0.16)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.55)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,107,0,0.06)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.30)' }}>−</button>
-                                {ed?.id===algo.id && ed?.day==='__mult__'
-                                  ? <input autoFocus type="number" min={1} value={ev}
-                                      onChange={e => setEv(e.target.value)}
-                                      onBlur={() => { changeCardMult(algo.id, Math.max(1, parseInt(ev)||1)); setEd(null) }}
-                                      onKeyDown={e => { if (e.key==='Enter') { changeCardMult(algo.id, Math.max(1, parseInt(ev)||1)); setEd(null) } }}
-                                      style={{ width:'36px', background:'rgba(22,22,25,0.90)', border:'0.5px solid var(--ox-radiant)', borderRadius:'4px', color:'var(--ox-glow)', fontSize:'11px', textAlign:'center', padding:'0 2px', fontFamily:'var(--font-mono)', outline:'none' }}/>
-                                  : <span onClick={() => { setEd({ id:algo.id, day:'__mult__' }); setEv(String(mult)) }}
-                                      style={{ width:'34px', textAlign:'center', cursor:'pointer', fontSize:'12px', fontWeight:700, color:'var(--ox-radiant)', fontFamily:'var(--font-mono)', letterSpacing:'-0.5px' }}>
-                                      {mult}x
-                                    </span>
-                                }
+                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
+                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>−</button>
+                                <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'#F0F0FF', minWidth:28, textAlign:'center', fontWeight:700 }}>
+                                  {mult}×
+                                </span>
                                 <button onClick={() => changeCardMult(algo.id, mult + 1)}
-                                  style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
-                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,107,0,0.16)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.55)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,107,0,0.06)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.30)' }}>+</button>
+                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
+                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>+</button>
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
@@ -686,8 +666,8 @@ export default function GridPage() {
                                       onClick={e => { e.stopPropagation(); isDeployed ? rmCell(algo.id, day) : deployDay(algo.id, day) }}
                                       title={`${day}${isHoliday?' (Holiday)':''}${isDeployed ? ` · ${deployedSt?.label||'Active'} · click to remove` : ' · click to deploy'}`}
                                       style={{
-                                        width:'28px', height:'28px', borderRadius:'50%', cursor:'pointer', position:'relative',
-                                        fontFamily:'var(--font-display)', fontSize:'10px', fontWeight:700,
+                                        width:'30px', height:'30px', borderRadius:'50%', cursor:'pointer', position:'relative',
+                                        fontFamily:'var(--font-display)', fontSize:'10px', fontWeight:600,
                                         display:'flex', alignItems:'center', justifyContent:'center',
                                         transition:'all 0.15s ease', flexShrink:0,
                                         border: isDeployed ? '0.5px solid rgba(255,107,0,0.60)'
@@ -716,40 +696,67 @@ export default function GridPage() {
                                 })}
                               </div>
 
-                              {/* ── Promote / Demote ── */}
-                              <div style={{ width:'80px', flexShrink:0, display:'flex', justifyContent:'center' }}
-                                onClick={e => e.stopPropagation()}>
-                                {isPractixMode ? (
-                                  <button onClick={() => promLive(algo.id)} style={{
-                                    height:'28px', padding:'0 12px', borderRadius:'100px', whiteSpace:'nowrap',
-                                    border:'0.5px solid rgba(34,221,136,0.35)', background:'rgba(34,221,136,0.08)', color:'var(--sem-long)',
-                                    fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s',
-                                  }}
-                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(34,221,136,0.16)'; e.currentTarget.style.borderColor='rgba(34,221,136,0.60)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(34,221,136,0.08)'; e.currentTarget.style.borderColor='rgba(34,221,136,0.35)' }}>
-                                    → LIVE
-                                  </button>
-                                ) : (
-                                  <button onClick={() => demoteLive(algo.id)} style={{
-                                    height:'28px', padding:'0 12px', borderRadius:'100px', whiteSpace:'nowrap',
-                                    border:'0.5px solid var(--gs-border)', background:'rgba(42,42,46,0.6)', color:'var(--gs-muted)',
-                                    fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s',
-                                  }}
-                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(58,58,64,0.9)'; e.currentTarget.style.color='var(--ox-ultra)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(42,42,46,0.6)'; e.currentTarget.style.color='var(--gs-muted)' }}>
-                                    ← PRAC
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* ── Actions ── */}
-                              <div style={{ width:'52px', flexShrink:0, display:'flex', gap:'4px', justifyContent:'flex-end' }}
-                                onClick={e => e.stopPropagation()}>
-                                <IBtn onClick={() => setDel(algo.id)}         icon={<TrashIcon/>}   dc="#FF4444" hc="#FF4444" hoverBg="rgba(255,68,68,0.12)"   hoverBorder="rgba(255,68,68,0.4)"   title="Delete permanently"/>
-                                <IBtn onClick={() => setArchConfirm(algo.id)} icon={<ArchiveIcon/>} dc="#60A5FA" hc="#60A5FA" hoverBg="rgba(96,165,250,0.12)"  hoverBorder="rgba(96,165,250,0.4)"  title="Archive"/>
-                              </div>
 
                             </div>{/* end card row body */}
+
+                            {/* ── Right panel — tall action buttons ── */}
+                            <div onClick={e => e.stopPropagation()} style={{
+                              display:'flex', alignSelf:'stretch',
+                              borderLeft:'0.5px solid rgba(255,255,255,0.06)',
+                            }}>
+                              {/* Promote / Demote */}
+                              <button
+                                onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
+                                style={{
+                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                                  gap:4, padding:'0 16px', background:'transparent', border:'none',
+                                  borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
+                                  color: isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)',
+                                  minWidth:64, transition:'all 150ms',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color = isPractixMode ? '#22DD88' : '#F0F0FF'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color = isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'transparent' }}>
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                  {isPractixMode
+                                    ? <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                                    : <path d="M12 7H2M6 3L2 7l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                                  }
+                                </svg>
+                                <span style={{ fontSize:9, letterSpacing:'0.5px', fontFamily:'var(--font-display)', fontWeight:600 }}>
+                                  {isPractixMode ? 'GO LIVE' : 'DEMOTE'}
+                                </span>
+                              </button>
+
+                              {/* Archive */}
+                              <button
+                                onClick={() => setArchConfirm(algo.id)}
+                                style={{
+                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                                  gap:4, padding:'0 14px', background:'transparent', border:'none',
+                                  borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
+                                  color:'rgba(96,165,250,0.6)', minWidth:52, transition:'all 150ms',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color='#60A5FA'; e.currentTarget.style.background='rgba(96,165,250,0.06)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color='rgba(96,165,250,0.6)'; e.currentTarget.style.background='transparent' }}>
+                                <ArchiveIcon/>
+                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>ARCHIVE</span>
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                onClick={() => setDel(algo.id)}
+                                style={{
+                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                                  gap:4, padding:'0 14px', background:'transparent', border:'none',
+                                  cursor:'pointer', color:'rgba(255,68,68,0.6)', minWidth:52, transition:'all 150ms',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color='#FF4444'; e.currentTarget.style.background='rgba(255,68,68,0.06)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color='rgba(255,68,68,0.6)'; e.currentTarget.style.background='transparent' }}>
+                                <TrashIcon/>
+                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>DELETE</span>
+                              </button>
+                            </div>
+
                           </div>{/* end main row */}
 
                           {/* ── Expanded detail panel ── */}
