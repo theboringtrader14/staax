@@ -126,13 +126,13 @@ function StaaxSelect({ value, onChange, options, width }: {
   return (
     <div ref={ref} style={{ position:'relative', width:width||'130px', flexShrink:0 }}>
       <button onClick={() => setOpen(v => !v)} style={{
-        width:'100%', height:'32px', padding:'0 28px 0 10px',
-        background:'rgba(22,22,25,0.80)',
-        border: open ? '0.5px solid rgba(255,107,0,0.55)' : '0.5px solid rgba(255,107,0,0.22)',
-        borderRadius:'10px', color:'var(--text)', fontSize:'12px',
-        fontFamily:'var(--font-body)', cursor:'pointer', textAlign:'left',
+        width:'100%', height:'32px', padding:'0 28px 0 12px',
+        background:'rgba(10,10,11,0.80)',
+        border: open ? '0.5px solid rgba(255,107,0,0.55)' : '0.5px solid rgba(255,107,0,0.25)',
+        borderRadius:'8px', color:'#F0F0FF', fontSize:'11px',
+        fontFamily:'var(--font-display)', cursor:'pointer', textAlign:'left',
         display:'flex', alignItems:'center',
-        boxShadow: open ? '0 0 0 3px rgba(255,107,0,0.08)' : 'none',
+        boxShadow: open ? '0 0 0 2px rgba(255,107,0,0.10)' : 'none',
         transition:'border-color 0.15s, box-shadow 0.15s',
       }}>
         <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{label}</span>
@@ -144,14 +144,14 @@ function StaaxSelect({ value, onChange, options, width }: {
       {open && (
         <div style={{
           position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:999,
-          background:'rgba(14,14,18,0.98)', backdropFilter:'blur(20px)',
-          border:'0.5px solid rgba(255,107,0,0.30)', borderRadius:'10px',
+          background:'rgba(10,10,11,0.98)', backdropFilter:'blur(20px)',
+          border:'0.5px solid rgba(255,107,0,0.30)', borderRadius:'8px',
           overflow:'hidden', boxShadow:'0 8px 32px rgba(0,0,0,0.7)',
         }}>
           {options.map(o => (
             <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
               style={{
-                padding:'9px 12px', fontSize:'12px', cursor:'pointer',
+                padding:'8px 12px', fontSize:'11px', fontFamily:'var(--font-display)', cursor:'pointer',
                 color: o.value === value ? '#FF6B00' : 'var(--text)',
                 background: o.value === value ? 'rgba(255,107,0,0.12)' : 'transparent',
                 borderLeft: o.value === value ? '2px solid #FF6B00' : '2px solid transparent',
@@ -600,10 +600,10 @@ export default function GridPage() {
                               boxShadow:`0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
 
                             {/* Card row body */}
-                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'24px', padding:'18px 24px' }}>
+                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'18px 24px' }}>
 
                               {/* ── Info block ── */}
-                              <div style={{ display:'flex', gap:'10px', width:'260px', flexShrink:0, alignItems:'flex-start' }}>
+                              <div style={{ display:'flex', gap:'10px', width:'240px', flexShrink:0, alignItems:'flex-start' }}>
                                 <div style={{ display:'flex', flexDirection:'column', gap:'3px', minWidth:0, flex:1 }}>
                                   <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
                                     style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
@@ -633,7 +633,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Entry / Exit time ── */}
-                              <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'90px', flexShrink:0 }}>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'80px', flexShrink:0 }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                                   <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
                                   <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
@@ -645,7 +645,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:'5px', width:'88px', flexShrink:0, justifyContent:'center' }}
+                              <div style={{ display:'flex', alignItems:'center', gap:'5px', width:'80px', flexShrink:0, justifyContent:'center' }}
                                 onClick={e => e.stopPropagation()}>
                                 <button onClick={() => changeCardMult(algo.id, mult - 1)}
                                   style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
@@ -669,7 +669,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'220px', justifyContent:'center' }}>
+                              <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', maxWidth:'240px', flexShrink:0, justifyContent:'center' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isDeployed = !!grid[algo.id]?.[day]
                                   const cell       = grid[algo.id]?.[day]
@@ -717,7 +717,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Promote / Demote ── */}
-                              <div style={{ width:'90px', flexShrink:0, display:'flex', justifyContent:'center' }}
+                              <div style={{ width:'80px', flexShrink:0, display:'flex', justifyContent:'center' }}
                                 onClick={e => e.stopPropagation()}>
                                 {isPractixMode ? (
                                   <button onClick={() => promLive(algo.id)} style={{
@@ -743,7 +743,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Actions ── */}
-                              <div style={{ width:'56px', flexShrink:0, display:'flex', gap:'4px', justifyContent:'flex-end' }}
+                              <div style={{ width:'52px', flexShrink:0, display:'flex', gap:'4px', justifyContent:'flex-end' }}
                                 onClick={e => e.stopPropagation()}>
                                 <IBtn onClick={() => setDel(algo.id)}         icon={<TrashIcon/>}   dc="#FF4444" hc="#FF4444" hoverBg="rgba(255,68,68,0.12)"   hoverBorder="rgba(255,68,68,0.4)"   title="Delete permanently"/>
                                 <IBtn onClick={() => setArchConfirm(algo.id)} icon={<ArchiveIcon/>} dc="#60A5FA" hc="#60A5FA" hoverBg="rgba(96,165,250,0.12)"  hoverBorder="rgba(96,165,250,0.4)"  title="Archive"/>
