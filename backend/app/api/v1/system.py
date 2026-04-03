@@ -273,10 +273,12 @@ async def smartstream_status(request: Request):
             pass
 
     return {
-        "connected":         getattr(adapter, "_connected", False),
-        "subscribed_tokens": sorted(subscribed_ints),
-        "mcx_tokens":        sorted(mcx_ints),
-        "last_tick_at":      getattr(adapter, "_last_tick_at", None),
+        "connected":           getattr(adapter, "_connected", False),
+        "subscribed_tokens":   sorted(subscribed_ints),
+        "mcx_tokens":          sorted(mcx_ints),
+        "last_tick_at":        getattr(adapter, "_last_tick_at", None),
+        "reconnect_count":     getattr(adapter, "_reconnect_count", 0),
+        "last_reconnect_at":   getattr(adapter, "_last_reconnect_at", None),
     }
 
 

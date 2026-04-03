@@ -3707,3 +3707,33 @@ None.
 | Instrument master | `backend/instrument_master_cache.json` |
 | Git org | github.com/theboringtrader14 |
 | Repos | staax, invex, budgex |
+
+## Audit Findings — 2026-04-02
+
+### Features That Are DEAD (not wired, not working)
+These show in UI but do not execute:
+
+| Feature | Status | Root Cause | Fix ETA |
+|---------|--------|-----------|---------|
+| TSL (Trailing SL) | ❌ Dead | AlgoLeg missing tsl_enabled/ttp_enabled columns | Next session |
+| TTP (Trailing TP) | ❌ Dead | Same as above | Next session |
+| Journey/child legs | ❌ Dead | journey_config read from wrong model (AlgoLeg instead of Algo) | Next session |
+| Re-entry AT_ENTRY_PRICE | ❌ Dead | on_candle_close() never called | Next session |
+| Re-entry AT_COST | ❌ Dead | Same as above | Next session |
+| Account-level Global MTM SL/TP | ❌ Dead | register_global() never called in main.py | Fixed in this session |
+
+### Indicator Bots — SIGNALS ONLY
+BotRunner (_enter_trade) creates BotOrder DB records but
+does NOT call order_placer.place(). Bot signals are
+observation-only — no real orders are placed.
+This is by design. Bots show signals in IndicatorsPage.
+
+### Fixes Applied (2026-04-02 audit)
+- main.py: _ao_startup_auto_login uses _connected not _running
+- main.py: Global MTM SL/TP wired via register_global()
+- algo_runner.py: broker_map None → hard block + error log
+- algo_runner.py: _set_waiting() deregisters SL/TP monitors
+- accounts.py: update_feed_token guard (skip if empty string)
+- mtm_monitor.py: deregister_algo() to prevent memory leak
+- bot_runner.py: Signal-only log + DTR 0-bots warning
+- main.py: Startup log corrected (connecting not started)

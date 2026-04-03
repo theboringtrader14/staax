@@ -251,17 +251,17 @@ export default function AccountsPage() {
   }
 
   const cardColors: Record<string, string> = {
-    'Karthik':    '#00B0F0',
-    'Mom':        '#22C55E',
+    'Karthik':    '#FF6B00',
+    'Mom':        '#22DD88',
     'Wife':       '#D77B12',
-    'Karthik AO': '#A78BFA',
+    'Karthik AO': '#CC4400',
   }
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Accounts</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>Accounts</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Broker accounts & API tokens</p>
         </div>
         <div className="page-header-actions">
@@ -281,8 +281,8 @@ export default function AccountsPage() {
 
           return (
             <div key={acc.id} style={{
-              background: 'var(--bg-surface)', border: '1px solid var(--bg-border)',
-              borderTop: `3px solid ${color}`, borderRadius: '8px', padding: '16px',
+              background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '0.5px solid rgba(255,107,0,0.22)',
+              borderTop: `2px solid ${color}`, borderRadius: '8px', padding: '16px',
             }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
@@ -310,7 +310,7 @@ export default function AccountsPage() {
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{acc.broker} · {acc.type}</div>
                 </div>
                 <span style={{
-                  fontSize: '11px', padding: '3px 8px', borderRadius: '4px', fontWeight: 600,
+                  fontSize: '11px', padding: '3px 8px', borderRadius: '100px', fontWeight: 600,
                   color: acc.status === 'active' ? 'var(--green)' : 'var(--amber)',
                   background: acc.status === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)',
                 }}>
@@ -450,11 +450,11 @@ export default function AccountsPage() {
                   {(['zerodha', 'angelone'] as const).map(b => (
                     <div key={b} onClick={() => patchForm({ broker: b })} style={{
                       padding: '20px 16px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
-                      border: `2px solid ${addForm.broker === b ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-                      background: addForm.broker === b ? 'rgba(0,176,240,0.08)' : 'var(--bg-secondary)',
+                      border: `0.5px solid ${addForm.broker === b ? 'rgba(255,107,0,0.65)' : 'rgba(255,107,0,0.15)'}`,
+                      background: addForm.broker === b ? 'rgba(255,107,0,0.10)' : 'var(--glass-bg)',
                       transition: 'all 0.12s',
                     }}>
-                      <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '4px', color: addForm.broker === b ? 'var(--accent-blue)' : 'var(--text)' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '4px', color: addForm.broker === b ? 'var(--ox-radiant)' : 'var(--text)' }}>
                         {b === 'zerodha' ? 'Zerodha' : 'Angel One'}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
@@ -463,7 +463,7 @@ export default function AccountsPage() {
                     </div>
                   ))}
                 </div>
-                <button className="btn" style={{ width: '100%', background: 'var(--accent-blue)', color: '#000', fontWeight: 700 }}
+                <button className="btn btn-primary" style={{ width: '100%' }}
                   disabled={!addForm.broker}
                   onClick={() => setAddStep(2)}>
                   Continue →
@@ -475,8 +475,8 @@ export default function AccountsPage() {
             {addStep === 2 && (
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button onClick={() => setAddStep(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-blue)', fontSize: '12px', padding: 0 }}>← Back</button>
-                  <span style={{ fontWeight: 700, color: addForm.broker === 'zerodha' ? 'var(--accent-blue)' : 'var(--accent-amber)' }}>
+                  <button onClick={() => setAddStep(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ox-radiant)', fontSize: '12px', padding: 0 }}>← Back</button>
+                  <span style={{ fontWeight: 700, color: addForm.broker === 'zerodha' ? 'var(--ox-radiant)' : 'var(--accent-amber)' }}>
                     {addForm.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}
                   </span>
                 </div>
@@ -507,7 +507,7 @@ export default function AccountsPage() {
                     {addError}
                   </div>
                 )}
-                <button className="btn" style={{ width: '100%', background: 'var(--accent-blue)', color: '#000', fontWeight: 700 }}
+                <button className="btn btn-primary" style={{ width: '100%' }}
                   disabled={addSaving}
                   onClick={submitAdd}>
                   {addSaving ? 'Adding…' : 'Add Account'}

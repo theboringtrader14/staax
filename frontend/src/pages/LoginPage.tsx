@@ -35,13 +35,13 @@ export default function LoginPage() {
       height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'var(--bg-primary)',
       backgroundImage:
-        'radial-gradient(ellipse at 20% 50%, rgba(0,176,240,0.06) 0%, transparent 50%), ' +
-        'radial-gradient(ellipse at 80% 50%, rgba(215,123,18,0.04) 0%, transparent 50%)',
+        'radial-gradient(ellipse at 20% 50%, rgba(255,107,0,0.08) 0%, transparent 50%), ' +
+        'radial-gradient(ellipse at 80% 50%, rgba(204,68,0,0.05) 0%, transparent 50%)',
     }}>
       <div style={{ width: '360px' }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <div style={{ fontFamily: "'ADLaM Display', serif", fontSize: '42px', color: 'var(--accent-blue)', letterSpacing: '0.08em' }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '42px', fontWeight: 800, color: 'var(--ox-radiant)', letterSpacing: '0.08em' }}>
             STAAX
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
@@ -50,7 +50,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="card" style={{ border: '1px solid rgba(0,176,240,0.2)' }}>
+        <div className="card" style={{ border: '0.5px solid rgba(255,107,0,0.30)' }}>
           <div style={{ marginBottom: '20px' }}>
             <label style={{
               fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600,

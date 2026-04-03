@@ -247,11 +247,11 @@ class AlgoScheduler:
         """
         self._scheduler.add_job(
             bot_runner_instance.load_daily_data,
-            CronTrigger(hour=9, minute=0, timezone=IST),
+            CronTrigger(hour=9, minute=0, day_of_week="mon-fri", timezone=IST),
             id="bot_daily_data",
             replace_existing=True,
         )
-        logger.info("BotRunner daily data job registered (09:00 IST)")
+        logger.info("BotRunner daily data job registered (09:00 IST, Mon–Fri)")
 
     def add_reconciler_job(self, coro_func):
         """Register the OrderReconciler to run every 15 seconds."""

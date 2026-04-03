@@ -41,9 +41,9 @@ interface OpenPosition {
 // Demo data — replaced by API data when available
 
 const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
-  open:    { color: '#22C55E', bg: 'rgba(34,197,94,0.12)'   },
-  closed:  { color: '#6B7280', bg: 'rgba(107,114,128,0.12)' },
-  error:   { color: '#EF4444', bg: 'rgba(239,68,68,0.12)'   },
+  open:    { color: '#22DD88', bg: 'rgba(34,221,136,0.12)'  },
+  closed:  { color: '#5A5A61', bg: 'rgba(90,90,97,0.12)'   },
+  error:   { color: '#FF4444', bg: 'rgba(255,68,68,0.12)'   },
   pending: { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)'  },
 }
 const COLS = ['36px','66px','174px','66px','140px','54px','76px','58px','88px','62px','82px']
@@ -54,7 +54,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
   const ltp = liveLtp ?? leg.ltp  // prefer live WebSocket value
   return (
     <>
-    <tr style={{ background: isChild ? 'rgba(0,176,240,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #EF4444' : undefined }}>
+    <tr style={{ background: isChild ? 'rgba(255,107,0,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #FF4444' : undefined }}>
       <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
       </td>
@@ -102,7 +102,7 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
       </td>
       <td style={{ width: COLS[9] }}>
         {leg.exitReason
-          ? <span className="tag" style={{ color: 'var(--red)', background: 'rgba(239,68,68,0.1)', fontSize: '10px' }}>
+          ? <span className="chip chip-error" style={{ fontSize: '10px', padding: '1px 7px', height: 'auto' }}>
               {leg.exitReason === 'auto_sq' ? 'Exit Time' : leg.exitReason}
             </span>
           : '—'}
@@ -124,15 +124,18 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
 
 interface ModalProps { title: string; desc: string; confirmLabel: string; confirmColor: string; children?: React.ReactNode; onConfirm: () => void; onCancel: () => void }
 function ConfirmModal({ title, desc, confirmLabel, confirmColor, children, onConfirm, onCancel }: ModalProps) {
+  const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444')
+  const isWarn   = confirmColor?.includes('amber') || confirmColor?.includes('f59e0b') || confirmColor?.includes('215,123')
+  const btnVariant = isDanger ? 'btn-danger' : isWarn ? 'btn-warn' : 'btn-primary'
   return (
     <div className="modal-overlay">
       <div className="modal-box">
-        <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>{title}</div>
+        <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>{title}</div>
         <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 'var(--card-gap)', lineHeight: 1.5 }}>{desc}</div>
         {children}
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn" style={{ background: confirmColor, color: '#fff' }} onClick={onConfirm}>{confirmLabel}</button>
+          <button className={`btn ${btnVariant}`} onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>
@@ -145,9 +148,9 @@ function setInlineStatus(setOrders: any, idx: number, msg: string, color: string
 }
 
 const STRATEGY_LABEL: Record<string, { label: string; color: string }> = {
-  intraday:   { label: 'Intraday',   color: '#6B7280' },
-  btst:       { label: 'BTST',       color: '#00B0F0' },
-  stbt:       { label: 'STBT',       color: '#A78BFA' },
+  intraday:   { label: 'Intraday',   color: '#5A5A61' },
+  btst:       { label: 'BTST',       color: '#FF6B00' },
+  stbt:       { label: 'STBT',       color: '#CC4400' },
   positional: { label: 'Positional', color: '#F59E0B' },
 }
 
@@ -305,7 +308,7 @@ export default function OrdersPage() {
   const doRun = async (idx: number) => {
     const algoId = orders[idx].algoId
     setLoading(l => ({ ...l, [`run-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '▶ Executing...', 'var(--accent-blue)')
+    setInlineStatus(setOrders, idx, '▶ Executing...', 'var(--indigo)')
     try {
       await algosAPI.start(algoId)
       setInlineStatus(setOrders, idx, '✅ Algo running', 'var(--green)')
@@ -384,7 +387,7 @@ export default function OrdersPage() {
     if (!modal) return null
     const { type, algoIdx } = modal
     const name = orders[algoIdx].algoName
-    if (type === 'run') return { title: `Execute ${name}?`, desc: `Execute ${name} immediately with the configured entry strategy.`, confirmLabel: 'Execute', confirmColor: 'var(--accent-blue)', children: undefined }
+    if (type === 'run') return { title: `Execute ${name}?`, desc: `Execute ${name} immediately with the configured entry strategy.`, confirmLabel: 'Execute', confirmColor: 'var(--ox-radiant)', children: undefined }
     if (type === 't')   return { title: `Terminate ${name}?`, desc: `Square off ALL open positions, cancel pending + SL orders at broker, and terminate ${name}. Cannot be undone.`, confirmLabel: 'Terminate', confirmColor: 'var(--red)', children: undefined }
     if (type === 'sq')  return {
       title: `Square Off — ${name}`, desc: 'Select open legs to square off:',
@@ -476,7 +479,7 @@ export default function OrdersPage() {
       <div style={{ flexShrink: 0 }}>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Orders</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, letterSpacing: '0.02em' }}>Orders</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display:'flex', alignItems:'center', gap:'6px' }}>Trade history · P&L by week ·{' '}
             <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
               {isPractixMode?'PRACTIX':'LIVE'}
@@ -485,7 +488,7 @@ export default function OrdersPage() {
         </div>
         <div className="page-header-actions">
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--accent-blue)' }} />
+            <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--ox-radiant)' }} />
             Show Weekends
           </label>
           <select value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('staax_orders_sort', e.target.value) }}
@@ -513,20 +516,21 @@ export default function OrdersPage() {
                   onClick={() => setActiveDay(pos.day_of_week.slice(0,3))}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '8px',
-                    background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
+                    background: 'var(--glass-bg)', border: 'var(--glass-border)',
                     borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
                     transition: 'border-color 0.15s', minWidth: 0,
+                    backdropFilter: 'blur(12px)',
                   }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--bg-border)'}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--ox-radiant)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--ox-border)'}
                 >
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.entry_date}</span>
-                  <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: `${strat.color}18`, color: strat.color, border: `1px solid ${strat.color}40`, whiteSpace: 'nowrap' }}>{strat.label}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '100px', background: `${strat.color}18`, color: strat.color, border: `1px solid ${strat.color}40`, whiteSpace: 'nowrap' }}>{strat.label}</span>
                   <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{pos.algo_name}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '1px 6px', borderRadius: '3px', border: '1px solid var(--bg-border)', whiteSpace: 'nowrap' }}>{pos.account}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '1px 6px', borderRadius: '100px', border: '1px solid var(--bg-border)', whiteSpace: 'nowrap' }}>{pos.account}</span>
                   {pos.open_count > 0 && <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.open_count} open</span>}
                   {pos.pnl !== 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: pnlColor, whiteSpace: 'nowrap' }}>{pos.pnl >= 0 ? '+' : ''}₹{Math.abs(pos.pnl).toLocaleString('en-IN')}</span>}
-                  <span style={{ fontSize: '10px', color: 'var(--accent-blue)', fontWeight: 700, whiteSpace: 'nowrap' }}>→ {pos.day_of_week.slice(0,3)}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--ox-radiant)', fontWeight: 700, whiteSpace: 'nowrap' }}>→ {pos.day_of_week.slice(0,3)}</span>
                 </div>
               )
             })}
@@ -543,7 +547,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Day tabs — full width, equal spacing, P&L per day */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--bg-border)', background: 'var(--bg-primary)' }}>
+      <div style={{ display: 'flex', borderBottom: '0.5px solid var(--ox-border)', background: 'var(--bg-primary)' }}>
         {visibleDays.map(d => {
           const isWeekend  = d === 'SAT' || d === 'SUN'
           const isToday    = d === todayDay()
@@ -554,17 +558,18 @@ export default function OrdersPage() {
             <button key={d} onClick={() => setActiveDay(d)} style={{
               flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               gap: '2px', padding: '8px 4px', fontSize: '12px', fontWeight: 600,
+              fontFamily: 'var(--font-display)',
               border: 'none', cursor: 'pointer',
-              background: isSelected ? 'rgba(99,102,241,0.08)' : 'transparent',
-              color: isSelected ? '#a78bfa' : isWeekend || isHoliday ? 'rgba(232,232,248,0.35)' : 'rgba(232,232,248,0.6)',
-              borderBottom: isSelected ? '2px solid #6366f1' : '2px solid transparent',
+              background: isSelected ? 'rgba(255,107,0,0.08)' : 'transparent',
+              color: isSelected ? 'var(--ox-radiant)' : isWeekend || isHoliday ? 'rgba(240,237,232,0.30)' : 'rgba(240,237,232,0.55)',
+              borderBottom: isSelected ? '2px solid var(--ox-radiant)' : '2px solid transparent',
               transition: 'all 0.2s ease',
-              opacity: isHoliday && !isSelected ? 0.55 : 1,
+              opacity: isHoliday && !isSelected ? 0.5 : 1,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>{d}</span>
                 {isToday && !isHoliday && (
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 6px #6366f1', flexShrink: 0 }} />
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--ox-radiant)', boxShadow: '0 0 6px var(--ox-radiant)', flexShrink: 0 }} />
                 )}
                 {isHoliday && (
                   <span style={{ fontSize: '9px', color: 'var(--accent-amber)' }} title="Market holiday">🏛</span>
@@ -603,8 +608,9 @@ export default function OrdersPage() {
             return (
             <div key={w.grid_entry_id} style={{
               marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
-              background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
+              background: 'var(--glass-bg)', border: 'var(--glass-border)',
               borderRadius: '7px', padding: '8px 14px',
+              backdropFilter: 'blur(12px)',
               display: 'flex', alignItems: 'center', gap: '12px',
             }}>
               <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>
@@ -612,16 +618,16 @@ export default function OrdersPage() {
               </span>
               <span style={{
                 fontSize: '10px', color: 'var(--text-muted)',
-                background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '4px',
+                background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px',
               }}>{w.account_name}</span>
               <span style={{
-                fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
                 color: isMissed ? 'var(--accent-amber)' : '#F59E0B',
                 background: isMissed ? 'rgba(215,123,18,0.1)' : 'rgba(245,158,11,0.1)',
                 border: `1px solid ${isMissed ? 'rgba(215,123,18,0.25)' : 'rgba(245,158,11,0.25)'}`,
               }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
               {w.entry_time && (
-                <span style={{ fontSize: '11px', color: 'var(--accent-blue)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--ox-radiant)' }}>
                   E: {w.entry_time.slice(0, 5)}
                 </span>
               )}
@@ -632,7 +638,7 @@ export default function OrdersPage() {
               )}
               <span style={{
                 marginLeft: 'auto', fontSize: '10px', fontWeight: 600,
-                color: w.is_practix ? 'var(--accent-amber)' : 'var(--accent-blue)',
+                color: w.is_practix ? 'var(--accent-amber)' : 'var(--ox-radiant)',
               }}>{w.is_practix ? 'PRACTIX' : 'LIVE'}</span>
             </div>
             )
@@ -648,7 +654,7 @@ export default function OrdersPage() {
         const dayWins = closedLegs.filter(l => (l.pnl ?? 0) > 0).length
         const dayWinRate = Math.round(dayWins / closedLegs.length * 100)
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 12px', marginBottom: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '6px', fontSize: '11px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 12px', marginBottom: '8px', background: 'rgba(22,22,25,0.65)', border: 'var(--glass-border)', borderRadius: '8px', fontSize: '11px', backdropFilter: 'blur(12px)' }}>
             <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>{closedLegs.length} trade{closedLegs.length !== 1 ? 's' : ''}</span>
             <span style={{ color: 'var(--text-dim)' }}>·</span>
             <span style={{ fontWeight: 700, color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
@@ -663,9 +669,10 @@ export default function OrdersPage() {
       {/* Algo groups */}
       {sortedOrders.map((group, gi) => (
         <div key={gi} style={{ marginBottom: '12px', opacity: group.terminated ? 0.65 : 1 }}>
-          <div style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)',
-            borderRadius: '7px 7px 0 0', padding: '8px 12px',
+          <div className="cloud-fill-sm" style={{
+            background: 'var(--glass-bg)', border: 'var(--glass-border)',
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            borderRadius: '10px 10px 0 0', padding: '10px 14px',
             display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
           }}>
             {/* Terminated icon */}
@@ -692,7 +699,7 @@ export default function OrdersPage() {
               const firstMsg = errLegs[0]?.errorMessage
               const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
               return (
-                <span title={firstMsg || undefined} style={{ fontSize: '10px', fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 8px', borderRadius: '4px', cursor: firstMsg ? 'help' : 'default' }}>
+                <span title={firstMsg || undefined} className="chip chip-error" style={{ fontSize: '10px', cursor: firstMsg ? 'help' : 'default' }}>
                   ⚠ {errCount} LEG{errCount > 1 ? 'S' : ''} FAILED{shortMsg}
                 </span>
               )
@@ -700,11 +707,11 @@ export default function OrdersPage() {
 
             <span
               onClick={() => algosAPI.get(group.algoId).then(r => setAlgoPopup({ algoName: group.algoName, data: r.data })).catch(() => setAlgoPopup({ algoName: group.algoName, data: null }))}
-              style={{ fontWeight: 700, fontSize: '14px', color: group.terminated ? 'var(--text-dim)' : 'var(--accent-blue)',
-                cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(0,176,240,0.4)' }}>
+              style={{ fontWeight: 700, fontSize: '14px', fontFamily: 'var(--font-display)', color: group.terminated ? 'var(--text-dim)' : 'var(--ox-radiant)',
+                cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
               {group.algoName}
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '4px' }}>{group.account}</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px' }}>{group.account}</span>
 
             {!group.terminated && !!(group.mtmSL || group.mtmTP) && (
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -723,23 +730,24 @@ export default function OrdersPage() {
             {/* Action buttons */}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '5px', alignItems: 'center' }}>
               {[
-                { label: 'RUN', color: '#00B0F0', action: () => setModal({ type: 'run', algoIdx: gi }), disabled: group.terminated },
-                { label: 'RE',  color: '#F59E0B', action: () => doRE(gi),                               disabled: group.terminated },
-              { label: 'SYNC', color: '#A78BFA', action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) }, disabled: group.terminated },
-                { label: 'SQ',  color: '#22C55E', action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) }, disabled: group.terminated || openLegs(gi).length === 0 },
-                { label: 'T',   color: '#EF4444', action: () => setModal({ type: 't', algoIdx: gi }),   disabled: group.terminated },
+                { label: 'RUN',  color: '#FF6B00', action: () => setModal({ type: 'run', algoIdx: gi }), disabled: group.terminated },
+                { label: 'RE',   color: '#F59E0B', action: () => doRE(gi),                               disabled: group.terminated },
+                { label: 'SYNC', color: '#CC4400', action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) }, disabled: group.terminated },
+                { label: 'SQ',   color: '#22DD88', action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) }, disabled: group.terminated || openLegs(gi).length === 0 },
+                { label: 'T',    color: '#FF4444', action: () => setModal({ type: 't', algoIdx: gi }),   disabled: group.terminated },
               ].map(btn => (
                 <button key={btn.label} title={btn.label}
                   disabled={btn.disabled || loading[`${btn.label.toLowerCase()}-${gi}`]}
                   style={{
                     height: '26px', minWidth: '42px', padding: '0 12px', fontSize: '11px', fontWeight: 700,
-                    border: `1.5px solid ${btn.color}`, background: `${btn.color}14`, color: btn.color,
-                    borderRadius: '13px', cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s', opacity: btn.disabled ? 0.35 : 1,
-                    letterSpacing: '0.04em',
+                    fontFamily: 'var(--font-display)',
+                    border: `0.5px solid ${btn.color}60`, background: `${btn.color}12`, color: btn.color,
+                    borderRadius: '100px', cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.18s ease', opacity: btn.disabled ? 0.35 : 1,
+                    letterSpacing: '0.05em',
                   }}
-                  onMouseEnter={e => { if (!btn.disabled) { (e.currentTarget as HTMLElement).style.background = `${btn.color}28`; (e.currentTarget as HTMLElement).style.boxShadow = `0 0 8px ${btn.color}50` } }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${btn.color}14`; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}
+                  onMouseEnter={e => { if (!btn.disabled) { (e.currentTarget as HTMLElement).style.background = `${btn.color}22`; (e.currentTarget as HTMLElement).style.borderColor = `${btn.color}` } }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${btn.color}12`; (e.currentTarget as HTMLElement).style.borderColor = `${btn.color}60` }}
                   onClick={btn.action}>
                   {btn.label}
                 </button>
@@ -756,7 +764,7 @@ export default function OrdersPage() {
                 const toX = (i: number) => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
                 const toY = (v: number) => H - PAD - ((v - minP) / range) * (H - PAD * 2)
                 const totalPnl = closedLegs.reduce((s, l) => s + (l.pnl ?? 0), 0)
-                const lineColor = totalPnl >= 0 ? '#22C55E' : '#EF4444'
+                const lineColor = totalPnl >= 0 ? '#22DD88' : '#FF4444'
                 const pathD = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
                 return (
                   <svg width={W} height={H} style={{ flexShrink: 0, opacity: 0.9 }}>
@@ -772,7 +780,7 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          <div style={{ border: '1px solid var(--bg-border)', borderTop: 'none', borderRadius: '0 0 7px 7px', overflow: 'hidden' }}>
+          <div style={{ border: 'var(--glass-border)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
             <table className="staax-table">
               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
               <thead><tr>{HDRS.map(h => <th key={h}>{h}</th>)}</tr></thead>
@@ -814,7 +822,7 @@ export default function OrdersPage() {
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-ghost" onClick={() => setShowSync(null)}>Cancel</button>
-              <button className="btn" style={{ background: '#A78BFA', color: '#fff' }}
+              <button className="btn btn-primary"
                 disabled={syncLoading} onClick={() => doSync(showSync)}>
                 {syncLoading ? '🔄 Fetching from broker...' : '🔗 Sync Order'}
               </button>
@@ -838,7 +846,7 @@ export default function OrdersPage() {
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-ghost" onClick={() => setEditExit(null)}>Cancel</button>
-              <button className="btn" style={{ background: 'var(--accent-blue)', color: '#fff' }}
+              <button className="btn btn-primary"
                 disabled={exitSaving} onClick={doCorrectExit}>
                 {exitSaving ? 'Saving...' : '✅ Save'}
               </button>
@@ -873,7 +881,7 @@ export default function OrdersPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   <div style={{ fontWeight: 700, fontSize: '17px' }}>{algoPopup.algoName}</div>
                   {d?.account_nickname && (
-                    <span style={{ fontSize: '11px', fontWeight: 600, background: 'rgba(0,176,240,0.12)', color: 'var(--accent-blue)', border: '1px solid rgba(0,176,240,0.25)', padding: '2px 9px', borderRadius: '20px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, background: 'rgba(255,107,0,0.12)', color: 'var(--ox-radiant)', border: '0.5px solid rgba(255,107,0,0.35)', padding: '2px 9px', borderRadius: '20px' }}>
                       {d.account_nickname}
                     </span>
                   )}
@@ -905,7 +913,7 @@ export default function OrdersPage() {
                         {d.entry_time && (
                           <div>
                             <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-blue)' }}>{d.entry_time}</div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--indigo)' }}>{d.entry_time}</div>
                           </div>
                         )}
                         {d.exit_time && (

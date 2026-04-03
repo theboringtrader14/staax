@@ -35,7 +35,7 @@ const TIMEFRAMES = [
 ]
 const CHANNEL_TFS = ['1', '3', '5', '15', '30', '60', '120', '240', 'D']
 const STATUS_COLOR: Record<string, string> = {
-  active: 'var(--accent-blue)', live: 'var(--green)', inactive: 'var(--text-dim)',
+  active: 'var(--indigo)', live: 'var(--green)', inactive: 'var(--text-dim)',
 }
 
 type Bot = {
@@ -57,6 +57,9 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
   title: string; desc: string; confirmLabel: string; confirmColor: string
   onConfirm: () => void; onCancel: () => void
 }) {
+  const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444')
+  const isWarn   = confirmColor?.includes('amber') || confirmColor?.includes('f59e0b') || confirmColor?.includes('215,123')
+  const btnVariant = isDanger ? 'btn-danger' : isWarn ? 'btn-warn' : 'btn-primary'
   return (
     <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: '380px' }}>
@@ -64,8 +67,7 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
         <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>{desc}</div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn" onClick={onConfirm}
-            style={{ background: confirmColor, color: '#fff', border: 'none' }}>{confirmLabel}</button>
+          <button className={`btn ${btnVariant}`} onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>
@@ -188,8 +190,8 @@ function BotConfigurator({ accounts, onSave, onClose }: {
         <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>
           {steps.map(s => (
             <div key={s.n} style={{ flex: 1 }}>
-              <div style={{ height: '3px', borderRadius: '2px', background: step >= s.n ? 'var(--accent-blue)' : 'var(--bg-border)', transition: 'background 0.2s' }}/>
-              <div style={{ fontSize: '9px', color: step >= s.n ? 'var(--accent-blue)' : 'var(--text-dim)', marginTop: '4px', textAlign: 'center' }}>{s.label}</div>
+              <div style={{ height: '3px', borderRadius: '2px', background: step >= s.n ? 'var(--indigo)' : 'var(--bg-border)', transition: 'background 0.2s' }}/>
+              <div style={{ fontSize: '9px', color: step >= s.n ? 'var(--indigo)' : 'var(--text-dim)', marginTop: '4px', textAlign: 'center' }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -200,8 +202,8 @@ function BotConfigurator({ accounts, onSave, onClose }: {
             {INSTRUMENTS.map(inst => (
               <button key={inst.value} onClick={() => u('instrument', inst.value)}
                 style={{ width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '8px',
-                  border: `2px solid ${form.instrument === inst.value ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-                  background: form.instrument === inst.value ? 'var(--accent-blue-dim)' : 'var(--bg-secondary)',
+                  border: `2px solid ${form.instrument === inst.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
+                  background: form.instrument === inst.value ? 'var(--indigo-dim)' : 'var(--bg-secondary)',
                   color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
                 <div style={{ fontWeight: 700 }}>{inst.label}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{inst.exchange}</div>
@@ -216,8 +218,8 @@ function BotConfigurator({ accounts, onSave, onClose }: {
             {INDICATORS.map(ind => (
               <button key={ind.value} onClick={() => u('indicator', ind.value)}
                 style={{ width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '8px',
-                  border: `2px solid ${form.indicator === ind.value ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-                  background: form.indicator === ind.value ? 'var(--accent-blue-dim)' : 'var(--bg-secondary)',
+                  border: `2px solid ${form.indicator === ind.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
+                  background: form.indicator === ind.value ? 'var(--indigo-dim)' : 'var(--bg-secondary)',
                   color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
                 <div style={{ fontWeight: 700 }}>{ind.label}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -237,9 +239,9 @@ function BotConfigurator({ accounts, onSave, onClose }: {
                 {TIMEFRAMES.filter(tf => tf.value < 60).map(tf => (
                 <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
                   style={{ padding: '14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
-                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-                    background: form.timeframe_mins === tf.value ? 'rgba(0,176,240,0.08)' : 'var(--bg-secondary)',
-                    color: form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--text)',
+                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
+                    background: form.timeframe_mins === tf.value ? 'rgba(255,107,0,0.08)' : 'var(--bg-secondary)',
+                    color: form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--text)',
                     cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
                   {tf.label}
                 </button>
@@ -250,9 +252,9 @@ function BotConfigurator({ accounts, onSave, onClose }: {
                 {TIMEFRAMES.filter(tf => tf.value >= 60).map(tf => (
                 <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
                   style={{ padding: '14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
-                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--bg-border)'}`,
-                    background: form.timeframe_mins === tf.value ? 'rgba(0,176,240,0.08)' : 'var(--bg-secondary)',
-                    color: form.timeframe_mins === tf.value ? 'var(--accent-blue)' : 'var(--text)',
+                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
+                    background: form.timeframe_mins === tf.value ? 'rgba(255,107,0,0.08)' : 'var(--bg-secondary)',
+                    color: form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--text)',
                     cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
                   {tf.label}
                 </button>
@@ -324,7 +326,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
               <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Lot Size</label>
               <input className="staax-input" type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
             </div>
-            <div style={{ background: 'var(--accent-blue-dim)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '11px', color: 'var(--accent-blue)' }}>
+            <div style={{ background: 'var(--indigo-dim)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '11px', color: 'var(--indigo)' }}>
               ℹ️ Expiry auto-set to current active contract ({autoExpiry()}). Rollover is automatic when ≤5 market days remain.
             </div>
             {error && <div style={{ fontSize: '12px', color: 'var(--red)' }}>❌ {error}</div>}
@@ -407,7 +409,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
           </span>
           {!bot.is_archived && (
             <button onClick={() => onUpdate(bot.id, { is_practix: !(bot.is_practix ?? true) })}
-              style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '3px',
+              style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
                 border: 'none', cursor: 'pointer', letterSpacing: '0.06em',
                 background: (bot.is_practix ?? true) ? 'rgba(215,123,18,0.15)' : 'rgba(34,197,94,0.15)',
                 color: (bot.is_practix ?? true) ? 'var(--accent-amber)' : 'var(--green)' }}>
@@ -428,11 +430,11 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
         </div>
 
         {/* Name + meta */}
-        <div onClick={() => setShowEdit(true)} style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', cursor: 'pointer', transition: 'color 0.12s' }} onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--accent-blue)'} onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--text)'}>{bot.name}</div>
+        <div onClick={() => setShowEdit(true)} style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', cursor: 'pointer', transition: 'color 0.12s' }} onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--indigo)'} onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.color = 'var(--text)'}>{bot.name}</div>
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: isMcx ? '6px' : '10px', display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span>{bot.instrument}</span><span>·</span><span>{indLabel}</span><span>·</span><span>{tfLabel}</span>
           <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '20px',
-            background: 'var(--accent-blue-dim)', color: 'var(--accent-blue)', border: '1px solid rgba(0,176,240,0.2)' }}>
+            background: 'var(--indigo-dim)', color: 'var(--indigo)', border: '1px solid rgba(255,107,0,0.2)' }}>
             {accountName}
           </span>
         </div>
@@ -464,12 +466,12 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
               <div style={{ display: 'flex', gap: '3px' }}>
                 <input type="number" value={lotsVal} onChange={e => setLotsVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') saveLots(); if (e.key === 'Escape') setEditLots(false) }}
-                  style={{ width: '40px', background: 'var(--bg-primary)', border: '1px solid var(--accent-blue)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '1px 4px' }} autoFocus />
-                <button onClick={saveLots} style={{ background: 'var(--accent-blue)', border: 'none', borderRadius: '3px', color: '#000', fontSize: '10px', padding: '0 5px', cursor: 'pointer' }}>✓</button>
+                  style={{ width: '40px', background: 'var(--bg-primary)', border: '1px solid var(--indigo)', borderRadius: '3px', color: 'var(--text)', fontSize: '11px', padding: '1px 4px' }} autoFocus />
+                <button onClick={saveLots} style={{ background: 'var(--indigo)', border: 'none', borderRadius: '3px', color: '#000', fontSize: '10px', padding: '0 5px', cursor: 'pointer' }}>✓</button>
               </div>
             ) : (
               <div onClick={() => { setEditLots(true); setLotsVal(String(bot.lots)) }}
-                title="Click to edit" style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--accent-blue)' }}>
+                title="Click to edit" style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--indigo)' }}>
                 {bot.lots}
               </div>
             )}
@@ -660,10 +662,10 @@ export default function IndicatorsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: "'ADLaM Display', serif", fontSize: '22px', fontWeight: 400 }}>Indicator Bots</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>Indicator Bots</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display:'flex', alignItems:'center', gap:'6px' }}>
             {loading ? 'Loading...' : `${activeBots.filter(b => b.status !== 'inactive').length} running · ${activeBots.length} total`}
-          {' '}·{' '}<span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>{isPractixMode?'PRACTIX':'LIVE'}</span></p>
+          {' '}·{' '}<span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,221,136,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--sem-long)',border:isPractixMode?'0.5px solid rgba(215,123,18,0.3)':'0.5px solid rgba(34,221,136,0.25)'}}>{isPractixMode?'PRACTIX':'LIVE'}</span></p>
         </div>
         <div className="page-header-actions">
           {archivedBots.length > 0 && (
@@ -676,17 +678,17 @@ export default function IndicatorsPage() {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--bg-border)', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', borderBottom: '0.5px solid rgba(255,107,0,0.16)', marginBottom: '16px' }}>
         {(['Bots', 'Signals', 'Orders'] as const).map(tab => {
           const hasDot = (tab === 'Signals' && signals.some(s => s.status === 'fired')) ||
                          (tab === 'Orders' && allBotOrders.some(o => o.status === 'open'))
           return (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
               flex: 1, padding: '8px 4px', fontSize: '12px', fontWeight: 600,
-              background: activeTab === tab ? 'rgba(99,102,241,0.08)' : 'transparent',
+              background: activeTab === tab ? 'rgba(255,107,0,0.08)' : 'transparent',
               border: 'none', cursor: 'pointer', position: 'relative',
-              color: activeTab === tab ? '#a78bfa' : 'rgba(232,232,248,0.6)',
-              borderBottom: activeTab === tab ? '2px solid #6366f1' : '2px solid transparent',
+              color: activeTab === tab ? '#FF6B00' : 'rgba(232,232,248,0.6)',
+              borderBottom: activeTab === tab ? '2px solid #FF6B00' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}>
               {tab}
@@ -704,7 +706,7 @@ export default function IndicatorsPage() {
             </span>
             <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
           </div>
-          <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
+          <div style={{ border: '0.5px solid rgba(255,107,0,0.18)', borderRadius: '7px', overflow: 'hidden' }}>
             <table className="staax-table">
               <thead>
                 <tr>
@@ -729,9 +731,9 @@ export default function IndicatorsPage() {
                     </td>
                     <td>
                       <span style={{
-                        fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
-                        color: s.status === 'executed' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'missed' ? 'var(--accent-amber)' : 'var(--accent-blue)',
-                        background: s.status === 'executed' ? 'rgba(34,197,94,0.12)' : s.status === 'error' ? 'rgba(239,68,68,0.12)' : s.status === 'missed' ? 'rgba(215,123,18,0.12)' : 'rgba(0,176,240,0.12)',
+                        fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
+                        color: s.status === 'executed' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'missed' ? 'var(--accent-amber)' : 'var(--indigo)',
+                        background: s.status === 'executed' ? 'rgba(34,221,136,0.12)' : s.status === 'error' ? 'rgba(255,68,68,0.12)' : s.status === 'missed' ? 'rgba(215,123,18,0.12)' : 'rgba(255,107,0,0.12)',
                       }}>{s.status.toUpperCase()}</span>
                     </td>
                   </tr>
@@ -785,7 +787,7 @@ export default function IndicatorsPage() {
         const openOrders   = allBotOrders.filter(o => o.status === 'open')
         const closedOrders = allBotOrders.filter(o => o.status !== 'open')
         const renderOrdersTable = (rows: AggOrder[]) => (
-          <div style={{ border: '1px solid var(--bg-border)', borderRadius: '7px', overflow: 'hidden' }}>
+          <div style={{ border: '0.5px solid rgba(255,107,0,0.18)', borderRadius: '7px', overflow: 'hidden' }}>
             <table className="staax-table">
               <thead><tr><th>Bot</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th></tr></thead>
               <tbody>

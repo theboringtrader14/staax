@@ -1,518 +1,310 @@
 import { useStore } from '@/store'
-import { useState, useEffect } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, ordersAPI } from '@/services/api'
+import { useState, useEffect, useRef } from 'react'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
 
 const INIT_SERVICES: Service[] = [
-  { id: 'db',      name: 'PostgreSQL',  status: 'stopped', detail: 'localhost:5432'       },
-  { id: 'redis',   name: 'Redis',       status: 'stopped', detail: 'localhost:6379'       },
+  { id: 'db',      name: 'PostgreSQL',  status: 'stopped', detail: 'localhost:5432' },
+  { id: 'redis',   name: 'Redis',       status: 'stopped', detail: 'localhost:6379' },
   { id: 'backend', name: 'Backend API', status: 'stopped', detail: 'http://localhost:8000' },
-  { id: 'ws',      name: 'Market Feed', status: 'stopped', detail: 'NSE live tick data'   },
+  { id: 'ws',      name: 'Market Feed', status: 'stopped', detail: 'NSE live tick data' },
 ]
 
-const STATUS_COLOR: Record<ServiceStatus, string> = {
-  running: '#10b981', stopped: 'rgba(232,232,248,0.25)',
-  starting: '#f59e0b', stopping: '#f59e0b',
-}
-const STATUS_BG: Record<ServiceStatus, string> = {
-  running: 'rgba(16,185,129,0.08)', stopped: 'rgba(255,255,255,0.02)',
-  starting: 'rgba(245,158,11,0.08)', stopping: 'rgba(245,158,11,0.08)',
+const STATUS_CLR: Record<ServiceStatus, string> = {
+  running: 'var(--sem-long)', stopped: '#4A4A52', starting: 'var(--sem-warn)', stopping: 'var(--sem-warn)',
 }
 
-const STAT_DEFS = [
-  { label: 'Active Algos',   key: 'active_algos',   accent: '#6366f1', format: (v: number) => String(v) },
-  { label: 'Open Positions', key: 'open_positions',  accent: '#10b981', format: (v: number) => String(v) },
-  { label: 'Today P&L',      key: 'today_pnl',       accent: '#10b981', format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
-  { label: 'FY P&L',         key: 'fy_pnl',          accent: '#a78bfa', format: (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` },
+const CHECKLIST = [
+  { key: 'database',          label: 'Database connected' },
+  { key: 'redis',             label: 'Redis running' },
+  { key: 'broker_karthik_ao', label: 'Karthik AO token valid' },
+  { key: 'broker_mom_ao',     label: 'Mom AO token valid' },
+  { key: 'broker_wife_ao',    label: 'Wife AO token valid' },
+  { key: 'broker_zerodha',    label: 'Zerodha token valid' },
+  { key: 'smartstream',       label: 'Market Feed (SmartStream) connected' },
+  { key: 'scheduler',         label: 'Scheduler running' },
 ]
 
-// ── RadialRing — SVG arc progress indicator ────────────────────
-function RadialRing({ pct, color, size = 56, strokeWidth = 3.5 }: {
-  pct: number; color: string; size?: number; strokeWidth?: number
-}) {
-  const r = (size - strokeWidth * 2) / 2
-  const circ = 2 * Math.PI * r
-  const filled = (Math.min(Math.max(pct, 0), 100) / 100) * circ
+function PnlCard({ label, value, isPositive, sparkId }: { label: string; value: number; isPositive: boolean; sparkId: string }) {
+  const rupee = String.fromCharCode(0x20B9)
+  const display = (isPositive ? '+' : '') + rupee + Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  const col  = isPositive ? 'var(--ox-radiant)' : 'var(--sem-short)'
+  const col2 = isPositive ? '#FF6B00' : '#FF4444'
   return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }} aria-hidden>
-      <circle cx={size/2} cy={size/2} r={r} fill="none"
-        stroke={`${color}28`} strokeWidth={strokeWidth} />
-      <circle cx={size/2} cy={size/2} r={r} fill="none"
-        stroke={color} strokeWidth={strokeWidth}
-        strokeDasharray={`${filled} ${circ - filled}`}
-        strokeLinecap="round"
-        style={{ filter:`drop-shadow(0 0 4px ${color})`, transition:'stroke-dasharray 0.8s ease' }}
-      />
-    </svg>
+    <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
+      <div className="card-label">{label}</div>
+      <div style={{ fontSize: 'clamp(20px,2.2vw,28px)', fontWeight: 800, color: col, fontFamily: 'var(--font-mono)', letterSpacing: '-1px', lineHeight: 1 }}>{display}</div>
+      <div style={{ fontSize: '10px', color: isPositive ? 'rgba(255,107,0,0.65)' : 'rgba(255,68,68,0.65)', marginTop: '3px', fontWeight: 600 }}>
+        {isPositive ? '▲' : '▼'} {isPositive ? 'Profit' : 'Loss'} · 0.00% ROI
+      </div>
+      <svg width="100%" height="36" viewBox="0 0 200 36" preserveAspectRatio="none" style={{ marginTop: '10px', display: 'block' }}>
+        <defs>
+          <linearGradient id={'sg-' + sparkId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={col2} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={col2} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2 L200,36 L0,36Z" fill={'url(#sg-' + sparkId + ')'} />
+        <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2" fill="none" stroke={col2} strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    </div>
   )
 }
 
-
-/** Returns true if current IST time is past 09:00 */
-function isPast9am(): boolean {
-  const now = new Date()
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+function isPast9am() {
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
   return ist.getHours() > 9 || (ist.getHours() === 9 && ist.getMinutes() >= 0)
 }
+
 
 export default function DashboardPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const algos         = useStore(s => s.algos)
   const accounts      = useStore(s => s.accounts)
   const setAccounts   = useStore(s => s.setAccounts)
+  const [services, setServices]          = useState<Service[]>(INIT_SERVICES)
+  const [stats, setStats]                = useState<Record<string,number>>({})
+  const [log, setLog]                    = useState<string[]>(['STAAX Dashboard ready.'])
+  const [zerodhaConnected, setZerodha]   = useState(false)
+  const [showLateWarning, setLateWarn]   = useState(false)
+  const [holidays, setHolidays]          = useState<any[]>([])
+  const [syncingHolidays, setSyncing]    = useState(false)
+  const [showKillConfirm, setKillModal]  = useState(false)
+  const [killActivated, setKillActived]  = useState(false)
+  const [killLoading, setKillLoading]    = useState(false)
+  const [killResult, setKillResult]      = useState<{positions_squared:number;orders_cancelled:number;errors:string[]}|null>(null)
+  const [selKill, setSelKill]            = useState<string[]>([])
+  const [killedIds, setKilledIds]        = useState<string[]>([])
+  const [now, setNow]                    = useState(new Date())
+  const [todayGrid, setTodayGrid]        = useState<any[]>([])
+  const [health, setHealth]              = useState<any>(null)
+  const [healthCollapsed, setHCollapsed] = useState(false)
+  const algoScrollRef                    = useRef<HTMLDivElement>(null)
+  const [scrollPos, setScrollPos]        = useState(0)
 
-  const [services, setServices]               = useState<Service[]>(INIT_SERVICES)
-  const [stats, setStats]                     = useState<Record<string, number>>({})
-  const [log, setLog]                         = useState<string[]>(['STAAX Dashboard ready.'])
-  const [zerodhaConnected, setZerodhaConnected] = useState(false)
-  const [showLateWarning, setShowLateWarning] = useState(false)
-  const [holidays, setHolidays]                   = useState<any[]>([])
-  const [syncingHolidays, setSyncingHolidays]     = useState(false)
-  const [showKillConfirm, setShowKillConfirm]     = useState(false)
-  const [killActivated, setKillActivated]         = useState(false)
-  const [killLoading, setKillLoading]             = useState(false)
-  const [killResult, setKillResult]               = useState<{ positions_squared: number; orders_cancelled: number; errors: string[]; per_account?: Record<string, { positions_squared: number; orders_cancelled: number }> } | null>(null)
-  const [selectedKillAccounts, setSelectedKillAccounts] = useState<string[]>([])
-  const [killedAccountIds, setKilledAccountIds]         = useState<string[]>([])
-  const [now, setNow]                                   = useState(new Date())
-  const [todayGrid, setTodayGrid]                       = useState<any>([])
-  const [health, setHealth]                             = useState<any>(null)
-  const [healthCollapsed, setHealthCollapsed]           = useState(false)
-  const [recentOrders, setRecentOrders]                 = useState<any[]>([])
-
-  // 1s tick for Xm Ys countdown accuracy
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(t)
-  }, [])
-
-  // Fetch today's grid entries for Next Algo card
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
   useEffect(() => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    const fetch = () => {
-      gridAPI.list({ week_start: today, week_end: today, is_practix: isPractixMode })
-        .then(r => setTodayGrid(r.data?.entries || r.data?.groups || r.data || []))
-        .catch(() => {})
-    }
-    fetch()
-    const t = setInterval(fetch, 30000)
-    return () => clearInterval(t)
+    const run = () => gridAPI.list({ week_start: today, week_end: today, is_practix: isPractixMode })
+      .then(r => setTodayGrid(r.data?.entries || r.data?.groups || r.data || [])).catch(() => {})
+    run(); const t = setInterval(run, 30000); return () => clearInterval(t)
   }, [isPractixMode])
-
-  // Load accounts on mount + derive zerodha token state
   useEffect(() => {
-    accountsAPI.list()
-      .then(res => {
-        setAccounts(res.data)
-        const zerodha = (res.data || []).find((a: any) => a.broker === 'zerodha')
-        if (zerodha?.token_valid_today) setZerodhaConnected(true)
-      })
-      .catch(() => {}) // backend may not be up yet
+    accountsAPI.list().then(res => {
+      setAccounts(res.data)
+      const z = (res.data || []).find((a: any) => a.broker === 'zerodha')
+      if (z?.token_valid_today) setZerodha(true)
+    }).catch(() => {})
   }, [])
-
-  // Load dashboard stats on mount (active algos, open positions, P&L)
+  useEffect(() => { systemAPI.stats(isPractixMode).then(r => setStats(r.data)).catch(() => {}) }, [isPractixMode])
   useEffect(() => {
-    systemAPI.stats(isPractixMode)
-      .then(res => setStats(res.data))
-      .catch(() => {})
-  }, [isPractixMode])
-
-  // Pre-populate System Log from persisted event_log on mount
-  useEffect(() => {
-    eventsAPI.list(50)
-      .then(res => {
-        const entries: any[] = res.data || []
-        // Today's date in IST as YYYY-MM-DD — 'sv' locale gives ISO format in the given tz
-        const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
-
-        // Build lines newest-first — entries arrive newest-first from API, iterate as-is
-        const lines: string[] = []
-        let lastDateSep = ''
-        for (const e of entries) {
-          const eventDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
-          // Use 'sv' locale for YYYY-MM-DD in IST — avoids UTC vs IST date mismatch
-          const eventDay  = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
-          // Insert separator when we encounter events from a new older day
-          if (eventDay !== todayStr && eventDate && eventDay !== lastDateSep) {
-            lines.push(`── ${eventDate} ──`)
-            lastDateSep = eventDay
-          }
-          const ts   = e.ts
-            ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-            : '--:--:--'
-          const src  = e.source ? `[${e.source}] ` : ''
-          const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
-          lines.push(`[${ts}] ${icon} ${src}${e.msg}`)
-        }
-        if (lines.length > 0) {
-          setLog(prev => [...lines, ...prev])
-        }
-      })
-      .catch(() => {}) // non-fatal — in-memory log still works
+    eventsAPI.list(50).then(res => {
+      const entries: any[] = res.data || []
+      const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
+      const lines: string[] = []
+      let lastSep = ''
+      for (const e of entries) {
+        const eDay = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
+        const eDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
+        if (eDay !== todayStr && eDate && eDay !== lastSep) { lines.push('── ' + eDate + ' ──'); lastSep = eDay }
+        const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
+        const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
+        lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
+      }
+      if (lines.length) setLog(p => [...lines, ...p])
+    }).catch(() => {})
   }, [])
-
-  // Load upcoming holidays
   useEffect(() => {
-    holidaysAPI.list(new Date().getFullYear())
-      .then(res => {
-        const today = new Date()
-        const in30 = new Date(today); in30.setDate(today.getDate() + 30)
-        const upcoming = (res.data || []).filter((h: any) => {
-          const d = new Date(h.date)
-          return d >= today && d <= in30 && h.segment === 'fo'
-        })
-        setHolidays(upcoming.slice(0, 8))
-      })
-      .catch(() => {})
+    holidaysAPI.list(new Date().getFullYear()).then(res => {
+      const today = new Date(); const in30 = new Date(today); in30.setDate(today.getDate() + 30)
+      setHolidays((res.data || []).filter((h: any) => { const d = new Date(h.date); return d >= today && d <= in30 && h.segment === 'fo' }).slice(0, 8))
+    }).catch(() => {})
   }, [])
-
-  const handleSyncHolidays = async () => {
-    setSyncingHolidays(true)
-    try {
-      const res = await holidaysAPI.sync()
-      addLog(`✅ Holidays synced — ${res.data.synced} new, ${res.data.skipped} existing`)
-      // Refresh list
-      const listRes = await holidaysAPI.list(new Date().getFullYear())
-      const today = new Date()
-      const in30 = new Date(today); in30.setDate(today.getDate() + 30)
-      const upcoming = (listRes.data || []).filter((h: any) => {
-        const d = new Date(h.date)
-        return d >= today && d <= in30 && h.segment === 'fo'
-      })
-      setHolidays(upcoming.slice(0, 8))
-    } catch {
-      addLog('⛔ Holiday sync failed — check NSE connectivity')
-    } finally {
-      setSyncingHolidays(false)
-    }
-  }
-
-  // Fetch system health every 60s
   useEffect(() => {
-    const fetchHealth = () => {
-      systemAPI.health()
-        .then(res => {
-          setHealth(res.data)
-          // Auto-expand if any check is not ok
-          const checks = res.data?.checks || {}
-          const anyFail = Object.entries(checks).some(([_, v]: [string, any]) =>
-            typeof v === 'object' && v !== null && v.ok === false
-          )
-          if (anyFail) setHealthCollapsed(false)
-        })
-        .catch(() => {})
-    }
-    fetchHealth()
-    const t = setInterval(fetchHealth, 60000)
-    return () => clearInterval(t)
+    const run = () => systemAPI.health().then(res => {
+      setHealth(res.data)
+      const anyFail = Object.values(res.data?.checks || {}).some((v: any) => typeof v === 'object' && v?.ok === false)
+      if (anyFail) setHCollapsed(false)
+    }).catch(() => {})
+    run(); const t = setInterval(run, 60000); return () => clearInterval(t)
   }, [])
-
-  // Fetch recent completed orders for Recent Trades widget + win/loss donut
   useEffect(() => {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    ordersAPI.list(today, isPractixMode)
-      .then(r => {
-        const completed = (r.data || []).filter((o: any) => o.status === 'complete')
-        setRecentOrders(completed.slice(-6).reverse())
-      })
-      .catch(() => {})
-  }, [isPractixMode])
-
-  // Load kill switch state on mount
-  useEffect(() => {
-    systemAPI.killSwitchStatus()
-      .then(res => {
-        if (res.data?.activated) setKillActivated(true)
-        if (res.data?.killed_account_ids?.length) setKilledAccountIds(res.data.killed_account_ids)
-      })
-      .catch(() => {})
+    systemAPI.killSwitchStatus().then(res => {
+      if (res.data?.activated) setKillActived(true)
+      if (res.data?.killed_account_ids?.length) setKilledIds(res.data.killed_account_ids)
+    }).catch(() => {})
   }, [])
-
-  // Poll service status every 5 seconds
   useEffect(() => {
-    const poll = () => {
-      servicesAPI.status()
-        .then(res => {
-          const svcs: Service[] = res.data.services
-          setServices(prev => prev.map(s => {
-            const remote = svcs.find(r => r.id === s.id)
-            return remote ? { ...s, status: remote.status as ServiceStatus } : s
-          }))
-        })
-        .catch(() => {})
-    }
-    poll()
-    const t = setInterval(poll, 5000)
-    return () => clearInterval(t)
+    const poll = () => servicesAPI.status().then(res => {
+      setServices(prev => prev.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s }))
+    }).catch(() => {})
+    poll(); const t = setInterval(poll, 5000); return () => clearInterval(t)
   }, [])
 
   const addLog = (msg: string) => {
     const ts = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    setLog(l => [`[${ts}] ${msg}`, ...l.slice(0, 49)])
+    setLog(l => ['[' + ts + '] ' + msg, ...l.slice(0, 49)])
   }
-
-  const setSvc = (id: string, status: ServiceStatus) =>
-    setServices(s => s.map(x => x.id === id ? { ...x, status } : x))
-
-  const startSvc = async (id: string) => {
-    setSvc(id, 'starting')
-    addLog(`Starting ${id}...`)
-    try {
-      await servicesAPI.start(id)
-      setSvc(id, 'running')
-      addLog(`✅ ${id} running`)
-    } catch {
-      setSvc(id, 'stopped')
-      addLog(`⛔ ${id} failed to start`)
-    }
-  }
-
-  const stopSvc = async (id: string) => {
-    setSvc(id, 'stopping')
-    addLog(`Stopping ${id}...`)
-    try {
-      await servicesAPI.stop(id)
-      setSvc(id, 'stopped')
-      addLog(`⛔ ${id} stopped`)
-    } catch {
-      setSvc(id, 'running')
-      addLog(`Error stopping ${id}`)
-    }
-  }
-
-  const startAll = async () => {
-    // F8 — warn if starting after 9 AM (algos may have missed entry window)
-    if (isPast9am()) {
-      setShowLateWarning(true)
-      return
-    }
-    await doStartAll()
-  }
-
+  const setSvc = (id: string, st: ServiceStatus) => setServices(s => s.map(x => x.id === id ? { ...x, status: st } : x))
+  const startSvc = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'...'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog('✅ '+id+' running') } catch { setSvc(id,'stopped'); addLog('⛔ '+id+' failed') } }
+  const stopSvc  = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'...'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog('⛔ '+id+' stopped') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
+  const startAll = async () => { if (isPast9am()) { setLateWarn(true); return }; await doStartAll() }
   const doStartAll = async () => {
-    setShowLateWarning(false)
-    addLog('Starting all services...')
-    try {
-      await servicesAPI.startAll()
-      addLog('✅ All services running.')
-      // Refresh status
-      const res = await servicesAPI.status()
-      const svcs: Service[] = res.data.services
-      setServices(prev => prev.map(s => {
-        const remote = svcs.find(r => r.id === s.id)
-        return remote ? { ...s, status: remote.status as ServiceStatus } : s
-      }))
-    } catch {
-      addLog('⛔ Start all failed — check backend')
-    }
+    setLateWarn(false); addLog('Starting all services...')
+    try { await servicesAPI.startAll(); addLog('✅ All services running.'); const res = await servicesAPI.status(); setServices(p => p.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s })) }
+    catch { addLog('⛔ Start all failed') }
   }
-
-  const stopAll = async () => {
-    addLog('Stopping all services...')
+  const stopAll = async () => { addLog('Stopping all services...'); try { await servicesAPI.stopAll(); addLog('All services stopped.') } catch { addLog('Error stopping services') } }
+  const handleKill = async () => {
+    setKillLoading(true); addLog('⚠️ KILL SWITCH ACTIVATED')
     try {
-      await servicesAPI.stopAll()
-      addLog('All services stopped.')
-    } catch {
-      addLog('Error stopping services')
-    }
-  }
-
-  const handleKillSwitch = async () => {
-    setKillLoading(true)
-    addLog("⚠️ KILL SWITCH ACTIVATED — fetching broker state...")
-    try {
-      const res = await systemAPI.activateKillSwitch(selectedKillAccounts)
-      const d = res.data
-      setKillActivated(true)
-      setKilledAccountIds(prev => Array.from(new Set([...prev, ...(selectedKillAccounts.length > 0 ? selectedKillAccounts : accounts.map((a: any) => a.id))])))
+      const res = await systemAPI.activateKillSwitch(selKill); const d = res.data
+      setKillActived(true); setKilledIds(p => Array.from(new Set([...p, ...(selKill.length > 0 ? selKill : (accounts as any[]).map(a => a.id))])))
       setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
-      addLog(`[CRITICAL] KILL SWITCH — ${d.positions_squared ?? 0} positions squared, ${d.orders_cancelled ?? 0} orders cancelled`)
-      if (d.errors?.length) { d.errors.forEach((e: string) => addLog(`⚠️ ${e}`)) }
-    } catch (err: any) {
-      addLog("⛔ Kill switch failed — " + (err?.response?.data?.detail || "unknown error"))
-    } finally {
-      setKillLoading(false)
-      setShowKillConfirm(false)
-    }
+      addLog('[CRITICAL] KILL — ' + (d.positions_squared ?? 0) + ' positions, ' + (d.orders_cancelled ?? 0) + ' orders')
+    } catch (err: any) { addLog('⛔ Kill switch failed — ' + (err?.response?.data?.detail || 'unknown')) }
+    finally { setKillLoading(false); setKillModal(false) }
   }
-
   const handleZerodhaLogin = () => {
-    accountsAPI.zerodhaLoginUrl()
-      .then(res => {
-        const url = res.data.login_url
-        const popup = window.open(url, '_blank', 'width=800,height=600')
-        addLog('🔑 Zerodha login window opened — complete login in the popup')
-
-        // Listen for postMessage from callback page
-        const onMsg = (e: MessageEvent) => {
-          if (e.data?.type === 'ZERODHA_TOKEN_SET') {
-            setZerodhaConnected(true)
-            addLog('✅ Zerodha token set — connected for today')
-            window.removeEventListener('message', onMsg)
-            if (popup) popup.close()
-          }
-        }
-        window.addEventListener('message', onMsg)
-
-        // Fallback poll — check token status every 3s for up to 3 minutes
-        const poll = setInterval(async () => {
-          try {
-            const r = await accountsAPI.list()
-            const zerodha = (r.data || []).find((a: any) => a.broker === 'zerodha')
-            if (zerodha?.token_valid_today) {
-              setZerodhaConnected(true)
-              addLog('✅ Zerodha connected for today')
-              clearInterval(poll)
-              window.removeEventListener('message', onMsg)
-            }
-          } catch { /* ignore */ }
-        }, 3000)
-        setTimeout(() => clearInterval(poll), 180000)
-      })
-      .catch(() => addLog('⚠️ Could not fetch Zerodha login URL — is backend running?'))
+    accountsAPI.zerodhaLoginUrl().then(res => {
+      const popup = window.open(res.data.login_url, '_blank', 'width=800,height=600'); addLog('🔑 Zerodha login opened')
+      const onMsg = (e: MessageEvent) => { if (e.data?.type === 'ZERODHA_TOKEN_SET') { setZerodha(true); addLog('✅ Zerodha connected'); window.removeEventListener('message', onMsg); popup?.close() } }
+      window.addEventListener('message', onMsg)
+      const poll = setInterval(async () => { try { const r = await accountsAPI.list(); if ((r.data || []).find((a: any) => a.broker === 'zerodha')?.token_valid_today) { setZerodha(true); addLog('✅ Zerodha connected'); clearInterval(poll); window.removeEventListener('message', onMsg) } } catch {} }, 3000)
+      setTimeout(() => clearInterval(poll), 180000)
+    }).catch(() => addLog('⚠️ Could not fetch Zerodha login URL'))
+  }
+  const handleSyncHolidays = async () => {
+    setSyncing(true)
+    try {
+      const res = await holidaysAPI.sync(); addLog('✅ Holidays synced — ' + res.data.synced + ' new')
+      const lr = await holidaysAPI.list(new Date().getFullYear())
+      const today = new Date(); const in30 = new Date(today); in30.setDate(today.getDate() + 30)
+      setHolidays((lr.data || []).filter((h: any) => { const d = new Date(h.date); return d >= today && d <= in30 && h.segment === 'fo' }).slice(0, 8))
+    } catch { addLog('⛔ Holiday sync failed') } finally { setSyncing(false) }
   }
 
   const allRunning = services.every(s => s.status === 'running')
   const allStopped = services.every(s => s.status === 'stopped')
-
-  // Build late warning message — list algos with entry_time already passed
-  const lateAlgos = algos.filter(a => {
+  const lateAlgos  = (algos as any[]).filter((a: any) => {
     if (!a.entry_time) return false
-    const now = new Date()
-    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
     const [h, m] = a.entry_time.split(':').map(Number)
     return ist.getHours() > h || (ist.getHours() === h && ist.getMinutes() >= m)
   })
 
+  const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  const [ih, im, is_] = istStr.split(':').map(Number)
+  const nowSecs = ih * 3600 + im * 60 + is_
+  const mktOpen = 9 * 3600; const mktClose = 15 * 3600 + 30 * 60
+  const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
+  const scheduledAlgos = (nowSecs >= mktOpen && nowSecs <= mktClose)
+    ? (Array.isArray(todayGrid) ? todayGrid : [])
+        .filter((e: any) => e.status === 'waiting' && e.entry_time)
+        .map((e: any) => { const [eh,em] = (e.entry_time as string).split(':').map(Number); return { name: (algoMap.get(e.algo_id) as any)?.name || e.algo_name || 'Unknown', secs: eh*3600+em*60, time: e.entry_time as string } })
+        .sort((a: any, b: any) => a.secs - b.secs)
+    : []
+  const nextAlgo = scheduledAlgos.find((a: any) => a.secs > nowSecs)
+  const scrollAlgos = (dir: 'left' | 'right') => {
+    const el = algoScrollRef.current; if (!el) return
+    el.scrollBy({ left: dir === 'right' ? 130 : -130, behavior: 'smooth' })
+    setTimeout(() => setScrollPos(el.scrollLeft), 360)
+  }
+
+  const todayPnl = stats['today_pnl'] ?? 0
+  const fyPnl    = stats['fy_pnl']    ?? 0
+
+  const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
+    { id: '1', nickname: 'Karthik',    broker: 'zerodha',  token_valid_today: false },
+    { id: '2', nickname: 'Mom',         broker: 'angelone', token_valid_today: false },
+    { id: '3', nickname: 'Wife',        broker: 'angelone', token_valid_today: false },
+    { id: '4', nickname: 'Karthik AO', broker: 'angelone', token_valid_today: false },
+  ]
+
   return (
-    <div>
+    <div style={{ animation: 'fadeUp var(--dur-slow) var(--ease-out) both' }}>
+
+      {/* ── Page header ── */}
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>Dashboard</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            System status · Start / stop services ·{' '}
-            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
-              {isPractixMode?'PRACTIX':'LIVE'}
-            </span>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px,2.5vw,34px)', fontWeight: 800, color: 'var(--ox-radiant)', letterSpacing: '-1px', lineHeight: 1.1 }}>Dashboard</h1>
+          <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            System status · Start / stop services ·
+            <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>{isPractixMode ? 'PRACTIX' : 'LIVE'}</span>
           </p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-danger" onClick={() => { setSelectedKillAccounts(accounts.map((a: any) => a.id).filter((id: string) => !killedAccountIds.includes(id))); setShowKillConfirm(true) }} disabled={(killActivated && killedAccountIds.length >= accounts.length) || killLoading}
-            style={{ fontSize:'12px', position:'relative', background: killActivated ? 'rgba(239,68,68,0.15)' : undefined, color: killActivated ? 'var(--red)' : undefined, border: killActivated ? '1px solid rgba(239,68,68,0.4)' : undefined }}>
-            ⚡ {(killActivated && killedAccountIds.length >= accounts.length) ? 'Kill Switch Activated' : killedAccountIds.length > 0 ? `Kill Switch (${accounts.length - killedAccountIds.length} left)` : 'Kill Switch'}
+          <button className="btn btn-danger" onClick={() => { setSelKill(displayAccounts.map(a => a.id).filter((id: string) => !killedIds.includes(id))); setKillModal(true) }} disabled={(killActivated && killedIds.length >= accounts.length) || killLoading}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            {killActivated && killedIds.length >= accounts.length ? 'Kill Switch Activated' : killedIds.length > 0 ? 'Kill (' + (accounts.length - killedIds.length) + ' left)' : 'Kill Switch'}
           </button>
-          <button className="btn btn-ghost" onClick={stopAll} disabled={allStopped}>⛔ Stop All</button>
-          <button className="btn btn-primary" onClick={startAll} disabled={allRunning}>▶ Start Session</button>
-
+          <button className="btn btn-steel" onClick={stopAll} disabled={allStopped}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop All</button>
+          <button className="btn btn-primary" onClick={startAll} disabled={allRunning}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Session</button>
         </div>
       </div>
 
-      {/* Task 2 — LIVE mode blocked on localhost */}
+      {/* LIVE blocked */}
       {!isPractixMode && typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
-        <div style={{
-          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
-          borderRadius: '8px', padding: '10px 16px', marginBottom: '12px',
-          fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600,
-        }}>
-          ⚠️ LIVE mode blocked on local — deploy to production server for live trading.
+        <div className="card card-amber" style={{ padding: '10px 16px', marginBottom: '12px', fontSize: '12px', color: 'var(--sem-warn)', fontWeight: 600 }}>
+          ⚠️ LIVE mode blocked on local — deploy to production.
         </div>
       )}
 
-      {/* F8 — Late session warning */}
+      {/* Late warning */}
       {showLateWarning && (
-        <div style={{
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: '8px', padding: '14px 16px', marginBottom: '12px',
-        }}>
-          <div style={{ fontWeight: 700, color: 'var(--red)', marginBottom: '6px' }}>
-            ⚠️ Starting session after 9:00 AM
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-            The following algos have already passed their entry time and will NOT trigger today:
-          </div>
-          {lateAlgos.length === 0
-            ? <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No algos affected.</div>
-            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
-                {lateAlgos.map(a => (
-                  <span key={a.id} style={{
-                    fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
-                    background: 'rgba(239,68,68,0.12)', color: 'var(--red)',
-                    border: '1px solid rgba(239,68,68,0.25)',
-                  }}>
-                    {a.name} ({a.entry_time})
-                  </span>
-                ))}
-              </div>
-          }
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn btn-ghost" onClick={() => setShowLateWarning(false)}>Cancel</button>
-            <button className="btn" style={{ background: 'var(--red)', color: '#fff' }} onClick={doStartAll}>
-              Start Anyway
-            </button>
+        <div className="card card-violet" style={{ marginBottom: '12px' }}>
+          <div style={{ fontWeight: 700, color: 'var(--sem-short)', marginBottom: '6px', fontSize: '13px' }}>⚠️ Starting session after 9:00 AM</div>
+          <div style={{ fontSize: '12px', color: 'var(--gs-muted)', marginBottom: '10px' }}>These algos have already passed their entry time:</div>
+          {lateAlgos.length === 0 ? <div style={{ fontSize: '12px', color: 'var(--gs-muted)' }}>No algos affected.</div> : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+              {lateAlgos.map((a: any) => <span key={a.id} className="chip chip-error">{a.name} ({a.entry_time})</span>)}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+            <button className="btn btn-ghost" onClick={() => setLateWarn(false)}>Cancel</button>
+            <button className="btn btn-danger" onClick={doStartAll}>Start Anyway</button>
           </div>
         </div>
       )}
 
-      {/* Morning Checklist — System Health */}
+      {/* Kill result */}
+      {killActivated && killResult && (
+        <div className="card card-violet" style={{ padding: '12px 16px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--sem-short)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            <span style={{ fontWeight: 700, color: 'var(--sem-short)', fontSize: '12px' }}>Kill Switch Activated — {killedIds.length} account(s) terminated</span>
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)' }}>
+            {killResult.positions_squared} positions squared · {killResult.orders_cancelled} orders cancelled
+            {killResult.errors.length > 0 && <span style={{ color: 'var(--sem-warn)', marginLeft: '8px' }}>⚠️ {killResult.errors.length} errors</span>}
+          </div>
+        </div>
+      )}
+
+      {/* ── SYSTEM HEALTH ── */}
       {health && (() => {
-        const c = health.checks || {}
-        const allReady = health.status === 'ready'
-        const isCollapsed = healthCollapsed && allReady
-
-        const CHECKLIST = [
-          { key: 'database',         label: 'Database connected' },
-          { key: 'redis',            label: 'Redis running' },
-          { key: 'broker_karthik_ao',label: 'Karthik AO token valid' },
-          { key: 'broker_mom_ao',    label: 'Mom AO token valid' },
-          { key: 'broker_wife_ao',   label: 'Wife AO token valid' },
-          { key: 'broker_zerodha',   label: 'Zerodha token valid' },
-          { key: 'smartstream',      label: 'Market Feed (SmartStream) connected' },
-          { key: 'scheduler',        label: 'Scheduler running' },
-        ]
-
-        const headerColor  = allReady ? '#10b981' : '#f59e0b'
-        const headerBg     = allReady ? 'rgba(16,185,129,0.06)' : 'rgba(245,158,11,0.06)'
-        const headerBorder = allReady ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.3)'
-        const headerGlow   = allReady ? '0 0 20px rgba(16,185,129,0.15)' : '0 0 20px rgba(245,158,11,0.1)'
-
+        const c = health.checks || {}; const allReady = health.status === 'ready'
         return (
-          <div style={{ background: headerBg, border: `1px solid ${headerBorder}`, borderRadius: '10px', marginBottom: '12px', backdropFilter: 'blur(20px)', boxShadow: headerGlow }}>
-            {/* Header row */}
-            <div
-              onClick={() => setHealthCollapsed(p => !p)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', cursor: 'pointer' }}
-            >
-              <span style={{ fontWeight: 700, fontSize: '12px', color: headerColor }}>
-                {allReady ? '✅ System Ready' : '⚠️ System Not Ready'}
-                <span style={{ fontWeight: 400, fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                  {health.timestamp ? new Date(health.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
-                </span>
-              </span>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  onClick={e => { e.stopPropagation(); systemAPI.health().then(r => setHealth(r.data)).catch(() => {}) }}
-                  style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: 'var(--indigo)', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.04em', fontFamily: 'inherit' }}
-                >
-                  Refresh
-                </button>
+          <div className={'card ' + (allReady ? 'card-emerald' : 'card-amber')} style={{ marginBottom: '12px', padding: 0 }}>
+            <div onClick={() => setHCollapsed(p => !p)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className={allReady ? 'pulse-live' : 'pulse-warn'} />
+                <span style={{ fontWeight: 700, fontSize: '12px', color: allReady ? 'var(--sem-long)' : 'var(--sem-warn)' }}>{allReady ? 'System Ready' : 'System Not Ready'}</span>
+                {health.timestamp && <span style={{ fontSize: '11px', color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)' }}>{new Date(health.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
               </div>
+              <button onClick={e => { e.stopPropagation(); systemAPI.health().then(r => setHealth(r.data)).catch(() => {}) }} className="btn btn-steel" style={{ fontSize: '11px', padding: '0 12px', height: '26px' }}>Refresh</button>
             </div>
-
-            {/* Checklist body */}
-            {!isCollapsed && (
-              <div style={{ padding: '0 14px 12px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '6px' }}>
+            {!(healthCollapsed && allReady) && (
+              <div style={{ padding: '2px 16px 12px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '3px' }}>
                 {CHECKLIST.map(({ key, label }) => {
-                  const v = c[key]
-                  const ok = typeof v === 'object' ? v?.ok === true : false
+                  const v = c[key]; const ok = typeof v === 'object' ? v?.ok === true : false
                   return (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: ok ? '#10b981' : '#ef4444' }}>
-                      <span>{ok ? '✅' : '❌'}</span>
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: ok ? 'var(--sem-long)' : 'var(--sem-short)', padding: '3px 0' }}>
+                      <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: '10px' }}>{ok ? '✓' : '✗'}</span>
                       <span>{label}</span>
-                      {typeof v === 'object' && v?.latency_ms !== undefined && (
-                        <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>{v.latency_ms}ms</span>
-                      )}
+                      {typeof v === 'object' && v?.latency_ms !== undefined && <span style={{ color: 'var(--gs-muted)', fontSize: '9px', fontFamily: 'var(--font-mono)' }}>{v.latency_ms}ms</span>}
                     </div>
                   )
                 })}
@@ -522,468 +314,211 @@ export default function DashboardPage() {
         )
       })()}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '12px' }}>
-        {STAT_DEFS.map(s => {
-          const raw = stats[s.key]
-          const display = raw != null ? s.format(raw) : '—'
-          const isPnl = s.key === 'today_pnl' || s.key === 'fy_pnl'
-          const color = isPnl && raw != null ? (raw >= 0 ? '#10b981' : '#ef4444') : s.accent
-          const glowRgb = isPnl && raw != null ? (raw >= 0 ? '16,185,129' : '239,68,68') : (
-            s.accent === '#6366f1' ? '99,102,241' : s.accent === '#10b981' ? '16,185,129' : '167,139,250'
-          )
-          const cardBoxShadow = `inset 0 1px 0 rgba(${glowRgb},0.3), 0 0 24px rgba(${glowRgb},0.14), 0 0 48px rgba(${glowRgb},0.07)`
-          // Ring pct: utilization for counts, health for P&L
-          const ringPct = s.key === 'active_algos'
-            ? (raw != null ? Math.min((raw / Math.max((algos as any[]).length, 1)) * 100, 100) : 0)
-            : s.key === 'open_positions'
-            ? (raw != null ? Math.min(raw / 10 * 100, 100) : 0)
-            : isPnl
-            ? (raw != null ? (raw >= 0 ? 82 : 28) : 0)
-            : 60
-          // Sub-label
-          const sub = s.key === 'active_algos'
-            ? `of ${(algos as any[]).length} algos`
-            : s.key === 'open_positions'
-            ? 'open lots'
-            : isPnl && raw != null
-            ? (raw >= 0 ? '▲ Profit' : '▼ Loss')
-            : ''
-          return (
-            <div key={s.label} className="card card-stat" style={{
-              borderTop: `2px solid ${color}`,
-              paddingTop: '14px',
-              overflow: 'hidden',
-              boxShadow: cardBoxShadow,
-              borderColor: `rgba(${glowRgb},0.45)`,
-              minHeight: '110px',
-              '--stat-rgb': glowRgb,
-            } as React.CSSProperties}>
-              {/* faint accent glow in bg */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70px', background: `linear-gradient(to bottom, rgba(${glowRgb},0.08), transparent)`, pointerEvents: 'none' }} />
-              <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', fontWeight: 600 }}>{s.label}</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                <div>
-                  <div style={{
-                    fontSize: '30px', fontWeight: 800,
-                    fontFamily: "'DM Mono', monospace",
-                    letterSpacing: '-0.02em',
-                    color: color,
-                    textShadow: `0 0 20px rgba(${glowRgb},0.55), 0 0 40px rgba(${glowRgb},0.25)`,
-                    lineHeight: 1,
-                  }}>{display}</div>
-                  {sub && <div style={{ fontSize: '10px', color: `rgba(${glowRgb},0.7)`, marginTop: '5px', fontWeight: 600 }}>{sub}</div>}
-                </div>
-                <RadialRing pct={ringPct} color={color} size={52} strokeWidth={3.5} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Next Algo + Holidays — two-card row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-
-        {/* Left: Next Algo countdown */}
-        <div className="card" style={{ borderLeft: '2px solid rgba(99,102,241,0.4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 8px #6366f1', animation: 'glowPulse 2s infinite', flexShrink: 0 }} />
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Next Algo</div>
-          </div>
-          {(() => {
-            const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-            const [h, m, s] = istStr.split(':').map(Number)
-            const nowSecs = h * 3600 + m * 60 + s
-            const marketOpen  = 9 * 3600
-            const marketClose = 15 * 3600 + 30 * 60
-            if (nowSecs < marketOpen || nowSecs > marketClose) {
-              return <div style={{ fontSize: '13px', color: 'rgba(232,232,248,0.25)', fontStyle: 'italic' }}>Market closed</div>
-            }
-            const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
-            const waiting = (Array.isArray(todayGrid) ? todayGrid : []).filter((e: any) => e.status === 'waiting' && e.entry_time)
-              .map(e => {
-                const algo = algoMap.get(e.algo_id)
-                const [eh, em] = (e.entry_time as string).split(':').map(Number)
-                return { name: algo?.name || e.algo_name || 'Unknown', entrySecs: eh * 3600 + em * 60, entry_time: e.entry_time as string }
-              })
-              .filter(x => x.entrySecs > nowSecs)
-              .sort((a, b) => a.entrySecs - b.entrySecs)
-            if (waiting.length === 0) {
-              return <div style={{ fontSize: '13px', color: 'rgba(232,232,248,0.25)', fontStyle: 'italic' }}>No algos scheduled today</div>
-            }
-            const next = waiting[0]
-            const diff = next.entrySecs - nowSecs
-            const mins = Math.floor(diff / 60)
-            const secs = diff % 60
+      {/* ── ACCOUNT STATUS — FIX #1: no separator line inside card ── */}
+      <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '14px 16px' }}>
+        <div className="card-label">Account Status</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
+          {displayAccounts.map((acc: any) => {
+            const isActive = acc.token_valid_today === true
+            const isZerodha = acc.broker === 'zerodha'
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{
-                  fontSize: '16px', fontWeight: 700,
-                  background: 'linear-gradient(135deg, #e8e8f8, #a78bfa)',
-                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-                }}>{next.name}</div>
-                <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.4)' }}>Entry {next.entry_time}</div>
-                <div style={{
-                  fontSize: '22px', fontWeight: 700, color: '#f59e0b',
-                  fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', monospace",
-                  textShadow: '0 0 16px rgba(245,158,11,0.6)',
-                  letterSpacing: '-0.02em',
-                }}>
-                  {mins}m {String(secs).padStart(2, '0')}s
+              <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '9px', background: 'rgba(18,18,22,0.75)', border: '0.5px solid ' + (isActive ? 'rgba(34,221,136,0.22)' : 'rgba(255,255,255,0.05)'), transition: 'border-color var(--dur-mid), transform var(--dur-fast) var(--ease-spring)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--ox-border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = isActive ? 'rgba(34,221,136,0.22)' : 'rgba(255,255,255,0.05)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}>
+                <span className={isActive ? 'pulse-live-lg' : 'pulse-warn-lg'} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 600, color: 'var(--ox-glow)' }}>{acc.nickname || acc.name}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '1px' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
                 </div>
-                {waiting.length > 1 && (
-                  <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.3)', marginTop: '2px' }}>
-                    +{waiting.length - 1} more scheduled
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-        </div>
-
-        {/* Right: Upcoming Holidays */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Upcoming Holidays (F&O)
-            </div>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: '10px', padding: '0 10px', height: '24px' }}
-              onClick={handleSyncHolidays}
-              disabled={syncingHolidays}
-            >
-              {syncingHolidays ? 'Syncing…' : 'Sync NSE'}
-            </button>
-          </div>
-          {holidays.length === 0 ? (
-            <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
-              No F&O holidays in the next 30 days — or sync to load from NSE.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {holidays.map((h: any) => {
-                const d   = new Date(h.date)
-                const day = d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })
-                const dt  = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })
-                return (
-                  <div key={h.id} style={{
-                    display: 'flex', flexDirection: 'column', gap: '2px',
-                    padding: '6px 12px', borderRadius: '6px',
-                    background: 'rgba(245,158,11,0.08)',
-                    border: '1px solid rgba(245,158,11,0.2)',
-                    minWidth: '110px',
-                  }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)' }}>{dt} · {day}</div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{h.description}</div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-      </div>
-
-      {/* ── Recent Trades + Services + System Log ─────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-
-        {/* Recent Trades */}
-        <div className="card card-violet" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 6px #a78bfa', flexShrink: 0 }} />
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Recent Trades · Today</div>
-          </div>
-          {recentOrders.length === 0 ? (
-            <div style={{ fontSize: '12px', color: 'rgba(232,232,248,0.25)', fontStyle: 'italic', paddingTop: '8px' }}>
-              No completed trades today
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {recentOrders.map((o: any, i: number) => {
-                const pnl     = o.pnl ?? 0
-                const isWin   = pnl > 0
-                const pnlStr  = `${pnl >= 0 ? '+' : ''}₹${Math.abs(pnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-                const entryTs = o.entry_time ? new Date(o.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'
-                const algoName = o.algo_name || o.algo?.name || 'Unknown'
-                const side    = (o.direction || o.side || '').toUpperCase()
-                return (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '7px 10px', borderRadius: '6px',
-                    background: isWin ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
-                    border: `1px solid ${isWin ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}`,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-                        background: isWin ? '#10b981' : '#ef4444',
-                        boxShadow: `0 0 4px ${isWin ? '#10b981' : '#ef4444'}`,
-                      }} />
-                      <div>
-                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#e8e8f8' }}>{algoName}</div>
-                        <div style={{ fontSize: '9px', color: 'rgba(232,232,248,0.35)', marginTop: '1px' }}>
-                          {side && <span style={{ color: side === 'BUY' ? '#6366f1' : '#a78bfa', fontWeight: 700 }}>{side} · </span>}
-                          {entryTs}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{
-                      fontSize: '12px', fontWeight: 700, fontFamily: "'DM Mono', monospace",
-                      color: isWin ? '#10b981' : '#ef4444',
-                      textShadow: `0 0 8px ${isWin ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
-                    }}>{pnlStr}</div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Services</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {services.map(svc => (
-              <div key={svc.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '9px 12px', borderRadius: '6px',
-                background: STATUS_BG[svc.status],
-                border: `1px solid ${STATUS_COLOR[svc.status]}22`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{
-                    width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-                    background: STATUS_COLOR[svc.status],
-                    boxShadow: svc.status === 'running' ? `0 0 6px ${STATUS_COLOR[svc.status]}` : 'none',
-                    animation: svc.status === 'starting' || svc.status === 'stopping' ? 'pulse 1s infinite' : 'none',
-                  }} />
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 600 }}>{svc.name}</div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{svc.detail}</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '10px', color: STATUS_COLOR[svc.status], fontWeight: 600, textTransform: 'uppercase' }}>{svc.status}</span>
-                  {svc.status === 'stopped'  && <button className="btn btn-ghost"  style={{ fontSize: '10px', padding: '0 10px', height: '26px' }} onClick={() => startSvc(svc.id)}>Start</button>}
-                  {svc.status === 'running'  && <button className="btn btn-danger" style={{ fontSize: '10px', padding: '0 10px', height: '26px' }} onClick={() => stopSvc(svc.id)}>Stop</button>}
-                </div>
-              </div>
-            ))}
-
-            {/* Zerodha token row */}
-            <div style={{
-              padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: '6px',
-              border: '1px solid var(--bg-border)', minHeight: '52px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 600 }}>Zerodha Token</div>
-                <div style={{ fontSize: '11px', marginTop: '3px', color: zerodhaConnected ? 'var(--green)' : 'var(--accent-amber)' }}>
-                  {zerodhaConnected ? '✅ Connected for today' : '⚠️ Login required'}
-                </div>
-              </div>
-              <button className="btn btn-ghost" style={{ fontSize: '11px', flexShrink: 0 }} onClick={handleZerodhaLogin}>
-                {zerodhaConnected ? '🔑 Re-login' : '🔑 Login'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ background: 'rgba(5,5,16,0.8)', border: '1px solid rgba(99,102,241,0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>System Log</div>
-          </div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', height: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', padding: '8px', background: '#020208', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.1)' }}>
-            {log.map((line, i) => {
-              const isSep = line.startsWith('──')
-              return (
-                <div key={i} style={isSep ? {
-                  color: 'rgba(99,102,241,0.35)', textAlign: 'center', fontSize: '10px',
-                  letterSpacing: '0.06em', padding: '2px 0', userSelect: 'none',
-                } : {
-                  color: line.includes('✅') ? '#10b981'
-                       : line.includes('⛔') ? '#ef4444'
-                       : line.includes('⚠️') ? '#f59e0b'
-                       : line.includes('Starting') || line.includes('Stopping') ? '#f59e0b'
-                       : 'rgba(232,232,248,0.45)',
-                  lineHeight: '1.6',
-                }}>
-                  {line}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-
-      {/* Kill Switch confirmation modal */}
-      {showKillConfirm && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
-          background: 'rgba(0,0,0,0.75)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{
-            background: '#1a1b1d', border: '1px solid rgba(239,68,68,0.5)',
-            borderRadius: '12px', padding: '28px 32px', maxWidth: '420px', width: '100%',
-            boxShadow: '0 0 40px rgba(239,68,68,0.15)',
-          }}>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--red)', marginBottom: '4px' }}>
-              ⚡ Kill Switch
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-              Select accounts to kill. Uncheck any you want to leave running.
-            </div>
-
-            {/* Account checkboxes */}
-            <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {accounts.map((acc: any) => {
-                const checked = selectedKillAccounts.includes(acc.id)
-                return (
-                  <label key={acc.id} style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    background: killedAccountIds.includes(acc.id) ? 'rgba(239,68,68,0.06)' : checked ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${killedAccountIds.includes(acc.id) ? 'rgba(239,68,68,0.25)' : checked ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                    borderRadius: '6px', padding: '8px 12px', cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}>
-                    {killedAccountIds.includes(acc.id) ? (
-                      <span style={{ fontSize: '12px', color: 'var(--red)', fontWeight: 700 }}>⚡</span>
-                    ) : (
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setSelectedKillAccounts(prev =>
-                            prev.includes(acc.id)
-                              ? prev.filter((id: string) => id !== acc.id)
-                              : [...prev, acc.id]
-                          )
-                        }}
-                        style={{ width: '14px', height: '14px', accentColor: 'var(--red)', cursor: 'pointer' }}
-                      />
-                    )}
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{acc.nickname || acc.name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'} · {acc.segment || 'F&O'}</div>
-                    </div>
-                    {killedAccountIds.includes(acc.id) ? <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--red)', fontWeight: 700, opacity: 0.6 }}>KILLED</span> : checked ? <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--red)', fontWeight: 700 }}>KILL</span> : null}
-                  </label>
-                )
-              })}
-              {accounts.length === 0 && (
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px' }}>
-                  No active accounts found
-                </div>
-              )}
-            </div>
-
-            <div style={{
-              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-              borderRadius: '6px', padding: '8px 12px', marginBottom: '16px',
-              fontSize: '11px', color: 'var(--red)', fontWeight: 600,
-            }}>
-              ⚠️ This will square off all positions + cancel all orders for selected accounts. Cannot be undone.
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setShowKillConfirm(false)} disabled={killLoading} style={{ height: "36px", padding: "0 20px" }}>
-                Cancel
-              </button>
-              <button
-                onClick={handleKillSwitch}
-                disabled={killLoading}
-                style={{
-                  background: 'var(--red)', color: '#fff', border: 'none',
-                  borderRadius: '6px', padding: '0 20px', height: '36px',
-                  fontSize: '13px', fontWeight: 700, cursor: killLoading ? 'not-allowed' : 'pointer',
-                  opacity: killLoading ? 0.7 : 1,
-                }}
-              >
-                {killLoading ? 'Activating...' : 'Activate Kill Switch'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Kill Switch result banner */}
-      {killActivated && killResult && (
-        <div style={{
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: '8px', padding: '12px 16px', marginBottom: '12px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <span style={{ fontSize: '16px' }}>⚡</span>
-            <div style={{ fontWeight: 700, color: 'var(--red)', fontSize: '13px' }}>
-              Kill Switch Activated — {killedAccountIds.length} account(s) terminated
-            </div>
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {killResult.positions_squared} position(s) squared off &nbsp;·&nbsp;
-            {killResult.orders_cancelled} order(s) cancelled
-            {killResult.errors.length > 0 && (
-              <span style={{ color: 'var(--accent-amber)', marginLeft: '8px' }}>
-                ⚠️ {killResult.errors.length} error(s) — check system log
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Account Status */}
-      <div className="card">
-        <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Account Status</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
-          {(accounts.length > 0 ? accounts : [
-            { id: '1', nickname: 'Karthik', broker: 'zerodha'  as any, client_id: '', status: 'active'       as any },
-            { id: '2', nickname: 'Mom',     broker: 'angelone' as any, client_id: '', status: 'active'       as any },
-            { id: '3', nickname: 'Wife',    broker: 'angelone' as any, client_id: '', status: 'disconnected' as any },
-          ]).map((acc) => {
-            const brokerLabel = acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'
-            const isActive = (acc as any).token_valid_today === true
-            const accColor = isActive ? '#10b981' : '#f59e0b'
-            const accRgb = isActive ? '16,185,129' : '245,158,11'
-            return (
-              <div key={acc.id} style={{
-                background: `rgba(${accRgb},0.05)`,
-                borderRadius: '8px', padding: '12px',
-                borderLeft: `3px solid ${accColor}`,
-                border: `1px solid rgba(${accRgb},0.25)`,
-                borderLeftWidth: '3px',
-                boxShadow: isActive
-                  ? `inset 3px 0 12px rgba(16,185,129,0.1), 0 0 16px rgba(16,185,129,0.12), inset 0 1px 0 rgba(16,185,129,0.15)`
-                  : `inset 3px 0 8px rgba(245,158,11,0.08), 0 0 10px rgba(245,158,11,0.08)`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '13px' }}>{acc.nickname}</div>
-                      {killedAccountIds.includes(acc.id) && (
-                        <span style={{
-                          fontSize: '9px', fontWeight: 700, color: 'var(--red)',
-                          background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
-                          borderRadius: '4px', padding: '1px 5px', letterSpacing: '0.5px',
-                        }}>⚡ KILLED</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{brokerLabel}</div>
-                  </div>
-                  <span style={{
-                    fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '10px',
-                    color: isActive ? '#10b981' : '#f59e0b',
-                    background: isActive ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
-                    border: isActive ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.3)',
-                    boxShadow: isActive ? '0 0 8px rgba(16,185,129,0.2)' : 'none',
-                  }}>
-                    {isActive ? '● Live' : '⚠ Login'}
-                  </span>
-                </div>
+                <button className={'btn ' + (isActive ? 'btn-ghost' : 'btn-steel')} style={{ fontSize: '10px', padding: '0 10px', height: '24px', flexShrink: 0 }} onClick={isZerodha && !isActive ? handleZerodhaLogin : undefined}>
+                  {isActive ? '● Live' : '🔑 Login'}
+                </button>
               </div>
             )
           })}
         </div>
       </div>
+
+      {/* ── STAT CARDS ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '0.7fr 0.7fr 1.3fr 1.3fr', gap: '12px', marginBottom: '12px' }}>
+        <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
+          <div className="card-label">Active Algos</div>
+          <div style={{ fontSize: '38px', fontWeight: 800, color: 'var(--ox-radiant)', fontFamily: 'var(--font-mono)', letterSpacing: '-2px', lineHeight: 1 }}>{stats['active_algos'] ?? 0}</div>
+          <div style={{ fontSize: '10px', color: 'rgba(255,107,0,0.6)', marginTop: '5px', fontWeight: 600 }}>of {(algos as any[]).length} algos</div>
+        </div>
+        <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
+          <div className="card-label">Open Positions</div>
+          <div style={{ fontSize: '38px', fontWeight: 800, color: 'var(--sem-long)', fontFamily: 'var(--font-mono)', letterSpacing: '-2px', lineHeight: 1 }}>{stats['open_positions'] ?? 0}</div>
+          <div style={{ fontSize: '10px', color: 'rgba(34,221,136,0.6)', marginTop: '5px', fontWeight: 600 }}>open lots</div>
+        </div>
+        <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} sparkId="today" />
+        <PnlCard label="FY P&L"    value={fyPnl}    isPositive={fyPnl >= 0}    sparkId="fy" />
+      </div>
+
+      {/* ── NEXT ALGO + HOLIDAYS — FIX #1: no separator lines ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+
+        {/* FIX #4: inset box-shadow draws the left orange bar without borderLeft conflict */}
+        <div className="card cloud-fill" style={{ padding: '14px 16px', boxShadow: 'inset 3px 0 0 var(--ox-radiant), 0 4px 24px rgba(0,0,0,0.55)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px' }}>
+            <span className="pulse-live" />
+            <span className="card-label" style={{ marginBottom: 0 }}>Next Algo</span>
+          </div>
+          {nowSecs < mktOpen || nowSecs > mktClose ? (
+            <div style={{ fontSize: '13px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>Market closed</div>
+          ) : scheduledAlgos.length === 0 ? (
+            <div style={{ fontSize: '13px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>No algos scheduled today</div>
+          ) : (
+            <>
+              <div style={{ position: 'relative', marginBottom: '10px' }}>
+                {scrollPos > 10 && (
+                  <button onClick={() => scrollAlgos('left')} style={{ position: 'absolute', left: '-4px', top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
+                )}
+                <div ref={algoScrollRef} onScroll={e => setScrollPos((e.target as HTMLDivElement).scrollLeft)}
+                  style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px' }}>
+                  {scheduledAlgos.map((a: any, i: number) => {
+                    const isNext = nextAlgo && a.name === nextAlgo.name && a.time === nextAlgo.time
+                    return (
+                      <div key={i} style={{ flexShrink: 0, padding: '7px 11px', borderRadius: '8px', background: isNext ? 'rgba(255,107,0,0.12)' : 'rgba(255,107,0,0.04)', border: '0.5px solid ' + (isNext ? 'rgba(255,107,0,0.40)' : 'rgba(255,107,0,0.14)'), minWidth: '98px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: isNext ? 'var(--ox-glow)' : 'var(--ox-ultra)', marginBottom: '3px', fontFamily: 'var(--font-display)' }}>{a.name}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)' }}>{a.time}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
+              </div>
+              {nextAlgo && (
+                <>
+                  <div style={{ fontSize: 'clamp(22px,2.5vw,30px)', fontWeight: 800, color: 'var(--sem-warn)', fontFamily: 'var(--font-mono)', textShadow: '0 0 18px rgba(255,215,0,0.5)', letterSpacing: '-1px' }}>
+                    {Math.floor((nextAlgo.secs - nowSecs) / 60)}m {String((nextAlgo.secs - nowSecs) % 60).padStart(2, '0')}s
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>until {nextAlgo.name} at {nextAlgo.time}</div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* FIX #2: cloud-fill on Holidays, FIX #1: no separator line */}
+        <div className="card cloud-fill" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span className="card-label" style={{ marginBottom: 0 }}>Upcoming Holidays (F&O)</span>
+            <button className="btn btn-ghost" style={{ fontSize: '10px', padding: '0 10px', height: '26px' }} onClick={handleSyncHolidays} disabled={syncingHolidays}>{syncingHolidays ? 'Syncing…' : 'Sync NSE'}</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {holidays.length === 0
+              ? <div style={{ fontSize: '12px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>No F&O holidays in next 30 days — sync to load.</div>
+              : holidays.map((h: any) => {
+                  const d = new Date(h.date)
+                  return (
+                    <div key={h.id} style={{ padding: '7px 12px', borderRadius: '8px', background: 'rgba(255,215,0,0.06)', border: '0.5px solid rgba(255,215,0,0.20)', minWidth: '110px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--sem-warn)', marginBottom: '2px' }}>
+                        {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} · {d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--gs-muted)' }}>{h.description}</div>
+                    </div>
+                  )
+                })
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* ── SERVICES + SYSTEM LOG ── */}
+      {/* FIX #3: cloud-fill on BOTH Services and System Log outer cards */}
+      {/* FIX #5: alignItems:start so both cards match their own content height */}
+      {/* FIX #4: System Log = card cloud-fill outer + dark inner container (container-in-container) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 2.6fr', gap: '12px', marginBottom: '12px', alignItems: 'start' }}>
+
+        {/* FIX #3: Services with cloud-fill, FIX #1: no separator */}
+        <div className="card cloud-fill" style={{ padding: '14px 14px 12px' }}>
+          <div className="card-label">Services</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {services.map(svc => (
+              <div key={svc.id} className={'service-row ' + (svc.status === 'running' ? 'running' : svc.status === 'stopped' ? 'stopped' : 'error')}
+                style={{ padding: '16px 10px', marginBottom: 0 }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0, background: STATUS_CLR[svc.status], boxShadow: svc.status === 'running' ? '0 0 6px ' + STATUS_CLR[svc.status] : 'none', animation: (svc.status === 'starting' || svc.status === 'stopping') ? 'pulse 1s infinite' : 'none' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ox-glow)' }}>{svc.name}</div>
+                  <div style={{ fontSize: '9px', color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px' }}>{svc.detail}</div>
+                </div>
+                <span className={'chip ' + (svc.status === 'running' ? 'chip-success' : 'chip-inactive')} style={{ fontSize: '9px', padding: '1px 6px', flexShrink: 0 }}>{svc.status}</span>
+                {svc.status === 'stopped'  && <button className="btn btn-ghost"  style={{ fontSize: '9px', padding: '0 8px', height: '22px' }} onClick={() => startSvc(svc.id)}>Start</button>}
+                {svc.status === 'running'  && <button className="btn btn-danger" style={{ fontSize: '9px', padding: '0 8px', height: '22px' }} onClick={() => stopSvc(svc.id)}>Stop</button>}
+                {(svc.status === 'starting' || svc.status === 'stopping') && <button className="btn btn-steel" style={{ fontSize: '9px', padding: '0 8px', height: '22px' }} disabled>{svc.status}…</button>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* FIX #3+4: System Log — outer card cloud-fill + inner dark terminal container */}
+        <div className="card cloud-fill" style={{ padding: '14px 14px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+            <span className="pulse-live" />
+            <span className="card-label" style={{ marginBottom: 0 }}>System Log</span>
+          </div>
+          {/* FIX #4: inner dark terminal — container within container */}
+          <div style={{ borderRadius: '8px', overflow: 'hidden', background: 'rgba(5,4,2,0.92)', border: '0.5px solid rgba(255,107,0,0.14)' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', padding: '10px 12px', height: '290px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              {log.map((line, i) => {
+                const isSep = line.startsWith('──')
+                if (isSep) return (
+                  <div key={i} style={{ color: 'rgba(255,107,0,0.25)', textAlign: 'center' as const, fontSize: '10px', letterSpacing: '0.06em', padding: '4px 0', margin: '3px 0', borderTop: '0.5px solid rgba(255,107,0,0.08)', borderBottom: '0.5px solid rgba(255,107,0,0.08)' }}>
+                    {line}
+                  </div>
+                )
+                const isOk  = line.includes('✅')
+                const isErr = line.includes('⛔')
+                const isWrn = line.includes('⚠')
+                return (
+                  <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF4444' : isWrn ? '#FFD700' : 'rgba(240,237,232,0.38)', lineHeight: 1.65, padding: '0.5px 0' }}>
+                    {line}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Kill Switch Modal ── */}
+      {showKillConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sem-short)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              <span style={{ fontWeight: 800, fontSize: '16px', fontFamily: 'var(--font-display)', color: 'var(--sem-short)' }}>Kill Switch</span>
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginBottom: '14px', lineHeight: 1.6 }}>Select accounts to kill. Uncheck any you want to leave running.</p>
+            <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {displayAccounts.map((acc: any) => {
+                const checked = selKill.includes(acc.id)
+                return (
+                  <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: checked ? 'rgba(255,68,68,0.08)' : 'rgba(255,255,255,0.03)', border: '0.5px solid ' + (checked ? 'rgba(255,68,68,0.4)' : 'rgba(255,255,255,0.08)'), borderRadius: '8px', padding: '8px 12px', cursor: 'pointer' }}>
+                    {killedIds.includes(acc.id) ? <span style={{ fontSize: '12px', color: 'var(--sem-short)' }}>⛔</span>
+                      : <input type="checkbox" checked={checked} onChange={() => setSelKill(p => p.includes(acc.id) ? p.filter(id => id !== acc.id) : [...p, acc.id])} style={{ width: '14px', height: '14px', accentColor: 'var(--sem-short)', cursor: 'pointer' }} />}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ox-glow)' }}>{acc.nickname || acc.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--gs-muted)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
+                    </div>
+                    {killedIds.includes(acc.id) ? <span className="chip chip-error" style={{ fontSize: '9px' }}>KILLED</span>
+                      : checked ? <span className="chip chip-error" style={{ fontSize: '9px' }}>WILL KILL</span> : null}
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{ background: 'rgba(255,68,68,0.07)', border: '0.5px solid rgba(255,68,68,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: 'var(--sem-short)', fontWeight: 600 }}>
+              ⚠️ This will square off all positions + cancel all orders. Cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setKillModal(false)} disabled={killLoading}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleKill} disabled={killLoading} style={{ minWidth: '160px' }}>{killLoading ? 'Activating…' : 'Activate Kill Switch'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

@@ -32,7 +32,7 @@ export default function ZerodhaCallbackPage() {
       })
   }, [])
 
-  const color = status === 'success' ? '#22c55e' : status === 'error' ? '#ef4444' : '#00B0F0'
+  const color = status === 'success' ? '#22DD88' : status === 'error' ? '#FF4444' : '#FF6B00'
 
   return (
     <div style={{
@@ -42,15 +42,15 @@ export default function ZerodhaCallbackPage() {
       gap: '16px',
     }}>
       <svg width="48" height="48" viewBox="0 0 32 32" fill="none">
-        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" fill="rgba(0,176,240,0.15)" stroke="#00B0F0" strokeWidth="1.2"/>
-        <polyline points="11,12 16,10 21,12 11,20 16,22 21,20" fill="none" stroke="#00B0F0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" fill="rgba(255,107,0,0.15)" stroke="#FF6B00" strokeWidth="1.2"/>
+        <polyline points="11,12 16,10 21,12 11,20 16,22 21,20" fill="none" stroke="#FF6B00" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
       <div style={{ fontSize: '18px', fontWeight: 600, color }}>
         {status === 'loading' ? 'STAAX — Connecting Zerodha' : status === 'success' ? 'Connected!' : 'Connection Failed'}
       </div>
       <div style={{ fontSize: '13px', color: '#9ca3af', maxWidth: '320px', textAlign: 'center' }}>{msg}</div>
       {status === 'loading' && (
-        <div style={{ width: '32px', height: '32px', border: '3px solid rgba(0,176,240,0.2)', borderTop: '3px solid #00B0F0', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+        <div style={{ width: '32px', height: '32px', border: '3px solid rgba(255,107,0,0.2)', borderTop: '3px solid #FF6B00', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
       )}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>

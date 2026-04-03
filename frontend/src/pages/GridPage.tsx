@@ -34,11 +34,11 @@ interface Algo {
 const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
   no_trade:     {label:'No Trade',col:'#6B7280',bg:'rgba(107,114,128,0.12)',pct:0},
   waiting:      {label:'Waiting', col:'#F59E0B',bg:'rgba(245,158,11,0.10)',pct:15},
-  algo_active:  {label:'Active',  col:'#00B0F0',bg:'rgba(0,176,240,0.12)', pct:30},
-  order_pending:{label:'Pending', col:'#F59E0B',bg:'rgba(245,158,11,0.12)',pct:50},
-  open:         {label:'Open',    col:'#22C55E',bg:'rgba(34,197,94,0.12)', pct:75},
-  algo_closed:  {label:'Closed',  col:'#16a34a',bg:'rgba(22,163,74,0.12)',pct:100},
-  error:        {label:'Error',   col:'#EF4444',bg:'rgba(239,68,68,0.12)',pct:60},
+  algo_active:  {label:'Active',  col:'#FF6B00',bg:'rgba(255,107,0,0.12)',  pct:30},
+  order_pending:{label:'Pending', col:'#F59E0B',bg:'rgba(245,158,11,0.12)', pct:50},
+  open:         {label:'Open',    col:'#22DD88',bg:'rgba(34,221,136,0.12)', pct:75},
+  algo_closed:  {label:'Closed',  col:'#22DD88',bg:'rgba(34,221,136,0.10)', pct:100},
+  error:        {label:'Error',   col:'#FF4444',bg:'rgba(255,68,68,0.12)',  pct:60},
 }
 
 function getWeekDates(): Record<string, string> {
@@ -526,13 +526,13 @@ export default function GridPage() {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 92px)' }}>
       {/* Header */}
-      <div style={{ flexShrink: 0, borderBottom: '1px solid var(--bg-border)', paddingBottom: '4px' }}>
+      <div style={{ flexShrink: 0, borderBottom: '0.5px solid rgba(255,107,0,0.16)', paddingBottom: '4px' }}>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily:"'ADLaM Display',serif", fontSize:'22px', fontWeight:400 }}>Smart Grid</h1>
+          <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800 }}>Smart Grid</h1>
           <p style={{ fontSize:'12px', color:'var(--text-muted)', marginTop:'2px', display:'flex', alignItems:'center', gap:'6px' }}>
             Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })} ·{' '}
-            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
+            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,221,136,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--sem-long)',border:isPractixMode?'0.5px solid rgba(215,123,18,0.3)':'0.5px solid rgba(34,221,136,0.25)'}}>
               {isPractixMode?'PRACTIX':'LIVE'}
             </span>
           </p>
@@ -542,10 +542,10 @@ export default function GridPage() {
             <span style={{ fontSize:'11px', color:'var(--red)', fontWeight:600 }}>⚠ {opError}</span>
           )}
           {autoFillToast && (
-            <span style={{ fontSize:'11px', color:'var(--accent-blue)', fontWeight:600 }}>↻ {autoFillToast}</span>
+            <span style={{ fontSize:'11px', color:'var(--ox-radiant)', fontWeight:600 }}>↻ {autoFillToast}</span>
           )}
           <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'var(--text-muted)', cursor:'pointer' }}>
-            <input type="checkbox" checked={wk} onChange={e => { setWk(e.target.checked); localStorage.setItem('staax_show_weekends', String(e.target.checked)) }} style={{ accentColor:'var(--accent-blue)' }}/>
+            <input type="checkbox" checked={wk} onChange={e => { setWk(e.target.checked); localStorage.setItem('staax_show_weekends', String(e.target.checked)) }} style={{ accentColor:'var(--ox-radiant)' }}/>
             Show Weekends
           </label>
           <select value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('staax_grid_sort', e.target.value) }}
@@ -567,13 +567,13 @@ export default function GridPage() {
 
       {/* Archive panel */}
       {showArch && (
-        <div style={{ flexShrink: 0, background:'rgba(215,123,18,0.07)', border:'1px solid rgba(215,123,18,0.22)', borderRadius:'8px', padding:'14px 16px', margin:'8px 0' }}>
+        <div style={{ flexShrink: 0, background:'rgba(215,123,18,0.07)', border:'0.5px solid rgba(215,123,18,0.22)', borderRadius:'8px', padding:'14px 16px', margin:'8px 0' }}>
           <div style={{ fontSize:'11px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'0.08em' }}>📦 Archived Algos</div>
           {archived.length === 0
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>No archived algos.</span>
             : <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
                 {archived.map(a => (
-                  <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'var(--bg-secondary)', borderRadius:'6px', padding:'8px 12px', border:'1px solid var(--bg-border)' }}>
+                  <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'var(--glass-bg)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', borderRadius:'6px', padding:'8px 12px', border:'0.5px solid rgba(255,107,0,0.18)' }}>
                     <div>
                       <div style={{ fontSize:'12px', fontWeight:600 }}>{a.name}</div>
                       <div style={{ fontSize:'10px', color:'var(--text-dim)' }}>{a.account}</div>
@@ -587,7 +587,7 @@ export default function GridPage() {
       )}
 
       {/* Legend */}
-      <div style={{ flexShrink: 0, display:'flex', gap:'12px', margin:'8px 0', flexWrap:'wrap', alignItems:'center', padding:'6px 12px', background:'var(--bg-secondary)', borderRadius:'6px', border:'1px solid var(--bg-border)' }}>
+      <div style={{ flexShrink: 0, display:'flex', gap:'12px', margin:'8px 0', flexWrap:'wrap', alignItems:'center', padding:'6px 12px', background:'var(--glass-bg)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', borderRadius:'6px', border:'0.5px solid rgba(255,107,0,0.15)' }}>
         {Object.entries(SC).map(([k, s]) => (
           <span key={k} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', color:'var(--text-muted)' }}>
             <span style={{ width:'7px', height:'7px', borderRadius:'2px', background:s.col, display:'inline-block' }}/>{s.label}
@@ -600,19 +600,19 @@ export default function GridPage() {
 
       {/* Grid table — flex:1 fills remaining height, overflowX:auto scrolls when weekends shown */}
       <div className="no-scrollbar" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', width: '100%' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+        <table className="staax-table" style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <colgroup>
             <col style={{ width:'200px' }}/>
             {days.map(d => <col key={d} style={{ width:'140px' }}/>)}
           </colgroup>
           <thead>
             <tr>
-              <th className="grid-sticky-th" style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
+              <th className="grid-sticky-th" style={{ position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'left', background:'var(--glass-bg)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'0.5px solid rgba(255,107,0,0.18)', fontSize:'10px', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   ALGO
                   <button onClick={addAllToToday} title="Deploy all active algos to today (or Friday if weekend)"
-                    style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer', fontWeight:600 }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
+                    style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'0.5px solid rgba(255,107,0,0.35)', background:'transparent', color:'var(--ox-radiant)', cursor:'pointer', fontWeight:600 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,107,0,0.08)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                     All → Today
                   </button>
@@ -624,8 +624,9 @@ export default function GridPage() {
                 return (
                   <th key={d} className="grid-sticky-th" style={{
                     position:'sticky', top:0, zIndex:2, padding:'8px 12px', textAlign:'center',
-                    background: isHoliday ? 'color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-amber) 12%)' : 'var(--bg-secondary)',
-                    border:'1px solid var(--bg-border)', fontSize:'10px', fontWeight:700,
+                    background: isHoliday ? 'color-mix(in srgb, var(--glass-bg) 88%, var(--accent-amber) 12%)' : 'var(--glass-bg)',
+                    backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)',
+                    border:'0.5px solid rgba(255,107,0,0.18)', fontSize:'10px', fontWeight:700,
                     letterSpacing:'0.08em', textTransform:'uppercase',
                     color: isHoliday ? 'var(--accent-amber)' : WEEKENDS.includes(d) ? 'var(--text-dim)' : 'var(--text-muted)',
                   }}>
@@ -652,7 +653,7 @@ export default function GridPage() {
               return (
                 <tr key={algo.id}>
                   {/* Algo label column */}
-                  <td style={{ padding:'8px 10px', background:'var(--bg-secondary)', border:'1px solid var(--bg-border)', verticalAlign:'top' }}>
+                  <td style={{ padding:'8px 10px', background:'var(--glass-bg)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'0.5px solid rgba(255,107,0,0.15)', verticalAlign:'top' }}>
                     <div style={{ display:'flex', alignItems:'flex-start', gap:'6px' }}>
                       <div draggable onDragStart={() => setDrag(algo.id)} onDragEnd={() => setDrag(null)}
                         title="Drag to deploy" style={{ cursor:'grab', flexShrink:0, paddingTop:'2px' }}>
@@ -661,22 +662,22 @@ export default function GridPage() {
                       <div style={{ flex:1, minWidth:0 }}>
                         {/* Row 1: Name */}
                         <div onClick={() => nav(`/algo/${algo.id}`)} title="Click to edit"
-                          style={{ fontWeight:700, fontSize:'12px', color:'var(--accent-blue)', cursor:'pointer', marginBottom:'3px',
+                          style={{ fontWeight:700, fontSize:'12px', color:'var(--ox-radiant)', cursor:'pointer', marginBottom:'3px',
                             whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                            textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.35)' }}>
+                            textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)' }}>
                           {algo.name}
                         </div>
                         {/* Row 2: Account name */}
                         <div style={{ marginBottom:'3px' }}>
-                          <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'var(--bg-surface)', padding:'1px 5px', borderRadius:'3px', border:'1px solid var(--bg-border)' }}>{algo.account}</span>
+                          <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'var(--bg-surface)', padding:'1px 5px', borderRadius:'3px', border:'0.5px solid rgba(255,255,255,0.07)' }}>{algo.account}</span>
                         </div>
                         {/* Row 3: Instrument chips */}
                         <div style={{ display:'flex', alignItems:'center', gap:'3px', flexWrap:'wrap', marginBottom:'4px' }}>
                           {algo.legs.map((l, i) => (
                             <span key={i} style={{ fontSize:'9px', fontWeight:700, padding:'1px 4px', borderRadius:'3px',
-                              background: l.d==='B' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                              color:      l.d==='B' ? 'var(--green)'          : 'var(--red)',
-                              border:     `1px solid ${l.d==='B' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                              background: l.d==='B' ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)',
+                              color:      l.d==='B' ? 'var(--sem-long)'        : 'var(--sem-short)',
+                              border:     `0.5px solid ${l.d==='B' ? 'rgba(34,221,136,0.30)' : 'rgba(255,68,68,0.30)'}` }}>
                               {l.i}{l.d}
                             </span>
                           ))}
@@ -686,8 +687,8 @@ export default function GridPage() {
                           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
                             {DAYS.some(d => !grid[algo.id]?.[d]) && (
                               <button onClick={() => addAllWeekdays(algo.id)}
-                                style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'1px solid rgba(0,176,240,0.3)', background:'transparent', color:'var(--accent-blue)', cursor:'pointer' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,176,240,0.08)')}
+                                style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'3px', height:'17px', border:'0.5px solid rgba(255,107,0,0.35)', background:'transparent', color:'var(--ox-radiant)', cursor:'pointer' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,107,0,0.08)')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                                 All
                               </button>
@@ -737,12 +738,12 @@ export default function GridPage() {
                       <td key={day}
                         onDragOver={e => e.preventDefault()}
                         onDrop={() => onDrop(algo.id, day)}
-                        style={{ padding:'4px', border:'1px solid var(--bg-border)', verticalAlign:'top', overflow:'hidden',
-                          background: isHolDay && !cell ? 'color-mix(in srgb, var(--bg-secondary) 96%, var(--accent-amber) 4%)' : WEEKENDS.includes(day) && !cell ? 'rgba(30,32,34,0.4)' : undefined,
+                        style={{ padding:'4px', border:'0.5px solid rgba(255,107,0,0.10)', verticalAlign:'top', overflow:'hidden',
+                          background: isHolDay && !cell ? 'color-mix(in srgb, rgba(22,22,25,0.72) 96%, var(--accent-amber) 4%)' : WEEKENDS.includes(day) && !cell ? 'rgba(20,20,22,0.55)' : undefined,
                           opacity: isHolDay && !cell ? 0.6 : undefined }}>
                         {cell && s
                           ? (
-                            <div style={{ background:'var(--bg-secondary)', borderLeft:`3px solid ${isMissed ? 'var(--accent-amber)' : s.col}`, borderRadius:'5px', padding:'6px 8px', position:'relative', overflow:'hidden', opacity: isMissed ? 0.7 : 1 }}>
+                            <div style={{ background:'rgba(22,22,25,0.85)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', borderLeft:`2px solid ${isMissed ? 'var(--accent-amber)' : s.col}`, borderRadius:'5px', padding:'6px 8px', position:'relative', overflow:'hidden', opacity: isMissed ? 0.7 : 1 }}>
                               <button onClick={() => rmCell(algo.id, day)}
                                 style={{ position:'absolute', top:'2px', right:'2px', background:'none', border:'none', cursor:'pointer', color:'var(--text-dim)', fontSize:'10px', padding:'2px 3px', lineHeight:1 }}
                                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
@@ -773,11 +774,11 @@ export default function GridPage() {
                                         onChange={e => setEv(e.target.value)}
                                         onBlur={() => { setM(algo.id, day, parseInt(ev) || 1); setEd(null) }}
                                         onKeyDown={e => e.key === 'Enter' && (setM(algo.id, day, parseInt(ev) || 1), setEd(null))}
-                                        style={{ width:'44px', background:'var(--bg-primary)', border:'1px solid var(--accent-blue)', borderRadius:'2px', color:'var(--text)', fontSize:'10px', padding:'0 3px', fontFamily:'inherit' }}/>
+                                        style={{ width:'44px', background:'var(--bg-primary)', border:'0.5px solid var(--ox-radiant)', borderRadius:'2px', color:'var(--text)', fontSize:'10px', padding:'0 3px', fontFamily:'inherit' }}/>
                                     : <span onClick={() => { setEd({ id: algo.id, day }); setEv(String(cell.multiplier)) }}
                                         style={{ display:'block', width:'100%', textAlign:'center', cursor:'pointer', padding:'8px 12px', margin:'-8px -12px',
-                                          fontSize:'10px', fontWeight:700, color:'var(--accent-blue)',
-                                          textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(0,176,240,0.4)' }}>
+                                          fontSize:'10px', fontWeight:700, color:'var(--ox-radiant)',
+                                          textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.40)' }}>
                                         {cell.multiplier}
                                       </span>}
                                 </div>
@@ -790,7 +791,7 @@ export default function GridPage() {
                                 </div>
                                 <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
                                   <span style={{ fontSize:'10px', color:'var(--text)', fontWeight:600 }}>E</span>
-                                  <span style={{ fontSize:'10px', color:'var(--accent-blue)', fontWeight:600 }}>{cell.entry}</span>
+                                  <span style={{ fontSize:'10px', color:'var(--ox-radiant)', fontWeight:600 }}>{cell.entry}</span>
                                 </div>
                                 <div style={{ textAlign:'right' }}>
                                   {cell.exit && <span style={{ fontSize:'10px', color:'var(--text-muted)' }}>X {cell.exit}</span>}
@@ -798,11 +799,11 @@ export default function GridPage() {
                               </div>
                             </div>
                           ) : (
-                            <div style={{ minHeight:'56px', border:'1px dashed var(--bg-border)', borderRadius:'5px',
+                            <div style={{ minHeight:'56px', border:'0.5px dashed rgba(255,107,0,0.20)', borderRadius:'5px',
                               display:'flex', alignItems:'center', justifyContent:'center', fontSize:'10px',
-                              background:   drag === algo.id ? 'rgba(0,176,240,0.05)' : 'transparent',
-                              borderColor:  drag === algo.id ? 'var(--accent-blue)'   : 'var(--bg-border)',
-                              color:        drag === algo.id ? 'var(--accent-blue)'   : 'var(--text-dim)',
+                              background:   drag === algo.id ? 'rgba(255,107,0,0.06)' : 'transparent',
+                              borderColor:  drag === algo.id ? 'var(--ox-radiant)'     : 'rgba(255,107,0,0.20)',
+                              color:        drag === algo.id ? 'var(--ox-radiant)'     : 'var(--text-dim)',
                               opacity:      drag === algo.id ? 1 : 0.35, transition:'all 0.15s' }}>
                               {drag === algo.id ? 'Drop here' : '—'}
                             </div>
@@ -837,12 +838,12 @@ export default function GridPage() {
               }
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button className="btn btn-ghost" onClick={() => setRmModal(null)}>Cancel</button>
-                <button className="btn" style={{ background:'var(--bg-surface)', color:'var(--text-muted)', border:'1px solid var(--bg-border)' }}
+                <button className="btn btn-ghost"
                   onClick={() => doRemove(rmModal.algoId, rmModal.day, false)}>
                   Just Today
                 </button>
                 {isRecurring && (
-                  <button className="btn" style={{ background:'rgba(239,68,68,0.15)', color:'var(--red)', border:'1px solid rgba(239,68,68,0.3)' }}
+                  <button className="btn btn-danger"
                     onClick={() => doRemove(rmModal.algoId, rmModal.day, true)}>
                     Remove Recurring
                   </button>
@@ -865,7 +866,7 @@ export default function GridPage() {
               </div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button className="btn btn-ghost" onClick={() => setArchConfirm(null)}>Cancel</button>
-                <button className="btn" style={{ background:'rgba(215,123,18,0.15)', color:'var(--accent-amber)', border:'1px solid rgba(215,123,18,0.3)' }}
+                <button className="btn btn-warn"
                   onClick={() => { archAlgo(archConfirm); setArchConfirm(null) }}>📦 Archive</button>
               </div>
             </div>
@@ -886,9 +887,9 @@ export default function GridPage() {
               </div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button className="btn btn-ghost" onClick={() => setDel(null)}>Cancel</button>
-                <button className="btn" style={{ background:'rgba(215,123,18,0.15)', color:'var(--accent-amber)', border:'1px solid rgba(215,123,18,0.3)' }}
+                <button className="btn btn-warn"
                   onClick={() => { archAlgo(del); setDel(null) }}>📦 Archive Instead</button>
-                <button className="btn" style={{ background:'var(--red)', color:'#fff' }}
+                <button className="btn btn-danger"
                   onClick={() => delAlgo(del)}>Delete</button>
               </div>
             </div>

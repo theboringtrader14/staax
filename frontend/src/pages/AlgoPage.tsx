@@ -18,11 +18,11 @@ const STRIKE_OPTIONS = [...Array.from({ length: 10 }, (_, i) => `ITM${10 - i}`),
 type FeatureKey = 'wt' | 'sl' | 're' | 'resl' | 'retp' | 'tp' | 'tsl' | 'ttp'
 const FEATURES: { key: FeatureKey; label: string; color: string }[] = [
   { key: 'wt',   label: 'W&T',   color: '#9CA3AF' },
-  { key: 'sl',   label: 'SL',    color: '#EF4444' },
-  { key: 'tsl',  label: 'TSL',   color: '#00B0F0' },
+  { key: 'sl',   label: 'SL',    color: '#FF4444' },
+  { key: 'tsl',  label: 'TSL',   color: '#FF6B00' },
   { key: 'resl', label: 'RE-SL', color: '#F59E0B' },
-  { key: 'tp',   label: 'TP',    color: '#22C55E' },
-  { key: 'ttp',  label: 'TTP',   color: '#A78BFA' },
+  { key: 'tp',   label: 'TP',    color: '#22DD88' },
+  { key: 'ttp',  label: 'TTP',   color: '#CC4400' },
   { key: 'retp', label: 'RE-TP', color: '#F59E0B' },
 ]
 
@@ -118,7 +118,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
   const csSt = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
   const childExpiryOpts = MONTHLY_ONLY_CODES.has(child.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
-  const depthColor = depth === 1 ? '#A78BFA' : depth === 2 ? '#F59E0B' : '#22C55E'
+  const depthColor = depth === 1 ? '#CC4400' : depth === 2 ? '#F59E0B' : '#22DD88'
   const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
   const tslBlocked = !child.sl_enabled || !child.sl_value
   const ttpBlocked = !child.tp_enabled || !child.tp_value
@@ -135,15 +135,15 @@ function JourneyChildPanel({ child, depth, onChange }: {
       {child.enabled && (<>
         {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
-          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: '1px solid rgba(0,176,240,0.3)', cursor: 'pointer' }}>{child.instType}</button>
+          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(255,107,0,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--ox-radiant)' : 'var(--accent-amber)', border: '1px solid rgba(255,107,0,0.3)', cursor: 'pointer' }}>{child.instType}</button>
           <select className="staax-select" value={child.instCode} onChange={e => {
             const code = e.target.value
             const patch: Partial<JourneyChild> = { instCode: code }
             if (MONTHLY_ONLY_CODES.has(code) && !child.expiry.includes('monthly')) patch.expiry = 'current_monthly'
             onChange({ ...child, ...patch })
           }} style={cs}>{Object.entries(INST_CODES).map(([c]) => <option key={c} value={c}>{c}</option>)}</select>
-          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,197,94,0.3)', cursor: 'pointer' }}>{child.direction}</button>
-          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>}
+          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,221,136,0.3)', cursor: 'pointer' }}>{child.direction}</button>
+          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>}
           {child.instType === 'OP' && <>
             <select className="staax-select" value={child.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...cs, width: '128px' }}>{childExpiryOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             <select className="staax-select" value={child.strikeMode} onChange={e => u('strikeMode', e.target.value)} style={cs}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
@@ -155,11 +155,11 @@ function JourneyChildPanel({ child, depth, onChange }: {
           <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>|</span>
           {[
             { key: 'wt_enabled', label: 'W&T',   color: '#9CA3AF' },
-            { key: 'sl_enabled',    label: 'SL',    color: '#EF4444' },
-            { key: 'tsl_enabled',   label: 'TSL',   color: '#00B0F0', blocked: tslBlocked },
+            { key: 'sl_enabled',    label: 'SL',    color: '#FF4444' },
+            { key: 'tsl_enabled',   label: 'TSL',   color: '#FF6B00', blocked: tslBlocked },
             { key: 're_sl_enabled', label: 'RE-SL', color: '#F59E0B', blocked: reslBlocked },
-            { key: 'tp_enabled',    label: 'TP',    color: '#22C55E' },
-            { key: 'ttp_enabled',  label: 'TTP',   color: '#A78BFA', blocked: ttpBlocked },
+            { key: 'tp_enabled',    label: 'TP',    color: '#22DD88' },
+            { key: 'ttp_enabled',  label: 'TTP',   color: '#CC4400', blocked: ttpBlocked },
             { key: 're_tp_enabled', label: 'RE-TP', color: '#F59E0B', blocked: retpBlocked },
           ].map(f => (
             <button key={f.key} onClick={() => {
@@ -185,8 +185,8 @@ function JourneyChildPanel({ child, depth, onChange }: {
             </div>
           )}
           {child.sl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#EF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#FF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
               <select className="staax-select" value={child.sl_type} onChange={e => u('sl_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
               <input type="number" min="0" value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
@@ -214,15 +214,15 @@ function JourneyChildPanel({ child, depth, onChange }: {
             </div>
           )}
           {child.tp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#22C55E', fontWeight: 700, marginRight: '2px' }}>TP:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(34,221,136,0.08)', border: '1px solid rgba(34,221,136,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#22DD88', fontWeight: 700, marginRight: '2px' }}>TP:</span>
               <select className="staax-select" value={child.tp_type} onChange={e => u('tp_type', e.target.value)} style={{ ...cs, height: '22px' }}>{TYPE_OPTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
               <input type="number" min="0" value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.tsl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(0,176,240,0.08)', border: '1px solid rgba(0,176,240,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#00B0F0', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(255,107,0,0.08)', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+              <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
               <input type="number" min="0" value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
               <input type="number" min="0" value={child.tsl_y} onChange={e => u('tsl_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
@@ -231,7 +231,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
           )}
           {child.ttp_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#A78BFA', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
+              <span style={{ fontSize: '10px', color: '#CC4400', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
               <input type="number" min="0" value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
               <input type="number" min="0" value={child.ttp_y} onChange={e => u('ttp_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
@@ -254,7 +254,7 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   return (
     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(167,139,250,0.15)' }}>
       <button onClick={() => setOpen((o: boolean) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: hasJourney ? '#A78BFA' : 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: hasJourney ? '#CC4400' : 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {open ? '▾' : '▸'} Journey {hasJourney ? '● Active' : ''}
         </span>
       </button>
@@ -280,19 +280,19 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   const expiryOpts = MONTHLY_ONLY_CODES.has(leg.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
 
   return (
-    <div style={{ background: 'var(--bg-secondary)', border: `1px solid ${isDragging ? 'var(--accent-blue)' : 'var(--bg-border)'}`, borderRadius: '7px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'border-color 0.1s' }}>
+    <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `0.5px solid ${isDragging ? 'rgba(255,107,0,0.65)' : 'rgba(255,107,0,0.22)'}`, borderRadius: '7px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'border-color 0.1s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
         <span {...dragHandleProps} title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-dim)', fontSize: '13px', flexShrink: 0, padding: '0 2px', userSelect: 'none' }}>⠿</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', minWidth: '20px', textAlign: 'center' }}>L{leg.no}</span>
-        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: leg.instType === 'OP' ? 'rgba(0,176,240,0.15)' : 'rgba(215,123,18,0.15)', color: leg.instType === 'OP' ? 'var(--accent-blue)' : 'var(--accent-amber)', border: `1px solid ${leg.instType === 'OP' ? 'rgba(0,176,240,0.3)' : 'rgba(215,123,18,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
+        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: leg.instType === 'OP' ? 'rgba(255,107,0,0.15)' : 'rgba(215,123,18,0.15)', color: leg.instType === 'OP' ? 'var(--ox-radiant)' : 'var(--accent-amber)', border: `1px solid ${leg.instType === 'OP' ? 'rgba(255,107,0,0.3)' : 'rgba(215,123,18,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
         <select className="staax-select" value={leg.instCode} onChange={e => {
           const code = e.target.value
           const patch: Partial<Leg> = { instCode: code }
           if (MONTHLY_ONLY_CODES.has(code) && !leg.expiry.includes('monthly')) patch.expiry = 'current_monthly'
           onUpdate(leg.id, patch)
         }} style={{ ...s, color: leg.instCode ? 'var(--text)' : 'var(--text-muted)' }}>{Object.entries(INST_CODES).map(([c, n]) => <option key={c} value={c} title={n}>{c}</option>)}</select>
-        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: leg.direction === 'BUY' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: leg.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: `1px solid ${leg.direction === 'BUY' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
-        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
+        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: leg.direction === 'BUY' ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)', color: leg.direction === 'BUY' ? 'var(--sem-long)' : 'var(--sem-short)', border: `0.5px solid ${leg.direction === 'BUY' ? 'rgba(34,221,136,0.35)' : 'rgba(255,68,68,0.35)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
+        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
           <select className="staax-select" value={leg.expiry} onChange={e => u('expiry', e.target.value)} style={{ ...s, width: '128px', color: leg.expiry === 'current_weekly' ? 'var(--text-muted)' : 'var(--text)' }}>{expiryOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
           <select className="staax-select" value={leg.strikeMode} onChange={e => { u('strikeMode', e.target.value); if (e.target.value === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} style={{ ...s, color: leg.strikeMode === 'leg' ? 'var(--text-muted)' : 'var(--text)' }}><option value="leg">Strike</option><option value="premium">Premium</option><option value="straddle">Straddle</option></select>
@@ -319,8 +319,8 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           )
         })}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexShrink: 0 }}>
-          <button onClick={() => onCopy(leg.id)} title="Copy leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '1px solid rgba(0,176,240,0.25)', color: 'var(--accent-blue)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>⧉</button>
-          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--red)', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+          <button onClick={() => onCopy(leg.id)} title="Copy leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '0.5px solid rgba(255,107,0,0.35)', color: 'var(--ox-radiant)', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>⧉</button>
+          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '0.5px solid rgba(255,68,68,0.35)', color: 'var(--red)', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
       <FeatVals leg={leg} onUpdate={onUpdate} entryType={entryType} />
@@ -335,8 +335,8 @@ function SubSection({ title }: { title: string }) {
       fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.7)',
       textTransform: 'uppercase', letterSpacing: '1.5px',
       marginBottom: '10px', marginTop: '6px', paddingBottom: '6px',
-      borderBottom: '1px solid rgba(99,102,241,0.12)',
-      borderLeft: '2px solid #6366f1', paddingLeft: '10px',
+      borderBottom: '1px solid rgba(255,107,0,0.12)',
+      borderLeft: '2px solid #FF6B00', paddingLeft: '10px',
     }}>{title}</div>
   )
 }
@@ -353,7 +353,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
   }
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', height: '32px', padding: '0 7px', boxSizing: 'border-box' }}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.7 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 12"/></svg>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.7 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 12"/></svg>
       <input
         type="time"
         step="1"
@@ -697,12 +697,12 @@ export default function AlgoPage() {
     return (
       <div>
         <div className="page-header">
-          <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>{algoName || 'Edit Algo'}</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>{algoName || 'Edit Algo'}</h1>
           <div className="page-header-actions">
             <button className="btn btn-ghost" onClick={() => navigate('/grid')}>← Back to Grid</button>
           </div>
         </div>
-        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '20px 24px', textAlign: 'center' }}>
+        <div style={{ background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: '8px', padding: '20px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔒</div>
           <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--red)', marginBottom: '6px' }}>Algo is live — editing locked</div>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
@@ -729,7 +729,7 @@ export default function AlgoPage() {
         .leg-select-active { color: var(--text) !important; }
       `}</style>
       <div className="page-header">
-        <h1 style={{ fontFamily: "'ADLaM Display',serif", fontSize: '22px', fontWeight: 400 }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
         <div className="page-header-actions">
           {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
@@ -740,7 +740,7 @@ export default function AlgoPage() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(30,30,30,0.95)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '8px', padding: '10px 18px', fontSize: '12px', color: 'var(--red)', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(30,30,30,0.95)', border: '1px solid rgba(255,68,68,0.4)', borderRadius: '8px', padding: '10px 18px', fontSize: '12px', color: 'var(--red)', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
           ⚠ {toast}
         </div>
       )}
@@ -753,7 +753,7 @@ export default function AlgoPage() {
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-ghost" onClick={() => setShowTomorrowWarn(false)}>Cancel</button>
-            <button className="btn" style={{ background: 'var(--accent-amber)', color: '#000', fontWeight: 700 }} onClick={handleSave}>Save Anyway</button>
+            <button className="btn btn-warn" onClick={handleSave}>Save Anyway</button>
           </div>
         </div>
       )}
@@ -791,7 +791,7 @@ export default function AlgoPage() {
         </div>
 
         {/* Entry Type & Timing */}
-        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--bg-border)' }}>
+        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)' }}>
           <SubSection title="Entry Type & Timing — Algo Level" />
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -839,7 +839,7 @@ export default function AlgoPage() {
         </div>
 
         {/* MTM */}
-        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--bg-border)' }}>
+        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)' }}>
           <SubSection title="MTM Controls — Algo Level" />
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <select className="staax-select" value={mtmUnit} onChange={e => setMtmUnit(e.target.value)} style={{ width: '96px', fontSize: '12px' }}>
@@ -861,7 +861,7 @@ export default function AlgoPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Legs</span>
-          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '3px', background: 'rgba(34,197,94,0.1)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · TTP · W&T · RE · Journey per leg</span>
+          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '3px', background: 'rgba(34,221,136,0.1)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · TTP · W&T · RE · Journey per leg</span>
           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{legs.length} leg{legs.length > 1 ? 's' : ''}</span>
         </div>
         <button className="btn btn-ghost" style={{ fontSize: '11px' }} onClick={addLeg}>+ Add Leg</button>
@@ -869,7 +869,7 @@ export default function AlgoPage() {
       {legs.map((leg, i) => (
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
-          style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent-blue)' : 'none', borderRadius: '7px' }}>
+          style={{ outline: dragOverIdx === i && dragIdx !== i ? '1px dashed rgba(255,107,0,0.55)' : 'none', borderRadius: '7px' }}>
           <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} entryType={entryType} />
         </div>
       ))}
@@ -905,7 +905,7 @@ export default function AlgoPage() {
           </div>
         </div>
 
-        <div style={{ margin: '12px 0 10px', borderTop: '1px solid var(--bg-border)' }} />
+        <div style={{ margin: '12px 0 10px', borderTop: '0.5px solid rgba(255,107,0,0.12)' }} />
         <SubSection title="Error Settings — Algo Level" />
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }}>

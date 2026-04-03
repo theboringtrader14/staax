@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { CSSProperties } from 'react'
+import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI } from '@/services/api'
 import type { Order, Algo } from '@/types'
@@ -51,9 +52,9 @@ const secHdr: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
   marginBottom: '8px',
-  borderLeft: '3px solid #6366f1',
+  borderLeft: '3px solid #FF6B00',
   paddingLeft: '10px',
-  textShadow: '0 0 20px rgba(99,102,241,0.5)',
+  textShadow: '0 0 20px rgba(255,107,0,0.5)',
   boxShadow: 'none',
 }
 
@@ -64,14 +65,114 @@ const tblWrap: CSSProperties = {
   overflow: 'hidden',
 }
 
+// ── Recharts dark tooltip ───────────────────────────────────────────────────────
+function PnlTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  const v: number = payload[0].value
+  return (
+    <div style={{
+      background: 'rgba(14,14,24,0.96)', border: '1px solid rgba(255,255,255,0.1)',
+      borderRadius: '8px', padding: '8px 12px', fontSize: '11px',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+    }}>
+      <div style={{ color: 'rgba(232,232,248,0.45)', marginBottom: '3px', letterSpacing: '0.03em' }}>{label}</div>
+      <div style={{ fontWeight: 700, fontSize: '13px', color: v >= 0 ? '#22DD88' : '#FF4444' }}>
+        {v >= 0 ? '+' : '−'}₹{Math.abs(v).toLocaleString('en-IN')}
+      </div>
+    </div>
+  )
+}
+
+// ── Cumulative P&L AreaChart ────────────────────────────────────────────────────
+function CumulativePnlChart({ orders }: { orders: Order[] }) {
+  const chartData = useMemo(() => {
+    const byDate: Record<string, number> = {}
+    for (const o of orders) {
+      const date = getOrderDate(o)
+      if (!date || (o as any).pnl == null) continue
+      byDate[date] = (byDate[date] ?? 0) + ((o as any).pnl ?? 0)
+    }
+    let cum = 0
+    return Object.entries(byDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, pnl]) => { cum += pnl; return { date: date.slice(5), cum: Math.round(cum) } })
+  }, [orders])
+
+  if (chartData.length < 2) return null
+
+  const isPositive = chartData[chartData.length - 1].cum >= 0
+  const color = isPositive ? '#22DD88' : '#FF4444'
+  const gradId = `pnlGrad-${isPositive ? 'g' : 'r'}`
+
+  return (
+    <div className="card" style={{ marginBottom: '12px', paddingBottom: '8px' }}>
+      <div style={{ ...secHdr, marginBottom: '12px' }}>Cumulative P&amp;L</div>
+      <ResponsiveContainer width="100%" height={100}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={color} stopOpacity={0.35} />
+              <stop offset="95%" stopColor={color} stopOpacity={0}    />
+            </linearGradient>
+          </defs>
+          <XAxis dataKey="date"
+            tick={{ fontSize: 9, fill: 'rgba(232,232,248,0.35)' }}
+            axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <Tooltip content={<PnlTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }} />
+          <Area type="monotone" dataKey="cum" stroke={color} strokeWidth={1.5}
+            fill={`url(#${gradId})`} dot={false}
+            activeDot={{ r: 3, fill: color, strokeWidth: 0 }} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ── Segmented Arc Gauge ─────────────────────────────────────────────────────────
+function SegmentedArcGauge({ score }: { score: number }) {
+  const s = Math.max(0, Math.min(100, score))
+  const color = s >= 70 ? '#22DD88' : s >= 40 ? '#f59e0b' : '#FF4444'
+  const grade = s >= 70 ? 'A' : s >= 40 ? 'B' : s < 20 ? 'D' : 'C'
+  // SVG 160×96: arc center (80,90), r=68
+  // M 12 90 A 68 68 0 1 0 148 90 = left→right through top (counterclockwise, large arc)
+  const arcPath = 'M 12 90 A 68 68 0 1 0 148 90'
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <svg width="160" height="96" viewBox="0 0 160 96" style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}>
+        {/* Track segments: red zone 0-40, amber 40-70, green 70-100 */}
+        <path d={arcPath} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="12" strokeLinecap="round" />
+        {/* Score fill */}
+        <path d={arcPath} fill="none" stroke={color} strokeWidth="12"
+          pathLength="100" strokeDasharray={`${s} 100`}
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 6px ${color}80)`, transition: 'stroke-dasharray 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
+        {/* Center labels */}
+        <text x="80" y="64" textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: '28px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
+          {s}
+        </text>
+        <text x="80" y="80" textAnchor="middle"
+          style={{ fontSize: '9px', fill: 'rgba(232,232,248,0.38)', letterSpacing: '0.1em', fontFamily: 'inherit' }}>
+          AVG HEALTH
+        </text>
+        {/* Grade badge */}
+        <text x="80" y="93" textAnchor="middle"
+          style={{ fontSize: '11px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
+          {grade}
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 function PractixChip({ isPractix }: { isPractix: boolean }) {
   return (
     <span style={{
-      fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px',
-      background: isPractix ? 'rgba(215,123,18,0.15)' : 'rgba(34,197,94,0.12)',
+      fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '100px',
+      background: isPractix ? 'rgba(215,123,18,0.15)' : 'rgba(34,221,136,0.12)',
       color: isPractix ? 'var(--accent-amber)' : 'var(--green)',
-      border: isPractix ? '1px solid rgba(215,123,18,0.3)' : '1px solid rgba(34,197,94,0.25)',
+      border: isPractix ? '1px solid rgba(215,123,18,0.3)' : '1px solid rgba(34,221,136,0.25)',
     }}>
       {isPractix ? 'PRACTIX' : 'LIVE'}
     </span>
@@ -83,9 +184,8 @@ function SummaryCard({ label, value, sub, valueColor }: {
 }) {
   const isGreen = valueColor?.includes('green') || valueColor === 'var(--green)'
   const isRed   = valueColor?.includes('red')   || valueColor === 'var(--red)'
-  const isBlue  = valueColor?.includes('blue')  || valueColor === 'var(--accent-blue)'
-  const accentColor = isGreen ? '#10b981' : isRed ? '#ef4444' : isBlue ? '#38bdf8' : '#6366f1'
-  const accentRgb   = isGreen ? '16,185,129' : isRed ? '239,68,68' : isBlue ? '56,189,248' : '99,102,241'
+  const accentColor = isGreen ? '#22DD88' : isRed ? '#FF4444' : '#FF6B00'
+  const accentRgb   = isGreen ? '16,185,129' : isRed ? '239,68,68' : '99,102,241'
   return (
     <div className="card card-stat" style={{
       borderTop: `2px solid ${accentColor}`,
@@ -98,7 +198,7 @@ function SummaryCard({ label, value, sub, valueColor }: {
       </div>
       <div style={{
         fontSize: '20px', fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word',
-        background: `linear-gradient(135deg, ${accentColor} 0%, #d4d4f8 100%)`,
+        background: `linear-gradient(135deg, ${accentColor} 0%, #FF8C33 100%)`,
         WebkitBackgroundClip: 'text', backgroundClip: 'text',
         WebkitTextFillColor: 'transparent', color: 'transparent',
         display: 'inline-block',
@@ -108,6 +208,14 @@ function SummaryCard({ label, value, sub, valueColor }: {
       {sub && <div style={{ fontSize: '10px', color: `rgba(${accentRgb},0.6)`, marginTop: '4px' }}>{sub}</div>}
     </div>
   )
+}
+
+// ── Grade Colors — shared ──────────────────────────────────────────────────────
+const GRADE_COLORS: Record<string, { color: string; bg: string; border: string }> = {
+  A: { color: 'var(--green)',        bg: 'rgba(34,221,136,0.12)',    border: 'rgba(34,221,136,0.3)'    },
+  B: { color: 'var(--indigo)',        bg: 'rgba(255,107,0,0.12)',   border: 'rgba(255,107,0,0.3)'   },
+  C: { color: 'var(--accent-amber)', bg: 'rgba(215,123,18,0.12)',   border: 'rgba(215,123,18,0.3)'   },
+  D: { color: 'var(--red)',          bg: 'rgba(239,68,68,0.12)',    border: 'rgba(239,68,68,0.3)'    },
 }
 
 // ── Tab 1: Performance ─────────────────────────────────────────────────────────
@@ -152,7 +260,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   const heatmapAlgos = Object.keys(breakdown).sort()
   function cellBg(pnl: number | undefined): string {
     if (pnl === undefined) return 'var(--bg-border)'
-    if (pnl > 0) return `rgba(34,197,94,${Math.min(Math.abs(pnl) / 5000, 1) * 0.5 + 0.12})`
+    if (pnl > 0) return `rgba(34,221,136,${Math.min(Math.abs(pnl) / 5000, 1) * 0.5 + 0.12})`
     if (pnl < 0) return `rgba(239,68,68,${Math.min(Math.abs(pnl) / 3000, 1) * 0.5 + 0.12})`
     return 'var(--bg-border)'
   }
@@ -177,10 +285,13 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         <SummaryCard label="Avg Score" value={scores.length > 0 ? String(avgScore) : '—'}
           valueColor={avgScore >= 70 ? 'var(--green)' : avgScore >= 40 ? 'var(--accent-amber)' : 'var(--red)'} />
         <SummaryCard label="Most Consistent" value={mostConsistent?.algo_name || '—'}
-          sub={mostConsistent ? `${mostConsistent.trades} trades` : undefined} valueColor="var(--accent-blue)" />
+          sub={mostConsistent ? `${mostConsistent.trades} trades` : undefined} valueColor="var(--indigo)" />
         <SummaryCard label="Needs Attention" value={needsAttn?.algo_name || '—'}
           sub={needsAttn ? `Score ${needsAttn.score} · ${needsAttn.grade}` : undefined} valueColor="var(--red)" />
       </div>
+
+      {/* Cumulative P&L chart */}
+      <CumulativePnlChart orders={allOrders} />
 
       {/* Row 2 — chip toggle: P&L heatmap vs Health Scores */}
       <div className="card" style={{ marginBottom: '12px', overflowX: 'auto' }}>
@@ -245,7 +356,11 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         {activeView === 'health' && (
           scores.length === 0
             ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No health data available.</div>
-            : <div style={tblWrap}>
+            : <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+                <div style={{ flexShrink: 0, paddingTop: '8px' }}>
+                  <SegmentedArcGauge score={avgScore} />
+                </div>
+                <div style={{ flex: 1, ...tblWrap }}>
                 <table className="staax-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
@@ -260,7 +375,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                         <tr key={s.algo_name}>
                           <td style={{ fontWeight: 600 }}>{s.algo_name}</td>
                           <td style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', color: g.color, background: g.bg, border: `1px solid ${g.border}` }}>{s.grade}</span>
+                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', color: g.color, background: g.bg, border: `1px solid ${g.border}` }}>{s.grade}</span>
                           </td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -268,10 +383,10 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                                 <div style={{
                                   width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: '3px',
                                   background: s.score >= 70
-                                    ? 'linear-gradient(90deg, #10b981, #34d399)'
+                                    ? 'linear-gradient(90deg, #22DD88, #34d399)'
                                     : s.score >= 40
                                     ? 'linear-gradient(90deg, #f59e0b, #fcd34d)'
-                                    : 'linear-gradient(90deg, #ef4444, #f87171)',
+                                    : 'linear-gradient(90deg, #FF4444, #f87171)',
                                   boxShadow: s.score >= 70
                                     ? '0 0 8px rgba(16,185,129,0.7)'
                                     : s.score >= 40
@@ -291,6 +406,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
         )}
       </div>
@@ -394,7 +510,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
         <SummaryCard label="Total Errors" value={data.total_errors.toString()} valueColor="var(--red)" />
         <SummaryCard label="Error Rate %" value={`${data.error_rate_pct.toFixed(1)}%`} sub={`of ${data.total_orders} orders (FY)`} />
-        <SummaryCard label="Most Failed Algo" value={mostFailed} valueColor="var(--accent-blue)" />
+        <SummaryCard label="Most Failed Algo" value={mostFailed} valueColor="var(--indigo)" />
         <SummaryCard label="Algos with Errors" value={data.per_algo.length.toString()} />
       </div>
 
@@ -607,14 +723,6 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   )
 }
 
-// ── Grade Colors — shared ──────────────────────────────────────────────────────
-const GRADE_COLORS: Record<string, { color: string; bg: string; border: string }> = {
-  A: { color: 'var(--green)',        bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)'    },
-  B: { color: 'var(--accent-blue)',  bg: 'rgba(0,176,240,0.12)',    border: 'rgba(0,176,240,0.3)'    },
-  C: { color: 'var(--accent-amber)', bg: 'rgba(215,123,18,0.12)',   border: 'rgba(215,123,18,0.3)'   },
-  D: { color: 'var(--red)',          bg: 'rgba(239,68,68,0.12)',    border: 'rgba(239,68,68,0.3)'    },
-}
-
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
@@ -696,33 +804,31 @@ export default function AnalyticsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: "'ADLaM Display', serif", fontSize: '22px', fontWeight: 400 }}>Analytics</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>Analytics</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             Performance, risk, failures &amp; slippage ·{' '}
             <PractixChip isPractix={isPractixMode} />
           </p>
         </div>
         <div className="page-header-actions">
-          <select className="staax-select" value={fy} onChange={e => setFy(e.target.value)} style={{ width: '120px', fontSize: '11px' }}>
-            <option value="2025-26">FY 2025-26</option>
-            <option value="2024-25">FY 2024-25</option>
-          </select>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {(['2025-26', '2024-25'] as const).map(f => (
+              <button key={f} onClick={() => setFy(f)}
+                className={`chip ${fy === f ? 'chip-active' : 'chip-inactive'}`}
+                style={{ height: '28px', padding: '0 14px', fontSize: '11px' }}>
+                FY {f}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', width: '100%', borderBottom: '1px solid var(--bg-border)', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
         {TABS.map(tab => (
-          <button
-            key={tab}
+          <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
-            style={{
-              flex: 1, padding: '8px 4px', fontSize: '12px', fontWeight: 600,
-              background: activeTab === tab ? 'rgba(99,102,241,0.08)' : 'transparent',
-              border: 'none', cursor: 'pointer', transition: 'all 0.2s ease',
-              color: activeTab === tab ? '#a78bfa' : 'rgba(232,232,248,0.6)',
-              borderBottom: activeTab === tab ? '2px solid #6366f1' : '2px solid transparent',
-            }}
-          >
+            className={`chip ${activeTab === tab ? 'chip-active' : 'chip-inactive'}`}
+            style={{ height: '30px', padding: '0 18px', fontSize: '12px', fontWeight: 600 }}>
             {tab}
           </button>
         ))}

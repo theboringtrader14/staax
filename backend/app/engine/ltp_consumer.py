@@ -69,6 +69,8 @@ class AngelOneTickerAdapter:
         self._last_tick_at: Optional[str]   = None    # ISO timestamp of last tick received
         self._corr_id                       = "staax_ltp"
         self._mcx_tokens: Set[str]          = set()   # tokens that need exchangeType=5
+        self._reconnect_count               = 0
+        self._last_reconnect_at: Optional[str] = None
 
         # Debug: log credential presence at construction time
         ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
@@ -236,17 +238,70 @@ class AngelOneTickerAdapter:
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._reconnect(), self._loop)
 
+    def update_feed_token(self, new_token: str):
+        """
+        Update feed_token in-place on a live adapter.
+        Ensures the next reconnect authenticates with the refreshed credential
+        without restarting the current WebSocket connection.
+        """
+        if new_token and new_token != self.feed_token:
+            self.feed_token = new_token
+            logger.info("[AO] Feed token updated on live adapter")
+
     async def _reconnect(self):
-        """Attempt to reconnect SmartStream after a 10-second delay."""
+        """
+        Attempt to reconnect SmartStream after a 10-second delay.
+        Fetches fresh auth_token + feed_token from DB before reconnecting so
+        a daily re-login never leaves the adapter with stale credentials.
+        """
         await asyncio.sleep(10)
         if self._running:
             return   # already reconnected by another path
-        logger.info("[AO] 🔄 Attempting SmartStream reconnect...")
+
+        from datetime import datetime, timezone
+        self._reconnect_count   += 1
+        self._last_reconnect_at  = datetime.now(timezone.utc).isoformat()
+        logger.info(f"[AO] 🔄 SmartStream reconnect attempt #{self._reconnect_count}...")
+
+        # ── Refresh credentials from DB ───────────────────────────────────────
         try:
-            if self._sws:
-                self._sws.connect()
-                self._running = True
-                logger.info("[AO] ✅ SmartStream reconnected")
+            from app.core.database import AsyncSessionLocal
+            from app.models.account import Account
+            from sqlalchemy import select as _select
+            async with AsyncSessionLocal() as _db:
+                _res = await _db.execute(
+                    _select(Account).where(Account.client_id == self.client_code)
+                )
+                _acc = _res.scalar_one_or_none()
+                if _acc:
+                    if _acc.access_token and _acc.access_token != self.auth_token:
+                        self.auth_token = _acc.access_token
+                        logger.info("[AO] Auth token refreshed from DB for reconnect")
+                    if _acc.feed_token and _acc.feed_token != self.feed_token:
+                        self.feed_token = _acc.feed_token
+                        logger.info("[AO] Feed token refreshed from DB for reconnect")
+        except Exception as _db_err:
+            logger.warning(
+                f"[AO] Could not fetch fresh tokens from DB — "
+                f"reconnecting with cached tokens: {_db_err}"
+            )
+
+        # ── Recreate SmartWebSocketV2 with (possibly refreshed) credentials ──
+        try:
+            from SmartApi.smartWebSocketV2 import SmartWebSocketV2
+            self._sws = SmartWebSocketV2(
+                self.auth_token,
+                self.api_key,
+                self.client_code,
+                self.feed_token,
+            )
+            self._sws.on_open  = self._on_open
+            self._sws.on_data  = self._on_data
+            self._sws.on_error = self._on_error
+            self._sws.on_close = self._on_close
+            self._sws.connect()
+            self._running = True
+            logger.info("[AO] ✅ SmartStream reconnected")
         except Exception as e:
             logger.error(f"[AO] Reconnect failed: {e}")
 

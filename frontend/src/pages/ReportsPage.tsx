@@ -40,9 +40,9 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
   const handleClick=()=>{ if(!isFutureMonth&&hasRealData) onToggle() }
   return(
     <div onClick={handleClick} style={{
-      background:selected?'rgba(5,5,28,0.85)':'rgba(5,5,18,0.7)',
-      border:`1px solid ${selected?'rgba(99,102,241,0.65)':'rgba(99,102,241,0.2)'}`,
-      boxShadow:selected?'0 0 20px rgba(99,102,241,0.25), inset 0 1px 0 rgba(167,139,250,0.2)':'inset 0 1px 0 rgba(99,102,241,0.1)',
+      background:selected?'rgba(22,22,25,0.92)':'rgba(22,22,25,0.72)',
+      border:`0.5px solid ${selected?'rgba(255,107,0,0.65)':'rgba(255,107,0,0.22)'}`,
+      boxShadow:selected?'0 0 20px rgba(255,107,0,0.20), 0 4px 24px rgba(0,0,0,0.55)':'0 4px 24px rgba(0,0,0,0.45)',
       backdropFilter:'blur(20px)',
       borderRadius:'8px',padding:'10px 10px 12px',
       cursor:isFutureMonth||!hasRealData?'default':'pointer',
@@ -85,7 +85,7 @@ function MonthDetail({month,year,label,calendarData}:{month:number,year:number,l
   const tradingDays=Array.from({length:new Date(year,month,0).getDate()},(_,i)=>i+1).filter(d=>{const dow=new Date(year,month-1,d).getDay();return dow!==0&&dow!==6})
   const padded=[...Array(offset).fill(null),...tradingDays]
   return(
-    <div style={{background:'var(--bg-secondary)',border:'1px solid var(--indigo)',borderRadius:'8px',padding:'16px',marginTop:'12px'}}>
+    <div style={{background:'var(--glass-bg)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',border:'0.5px solid rgba(255,107,0,0.35)',borderRadius:'8px',padding:'16px',marginTop:'12px'}}>
       <div style={{fontSize:'12px',fontWeight:700,color:'var(--indigo)',marginBottom:'14px'}}>{label} {year} — Day View</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px',marginBottom:'4px'}}>
         {['Mon','Tue','Wed','Thu','Fri'].map(d=><div key={d} style={{textAlign:'center',fontSize:'10px',color:'var(--text-dim)',fontWeight:600}}>{d}</div>)}
@@ -96,7 +96,7 @@ function MonthDetail({month,year,label,calendarData}:{month:number,year:number,l
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
           const pnl=calendarData[dateKey]??null
           const isFuture=new Date(year,month-1,day)>today
-          return <div key={i} style={{padding:'8px 4px',borderRadius:'6px',textAlign:'center',opacity:isFuture?0.2:1,background:pnl==null?'transparent':pnl>0?`rgba(34,197,94,${Math.min(pnl/8000,1)*0.35+0.08})`:`rgba(239,68,68,${Math.min(Math.abs(pnl)/3000,1)*0.35+0.08})`}}>
+          return <div key={i} style={{padding:'8px 4px',borderRadius:'6px',textAlign:'center',opacity:isFuture?0.2:1,background:pnl==null?'transparent':pnl>0?`rgba(34,221,136,${Math.min(pnl/8000,1)*0.35+0.08})`:`rgba(239,68,68,${Math.min(Math.abs(pnl)/3000,1)*0.35+0.08})`}}>
             <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{day}</div>
             {pnl!=null&&<div style={{fontSize:'10px',fontWeight:700,marginTop:'2px',color:pnl>0?'var(--green)':'var(--red)'}}>{pnl>0?'+':''}{(pnl/1000).toFixed(1)}k</div>}
             {pnl==null&&!isFuture&&<div style={{fontSize:'10px',color:'var(--text-dim)',marginTop:'2px'}}>—</div>}
@@ -192,10 +192,10 @@ export default function ReportsPage(){
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{fontFamily:"'ADLaM Display',serif",fontSize:'22px',fontWeight:400}}>Reports</h1>
+          <h1 style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800}}>Reports</h1>
           <p style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
             Performance analytics ·{' '}
-            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
+            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,221,136,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--sem-long)',border:isPractixMode?'0.5px solid rgba(215,123,18,0.3)':'0.5px solid rgba(34,221,136,0.25)'}}>
               {isPractixMode?'PRACTIX':'LIVE'}
             </span>
           </p>
@@ -216,7 +216,7 @@ export default function ReportsPage(){
       {/* Top widgets — 4 columns: FY P&L (wider), Trades, Win Rate, Day P&L */}
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr',gap:'12px',marginBottom:'12px'}}>
         {/* FY P&L */}
-        <div className="card card-stat" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #10b981',
+        <div className="card card-stat" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #22DD88',
           '--stat-rgb': totalPnl>=0?'16,185,129':'239,68,68',
           boxShadow: `inset 0 1px 0 rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.25), 0 0 22px rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.2), 0 6px 24px rgba(0,0,0,0.5)`,
         } as React.CSSProperties} onClick={()=>setChartModal(true)}>
@@ -225,7 +225,7 @@ export default function ReportsPage(){
             <div>
               <div style={{
                 fontSize:'22px',fontWeight:700,letterSpacing:'-0.02em',
-                background: totalPnl>=0?'linear-gradient(135deg, #10b981, #d4f4e8)':'linear-gradient(135deg, #ef4444, #ffd4d4)',
+                background: totalPnl>=0?'linear-gradient(135deg, #22DD88, #d4f4e8)':'linear-gradient(135deg, #FF4444, #ffd4d4)',
                 WebkitBackgroundClip:'text', backgroundClip:'text',
                 WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
               }}>
@@ -238,12 +238,12 @@ export default function ReportsPage(){
                 <AreaChart data={equityCurve} margin={{top:2,right:0,bottom:0,left:0}}>
                   <defs>
                     <linearGradient id="miniEqGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={totalPnl>=0?'#10b981':'#ef4444'} stopOpacity={0.5}/>
-                      <stop offset="95%" stopColor={totalPnl>=0?'#10b981':'#ef4444'} stopOpacity={0}/>
+                      <stop offset="5%" stopColor={totalPnl>=0?'#22DD88':'#FF4444'} stopOpacity={0.5}/>
+                      <stop offset="95%" stopColor={totalPnl>=0?'#22DD88':'#FF4444'} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <Area type="monotone" dataKey="cumulative"
-                    stroke={totalPnl>=0?'#10b981':'#ef4444'}
+                    stroke={totalPnl>=0?'#22DD88':'#FF4444'}
                     strokeWidth={2}
                     fill="url(#miniEqGrad)"
                     dot={false}/>
@@ -254,14 +254,14 @@ export default function ReportsPage(){
         </div>
 
         {/* Total Trades */}
-        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #6366f1',
-          '--stat-rgb': '99,102,241',
-          boxShadow: 'inset 0 1px 0 rgba(99,102,241,0.25), 0 0 20px rgba(99,102,241,0.18), 0 6px 24px rgba(0,0,0,0.5)',
+        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #FF6B00',
+          '--stat-rgb': '255,107,0',
+          boxShadow: 'inset 0 1px 0 rgba(255,107,0,0.25), 0 0 20px rgba(255,107,0,0.18), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Total Trades</div>
           <div style={{
             fontSize:'26px',fontWeight:700,lineHeight:1,
-            background:'linear-gradient(135deg, #6366f1, #c4c4f8)',
+            background:'linear-gradient(135deg, #FF6B00, #FF8C33)',
             WebkitBackgroundClip:'text', backgroundClip:'text',
             WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
           }}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
@@ -269,15 +269,15 @@ export default function ReportsPage(){
         </div>
 
         {/* Win Rate */}
-        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #a78bfa',
-          '--stat-rgb': '167,139,250',
-          boxShadow: 'inset 0 1px 0 rgba(167,139,250,0.25), 0 0 20px rgba(167,139,250,0.18), 0 6px 24px rgba(0,0,0,0.5)',
+        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #CC4400',
+          '--stat-rgb': '204,68,0',
+          boxShadow: 'inset 0 1px 0 rgba(204,68,0,0.25), 0 4px 24px rgba(0,0,0,0.55)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Win Rate</div>
           <div style={{
             fontSize:'26px',fontWeight:700,lineHeight:1,
             background: algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)>0
-              ? 'linear-gradient(135deg, #10b981, #d4f4e8)'
+              ? 'linear-gradient(135deg, #22DD88, #d4f4e8)'
               : 'linear-gradient(135deg, rgba(232,232,248,0.3), rgba(232,232,248,0.1))',
             WebkitBackgroundClip:'text', backgroundClip:'text',
             WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
@@ -289,7 +289,7 @@ export default function ReportsPage(){
 
         {/* Day-of-week P&L — compact horizontal bars */}
         <div className="card">
-        <div style={{fontSize:'10px',fontWeight:600,color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px',borderLeft:'3px solid #6366f1',paddingLeft:'8px'}}>P&L by Day</div>
+        <div style={{fontSize:'10px',fontWeight:600,color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px',borderLeft:'3px solid #FF6B00',paddingLeft:'8px'}}>P&L by Day</div>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-around',height:'64px',gap:'6px'}}>
           {DAY_NAMES.map(day=>{
             const pnl=dowPnl[day]||0
@@ -301,9 +301,9 @@ export default function ReportsPage(){
                     ?<div style={{
                       width:'60%',height:`${barH}px`,borderRadius:'3px 3px 0 0',
                       background: pnl>0
-                        ? 'linear-gradient(to top, rgba(16,185,129,0.5), rgba(16,185,129,0.9))'
+                        ? 'linear-gradient(to top, rgba(34,221,136,0.5), rgba(34,221,136,0.9))'
                         : 'linear-gradient(to top, rgba(239,68,68,0.5), rgba(239,68,68,0.9))',
-                      boxShadow: pnl>0?'0 0 10px rgba(16,185,129,0.45)':'0 0 10px rgba(239,68,68,0.45)',
+                      boxShadow: pnl>0?'0 0 10px rgba(34,221,136,0.45)':'0 0 10px rgba(239,68,68,0.45)',
                       transition:'height 0.4s cubic-bezier(0.4,0,0.2,1)',
                     }}/>
                     :<div style={{width:'60%',height:'2px',borderRadius:'2px',background:'var(--bg-border)',opacity:0.4}}/>
@@ -328,16 +328,16 @@ export default function ReportsPage(){
             <div style={{height:'320px'}}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={equityCurve} margin={{top:10,right:20,bottom:10,left:40}}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.12)"/>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,107,0,0.12)"/>
                   <XAxis dataKey="month" tick={{fill:'var(--text-muted)',fontSize:11}}/>
                   <YAxis tick={{fill:'var(--text-muted)',fontSize:11}} tickFormatter={v=>`₹${(v/1000).toFixed(0)}k`}/>
                   <Tooltip formatter={(v:any)=>[`₹${v.toLocaleString('en-IN')}`,'Cumulative P&L']} contentStyle={{background:'var(--bg-surface)',border:'1px solid var(--bg-border)',borderRadius:'6px'}} labelStyle={{color:'var(--text-muted)'}} itemStyle={{color:'var(--indigo)'}}/>
                   <Line type="monotone" dataKey="cumulative"
-                    stroke={fyTotal>=0?'#6366f1':'#ef4444'}
+                    stroke={fyTotal>=0?'#FF6B00':'#FF4444'}
                     strokeWidth={2.5}
-                    dot={{ fill: fyTotal>=0?'#a78bfa':'#ef4444', r: 4, strokeWidth: 0,
-                           filter: `drop-shadow(0 0 4px ${fyTotal>=0?'rgba(99,102,241,0.8)':'rgba(239,68,68,0.8)'})` }}
-                    activeDot={{ r: 6, fill: '#e8e8f8', strokeWidth: 2, stroke: fyTotal>=0?'#6366f1':'#ef4444' }}
+                    dot={{ fill: fyTotal>=0?'#FF6B00':'#FF4444', r: 4, strokeWidth: 0,
+                           filter: `drop-shadow(0 0 4px ${fyTotal>=0?'rgba(255,107,0,0.8)':'rgba(239,68,68,0.8)'})` }}
+                    activeDot={{ r: 6, fill: '#F0EDE8', strokeWidth: 2, stroke: fyTotal>=0?'#FF6B00':'#FF4444' }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -366,7 +366,7 @@ export default function ReportsPage(){
         <div style={{padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Per-Algo Metrics</div>
-            <span style={{fontSize:'11px',color:'var(--indigo)',background:'rgba(99,102,241,0.12)',padding:'2px 8px',borderRadius:'4px',fontWeight:600}}>{activePeriodLabel}</span>
+            <span style={{fontSize:'11px',color:'var(--indigo)',background:'rgba(255,107,0,0.12)',padding:'2px 8px',borderRadius:'4px',fontWeight:600}}>{activePeriodLabel}</span>
           </div>
           <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
             {[['fy','FY'],['month','Month'],['date','Date'],['custom','Custom']].map(([v,l])=>(
@@ -393,9 +393,9 @@ export default function ReportsPage(){
           <table className="staax-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%'}}>
             <thead>
               <tr>
-                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'#0a0a1a',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Key Metrics</th>
+                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'#0A0A0B',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Key Metrics</th>
                 {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px'}}>{a.name}</th>)}
-                <th style={{color:'var(--indigo)',position:'sticky',right:0,zIndex:2,background:'#0a0a1a',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Cumulative</th>
+                <th style={{color:'var(--indigo)',position:'sticky',right:0,zIndex:2,background:'#0A0A0B',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Cumulative</th>
               </tr>
             </thead>
             <tbody>
@@ -411,7 +411,7 @@ export default function ReportsPage(){
                   : 1
                 return(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'#0a0a1a',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'#0A0A0B',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
                     {algoMetrics.map((a:any)=>{
                       const val=(a as any)[row.key]
                       const barPct=isCurrency?Math.round(Math.abs(val||0)/maxAbs*100):0
@@ -422,7 +422,7 @@ export default function ReportsPage(){
                             <div style={{
                               position:'absolute',bottom:0,left:0,height:'3px',
                               width:`${barPct}%`,
-                              background:isNeg?'rgba(239,68,68,0.45)':'rgba(16,185,129,0.45)',
+                              background:isNeg?'rgba(239,68,68,0.45)':'rgba(34,221,136,0.45)',
                               borderRadius:'0 2px 0 0',
                             }}/>
                           )}
@@ -430,7 +430,7 @@ export default function ReportsPage(){
                         </td>
                       )
                     })}
-                    <td style={{color:'var(--indigo)',fontWeight:700,position:'sticky',right:0,background:'#0a0a1a',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
+                    <td style={{color:'var(--indigo)',fontWeight:700,position:'sticky',right:0,background:'#0A0A0B',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
                   </tr>
                 )
               })}
