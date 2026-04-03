@@ -319,7 +319,15 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           )
         })}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexShrink: 0 }}>
-          <button onClick={() => onCopy(leg.id)} title="Copy leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '0.5px solid rgba(255,107,0,0.35)', color: 'var(--ox-radiant)', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>⧉</button>
+          <button onClick={() => onCopy(leg.id)} title="Copy leg"
+            style={{ height: '28px', width: '28px', background: 'none', border: '0.5px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms ease', flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)' }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="4.083" y="4.083" width="8.167" height="8.167" rx="1.167" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M2.333 9.917H1.75A.583.583 0 011.167 9.333V1.75A.583.583 0 011.75 1.167h7.583a.583.583 0 01.584.583v.583" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </button>
           <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '0.5px solid rgba(255,68,68,0.35)', color: 'var(--red)', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
@@ -697,7 +705,7 @@ export default function AlgoPage() {
     return (
       <div>
         <div className="page-header">
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>{algoName || 'Edit Algo'}</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>{algoName || 'Edit Algo'}</h1>
           <div className="page-header-actions">
             <button className="btn btn-ghost" onClick={() => navigate('/grid')}>← Back to Grid</button>
           </div>
@@ -716,7 +724,7 @@ export default function AlgoPage() {
   }
 
   return (
-    <div>
+    <div className="algo-page">
       <style>{`
         .staax-time-input::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
         .staax-time-input::-webkit-inner-spin-button { display: none !important; }
@@ -729,7 +737,7 @@ export default function AlgoPage() {
         .leg-select-active { color: var(--text) !important; }
       `}</style>
       <div className="page-header">
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
         <div className="page-header-actions">
           {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
@@ -759,7 +767,7 @@ export default function AlgoPage() {
       )}
 
       {/* Identity card */}
-      <div className="card" style={{ marginBottom: '12px' }}>
+      <div className="card cloud-fill" style={{ marginBottom: '12px' }}>
         <SubSection title="Identity — Algo Level" />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 150px', maxWidth: '180px' }}>
@@ -875,7 +883,7 @@ export default function AlgoPage() {
       ))}
 
       {/* Delays + Errors */}
-      <div className="card" style={{ marginTop: '12px' }}>
+      <div className="card cloud-fill" style={{ marginTop: '12px' }}>
         <SubSection title="Order Delays — Algo Level" />
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           {/* F2 — Entry delay with BUY/SELL scope */}

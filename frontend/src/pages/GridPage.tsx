@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI, holidaysAPI } from '@/services/api'
 import { useStore } from '@/store'
@@ -8,6 +8,10 @@ const DAYS     = ['MON','TUE','WED','THU','FRI']
 const WEEKENDS = ['SAT','SUN']
 const ALL_DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN']
 const DAY_LBL  = ['M','T','W','T','F','S','S']
+const ABBR_TO_UNDERLYING: Record<string,string> = {
+  NF:'NIFTY', BN:'BANKNIFTY', SX:'SENSEX', MN:'MIDCAPNIFTY', FN:'FINNIFTY'
+}
+const INSTRUMENT_ORDER = ['NIFTY','BANKNIFTY','SENSEX','MIDCAPNIFTY','FINNIFTY','OTHER']
 type CS = 'no_trade'|'waiting'|'algo_active'|'order_pending'|'open'|'algo_closed'|'error'
 type CM = 'practix'|'live'
 
@@ -24,7 +28,7 @@ interface Algo {
   id:            string
   name:          string
   account:       string
-  legs:          {i:string; d:'B'|'S'}[]
+  legs:          {i:string; d:'B'|'S'; lots?:number; strikeType?:string; wtEnabled?:boolean; hasJourney?:boolean; tslX?:number; tslY?:number; ttpX?:number; ttpY?:number; reSlEnabled?:boolean; reTpEnabled?:boolean}[]
   et:            string
   xt:            string
   arch:          boolean
@@ -32,6 +36,7 @@ interface Algo {
   is_live:       boolean
   mtm_sl?:        number
   mtm_tp?:        number
+  mtm_unit?:      string
   entry_type?:    string
   order_type?:    string
   strategy_mode?: string
@@ -50,13 +55,13 @@ const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
 
 // ── Status bar (left strip) ─────────────────────────────────────────────────────
 const STATUS_BAR: Record<CS,{color:string;glow:string}> = {
-  algo_active:   { color:'#FF6B00',              glow:'rgba(255,107,0,0.30)' },
-  open:          { color:'#22DD88',              glow:'rgba(34,221,136,0.30)' },
-  algo_closed:   { color:'rgba(34,221,136,0.5)', glow:'rgba(34,221,136,0.15)' },
-  error:         { color:'#FF4444',              glow:'rgba(255,68,68,0.30)' },
-  waiting:       { color:'#FFD700',              glow:'rgba(255,215,0,0.30)' },
-  order_pending: { color:'#FFD700',              glow:'rgba(255,215,0,0.25)' },
-  no_trade:      { color:'rgba(255,255,255,0.10)', glow:'transparent' },
+  algo_active:   { color:'#FF6B00',              glow:'rgba(255,107,0,0.70)' },
+  open:          { color:'#00FF88',              glow:'rgba(0,255,136,0.70)' },
+  algo_closed:   { color:'rgba(0,255,136,0.45)', glow:'rgba(0,255,136,0.30)' },
+  error:         { color:'#FF2244',              glow:'rgba(255,34,68,0.70)' },
+  waiting:       { color:'#FFE600',              glow:'rgba(255,230,0,0.70)' },
+  order_pending: { color:'#FF8C00',              glow:'rgba(255,140,0,0.65)' },
+  no_trade:      { color:'rgba(255,255,255,0.20)', glow:'transparent' },
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -93,13 +98,9 @@ function getTodayDay(): string {
   return ['SUN','MON','TUE','WED','THU','FRI','SAT'][ist.getUTCDay()]
 }
 
-function accountChipStyle(name: string): {bg:string;color:string;border:string} {
-  const l = name.toLowerCase()
-  if (l.includes('zerodha') || l.includes('kite'))
-    return { bg:'rgba(68,136,255,0.12)', color:'#4488FF', border:'0.5px solid rgba(68,136,255,0.30)' }
-  if (l.includes('ao') || l.includes('angel') || l.includes('motilal'))
-    return { bg:'rgba(0,204,170,0.12)', color:'#00CCAA', border:'0.5px solid rgba(0,204,170,0.30)' }
-  return { bg:'rgba(255,107,0,0.10)', color:'var(--ox-glow)', border:'0.5px solid rgba(255,107,0,0.25)' }
+
+function toTitleCase(s: string): string {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function worstStatus(cells: Record<string,Cell>|undefined): CS {
@@ -187,11 +188,10 @@ export default function GridPage() {
   const [holidayDates,  setHolidayDates] = useState<Set<string>>(new Set())
   const [tick,          setTick]         = useState(0)
   const [rmModal,       setRmModal]      = useState<{algoId:string;day:string}|null>(null)
-  const [sortBy,        setSortBy]       = useState(() => localStorage.getItem('staax_grid_sort') || 'date_desc')
-  const [activeOnly,    setActiveOnly]   = useState(false)
-  const [cardMults,     setCardMults]    = useState<Record<string,number>>({})
-  const [expandedId,    setExpandedId]   = useState<string|null>(null)
-  const [filterAccount, setFilterAccount] = useState('all')
+  const [cardMults,       setCardMults]       = useState<Record<string,number>>({})
+  const [expandedId,      setExpandedId]      = useState<string|null>(null)
+  const [filterAccount,   setFilterAccount]   = useState('all')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -221,17 +221,29 @@ export default function GridPage() {
         account:      a.account_nickname || '',
         legs:         (a.legs || []).map((l: any) => ({
           i: (({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'} as Record<string,string>)[l.underlying] || (l.underlying||'NF').slice(0,2).toUpperCase()),
-          d: l.direction === 'buy' ? 'B' : 'S',
+          d:            l.direction === 'buy' ? 'B' : 'S',
+          lots:         l.lots ?? undefined,
+          strikeType:   l.strike_type ?? undefined,
+          wtEnabled:    !!l.wt_enabled,
+          hasJourney:   !!(l.journey_config?.child),
+          tslX:         l.tsl_x ?? undefined,
+          tslY:         l.tsl_y ?? undefined,
+          ttpX:         l.ttp_x ?? undefined,
+          ttpY:         l.ttp_y ?? undefined,
+          reSlEnabled:  !!(l.reentry_enabled && l.reentry_on_sl),
+          reTpEnabled:  !!(l.reentry_enabled && l.reentry_on_tp),
         })),
         et:           a.entry_time  || '09:16',
         xt:           a.exit_time   || '15:10',
         arch:         a.is_archived || false,
         recurringDays:Array.isArray(a.recurring_days) ? a.recurring_days : [],
         is_live:      a.is_live || false,
-        mtm_sl:       a.mtm_sl ?? undefined,
-        mtm_tp:       a.mtm_tp ?? undefined,
-        entry_type:   a.entry_type || undefined,
-        order_type:   a.order_type || undefined,
+        mtm_sl:       a.mtm_sl   ?? undefined,
+        mtm_tp:       a.mtm_tp   ?? undefined,
+        mtm_unit:     a.mtm_unit ?? undefined,
+        entry_type:    a.entry_type    || undefined,
+        order_type:    a.order_type    || undefined,
+        strategy_mode: a.strategy_mode || undefined,
       }))
       setAlgos(apiAlgos)
 
@@ -382,31 +394,6 @@ export default function GridPage() {
     }))
   }
 
-  // ── Add all to today ──────────────────────────────────────────────────────────
-  const addAllToToday = async () => {
-    const ist = new Date(new Date().toLocaleString('en-US', { timeZone:'Asia/Kolkata' }))
-    const dow = ist.getDay()
-    const targetDow = dow===0||dow===6 ? 5 : dow
-    const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT']
-    const today = dayNames[targetDow]
-    if (!DAYS.includes(today)) { flashError('Today is not a trading day'); return }
-    const tradingDate = weekDates[today]
-    const toAdd = sortedActive.filter(a => !grid[a.id]?.[today])
-    if (!toAdd.length) return
-    setGrid(g => { const u={...g}; for (const a of toAdd) u[a.id]={ ...g[a.id], [today]:{ multiplier:cardMults[a.id]||1, status:'algo_active' as CS, mode:'practix' as CM, entry:a.et||'09:16', exit:a.xt||'15:10' } }; return u })
-    await Promise.all(toAdd.map(async a => {
-      try {
-        const res = await gridAPI.deploy({ algo_id:a.id, trading_date:tradingDate, lot_multiplier:cardMults[a.id]||1, is_practix:isPractixMode })
-        const gridEntryId = String(res.data?.id||'')
-        setGrid(g => ({ ...g, [a.id]:{ ...g[a.id], [today]:{ ...g[a.id][today], gridEntryId } } }))
-        if (Array.isArray(res.data?.algo_recurring_days)) setAlgos(al => al.map(x => x.id===a.id ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
-      } catch (e:any) {
-        setGrid(g => { const u={...g[a.id]}; delete u[today]; return { ...g, [a.id]:u } })
-        flashError(e?.response?.data?.detail || `Deploy failed for ${a.name}`)
-      }
-    }))
-  }
-
   // ── Archive / Delete ──────────────────────────────────────────────────────────
   const archAlgo = async (algoId: string) => {
     const hasActive = Object.values(grid[algoId]||{}).some(c => c.status==='algo_active'||c.status==='waiting'||c.status==='open'||c.status==='order_pending')
@@ -426,33 +413,56 @@ export default function GridPage() {
     try { await algosAPI.delete(algoId) } catch { loadData(); flashError('Delete failed') }
   }
 
+  // ── SVG Icons ─────────────────────────────────────────────────────────────────
+  const TrashIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1.75 3.5h10.5M5.25 3.5V2.333A.583.583 0 015.833 1.75h2.334a.583.583 0 01.583.583V3.5M11.083 3.5l-.583 8.167a.583.583 0 01-.583.583H4.083a.583.583 0 01-.583-.583L2.917 3.5"
+        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M5.833 6.417v3.5M8.167 6.417v3.5"
+        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  )
+  const ArchiveIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1.167" y="1.75" width="11.666" height="2.917" rx="0.583" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M2.333 4.667v6.416a.583.583 0 00.584.584h8.166a.583.583 0 00.584-.584V4.667"
+        stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M7 6.417v3.5M5.25 8.167L7 9.917l1.75-1.75"
+        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+
   // ── Icon button ───────────────────────────────────────────────────────────────
-  const IBtn = ({ onClick, icon, hc, title }: { onClick:()=>void; icon:string; hc:string; title:string }) => (
+  const IBtn = ({ onClick, icon, dc, hc, hoverBg, hoverBorder, title }: { onClick:()=>void; icon:ReactNode; dc:string; hc:string; hoverBg:string; hoverBorder:string; title:string }) => (
     <button onClick={onClick} title={title}
-      style={{ width:'22px', height:'22px', borderRadius:'4px', border:'none', background:'transparent', color:'var(--text-dim)', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-      onMouseEnter={e => { const b=e.currentTarget as HTMLButtonElement; b.style.color=hc; b.style.background=`${hc}22` }}
-      onMouseLeave={e => { const b=e.currentTarget as HTMLButtonElement; b.style.color='var(--text-dim)'; b.style.background='transparent' }}>
+      style={{ width:'30px', height:'30px', borderRadius:'8px', background:'transparent',
+        border:'0.5px solid rgba(255,255,255,0.08)', color:dc,
+        cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 150ms ease' }}
+      onMouseEnter={e => { const b=e.currentTarget; b.style.color=hc; b.style.background=hoverBg; b.style.borderColor=hoverBorder }}
+      onMouseLeave={e => { const b=e.currentTarget; b.style.color=dc; b.style.background='transparent'; b.style.borderColor='rgba(255,255,255,0.08)' }}>
       {icon}
     </button>
   )
 
   const active   = algos.filter(a => !a.arch)
   const archived = algos.filter(a => a.arch)
-  const sortedActive = [...active].sort((a,b) => {
-    if (sortBy==='name_asc')  return a.name.localeCompare(b.name)
-    if (sortBy==='name_desc') return b.name.localeCompare(a.name)
-    if (sortBy==='buy_first')  return (a.legs.some(l=>l.d==='B')?0:1)-(b.legs.some(l=>l.d==='B')?0:1)
-    if (sortBy==='sell_first') return (a.legs.some(l=>l.d==='S')?0:1)-(b.legs.some(l=>l.d==='S')?0:1)
-    return 0
-  })
   const accountOptions = [
     { value:'all', label:'All Accounts' },
     ...Array.from(new Set(active.map(a => a.account).filter(Boolean))).map(a => ({ value:a, label:a })),
   ]
-  const visibleAlgos = sortedActive
+  const visibleAlgos = [...active]
     .filter(a => isPractixMode ? !a.is_live : a.is_live)
-    .filter(a => !activeOnly || Object.keys(grid[a.id]||{}).length > 0)
     .filter(a => filterAccount === 'all' || a.account === filterAccount)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // ── Group by primary instrument ───────────────────────────────────────────────
+  const groupedAlgos: Record<string, Algo[]> = {}
+  for (const algo of visibleAlgos) {
+    const key = ABBR_TO_UNDERLYING[algo.legs[0]?.i] || 'OTHER'
+    if (!groupedAlgos[key]) groupedAlgos[key] = []
+    groupedAlgos[key].push(algo)
+  }
+  const groupKeys = INSTRUMENT_ORDER.filter(k => groupedAlgos[k]?.length > 0)
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -462,7 +472,7 @@ export default function GridPage() {
       <div style={{ flexShrink:0, paddingBottom:'4px' }}>
         <div className="page-header">
           <div>
-            <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--ox-radiant)' }}>Smart Grid</h1>
+            <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--ox-radiant)' }}>Smart Cards</h1>
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'3px' }}>
               <span style={{ fontSize:'12px', color:'var(--gs-muted)' }}>
                 Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })}
@@ -476,34 +486,11 @@ export default function GridPage() {
             {opError       && <span style={{ fontSize:'11px', color:'var(--red)',        fontWeight:600 }}>⚠ {opError}</span>}
             {autoFillToast && <span style={{ fontSize:'11px', color:'var(--ox-radiant)', fontWeight:600 }}>↻ {autoFillToast}</span>}
 
-            {/* Active Only */}
-            <button onClick={() => setActiveOnly(v => !v)} style={{
-              height:'32px', padding:'0 14px', borderRadius:'100px',
-              background: activeOnly ? 'rgba(255,107,0,0.14)' : 'rgba(255,107,0,0.06)',
-              border:     activeOnly ? '0.5px solid rgba(255,107,0,0.45)' : '0.5px solid rgba(255,107,0,0.20)',
-              color:      activeOnly ? 'var(--ox-radiant)' : 'var(--gs-muted)',
-              fontSize:'11px', fontWeight:600, fontFamily:'var(--font-display)',
-              cursor:'pointer', letterSpacing:'0.4px', transition:'all 0.15s',
-            }}>Active Only</button>
-
             {/* Account filter */}
             <StaaxSelect value={filterAccount} onChange={setFilterAccount} options={accountOptions} width="130px"/>
 
-            {/* Sort */}
-            <StaaxSelect value={sortBy} onChange={v => { setSortBy(v); localStorage.setItem('staax_grid_sort', v) }}
-              options={[
-                {value:'date_desc', label:'Date Created'},
-                {value:'name_asc',  label:'Name A → Z'},
-                {value:'name_desc', label:'Name Z → A'},
-                {value:'buy_first', label:'Buy first'},
-                {value:'sell_first',label:'Sell first'},
-              ]}
-            />
-
-            <button className="btn btn-ghost" onClick={addAllToToday} style={{ fontSize:'11px', height:'32px', padding:'0 12px' }}>All → Today</button>
-
             <button className="btn btn-ghost" style={{ fontSize:'11px', position:'relative', height:'32px', padding:'0 12px' }} onClick={() => setShowArch(v => !v)}>
-              📦 Archive
+              Archive
               {archived.length > 0 && <span style={{ position:'absolute', top:'5px', right:'5px', width:'5px', height:'5px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
             </button>
           </div>
@@ -530,230 +517,297 @@ export default function GridPage() {
         </div>
       )}
 
-      {/* ── Algo cards ─────────────────────────────────────────────────────── */}
-      <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:'8px', paddingBottom:'16px' }}>
-
-        {visibleAlgos.length === 0 && (
-          <div style={{ padding:'64px 24px', textAlign:'center', color:'var(--text-dim)', fontSize:'13px' }}>
-            {activeOnly ? 'No deployed algos this week. Toggle "Active Only" off to see all.' : 'No algos to show. Create an algo to get started.'}
+      {/* ── Status legend ───────────────────────────────────────────────── */}
+      <div style={{ flexShrink:0, display:'flex', gap:'18px', alignItems:'center', paddingLeft:'2px', marginBottom:'8px', flexWrap:'wrap' }}>
+        {([
+          ['#FF6B00','Active'], ['#00FF88','Open'], ['#FFE600','Waiting'],
+          ['#FF8C00','Pending'], ['#FF2244','Error'],
+          ['rgba(0,255,136,0.45)','Closed'], ['rgba(255,255,255,0.20)','No Trade'],
+        ] as [string,string][]).map(([color, label]) => (
+          <div key={label} style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+            <div style={{ width:'7px', height:'7px', borderRadius:'50%', background:color, boxShadow:`0 0 6px ${color}`, flexShrink:0 }}/>
+            <span style={{ fontSize:'10px', color:'rgba(255,255,255,0.40)', fontFamily:'var(--font-display)', letterSpacing:'0.5px' }}>{label}</span>
           </div>
-        )}
+        ))}
+      </div>
 
-        {visibleAlgos.map(algo => {
-          const st         = worstStatus(grid[algo.id])
-          const bar        = STATUS_BAR[st]
-          const acChips    = accountChipStyle(algo.account)
-          const mult       = cardMults[algo.id] || 1
-          const isExpanded = expandedId === algo.id
-          const typeStr    = algo.account?.toLowerCase().includes('ao') ? 'Direct' : 'Broker'
+      {/* ── Algo cards outer container (cloud-fill glassmorphic) ─────── */}
+      <div className="card cloud-fill" style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', padding:'14px 14px 0', overflow:'hidden', borderRadius:'16px' }}>
+        <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', paddingBottom:'14px' }}>
 
-          return (
-            <div key={algo.id} className="card cloud-fill"
-              onClick={() => setExpandedId(v => v === algo.id ? null : algo.id)}
-              style={{ padding:0, overflow:'hidden', display:'flex', flexDirection:'column', borderRadius:'14px', cursor:'pointer', minHeight:'64px' }}>
+          {visibleAlgos.length === 0 && (
+            <div style={{ padding:'64px 24px', textAlign:'center', color:'var(--text-dim)', fontSize:'13px' }}>
+              No algos to show. Create an algo to get started.
+            </div>
+          )}
 
-              {/* ── Main row ── */}
-              <div style={{ display:'flex', alignItems:'center' }}>
+          {groupKeys.map((instrument, gIdx) => {
+            const groupAlgos  = groupedAlgos[instrument]
+            const isCollapsed = collapsedGroups.has(instrument)
+            return (
+              <div key={instrument}>
 
-                {/* 4px status strip — full card height */}
-                <div style={{ width:'4px', alignSelf:'stretch', flexShrink:0, background:bar.color, borderRadius:'14px 0 0 14px', boxShadow:`inset 0 0 14px ${bar.glow}` }}/>
+                {/* ── Group header ── */}
+                <div
+                  onClick={() => setCollapsedGroups(prev => {
+                    const next = new Set(prev)
+                    if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
+                    return next
+                  })}
+                  style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
+                    paddingBottom:'8px', marginBottom:'8px', marginTop: gIdx === 0 ? 0 : '20px',
+                    borderBottom:'0.5px solid rgba(255,107,0,0.15)', userSelect:'none',
+                  }}>
+                  <span style={{ fontFamily:'var(--font-display)', fontSize:'13px', fontWeight:700, color:'#FF6B00', letterSpacing:'1px' }}>
+                    {instrument}
+                  </span>
+                  <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.38)' }}>
+                    {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"
+                    style={{ marginLeft:'auto', transition:'transform 0.2s ease', transform: isCollapsed ? 'rotate(-90deg)' : 'none' }}>
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </div>
 
-                {/* Card row body */}
-                <div style={{ flex:1, display:'flex', alignItems:'center', gap:'12px', padding:'10px 16px' }}>
+                {/* ── Group cards ── */}
+                {!isCollapsed && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'4px' }}>
+                    {groupAlgos.map(algo => {
+                      const st          = worstStatus(grid[algo.id])
+                      const bar         = STATUS_BAR[st]
+                      const mult        = cardMults[algo.id] || 1
+                      const isExpanded  = expandedId === algo.id
+                      const typeStr     = algo.account?.toLowerCase().includes('ao') ? 'Direct' : 'Broker'
+                      const instruments = Array.from(new Set(algo.legs.map(l => l.i)))
 
-                  {/* ── Info block: name + account + legs (stacked) ── */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px', maxWidth:'220px', flexShrink:0 }}>
-
-                    {/* Row 1: Name + type */}
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                      <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
-                        style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
-                          cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'130px',
-                          textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)' }}>
-                        {algo.name}
-                      </span>
-                      <span style={{ fontSize:'10px', color:'var(--gs-muted)', whiteSpace:'nowrap', flexShrink:0 }}>
-                        {typeStr} · Intraday
-                      </span>
-                    </div>
-
-                    {/* Row 2: Account chip */}
-                    <div>
-                      <span style={{ display:'inline-flex', alignItems:'center', padding:'2px 8px', borderRadius:'100px',
-                        fontSize:'11px', fontWeight:600, fontFamily:'var(--font-display)', letterSpacing:'0.3px', whiteSpace:'nowrap',
-                        background:acChips.bg, color:acChips.color, border:acChips.border }}>
-                        {algo.account || '—'}
-                      </span>
-                    </div>
-
-                    {/* Row 3: Leg chips */}
-                    <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                      {algo.legs.map((l, i) => (
-                        <span key={i} style={{
-                          display:'inline-flex', alignItems:'center', padding:'2px 7px', borderRadius:'100px',
-                          fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'0.3px',
-                          background: l.d==='B' ? 'rgba(34,221,136,0.12)' : 'rgba(255,68,68,0.12)',
-                          color:      l.d==='B' ? 'var(--sem-long)'        : 'var(--sem-short)',
-                          border:    `0.5px solid ${l.d==='B' ? 'rgba(34,221,136,0.30)' : 'rgba(255,68,68,0.30)'}`,
-                        }}>
-                          {l.d==='B' ? 'B' : 'S'} {l.i}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* ── Lot multiplier stepper ── */}
-                  <div style={{ display:'flex', alignItems:'center', gap:'5px', minWidth:'80px', flexShrink:0, justifyContent:'center' }}
-                    onClick={e => e.stopPropagation()}>
-                    <button onClick={() => changeCardMult(algo.id, mult - 1)}
-                      style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
-                      onMouseEnter={e => { e.currentTarget.style.background='rgba(255,107,0,0.16)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.55)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background='rgba(255,107,0,0.06)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.30)' }}>−</button>
-
-                    {ed?.id===algo.id && ed?.day==='__mult__'
-                      ? <input autoFocus type="number" min={1} value={ev}
-                          onChange={e => setEv(e.target.value)}
-                          onBlur={() => { changeCardMult(algo.id, Math.max(1, parseInt(ev)||1)); setEd(null) }}
-                          onKeyDown={e => { if (e.key==='Enter') { changeCardMult(algo.id, Math.max(1, parseInt(ev)||1)); setEd(null) } }}
-                          style={{ width:'36px', background:'rgba(22,22,25,0.90)', border:'0.5px solid var(--ox-radiant)', borderRadius:'4px', color:'var(--ox-glow)', fontSize:'11px', textAlign:'center', padding:'0 2px', fontFamily:'var(--font-mono)', outline:'none' }}/>
-                      : <span onClick={() => { setEd({ id:algo.id, day:'__mult__' }); setEv(String(mult)) }}
-                          style={{ width:'34px', textAlign:'center', cursor:'pointer', fontSize:'12px', fontWeight:700, color:'var(--ox-radiant)', fontFamily:'var(--font-mono)', letterSpacing:'-0.5px' }}>
-                          {mult}x
-                        </span>
-                    }
-
-                    <button onClick={() => changeCardMult(algo.id, mult + 1)}
-                      style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
-                      onMouseEnter={e => { e.currentTarget.style.background='rgba(255,107,0,0.16)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.55)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background='rgba(255,107,0,0.06)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.30)' }}>+</button>
-                  </div>
-
-                  {/* ── Entry / Exit time ── */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:'3px', minWidth:'80px', flexShrink:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                      <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
-                      <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
-                    </div>
-                    <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                      <span style={{ color:'var(--text-muted)', fontSize:'10px' }}>⏹</span>
-                      <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-muted)' }}>{algo.xt}</span>
-                    </div>
-                  </div>
-
-                  {/* ── Day pills M T W T F S S ── */}
-                  <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'210px', justifyContent:'center' }}
-                    onClick={e => e.stopPropagation()}>
-                    {ALL_DAYS.map((day, i) => {
-                      const isDeployed = !!grid[algo.id]?.[day]
-                      const cell       = grid[algo.id]?.[day]
-                      const isToday    = day === todayDay
-                      const isWeekend  = WEEKENDS.includes(day)
-                      const isHoliday  = weekDates[day] ? holidayDates.has(weekDates[day]) : false
-                      const isMissed   = cell?.status==='waiting' && isToday && !!cell.entry && tick>=0 && (() => {
-                        const now = new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:false})
-                        return now >= cell.entry.slice(0,5)
-                      })()
-                      const deployedSt = cell ? SC[cell.status] : null
                       return (
-                        <button key={day}
-                          onClick={() => isDeployed ? rmCell(algo.id, day) : deployDay(algo.id, day)}
-                          title={`${day}${isHoliday?' (Holiday)':''}${isDeployed ? ` · ${deployedSt?.label||'Active'} · click to remove` : ' · click to deploy'}`}
-                          style={{
-                            width:'28px', height:'28px', borderRadius:'50%', cursor:'pointer', position:'relative',
-                            fontFamily:'var(--font-display)', fontSize:'10px', fontWeight:700,
-                            display:'flex', alignItems:'center', justifyContent:'center',
-                            transition:'all 0.15s var(--ease-smooth)', flexShrink:0,
-                            border: isDeployed ? '0.5px solid rgba(255,107,0,0.60)'
-                              : isToday   ? '0.5px solid rgba(255,107,0,0.45)'
-                              : isHoliday ? '0.5px solid rgba(245,158,11,0.25)'
-                              : isWeekend ? '0.5px solid rgba(255,255,255,0.05)'
-                              : '0.5px solid rgba(255,255,255,0.09)',
-                            background: isDeployed ? (isMissed ? 'rgba(245,158,11,0.18)' : 'rgba(255,107,0,0.20)')
-                              : isHoliday ? 'rgba(245,158,11,0.06)' : 'transparent',
-                            color: isDeployed ? (isMissed ? 'var(--accent-amber)' : '#fff')
-                              : isToday   ? 'rgba(255,107,0,0.75)'
-                              : isHoliday ? 'var(--accent-amber)'
-                              : isWeekend ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.40)',
-                            opacity: isHoliday && !isDeployed ? 0.5 : 1,
-                            boxShadow: isDeployed ? '0 0 8px rgba(255,107,0,0.18)' : 'none',
-                          }}>
-                          {DAY_LBL[i]}
-                          {isDeployed && deployedSt && deployedSt.col !== SC.algo_active.col && (
-                            <span style={{ position:'absolute', bottom:'1px', right:'1px', width:'5px', height:'5px', borderRadius:'50%', background:deployedSt.col }}/>
-                          )}
-                          {isMissed && (
-                            <span style={{ position:'absolute', top:'0', right:'0', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>
-                          )}
-                        </button>
+                        <div key={algo.id}
+                          onClick={() => setExpandedId(expandedId === algo.id ? null : algo.id)}
+                          style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:'10px', cursor:'pointer',
+                            background:'rgba(14,14,18,0.90)', border:'0.5px solid rgba(255,255,255,0.07)',
+                            transition:'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+                          }}
+                          onMouseEnter={e => { const d=e.currentTarget; d.style.transform='translateY(-2px)'; d.style.boxShadow='0 8px 28px rgba(255,107,0,0.13)'; d.style.borderColor='rgba(255,107,0,0.28)' }}
+                          onMouseLeave={e => { const d=e.currentTarget; d.style.transform='none'; d.style.boxShadow='none'; d.style.borderColor='rgba(255,255,255,0.07)' }}>
+
+                          {/* ── Main row ── */}
+                          <div style={{ display:'flex', alignItems:'stretch', minHeight:'80px' }}>
+
+                            {/* Status strip — full card height */}
+                            <div style={{ width:'4px', flexShrink:0, alignSelf:'stretch',
+                              background:bar.color, borderRadius:'2px',
+                              boxShadow:`0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
+
+                            {/* Card row body */}
+                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'24px', padding:'18px 24px' }}>
+
+                              {/* ── Info block ── */}
+                              <div style={{ display:'flex', gap:'10px', width:'260px', flexShrink:0, alignItems:'flex-start' }}>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', minWidth:0, flex:1 }}>
+                                  <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
+                                    style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
+                                      cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                                      textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)' }}>
+                                    {algo.name}
+                                  </span>
+                                  <span style={{ fontSize:'11px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                    {algo.account || '—'}
+                                  </span>
+                                </div>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:0, flex:1 }}>
+                                  <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
+                                    {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
+                                  </span>
+                                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                                    {instruments.map(ins => (
+                                      <span key={ins} style={{
+                                        display:'inline-flex', alignItems:'center', padding:'2px 7px', borderRadius:'100px',
+                                        fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'0.5px',
+                                        background:'rgba(255,107,0,0.10)', color:'var(--ox-glow)',
+                                        border:'0.5px solid rgba(255,107,0,0.28)',
+                                      }}>{ins}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* ── Entry / Exit time ── */}
+                              <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'90px', flexShrink:0 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                                  <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
+                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
+                                </div>
+                                <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                                  <span style={{ color:'var(--text-muted)', fontSize:'10px' }}>⏹</span>
+                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-muted)' }}>{algo.xt}</span>
+                                </div>
+                              </div>
+
+                              {/* ── Lot multiplier stepper ── */}
+                              <div style={{ display:'flex', alignItems:'center', gap:'5px', width:'88px', flexShrink:0, justifyContent:'center' }}
+                                onClick={e => e.stopPropagation()}>
+                                <button onClick={() => changeCardMult(algo.id, mult - 1)}
+                                  style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
+                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,107,0,0.16)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.55)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,107,0,0.06)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.30)' }}>−</button>
+                                {ed?.id===algo.id && ed?.day==='__mult__'
+                                  ? <input autoFocus type="number" min={1} value={ev}
+                                      onChange={e => setEv(e.target.value)}
+                                      onBlur={() => { changeCardMult(algo.id, Math.max(1, parseInt(ev)||1)); setEd(null) }}
+                                      onKeyDown={e => { if (e.key==='Enter') { changeCardMult(algo.id, Math.max(1, parseInt(ev)||1)); setEd(null) } }}
+                                      style={{ width:'36px', background:'rgba(22,22,25,0.90)', border:'0.5px solid var(--ox-radiant)', borderRadius:'4px', color:'var(--ox-glow)', fontSize:'11px', textAlign:'center', padding:'0 2px', fontFamily:'var(--font-mono)', outline:'none' }}/>
+                                  : <span onClick={() => { setEd({ id:algo.id, day:'__mult__' }); setEv(String(mult)) }}
+                                      style={{ width:'34px', textAlign:'center', cursor:'pointer', fontSize:'12px', fontWeight:700, color:'var(--ox-radiant)', fontFamily:'var(--font-mono)', letterSpacing:'-0.5px' }}>
+                                      {mult}x
+                                    </span>
+                                }
+                                <button onClick={() => changeCardMult(algo.id, mult + 1)}
+                                  style={{ width:'22px', height:'22px', borderRadius:'50%', border:'0.5px solid rgba(255,107,0,0.30)', background:'rgba(255,107,0,0.06)', color:'var(--ox-glow)', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1, transition:'all 0.12s', fontWeight:300 }}
+                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,107,0,0.16)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.55)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,107,0,0.06)'; e.currentTarget.style.borderColor='rgba(255,107,0,0.30)' }}>+</button>
+                              </div>
+
+                              {/* ── Day pills M T W T F S S ── */}
+                              <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'220px', justifyContent:'center' }}>
+                                {ALL_DAYS.map((day, i) => {
+                                  const isDeployed = !!grid[algo.id]?.[day]
+                                  const cell       = grid[algo.id]?.[day]
+                                  const isToday    = day === todayDay
+                                  const isWeekend  = WEEKENDS.includes(day)
+                                  const isHoliday  = weekDates[day] ? holidayDates.has(weekDates[day]) : false
+                                  const isMissed   = cell?.status==='waiting' && isToday && !!cell.entry && tick>=0 && (() => {
+                                    const now = new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:false})
+                                    return now >= cell.entry.slice(0,5)
+                                  })()
+                                  const deployedSt = cell ? SC[cell.status] : null
+                                  return (
+                                    <button key={day}
+                                      onClick={e => { e.stopPropagation(); isDeployed ? rmCell(algo.id, day) : deployDay(algo.id, day) }}
+                                      title={`${day}${isHoliday?' (Holiday)':''}${isDeployed ? ` · ${deployedSt?.label||'Active'} · click to remove` : ' · click to deploy'}`}
+                                      style={{
+                                        width:'28px', height:'28px', borderRadius:'50%', cursor:'pointer', position:'relative',
+                                        fontFamily:'var(--font-display)', fontSize:'10px', fontWeight:700,
+                                        display:'flex', alignItems:'center', justifyContent:'center',
+                                        transition:'all 0.15s ease', flexShrink:0,
+                                        border: isDeployed ? '0.5px solid rgba(255,107,0,0.60)'
+                                          : isToday   ? '0.5px solid rgba(255,107,0,0.45)'
+                                          : isHoliday ? '0.5px solid rgba(245,158,11,0.25)'
+                                          : isWeekend ? '0.5px solid rgba(255,255,255,0.05)'
+                                          : '0.5px solid rgba(255,255,255,0.09)',
+                                        background: isDeployed ? (isMissed ? 'rgba(245,158,11,0.18)' : 'rgba(255,107,0,0.20)')
+                                          : isHoliday ? 'rgba(245,158,11,0.06)' : 'transparent',
+                                        color: isDeployed ? (isMissed ? 'var(--accent-amber)' : '#fff')
+                                          : isToday   ? 'rgba(255,107,0,0.75)'
+                                          : isHoliday ? 'var(--accent-amber)'
+                                          : isWeekend ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.40)',
+                                        opacity: isHoliday && !isDeployed ? 0.5 : 1,
+                                        boxShadow: isDeployed ? '0 0 8px rgba(255,107,0,0.18)' : 'none',
+                                      }}>
+                                      {DAY_LBL[i]}
+                                      {isDeployed && deployedSt && deployedSt.col !== SC.algo_active.col && (
+                                        <span style={{ position:'absolute', bottom:'1px', right:'1px', width:'5px', height:'5px', borderRadius:'50%', background:deployedSt.col }}/>
+                                      )}
+                                      {isMissed && (
+                                        <span style={{ position:'absolute', top:'0', right:'0', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>
+                                      )}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+
+                              {/* ── Promote / Demote ── */}
+                              <div style={{ width:'90px', flexShrink:0, display:'flex', justifyContent:'center' }}
+                                onClick={e => e.stopPropagation()}>
+                                {isPractixMode ? (
+                                  <button onClick={() => promLive(algo.id)} style={{
+                                    height:'28px', padding:'0 12px', borderRadius:'100px', whiteSpace:'nowrap',
+                                    border:'0.5px solid rgba(34,221,136,0.35)', background:'rgba(34,221,136,0.08)', color:'var(--sem-long)',
+                                    fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s',
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(34,221,136,0.16)'; e.currentTarget.style.borderColor='rgba(34,221,136,0.60)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(34,221,136,0.08)'; e.currentTarget.style.borderColor='rgba(34,221,136,0.35)' }}>
+                                    → LIVE
+                                  </button>
+                                ) : (
+                                  <button onClick={() => demoteLive(algo.id)} style={{
+                                    height:'28px', padding:'0 12px', borderRadius:'100px', whiteSpace:'nowrap',
+                                    border:'0.5px solid var(--gs-border)', background:'rgba(42,42,46,0.6)', color:'var(--gs-muted)',
+                                    fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s',
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(58,58,64,0.9)'; e.currentTarget.style.color='var(--ox-ultra)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(42,42,46,0.6)'; e.currentTarget.style.color='var(--gs-muted)' }}>
+                                    ← PRAC
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* ── Actions ── */}
+                              <div style={{ width:'56px', flexShrink:0, display:'flex', gap:'4px', justifyContent:'flex-end' }}
+                                onClick={e => e.stopPropagation()}>
+                                <IBtn onClick={() => setDel(algo.id)}         icon={<TrashIcon/>}   dc="#FF4444" hc="#FF4444" hoverBg="rgba(255,68,68,0.12)"   hoverBorder="rgba(255,68,68,0.4)"   title="Delete permanently"/>
+                                <IBtn onClick={() => setArchConfirm(algo.id)} icon={<ArchiveIcon/>} dc="#60A5FA" hc="#60A5FA" hoverBg="rgba(96,165,250,0.12)"  hoverBorder="rgba(96,165,250,0.4)"  title="Archive"/>
+                              </div>
+
+                            </div>{/* end card row body */}
+                          </div>{/* end main row */}
+
+                          {/* ── Expanded detail panel ── */}
+                          {isExpanded && (() => {
+                            const leg0 = algo.legs[0]
+                            const lbl = (text: string) => (
+                              <div style={{ fontSize:'9px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'var(--gs-light)', fontFamily:'var(--font-display)', marginBottom:'4px' }}>{text}</div>
+                            )
+                            const val = (text: string, color = '#F0F0FF') => (
+                              <div style={{ fontSize:'13px', color, fontFamily:'var(--font-mono)' }}>{text}</div>
+                            )
+                            const boolVal = (flag?: boolean) => val(flag ? 'Yes' : 'No', flag ? '#22DD88' : 'var(--gs-light)')
+                            return (
+                              <div onClick={e => e.stopPropagation()}
+                                style={{ borderTop:'0.5px solid rgba(255,107,0,0.15)', padding:'14px 24px 16px',
+                                  display:'flex', flexDirection:'column', gap:'12px' }}>
+                                {/* Row 1 — MTM settings */}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
+                                  <div>{lbl('MTM SL')}{val(algo.mtm_sl != null ? `₹${algo.mtm_sl.toLocaleString('en-IN')}` : '—')}</div>
+                                  <div>{lbl('MTM TP')}{val(algo.mtm_tp != null ? `₹${algo.mtm_tp.toLocaleString('en-IN')}` : '—')}</div>
+                                  <div>{lbl('MTM Unit')}{val(algo.mtm_unit ? toTitleCase(algo.mtm_unit) : '—')}</div>
+                                  <div>{lbl('Global SL')}{val('—')}</div>
+                                </div>
+                                {/* Row 2 — Execution settings (first leg) */}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
+                                  <div>{lbl('Strike Type')}{val(leg0?.strikeType ? toTitleCase(leg0.strikeType) : '—')}</div>
+                                  <div>{lbl('Lots')}{val(leg0?.lots != null ? String(leg0.lots) : '—')}</div>
+                                  <div>{lbl('Re-entry SL')}{boolVal(leg0?.reSlEnabled)}</div>
+                                  <div>{lbl('Re-entry TP')}{boolVal(leg0?.reTpEnabled)}</div>
+                                </div>
+                                {/* Row 3 — Strategy settings (first leg) */}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
+                                  <div>{lbl('W&T')}{boolVal(leg0?.wtEnabled)}</div>
+                                  <div>{lbl('Journey')}{boolVal(leg0?.hasJourney)}</div>
+                                  <div>{lbl('TSL')}{val(leg0?.tslX != null ? `${leg0.tslX} → ${leg0.tslY}` : '—')}</div>
+                                  <div>{lbl('TTP')}{val(leg0?.ttpX != null ? `${leg0.ttpX} → ${leg0.ttpY}` : '—')}</div>
+                                </div>
+                                {DAYS.some(d => !grid[algo.id]?.[d]) && (
+                                  <div style={{ paddingTop:'8px', borderTop:'0.5px solid rgba(255,255,255,0.04)', display:'flex', gap:'8px' }}>
+                                    <button onClick={() => addAllWeekdays(algo.id)} className="btn btn-ghost"
+                                      style={{ fontSize:'11px', height:'28px', padding:'0 12px' }}>
+                                      Deploy All Weekdays
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+
+                        </div>
                       )
                     })}
                   </div>
-
-                  {/* ── Promote / Demote ── */}
-                  <div style={{ minWidth:'80px', flexShrink:0, display:'flex', justifyContent:'center' }}
-                    onClick={e => e.stopPropagation()}>
-                    {isPractixMode ? (
-                      <button onClick={() => promLive(algo.id)} style={{
-                        height:'28px', padding:'0 12px', borderRadius:'100px', whiteSpace:'nowrap',
-                        border:'0.5px solid rgba(34,221,136,0.35)', background:'rgba(34,221,136,0.08)', color:'var(--sem-long)',
-                        fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background='rgba(34,221,136,0.16)'; e.currentTarget.style.borderColor='rgba(34,221,136,0.60)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background='rgba(34,221,136,0.08)'; e.currentTarget.style.borderColor='rgba(34,221,136,0.35)' }}>
-                        → LIVE
-                      </button>
-                    ) : (
-                      <button onClick={() => demoteLive(algo.id)} style={{
-                        height:'28px', padding:'0 12px', borderRadius:'100px', whiteSpace:'nowrap',
-                        border:'0.5px solid var(--gs-border)', background:'rgba(42,42,46,0.6)', color:'var(--gs-muted)',
-                        fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background='rgba(58,58,64,0.9)'; e.currentTarget.style.color='var(--ox-ultra)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background='rgba(42,42,46,0.6)'; e.currentTarget.style.color='var(--gs-muted)' }}>
-                        ← PRAC
-                      </button>
-                    )}
-                  </div>
-
-                  {/* ── Actions ── */}
-                  <div style={{ display:'flex', gap:'2px', flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                    <IBtn onClick={() => setDel(algo.id)}         icon="🗑" hc="var(--red)"          title="Delete permanently"/>
-                    <IBtn onClick={() => setArchConfirm(algo.id)} icon="📦" hc="var(--accent-amber)" title="Archive"/>
-                  </div>
-
-                </div>{/* end card row body */}
-              </div>{/* end main row */}
-
-              {/* ── Expanded detail panel ── */}
-              {isExpanded && (
-                <div onClick={e => e.stopPropagation()}
-                  style={{ borderTop:'0.5px solid rgba(255,107,0,0.15)', margin:'0 20px 12px', paddingTop:'12px',
-                    display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', alignItems:'end' }}>
-                  {[
-                    { label:'MTM SL',    val: algo.mtm_sl != null ? String(algo.mtm_sl) : '—' },
-                    { label:'MTM TP',    val: algo.mtm_tp != null ? String(algo.mtm_tp) : '—' },
-                    { label:'Entry Type',val: algo.entry_type || '—' },
-                    { label:'Order Type',val: algo.order_type || '—' },
-                  ].map(({ label, val }) => (
-                    <div key={label}>
-                      <div style={{ fontSize:'9px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'var(--gs-light)', fontFamily:'var(--font-display)', marginBottom:'3px' }}>{label}</div>
-                      <div style={{ fontSize:'13px', color:'var(--text)', fontFamily:'var(--font-mono)' }}>{val}</div>
-                    </div>
-                  ))}
-                  {DAYS.some(d => !grid[algo.id]?.[d]) && (
-                    <div style={{ gridColumn:'span 4', paddingTop:'8px', borderTop:'0.5px solid rgba(255,255,255,0.04)', display:'flex', gap:'8px' }}>
-                      <button onClick={() => addAllWeekdays(algo.id)} className="btn btn-ghost"
-                        style={{ fontSize:'11px', height:'28px', padding:'0 12px' }}>
-                        Deploy All Weekdays
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-            </div>
-          )
-        })}
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* ── Remove cell modal ──────────────────────────────────────────────── */}

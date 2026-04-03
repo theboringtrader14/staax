@@ -1,9 +1,5 @@
 /* STAAX Brand Design System v2.0 — Orange / Void / Glass */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* ── Design Tokens ──────────────────────────────────────── */
 :root {
   --ox-ultra:    #FFB366;
@@ -246,7 +242,7 @@ body::before {
 }
 .staax-input::placeholder { color:var(--gs-light); }
 .staax-input:hover:not(:focus) { border-color:rgba(255,107,0,0.35); }
-.staax-input:focus { border-color:var(--ox-border-hi); box-shadow:0 0 0 3px rgba(255,107,0,0.08); }
+.staax-input:focus { border-color:rgba(255,107,0,0.5); box-shadow:0 0 0 2px rgba(255,107,0,0.10); }
 .staax-select {
   background:rgba(22,22,25,0.80); border:0.5px solid var(--ox-border); border-radius:var(--radius-md);
   color:var(--text); padding:0 28px 0 10px; height:var(--btn-h); font-size:12px; font-family:var(--font-body);
@@ -416,3 +412,19 @@ body::before {
 @keyframes pulseLive  { 0%,100%{box-shadow:0 0 4px var(--ox-radiant);opacity:1;} 50%{box-shadow:0 0 12px var(--ox-radiant);opacity:0.7;} }
 @keyframes shimmer    { 0%{background-position:-200% center;} 100%{background-position:200% center;} }
 
+
+/* AlgoPage — orange-accented select overrides */
+.algo-page .staax-select {
+  border-color: rgba(255,107,0,0.3);
+  color: #F0F0FF;
+}
+.algo-page .staax-select:focus {
+  border-color: rgba(255,107,0,0.6);
+  box-shadow: 0 0 0 2px rgba(255,107,0,0.12);
+  outline: none;
+}
+
+/* Dropdown + checkbox accent override */
+input[type="checkbox"] { accent-color: #FF6B00; }
+select { accent-color: #FF6B00; }
+select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-offset: 0; }
