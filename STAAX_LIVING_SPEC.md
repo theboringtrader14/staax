@@ -3760,3 +3760,49 @@ Use these as source of truth for any future UI work.
 - Borders: always 0.5px (never 1px except 2px left accent)
 - No blue (#00B0F0 / #38bdf8) anywhere — replaced with orange
 - Animations: fadeUp 400ms entry, 220ms hover, spring easing
+
+## Session Update — 2026-04-03
+
+### LIFEX Platform Status
+- LIFEX landing: lifex.in (local: localhost:3000)
+  - INVEX module card → opens localhost:3001
+  - Launch STAAX button removed
+  - Enter LIFEX → /dashboard
+- STAAX: localhost:3000 (orange brand v5.0) ✅
+- INVEX: localhost:3001 (teal brand v1.0) ✅
+  - Direct to /portfolio, no auth
+  - 5 metric cards, holdings table, sector allocation, equity curve
+
+### Smart Grid Redesign (in progress)
+- Replacing table with per-algo horizontal cards
+- Status strip (4px left bar), day pills, lot stepper
+- Design reference: DashboardPage
+
+### Pending
+- Smart Grid card redesign (Claude Code in progress)
+- Orders, Reports, Analytics, Indicators page polish
+- INVEX: connect to live portfolio data
+- Server deploy of v5.0 frontend
+
+## Session Update — 2026-04-03
+
+### LIFEX Platform Status
+- LIFEX landing: lifex.in (local: localhost:3000)
+  - INVEX module card → opens localhost:3001
+  - Launch STAAX button removed
+  - Enter LIFEX → /dashboard
+- STAAX: localhost:3000 (orange brand v5.0) ✅
+- INVEX: localhost:3001 (teal brand v1.0) ✅
+  - Direct to /portfolio, no auth
+  - 5 metric cards, holdings table, sector allocation, equity curve
+
+### Smart Grid Redesign (in progress)
+- Replacing table with per-algo horizontal cards
+- Status strip (4px left bar), day pills, lot stepper
+- Design reference: DashboardPage
+
+### Pending
+- Smart Grid card redesign (Claude Code in progress)
+- Orders, Reports, Analytics, Indicators page polish
+- INVEX: connect to live portfolio data
+- Server deploy of v5.0 frontend
