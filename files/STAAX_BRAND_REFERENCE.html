@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>STAAX — Brand & Design System Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ═══════════════════════════════════════════════════
+   STAAX DESIGN SYSTEM — CSS CUSTOM PROPERTIES
+   Reference these exactly in your Next.js globals.css
+═══════════════════════════════════════════════════ */
+:root {
+  /* ── ORANGE PRIMARY SCALE ── */
+  --ox-ultra:    #FFB366;   /* lightest — hover text, soft highlights */
+  --ox-glow:     #FF8C33;   /* subheadings, secondary CTAs */
+  --ox-radiant:  #FF6B00;   /* PRIMARY — headlines, active states, CTAs */
+  --ox-ember:    #CC4400;   /* dual-tone partner — gradients, chart fills */
+  --ox-deep:     #8B2500;   /* darkest — shadows behind orange elements */
+  --ox-ghost:    rgba(255,107,0,0.12); /* translucent fill */
+  --ox-border:   rgba(255,107,0,0.22); /* glass card border */
+  --ox-border-hi:rgba(255,107,0,0.50); /* hover/active border */
+
+  /* ── GREY STEEL SCALE ── */
+  --gs-muted:    #8A8A94;   /* body text, captions */
+  --gs-light:    #5A5A61;   /* disabled, tertiary text */
+  --gs-mid:      #3D3D42;   /* glass panel bg mid */
+  --gs-steel:    #2A2A2E;   /* glass panel bg base */
+  --gs-dark:     #1A1A1E;   /* deep surface */
+  --gs-border:   rgba(255,255,255,0.07); /* steel card borders */
+
+  /* ── VOID BACKGROUNDS ── */
+  --bg-void:     #0A0A0B;   /* page background — pitch black */
+  --bg-deep:     #111114;   /* slightly lifted surface */
+  --bg-surface:  #161619;   /* card background inner */
+
+  /* ── SEMANTIC / TERTIARY ── */
+  --sem-long:    #22DD88;   /* buy / profit / success */
+  --sem-short:   #FF4444;   /* sell / loss / error */
+  --sem-signal:  #4488FF;   /* signal / info / active algo */
+  --sem-warn:    #FFD700;   /* warning / pending / holiday */
+
+  /* ── GLASS RECIPE ── */
+  --glass-bg:    rgba(22,22,25,0.72);
+  --glass-blur:  blur(20px);
+  --glass-border:0.5px solid var(--ox-border);
+
+  --glass-steel-bg:    rgba(42,42,46,0.65);
+  --glass-steel-border:0.5px solid var(--gs-border);
+
+  /* ── TYPOGRAPHY ── */
+  --font-display: 'Syne', sans-serif;       /* ALL headings, labels, nav */
+  --font-mono:    'JetBrains Mono', monospace; /* prices, tickers, logs */
+
+  /* ── SPACING BASE ── */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* ── RADIUS ── */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-pill: 100px;
+
+  /* ── ANIMATION TIMING ── */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:    cubic-bezier(0, 0, 0.2, 1);
+  --dur-fast:  120ms;
+  --dur-mid:   220ms;
+  --dur-slow:  400ms;
+}
+
+/* ═══════════════════════════════════════════════════
+   GLOBAL RESET + BASE
+═══════════════════════════════════════════════════ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { font-size:16px; scroll-behavior:smooth; }
+body {
+  background: var(--bg-void);
+  color: var(--gs-muted);
+  font-family: var(--font-display);
+  min-height:100vh;
+  overflow-x:hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════
+   AMBIENT BACKGROUND ORBS — add to layout root
+═══════════════════════════════════════════════════ */
+.bg-orbs {
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  overflow:hidden;
+}
+.bg-orbs::before {
+  content:'';
+  position:absolute;
+  width:700px; height:700px;
+  top:-200px; left:-200px;
+  background: radial-gradient(circle, rgba(255,107,0,0.07) 0%, transparent 65%);
+  animation: orbDrift1 18s ease-in-out infinite alternate;
+}
+.bg-orbs::after {
+  content:'';
+  position:absolute;
+  width:500px; height:500px;
+  bottom:0; right:-100px;
+  background: radial-gradient(circle, rgba(204,68,0,0.06) 0%, transparent 65%);
+  animation: orbDrift2 22s ease-in-out infinite alternate;
+}
+@keyframes orbDrift1 { from { transform:translate(0,0) scale(1); } to { transform:translate(60px,40px) scale(1.1); } }
+@keyframes orbDrift2 { from { transform:translate(0,0) scale(1); } to { transform:translate(-40px,-60px) scale(1.08); } }
+
+/* ═══════════════════════════════════════════════════
+   CLOUDY ABSTRACT FILL — add ::before to any .cloud-fill container
+═══════════════════════════════════════════════════ */
+.cloud-fill { position:relative; overflow:hidden; }
+.cloud-fill::before {
+  content:'';
+  position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse 85% 65% at 15% 25%, rgba(255,107,0,0.16) 0%, transparent 58%),
+    radial-gradient(ellipse 55% 75% at 78% 72%, rgba(204,68,0,0.13) 0%, transparent 52%),
+    radial-gradient(ellipse 45% 55% at 55% 8%,  rgba(255,140,51,0.09) 0%, transparent 48%),
+    radial-gradient(ellipse 65% 38% at 88% 18%, rgba(139,37,0,0.11) 0%, transparent 52%),
+    radial-gradient(ellipse 35% 50% at 30% 88%, rgba(255,107,0,0.07) 0%, transparent 45%);
+  pointer-events:none; z-index:0;
+  animation: cloudShift 12s ease-in-out infinite alternate;
+}
+.cloud-fill > * { position:relative; z-index:1; }
+@keyframes cloudShift {
+  from { opacity:0.85; transform:scale(1); }
+  to   { opacity:1;    transform:scale(1.03) translate(4px, -3px); }
+}
+
+/* ═══════════════════════════════════════════════════
+   GLASS CARDS
+═══════════════════════════════════════════════════ */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: var(--r-lg);
+  transition: border-color var(--dur-mid) var(--ease-smooth),
+              box-shadow var(--dur-mid) var(--ease-smooth),
+              transform var(--dur-mid) var(--ease-spring);
+}
+.glass:hover {
+  border-color: var(--ox-border-hi);
+  box-shadow: 0 0 30px rgba(255,107,0,0.08), 0 8px 32px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+
+.glass-steel {
+  background: var(--glass-steel-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-steel-border);
+  border-radius: var(--r-lg);
+  transition: border-color var(--dur-mid) var(--ease-smooth);
+}
+.glass-steel:hover { border-color: var(--ox-border); }
+
+/* ═══════════════════════════════════════════════════
+   TYPOGRAPHY SYSTEM
+═══════════════════════════════════════════════════ */
+.t-display { font-family:var(--font-display); font-size:clamp(36px,5vw,56px); font-weight:800; color:var(--ox-radiant); line-height:1.0; letter-spacing:-2px; }
+.t-h1      { font-family:var(--font-display); font-size:clamp(24px,3vw,36px); font-weight:700; color:var(--ox-radiant); line-height:1.1; letter-spacing:-1px; }
+.t-h2      { font-family:var(--font-display); font-size:clamp(18px,2.2vw,26px); font-weight:600; color:var(--ox-glow);    line-height:1.2; letter-spacing:-0.5px; }
+.t-h3      { font-family:var(--font-display); font-size:18px; font-weight:500; color:var(--ox-ultra); line-height:1.3; }
+.t-body    { font-family:var(--font-display); font-size:14px; font-weight:400; color:var(--gs-muted); line-height:1.65; }
+.t-caption { font-family:var(--font-display); font-size:11px; font-weight:400; color:var(--gs-light); letter-spacing:0.3px; }
+.t-label   { font-family:var(--font-display); font-size:10px; font-weight:600; color:var(--gs-light); letter-spacing:2px; text-transform:uppercase; }
+.t-mono    { font-family:var(--font-mono);    font-size:13px; font-weight:500; color:var(--ox-ember); letter-spacing:0.5px; }
+.t-mono-sm { font-family:var(--font-mono);    font-size:11px; font-weight:400; color:var(--gs-muted); }
+.t-pnl-pos { font-family:var(--font-display); font-size:clamp(22px,2.5vw,32px); font-weight:700; color:var(--ox-radiant); letter-spacing:-1px; }
+.t-pnl-neg { font-family:var(--font-display); font-size:clamp(22px,2.5vw,32px); font-weight:700; color:var(--sem-short); letter-spacing:-1px; }
+
+/* ═══════════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════════ */
+.btn {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:10px 20px; border-radius:var(--r-md);
+  font-family:var(--font-display); font-size:13px; font-weight:600;
+  letter-spacing:0.5px; cursor:pointer; border:none; outline:none;
+  text-decoration:none; white-space:nowrap;
+  transition:
+    background var(--dur-mid) var(--ease-smooth),
+    border-color var(--dur-mid) var(--ease-smooth),
+    box-shadow var(--dur-mid) var(--ease-smooth),
+    transform var(--dur-fast) var(--ease-spring),
+    color var(--dur-mid) var(--ease-smooth);
+  position:relative; overflow:hidden;
+}
+.btn::after { /* ripple layer */
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.15) 0%, transparent 60%);
+  opacity:0; transform:scale(0.5);
+  transition: opacity var(--dur-fast), transform var(--dur-fast);
+}
+.btn:active::after { opacity:1; transform:scale(1.5); }
+.btn:active { transform:scale(0.97); }
+
+/* Primary */
+.btn-primary {
+  background: linear-gradient(135deg, var(--ox-radiant) 0%, var(--ox-ember) 100%);
+  color:#fff;
+  box-shadow: 0 0 0 0 rgba(255,107,0,0);
+}
+.btn-primary:hover {
+  box-shadow: 0 0 24px rgba(255,107,0,0.35), 0 4px 16px rgba(204,68,0,0.3);
+  transform:translateY(-1px) scale(1.01);
+}
+
+/* Ghost — orange outline */
+.btn-ghost {
+  background: rgba(255,107,0,0.08);
+  color: var(--ox-glow);
+  border: 0.5px solid var(--ox-border);
+}
+.btn-ghost:hover {
+  background: rgba(255,107,0,0.16);
+  border-color: var(--ox-border-hi);
+  color: var(--ox-radiant);
+  box-shadow: 0 0 16px rgba(255,107,0,0.15);
+}
+
+/* Steel — grey neutral */
+.btn-steel {
+  background: rgba(42,42,46,0.9);
+  color: var(--gs-muted);
+  border: 0.5px solid var(--gs-border);
+}
+.btn-steel:hover {
+  background: rgba(58,58,64,0.95);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--ox-ultra);
+}
+
+/* Danger */
+.btn-danger {
+  background: rgba(255,68,68,0.12);
+  color: var(--sem-short);
+  border: 0.5px solid rgba(255,68,68,0.3);
+}
+.btn-danger:hover {
+  background: rgba(255,68,68,0.22);
+  box-shadow: 0 0 16px rgba(255,68,68,0.2);
+}
+
+/* ═══════════════════════════════════════════════════
+   CHIPS / BADGES
+═══════════════════════════════════════════════════ */
+.chip {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 10px; border-radius:var(--r-pill);
+  font-family:var(--font-display); font-size:11px; font-weight:600;
+  letter-spacing:0.5px; cursor:default;
+  transition: background var(--dur-mid), box-shadow var(--dur-mid), transform var(--dur-fast) var(--ease-spring);
+}
+.chip:hover { transform:scale(1.04); }
+.chip-dot { width:5px; height:5px; border-radius:50%; background:currentColor; opacity:0.8; flex-shrink:0; }
+
+.chip-active  { background:rgba(255,107,0,0.18); color:var(--ox-radiant); border:0.5px solid rgba(255,107,0,0.45); }
+.chip-active:hover { box-shadow:0 0 10px rgba(255,107,0,0.25); }
+.chip-orange  { background:rgba(255,107,0,0.10); color:var(--ox-glow);    border:0.5px solid rgba(255,107,0,0.25); }
+.chip-steel   { background:rgba(42,42,46,0.9);   color:var(--gs-muted);   border:0.5px solid var(--gs-border); }
+.chip-success { background:rgba(34,221,136,0.12); color:var(--sem-long);  border:0.5px solid rgba(34,221,136,0.3); }
+.chip-error   { background:rgba(255,68,68,0.12);  color:var(--sem-short); border:0.5px solid rgba(255,68,68,0.3); }
+.chip-warn    { background:rgba(255,215,0,0.12);  color:var(--sem-warn);  border:0.5px solid rgba(255,215,0,0.3); }
+.chip-signal  { background:rgba(68,136,255,0.12); color:var(--sem-signal);border:0.5px solid rgba(68,136,255,0.3); }
+
+/* Status labels (larger, for Grid) */
+.status-label {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 8px; border-radius:var(--r-sm);
+  font-family:var(--font-display); font-size:10px; font-weight:700;
+  letter-spacing:1.5px; text-transform:uppercase;
+}
+.status-closed   { background:rgba(68,136,255,0.15); color:var(--sem-signal); }
+.status-active   { background:rgba(34,221,136,0.15); color:var(--sem-long); }
+.status-waiting  { background:rgba(255,215,0,0.15);  color:var(--sem-warn); }
+.status-pending  { background:rgba(255,140,51,0.15); color:var(--ox-glow); }
+.status-error    { background:rgba(255,68,68,0.15);  color:var(--sem-short); }
+.status-notrade  { background:rgba(42,42,46,0.7);    color:var(--gs-light); }
+
+/* ═══════════════════════════════════════════════════
+   PULSE ANIMATIONS (status dots)
+═══════════════════════════════════════════════════ */
+.pulse-live  { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--sem-long); position:relative; }
+.pulse-live::after {
+  content:''; position:absolute; inset:-3px;
+  border-radius:50%; border:1.5px solid var(--sem-long);
+  animation: pulseLive 2s ease-out infinite;
+}
+@keyframes pulseLive {
+  0%   { transform:scale(0.8); opacity:0.8; }
+  60%  { transform:scale(2);   opacity:0; }
+  100% { transform:scale(2);   opacity:0; }
+}
+
+.pulse-warn  { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--sem-warn); animation:pulseWarn 1.8s ease-in-out infinite; }
+@keyframes pulseWarn { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+.pulse-error { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--sem-short); animation:pulseErr 1.4s ease-in-out infinite; }
+@keyframes pulseErr { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+/* ═══════════════════════════════════════════════════
+   STATUS INDICATORS (service rows)
+═══════════════════════════════════════════════════ */
+.service-row {
+  display:flex; align-items:center; gap:12px; padding:14px 16px;
+  border-radius:var(--r-md); background:rgba(26,26,30,0.6);
+  border:0.5px solid rgba(255,255,255,0.05);
+  transition: background var(--dur-mid), border-color var(--dur-mid);
+  margin-bottom:8px;
+}
+.service-row:hover { background:rgba(36,36,42,0.8); border-color:var(--ox-border); }
+.service-row.running { border-left:2px solid var(--sem-long); }
+.service-row.stopped { border-left:2px solid var(--gs-light); }
+.service-row.error   { border-left:2px solid var(--sem-short); }
+
+/* ═══════════════════════════════════════════════════
+   METRIC CARD
+═══════════════════════════════════════════════════ */
+.metric-card { padding:var(--sp-5); }
+.metric-label { font-family:var(--font-display); font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--gs-light); margin-bottom:10px; }
+.metric-value { font-family:var(--font-display); font-size:clamp(24px,3vw,36px); font-weight:800; color:var(--ox-radiant); letter-spacing:-1.5px; line-height:1; }
+.metric-sub   { font-size:12px; font-weight:500; margin-top:6px; color:var(--gs-muted); }
+.delta-pos    { color:var(--sem-long); }
+.delta-neg    { color:var(--sem-short); }
+
+/* ═══════════════════════════════════════════════════
+   NAV SIDEBAR
+═══════════════════════════════════════════════════ */
+.sidebar {
+  position:fixed; left:0; top:0; bottom:0; width:56px;
+  background:rgba(10,10,11,0.9);
+  border-right:0.5px solid rgba(255,107,0,0.1);
+  display:flex; flex-direction:column; align-items:center;
+  padding:12px 0; gap:4px; z-index:100;
+  backdrop-filter:blur(20px);
+}
+.nav-icon {
+  width:40px; height:40px; display:flex; align-items:center; justify-content:center;
+  border-radius:var(--r-md); cursor:pointer; position:relative;
+  color:var(--gs-light);
+  transition:
+    background var(--dur-mid) var(--ease-smooth),
+    color var(--dur-mid) var(--ease-smooth),
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-mid);
+}
+.nav-icon:hover {
+  background:rgba(255,107,0,0.1);
+  color:var(--ox-glow);
+  transform:scale(1.08);
+}
+.nav-icon.active {
+  background:rgba(255,107,0,0.15);
+  color:var(--ox-radiant);
+  box-shadow:0 0 12px rgba(255,107,0,0.2), inset 0 0 0 0.5px rgba(255,107,0,0.4);
+}
+.nav-icon.active::after {
+  content:''; position:absolute; left:-1px; top:25%; bottom:25%;
+  width:2px; background:var(--ox-radiant); border-radius:0 2px 2px 0;
+  box-shadow:0 0 8px rgba(255,107,0,0.6);
+}
+
+/* ═══════════════════════════════════════════════════
+   TOP BAR
+═══════════════════════════════════════════════════ */
+.topbar {
+  position:sticky; top:0; z-index:90;
+  background:rgba(10,10,11,0.85);
+  border-bottom:0.5px solid rgba(255,107,0,0.1);
+  backdrop-filter:blur(20px);
+  display:flex; align-items:center; gap:16px;
+  padding:0 20px 0 72px; height:48px;
+}
+
+/* ═══════════════════════════════════════════════════
+   INPUT FIELDS
+═══════════════════════════════════════════════════ */
+.input {
+  background:rgba(22,22,25,0.8);
+  border:0.5px solid rgba(255,107,0,0.18);
+  border-radius:var(--r-md); padding:10px 14px;
+  font-family:var(--font-display); font-size:13px; color:var(--ox-glow);
+  outline:none; width:100%;
+  transition:border-color var(--dur-mid), box-shadow var(--dur-mid);
+}
+.input::placeholder { color:var(--gs-light); }
+.input:focus {
+  border-color:var(--ox-border-hi);
+  box-shadow:0 0 0 3px rgba(255,107,0,0.08);
+}
+.input:hover:not(:focus) { border-color:rgba(255,107,0,0.3); }
+
+/* ═══════════════════════════════════════════════════
+   DATA TABLE
+═══════════════════════════════════════════════════ */
+.data-table { width:100%; border-collapse:collapse; }
+.data-table th {
+  font-family:var(--font-display); font-size:10px; font-weight:600;
+  letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--gs-light); padding:10px 14px; text-align:left;
+  border-bottom:0.5px solid rgba(255,107,0,0.1);
+}
+.data-table td {
+  padding:12px 14px; font-size:13px; font-weight:400;
+  color:var(--gs-muted);
+  border-bottom:0.5px solid rgba(255,255,255,0.03);
+  transition:background var(--dur-fast);
+}
+.data-table tr:hover td { background:rgba(255,107,0,0.04); }
+.data-table td.cell-symbol { color:var(--ox-glow); font-weight:600; font-family:var(--font-mono); }
+.data-table td.cell-buy    { color:var(--sem-long); font-weight:700; }
+.data-table td.cell-sell   { color:var(--sem-short); font-weight:700; }
+.data-table td.cell-mono   { font-family:var(--font-mono); font-size:12px; }
+.data-table td.cell-pos    { color:var(--sem-long); }
+.data-table td.cell-neg    { color:var(--sem-short); }
+
+/* ═══════════════════════════════════════════════════
+   SYSTEM LOG (monospaced stream)
+═══════════════════════════════════════════════════ */
+.log-container {
+  font-family:var(--font-mono); font-size:11px;
+  background:rgba(10,10,11,0.5);
+  border:0.5px solid rgba(255,107,0,0.08);
+  border-radius:var(--r-md);
+  padding:12px; overflow-y:auto; max-height:300px;
+}
+.log-entry        { padding:2px 0; color:var(--gs-muted); line-height:1.5; }
+.log-entry.ok     { color:rgba(34,221,136,0.85); }
+.log-entry.error  { color:rgba(255,68,68,0.85); }
+.log-entry.neutral{ color:var(--gs-muted); }
+.log-divider      { color:var(--gs-steel); font-size:10px; padding:6px 0; text-align:center; border-top:0.5px solid rgba(255,255,255,0.05); border-bottom:0.5px solid rgba(255,255,255,0.05); margin:4px 0; }
+
+/* ═══════════════════════════════════════════════════
+   SPARKLINE CHART CONTAINER
+═══════════════════════════════════════════════════ */
+.sparkline { width:100%; height:36px; margin-top:10px; }
+
+/* ═══════════════════════════════════════════════════
+   PAGE ANIMATIONS — entry transitions
+   Use these classes on mount in Next.js
+═══════════════════════════════════════════════════ */
+.anim-fade-up {
+  animation: fadeUp var(--dur-slow) var(--ease-out) both;
+}
+.anim-fade-up:nth-child(1) { animation-delay:0ms; }
+.anim-fade-up:nth-child(2) { animation-delay:60ms; }
+.anim-fade-up:nth-child(3) { animation-delay:120ms; }
+.anim-fade-up:nth-child(4) { animation-delay:180ms; }
+.anim-fade-up:nth-child(5) { animation-delay:240ms; }
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.anim-scale-in {
+  animation: scaleIn var(--dur-slow) var(--ease-spring) both;
+}
+@keyframes scaleIn {
+  from { opacity:0; transform:scale(0.94); }
+  to   { opacity:1; transform:scale(1); }
+}
+
+/* ═══════════════════════════════════════════════════
+   HOVER GLOW UTILITY
+═══════════════════════════════════════════════════ */
+.hover-glow { transition:box-shadow var(--dur-mid); }
+.hover-glow:hover { box-shadow:0 0 20px rgba(255,107,0,0.2); }
+.hover-lift { transition:transform var(--dur-mid) var(--ease-spring); }
+.hover-lift:hover { transform:translateY(-2px); }
+
+/* ═══════════════════════════════════════════════════
+   SECTION DIVIDER (orange gradient fade)
+═══════════════════════════════════════════════════ */
+.divider {
+  height:0.5px;
+  background:linear-gradient(90deg, transparent, rgba(255,107,0,0.35), transparent);
+  margin:var(--sp-8) 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   SCROLLBAR STYLING
+═══════════════════════════════════════════════════ */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:rgba(10,10,11,0.5); }
+::-webkit-scrollbar-thumb { background:rgba(255,107,0,0.25); border-radius:2px; }
+::-webkit-scrollbar-thumb:hover { background:rgba(255,107,0,0.45); }
+
+/* ═══════════════════════════════════════════════════
+   ──────── REFERENCE PAGE LAYOUT ────────
+═══════════════════════════════════════════════════ */
+.ref-page { max-width:1200px; margin:0 auto; padding:48px 32px; position:relative; z-index:1; }
+.ref-section { margin-bottom:64px; }
+.ref-section-title {
+  font-size:10px; font-weight:700; letter-spacing:3px; text-transform:uppercase;
+  color:var(--gs-light); margin-bottom:28px;
+  display:flex; align-items:center; gap:12px;
+}
+.ref-section-title::after { content:''; flex:1; height:0.5px; background:rgba(255,107,0,0.15); }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+.grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+@media (max-width:800px) { .grid-2,.grid-3,.grid-4 { grid-template-columns:1fr; } }
+
+/* colour scale row */
+.colour-row { display:flex; border-radius:10px; overflow:hidden; height:52px; }
+.colour-stop { flex:1; display:flex; flex-direction:column; justify-content:flex-end; padding:5px 7px; }
+.colour-stop-name { font-family:var(--font-mono); font-size:8.5px; opacity:0.6; }
+.colour-stop-hex  { font-family:var(--font-mono); font-size:7.5px; opacity:0.4; }
+
+/* account card */
+.account-card {
+  padding:16px 18px; border-radius:var(--r-lg);
+  background:rgba(22,22,25,0.7);
+  border:0.5px solid rgba(255,255,255,0.06);
+  display:flex; align-items:center; justify-content:space-between;
+  transition:border-color var(--dur-mid), background var(--dur-mid);
+}
+.account-card:hover { border-color:var(--ox-border); background:rgba(30,30,34,0.8); }
+</style>
+</head>
+<body>
+
+<div class="bg-orbs"></div>
+
+<div class="ref-page">
+
+  <!-- HERO -->
+  <div style="margin-bottom:64px; display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:20px;">
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gs-light);margin-bottom:12px;">STAAX · DESIGN SYSTEM v1.0</div>
+      <div class="t-display" style="margin-bottom:8px;">Brand Reference</div>
+      <div class="t-body" style="max-width:480px;">Complete design language for the STAAX algorithmic trading platform. Share this file directly with Claude Code to redesign any page.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+      <div style="display:flex;align-items:center;gap:8px;"><span class="pulse-live"></span><span class="t-caption" style="color:var(--sem-long);">System Live</span></div>
+      <div class="t-mono" style="font-size:10px;color:var(--gs-light);">STAAX · LIFEX Intelligence Suite</div>
+    </div>
+  </div>
+
+  <!-- ── COLOUR SYSTEM ── -->
+  <div class="ref-section">
+    <div class="ref-section-title">Colour System</div>
+
+    <div style="margin-bottom:16px;">
+      <div class="t-label" style="margin-bottom:8px;color:var(--ox-ember);">Primary — Radiating Orange</div>
+      <div class="colour-row">
+        <div class="colour-stop" style="background:#FFB366;"><div class="colour-stop-name" style="color:#000">Ultra</div><div class="colour-stop-hex" style="color:#000">#FFB366</div></div>
+        <div class="colour-stop" style="background:#FF8C33;"><div class="colour-stop-name" style="color:#000">Glow</div><div class="colour-stop-hex" style="color:#000">#FF8C33</div></div>
+        <div class="colour-stop" style="background:#FF6B00; flex:1.5;"><div class="colour-stop-name" style="color:#fff">Radiant ★</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.6)">#FF6B00</div></div>
+        <div class="colour-stop" style="background:#CC4400; flex:1.3;"><div class="colour-stop-name" style="color:#fff">Ember ★</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.6)">#CC4400</div></div>
+        <div class="colour-stop" style="background:#8B2500;"><div class="colour-stop-name" style="color:rgba(255,255,255,0.7)">Deep</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.4)">#8B2500</div></div>
+        <div class="colour-stop" style="background:rgba(255,107,0,0.12);border:0.5px solid rgba(255,107,0,0.25);"><div class="colour-stop-name" style="color:var(--ox-glow)">Ghost</div><div class="colour-stop-hex" style="color:var(--gs-light)">α12%</div></div>
+      </div>
+      <div class="t-caption" style="margin-top:6px;">★ Dual-tone primary pair — always used together in gradients and cloud fills</div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <div class="t-label" style="margin-bottom:8px;color:var(--gs-muted);">Secondary — Steel Grey</div>
+      <div class="colour-row">
+        <div class="colour-stop" style="background:#8A8A94;"><div class="colour-stop-name" style="color:#000">Muted</div><div class="colour-stop-hex" style="color:#000">#8A8A94</div></div>
+        <div class="colour-stop" style="background:#5A5A61;"><div class="colour-stop-name" style="color:#fff">Light</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.5)">#5A5A61</div></div>
+        <div class="colour-stop" style="background:#3D3D42;"><div class="colour-stop-name" style="color:#fff">Mid</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.4)">#3D3D42</div></div>
+        <div class="colour-stop" style="background:#2A2A2E;flex:1.3;"><div class="colour-stop-name" style="color:#fff">Steel ★</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.4)">#2A2A2E</div></div>
+        <div class="colour-stop" style="background:#1A1A1E;"><div class="colour-stop-name" style="color:rgba(255,255,255,0.6)">Dark</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.3)">#1A1A1E</div></div>
+        <div class="colour-stop" style="background:#111114;"><div class="colour-stop-name" style="color:rgba(255,255,255,0.5)">Deep</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.3)">#111114</div></div>
+        <div class="colour-stop" style="background:#0A0A0B;flex:1.3;"><div class="colour-stop-name" style="color:rgba(255,255,255,0.4)">Void ★</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.25)">#0A0A0B</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="t-label" style="margin-bottom:8px;color:var(--gs-muted);">Tertiary — Semantic</div>
+      <div class="colour-row" style="height:44px;">
+        <div class="colour-stop" style="background:var(--sem-long);"><div class="colour-stop-name" style="color:#000">Long/Profit</div><div class="colour-stop-hex" style="color:#000">#22DD88</div></div>
+        <div class="colour-stop" style="background:var(--sem-short);"><div class="colour-stop-name" style="color:#fff">Short/Loss</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.6)">#FF4444</div></div>
+        <div class="colour-stop" style="background:var(--sem-signal);"><div class="colour-stop-name" style="color:#fff">Signal/Info</div><div class="colour-stop-hex" style="color:rgba(255,255,255,0.6)">#4488FF</div></div>
+        <div class="colour-stop" style="background:var(--sem-warn);"><div class="colour-stop-name" style="color:#000">Warning</div><div class="colour-stop-hex" style="color:#000">#FFD700</div></div>
+      </div>
+      <div class="t-caption" style="margin-top:6px;">Strictly semantic — never used decoratively. Green = Long/Buy/OK, Red = Short/Sell/Error, Blue = Signal/Active, Gold = Warning/Pending/Holiday</div>
+    </div>
+  </div>
+
+  <!-- ── TYPOGRAPHY ── -->
+  <div class="ref-section">
+    <div class="ref-section-title">Typography System</div>
+    <div class="glass cloud-fill" style="padding:32px;">
+      <div style="margin-bottom:24px;">
+        <div class="t-display">Display 800 — Dashboard, hero numbers</div>
+        <div class="t-caption" style="margin-top:4px;">Syne 800 · clamp(36px→56px) · letter-spacing: -2px · color: --ox-radiant</div>
+      </div>
+      <div class="divider" style="margin:20px 0;"></div>
+      <div style="margin-bottom:20px;">
+        <div class="t-h1">H1 700 — Page titles like "Dashboard", "Smart Grid"</div>
+        <div class="t-caption" style="margin-top:4px;">Syne 700 · clamp(24px→36px) · color: --ox-radiant</div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div class="t-h2">H2 600 — Section headings, card titles, panel names</div>
+        <div class="t-caption" style="margin-top:4px;">Syne 600 · clamp(18px→26px) · color: --ox-glow</div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div class="t-h3">H3 500 — Subheadings, metric labels, chip text</div>
+        <div class="t-caption" style="margin-top:4px;">Syne 500 · 18px · color: --ox-ultra</div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div class="t-body">Body 400 — System status descriptions, log context, card body text. Used for all secondary informational content across the platform.</div>
+        <div class="t-caption" style="margin-top:4px;">Syne 400 · 14px · line-height: 1.65 · color: --gs-muted</div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div class="t-mono">NIFTY07APR2622350CE · BUY 100 · LIMIT ₹24,350.00 · [engine] Algo-1 OPEN @ 397.00</div>
+        <div class="t-caption" style="margin-top:4px;">JetBrains Mono 500 · 13px · color: --ox-ember · ALL financial data, prices, tickers, system logs, trade IDs</div>
+      </div>
+      <div>
+        <div class="t-label">Label — SECTION HEADERS · METRIC NAMES · TABLE COLUMNS</div>
+        <div class="t-caption" style="margin-top:4px;">Syne 600 · 10px · letter-spacing: 2px · text-transform: uppercase · color: --gs-light</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COMPONENTS ── -->
+  <div class="ref-section">
+    <div class="ref-section-title">Components</div>
+    <div class="grid-2">
+
+      <!-- Buttons -->
+      <div class="glass cloud-fill" style="padding:24px;">
+        <div class="t-label" style="margin-bottom:16px;">Buttons</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-primary">▶ Start Session</button>
+          <button class="btn btn-danger">⚡ Kill Switch</button>
+          <button class="btn btn-ghost">View Analytics →</button>
+          <button class="btn btn-steel">Export Trades</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" style="padding:7px 14px;font-size:12px;">Deploy</button>
+            <button class="btn btn-steel" style="padding:7px 14px;font-size:12px;">Archive</button>
+            <button class="btn btn-ghost" style="padding:7px 14px;font-size:12px;">Promote</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chips & Status -->
+      <div class="glass cloud-fill" style="padding:24px;">
+        <div class="t-label" style="margin-bottom:16px;">Chips & Status Labels</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+          <span class="chip chip-active"><span class="chip-dot"></span>Active</span>
+          <span class="chip chip-success"><span class="chip-dot"></span>Running</span>
+          <span class="chip chip-error"><span class="chip-dot"></span>Error</span>
+          <span class="chip chip-warn"><span class="chip-dot"></span>Pending</span>
+          <span class="chip chip-signal">Signal</span>
+          <span class="chip chip-orange">NIFTY50</span>
+          <span class="chip chip-steel">NFB</span>
+          <span class="chip chip-steel">BNB</span>
+          <span class="chip chip-orange">NFS</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+          <span class="status-label status-active">Active</span>
+          <span class="status-label status-closed">Closed</span>
+          <span class="status-label status-waiting">Waiting</span>
+          <span class="status-label status-pending">Pending</span>
+          <span class="status-label status-error">Error</span>
+          <span class="status-label status-notrade">No Trade</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;"><span class="pulse-live"></span><span class="t-caption" style="color:var(--sem-long);">Live</span></div>
+          <div style="display:flex;align-items:center;gap:6px;"><span class="pulse-warn"></span><span class="t-caption" style="color:var(--sem-warn);">Waiting</span></div>
+          <div style="display:flex;align-items:center;gap:6px;"><span class="pulse-error"></span><span class="t-caption" style="color:var(--sem-short);">Error</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── DASHBOARD PREVIEW ── -->
+  <div class="ref-section">
+    <div class="ref-section-title">Dashboard — Page Reference</div>
+
+    <!-- Metric cards -->
+    <div class="grid-4" style="margin-bottom:20px;">
+      <div class="glass cloud-fill metric-card anim-fade-up">
+        <div class="metric-label">Active Algos</div>
+        <div class="metric-value">0</div>
+        <div class="metric-sub">of 0 algos</div>
+        <svg class="sparkline" viewBox="0 0 120 36" preserveAspectRatio="none">
+          <polyline points="0,30 30,22 60,26 80,14 100,18 120,8" fill="none" stroke="var(--ox-ember)" stroke-width="1.5" stroke-linecap="round"/>
+          <polyline points="0,30 30,22 60,26 80,14 100,18 120,8 120,36 0,36" fill="rgba(204,68,0,0.07)"/>
+        </svg>
+      </div>
+      <div class="glass cloud-fill metric-card anim-fade-up">
+        <div class="metric-label">Open Positions</div>
+        <div class="metric-value">0</div>
+        <div class="metric-sub">open lots</div>
+      </div>
+      <div class="glass cloud-fill metric-card anim-fade-up">
+        <div class="metric-label">Today P&L</div>
+        <div class="t-pnl-pos">+₹0</div>
+        <div class="metric-sub delta-pos">▲ Profit</div>
+      </div>
+      <div class="glass cloud-fill metric-card anim-fade-up">
+        <div class="metric-label">FY P&L</div>
+        <div class="t-pnl-pos">+₹0</div>
+        <div class="metric-sub delta-pos">▲ Profit</div>
+      </div>
+    </div>
+
+    <!-- Services + Log -->
+    <div class="grid-2" style="margin-bottom:20px;">
+      <div class="glass cloud-fill" style="padding:20px;">
+        <div class="t-label" style="margin-bottom:14px;">Services</div>
+        <div class="service-row stopped">
+          <span class="pulse-error"></span>
+          <div style="flex:1;"><div class="t-h3" style="font-size:14px;">PostgreSQL</div><div class="t-mono-sm">localhost:5432</div></div>
+          <span class="chip chip-steel" style="font-size:10px;padding:2px 8px;">Stopped</span>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px;">Start</button>
+        </div>
+        <div class="service-row running">
+          <span class="pulse-live"></span>
+          <div style="flex:1;"><div class="t-h3" style="font-size:14px;">Backend API</div><div class="t-mono-sm">localhost:8000</div></div>
+          <span class="chip chip-success" style="font-size:10px;padding:2px 8px;">Running</span>
+          <button class="btn btn-danger" style="padding:5px 12px;font-size:11px;">Stop</button>
+        </div>
+        <div class="service-row running">
+          <span class="pulse-live"></span>
+          <div style="flex:1;"><div class="t-h3" style="font-size:14px;">Market Feed</div><div class="t-mono-sm">NSE live tick data</div></div>
+          <span class="chip chip-success" style="font-size:10px;padding:2px 8px;">Running</span>
+          <button class="btn btn-danger" style="padding:5px 12px;font-size:11px;">Stop</button>
+        </div>
+      </div>
+
+      <div class="glass cloud-fill" style="padding:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+          <span class="pulse-live"></span>
+          <div class="t-label">System Log</div>
+        </div>
+        <div class="log-container">
+          <div class="log-divider">── 2 Apr ──</div>
+          <div class="log-entry ok">[22:36:36] ✅ [auth] Angel One (Mom) connected</div>
+          <div class="log-entry neutral">[22:36:35] · [scheduler] Entry fired: Algo-8</div>
+          <div class="log-divider">── 1 Apr ──</div>
+          <div class="log-entry ok">[09:54:00] ✅ [engine] Algo-8 · BUY NIFTY07APR2622350CE OPEN @ 397.00</div>
+          <div class="log-entry error">[09:45:00] ⛔ [engine] Leg 1 failed: Strike selection failed</div>
+          <div class="log-entry neutral">[09:45:00] · [scheduler] Entry fired: Algo-1</div>
+          <div class="log-entry ok">[08:30:15] ✅ [auth] Angel One (Karthik AO) connected</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account Status -->
+    <div class="glass cloud-fill" style="padding:20px;">
+      <div class="t-label" style="margin-bottom:16px;">Account Status</div>
+      <div class="grid-4">
+        <div class="account-card">
+          <div><div class="t-h3" style="font-size:14px;">Karthik</div><div class="t-caption">Zerodha</div></div>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px;">🔑 Login</button>
+        </div>
+        <div class="account-card">
+          <div><div class="t-h3" style="font-size:14px;">Mom</div><div class="t-caption">Angel One</div></div>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px;">🔑 Login</button>
+        </div>
+        <div class="account-card">
+          <div><div class="t-h3" style="font-size:14px;">Wife</div><div class="t-caption">Angel One</div></div>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px;">🔑 Login</button>
+        </div>
+        <div class="account-card">
+          <div><div class="t-h3" style="font-size:14px;">Karthik AO</div><div class="t-caption">Angel One</div></div>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px;">🔑 Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ANALYTICS PREVIEW ── -->
+  <div class="ref-section">
+    <div class="ref-section-title">Analytics — Page Reference</div>
+    <div class="grid-4" style="margin-bottom:20px;">
+      <div class="glass cloud-fill" style="padding:16px;border:0.5px solid rgba(34,221,136,0.3);">
+        <div class="t-label" style="margin-bottom:8px;color:var(--gs-light);">Best Algo</div>
+        <div class="t-h2" style="color:var(--sem-long);">Algo-2</div>
+        <div class="t-mono-sm" style="margin-top:4px;">+₹2,604 · 2W/0L</div>
+      </div>
+      <div class="glass cloud-fill" style="padding:16px;border:0.5px solid rgba(255,68,68,0.3);">
+        <div class="t-label" style="margin-bottom:8px;color:var(--gs-light);">Worst Algo</div>
+        <div class="t-h2" style="color:var(--sem-short);">Algo-19</div>
+        <div class="t-mono-sm" style="margin-top:4px;">−₹2,136 · 0W/2L</div>
+      </div>
+      <div class="glass cloud-fill" style="padding:16px;">
+        <div class="t-label" style="margin-bottom:8px;">Best Score</div>
+        <div class="t-h2">65.2</div>
+        <div class="t-mono-sm" style="margin-top:4px;">Algo-2 · B</div>
+      </div>
+      <div class="glass cloud-fill" style="padding:16px;">
+        <div class="t-label" style="margin-bottom:8px;">Avg Score</div>
+        <div class="t-h2">23.8</div>
+        <div class="t-mono-sm" style="margin-top:4px;">All algos</div>
+      </div>
+    </div>
+
+    <!-- P&L Heatmap table sample -->
+    <div class="glass cloud-fill" style="padding:0;overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:0.5px solid rgba(255,107,0,0.1);display:flex;gap:8px;">
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:12px;">P&L Heatmap</button>
+        <button class="btn btn-steel" style="padding:6px 14px;font-size:12px;">Health Scores</button>
+        <button class="btn btn-steel" style="padding:6px 14px;font-size:12px;">Failures</button>
+        <button class="btn btn-steel" style="padding:6px 14px;font-size:12px;">Slippage</button>
+      </div>
+      <table class="data-table" style="padding:0;">
+        <thead>
+          <tr>
+            <th>Algo</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th style="text-align:right;">FY Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="cell-symbol">Algo-2</td>
+            <td>—</td><td>—</td><td>—</td><td>—</td>
+            <td><span style="background:rgba(34,221,136,0.15);color:var(--sem-long);padding:3px 8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;">+2.6k</span></td>
+            <td class="cell-pos" style="text-align:right;font-family:var(--font-mono);font-size:12px;">+₹2,604</td>
+          </tr>
+          <tr>
+            <td class="cell-symbol">Algo-19</td>
+            <td>—</td><td>—</td><td>—</td><td>—</td>
+            <td><span style="background:rgba(255,68,68,0.15);color:var(--sem-short);padding:3px 8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;">−2.1k</span></td>
+            <td class="cell-neg" style="text-align:right;font-family:var(--font-mono);font-size:12px;">−₹2,136</td>
+          </tr>
+          <tr>
+            <td class="cell-symbol">Algo-1</td>
+            <td>—</td>
+            <td><span style="background:rgba(68,136,255,0.12);color:var(--sem-signal);padding:3px 8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;">+0.0k</span></td>
+            <td>—</td><td>—</td>
+            <td><span style="background:rgba(255,68,68,0.1);color:var(--sem-short);padding:3px 8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;">−0.0k</span></td>
+            <td class="cell-neg" style="text-align:right;font-family:var(--font-mono);font-size:12px;">−₹29</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── BRAND GUIDELINES ── -->
+  <div class="ref-section">
+    <div class="ref-section-title">Brand Guidelines — Claude Code Reference</div>
+    <div class="glass cloud-fill" style="padding:28px;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div>
+          <div class="t-label" style="margin-bottom:12px;color:var(--ox-ember);">Colour Tokens</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.04);">
+              <span class="t-body">Primary action / headlines</span>
+              <span class="t-mono" style="font-size:11px;color:var(--ox-radiant);">--ox-radiant #FF6B00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.04);">
+              <span class="t-body">Gradient partner / chart fill</span>
+              <span class="t-mono" style="font-size:11px;color:var(--ox-ember);">--ox-ember #CC4400</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.04);">
+              <span class="t-body">Subheadings / hover text</span>
+              <span class="t-mono" style="font-size:11px;color:var(--ox-glow);">--ox-glow #FF8C33</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.04);">
+              <span class="t-body">Body text / descriptions</span>
+              <span class="t-mono" style="font-size:11px;">--gs-muted #8A8A94</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.04);">
+              <span class="t-body">Page background</span>
+              <span class="t-mono" style="font-size:11px;color:var(--gs-light);">--bg-void #0A0A0B</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;">
+              <span class="t-body">Buy / profit / connected</span>
+              <span class="t-mono" style="font-size:11px;color:var(--sem-long);">--sem-long #22DD88</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="t-label" style="margin-bottom:12px;color:var(--ox-ember);">Design Rules</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="padding:8px 12px;background:rgba(255,107,0,0.06);border-left:2px solid var(--ox-ember);border-radius:0 6px 6px 0;margin-bottom:4px;">
+              <div class="t-body" style="color:var(--ox-ultra);">Glass formula</div>
+              <div class="t-mono-sm">bg: rgba(22,22,25,0.72) · blur(20px) · border: 0.5px rgba(255,107,0,0.22)</div>
+            </div>
+            <div style="padding:8px 12px;background:rgba(255,107,0,0.06);border-left:2px solid var(--ox-ember);border-radius:0 6px 6px 0;margin-bottom:4px;">
+              <div class="t-body" style="color:var(--ox-ultra);">Cloud fill recipe</div>
+              <div class="t-mono-sm">5× radial-gradient blobs · ox-radiant + ox-ember + ox-glow · 8–18% opacity · animate</div>
+            </div>
+            <div style="padding:8px 12px;background:rgba(255,107,0,0.06);border-left:2px solid var(--ox-ember);border-radius:0 6px 6px 0;margin-bottom:4px;">
+              <div class="t-body" style="color:var(--ox-ultra);">Fonts</div>
+              <div class="t-mono-sm">UI: Syne 400/500/600/700/800 · Data: JetBrains Mono 400/500/600</div>
+            </div>
+            <div style="padding:8px 12px;background:rgba(255,107,0,0.06);border-left:2px solid var(--ox-ember);border-radius:0 6px 6px 0;">
+              <div class="t-body" style="color:var(--ox-ultra);">Animations</div>
+              <div class="t-mono-sm">Entry: fadeUp 400ms · Hover: 220ms ease-smooth · Active: scale(0.97) · Spring: cubic-bezier(0.34,1.56,0.64,1)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;padding:32px 0 16px;color:var(--gs-light);font-size:10px;letter-spacing:2.5px;text-transform:uppercase;">
+    STAAX · Design System v1.0 · LIFEX Intelligence Suite · Share this file with Claude Code
+  </div>
+
+</div><!-- /ref-page -->
+</body>
+</html>
