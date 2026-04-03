@@ -3737,3 +3737,26 @@ This is by design. Bots show signals in IndicatorsPage.
 - mtm_monitor.py: deregister_algo() to prevent memory leak
 - bot_runner.py: Signal-only log + DTR 0-bots warning
 - main.py: Startup log corrected (connecting not started)
+
+## STAAX v5.0 — Brand Redesign (2026-04-02)
+
+### New Design System
+- **Primary:** #FF6B00 (--ox-radiant orange) + #CC4400 (--ox-ember dual-tone)
+- **Background:** #0A0A0B (--bg-void pure black)
+- **Fonts:** Syne 800 (display/headings) + JetBrains Mono (prices/data)
+- **Cards:** Glass — rgba(22,22,25,0.72) + blur(20px) + 0.5px orange border
+- **Ambient:** Fixed orange orbs with orbDrift animation
+- **Semantic:** #22DD88 profit, #FF4444 loss, #4488FF signal, #FFD700 warning
+
+### Pages Redesigned
+All 8 pages + Layout shell (Sidebar, TopBar, Layout)
+
+### Brand Reference Files
+~/STAXX/staax/files/ — complete scaffold with components + CLAUDE_CODE_PROMPT.md
+Use these as source of truth for any future UI work.
+
+### Design Rules (enforce always)
+- Background: #0A0A0B — never change
+- Borders: always 0.5px (never 1px except 2px left accent)
+- No blue (#00B0F0 / #38bdf8) anywhere — replaced with orange
+- Animations: fadeUp 400ms entry, 220ms hover, spring easing
