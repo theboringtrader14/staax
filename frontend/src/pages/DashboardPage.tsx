@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const [services, setServices]          = useState<Service[]>(INIT_SERVICES)
   const [stats, setStats]                = useState<Record<string,number>>({})
   const [log, setLog]                    = useState<string[]>(['STAAX Dashboard ready.'])
-  const [zerodhaConnected, setZerodha]   = useState(false)
+  const [_zerodhaConnected, setZerodha]   = useState(false)
   const [showLateWarning, setLateWarn]   = useState(false)
   const [holidays, setHolidays]          = useState<any[]>([])
   const [syncingHolidays, setSyncing]    = useState(false)

@@ -48,7 +48,7 @@ function CosmicCanvas() {
       nextShoot = performance.now() + 4500 + Math.random()*7000
     }
 
-    const bl_pulse = (t: number, i: number) => 0.15 * Math.sin(t * 0.9 + i)
+    // bl_pulse removed
 
     let raf: number
     const draw = (now: number) => {

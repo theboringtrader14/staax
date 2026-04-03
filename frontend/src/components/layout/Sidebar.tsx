@@ -1,6 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { useStore } from '../../store'
 
 const IS = 17
 
