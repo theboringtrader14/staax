@@ -123,8 +123,8 @@ export default function GridPage() {
 
   const [algos,         setAlgos]        = useState<Algo[]>([])
   const [grid,          setGrid]         = useState<Record<string,Record<string,Cell>>>({})
-  const [,              setLoading]      = useState(true)
-  const [showArch,      setShowArch]     = useState(false)
+  const [loading,       setLoading]      = useState(true)
+  const [showArch,      setShowArch]     = useState(() => localStorage.getItem('showArch') === 'true')
   const [del,           setDel]          = useState<string|null>(null)
   const [archConfirm,   setArchConfirm]  = useState<string|null>(null)
   const [opError,       setOpError]      = useState('')
@@ -422,7 +422,7 @@ export default function GridPage() {
             {/* Account filter */}
             <StaaxSelect value={filterAccount} onChange={setFilterAccount} options={accountOptions} width="130px"/>
 
-            <button className="btn btn-ghost" style={{ fontSize:'11px', position:'relative', height:'32px', padding:'0 12px' }} onClick={() => setShowArch(v => !v)}>
+            <button className="btn btn-ghost" style={{ fontSize:'11px', position:'relative', height:'32px', padding:'0 12px' }} onClick={() => setShowArch(v => { const next = !v; localStorage.setItem('showArch', String(next)); return next })}>
               Archive
               {archived.length > 0 && <span style={{ position:'absolute', top:'5px', right:'5px', width:'5px', height:'5px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
             </button>
@@ -434,7 +434,9 @@ export default function GridPage() {
       {showArch && (
         <div style={{ flexShrink:0, background:'rgba(245,158,11,0.07)', border:'0.5px solid rgba(245,158,11,0.22)', borderRadius:'10px', padding:'14px 16px', marginBottom:'10px' }}>
           <div style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-display)' }}>Archived Algos</div>
-          {archived.length === 0
+          {loading
+            ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Loading…</span>
+            : archived.length === 0
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>No archived algos.</span>
             : <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
                 {archived.map(a => (
