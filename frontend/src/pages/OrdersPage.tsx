@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
-import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI } from '@/services/api'
+import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI, accountsAPI } from '@/services/api'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -316,6 +316,17 @@ export default function OrdersPage() {
   const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
   const [showWeekends, setShowWeekends] = useState(false)
   const [accountFilter, setAccountFilter] = useState<string>('all')
+  const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
+
+  // Fetch accounts list on mount
+  useEffect(() => {
+    accountsAPI.list()
+      .then(res => {
+        const list: any[] = res.data?.accounts || res.data || []
+        setFetchedAccounts(list.filter((a: any) => a.nickname).map((a: any) => ({ id: a.id, nickname: a.nickname })))
+      })
+      .catch(() => {})
+  }, [])
 
   // Fetch open positions + holidays once on mount
   useEffect(() => {
@@ -572,8 +583,10 @@ export default function OrdersPage() {
   const filteredOrders  = activeAccountNickname ? orders.filter(g => g.account === activeAccountNickname) : orders
   const filteredWaiting = activeAccountNickname ? waitingAlgos.filter(w => w.account_name === activeAccountNickname) : waitingAlgos
 
-  // Local account filter — derive unique account names from loaded orders
-  const uniqueAccounts = Array.from(new Set(orders.map(g => g.account).filter(Boolean)))
+  // Local account filter — use fetched accounts list so chips are always visible
+  const uniqueAccounts = fetchedAccounts.length > 0
+    ? fetchedAccounts.map(a => a.nickname)
+    : Array.from(new Set(orders.map(g => g.account).filter(Boolean)))
   const accountChips = ['all', ...uniqueAccounts]
 
   const localFilteredOrders  = accountFilter === 'all' ? filteredOrders  : filteredOrders.filter(g => g.account === accountFilter)
