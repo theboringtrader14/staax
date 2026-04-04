@@ -209,3 +209,4 @@ __marimo__/
 *.sh
 backend/instrument_master_cache.json
 backend/instrument_master_cache_date.txt
+.env.save
