@@ -641,6 +641,20 @@ class AlgoRunner:
         # ── Place order via ExecutionManager (single control point) ───────────
         idempotency_key = f"{grid_entry.id}:{leg.id}:{algo_state.reentry_count}"
 
+        # SEBI mandates SL-Limit for all algo orders — compute trigger + limit prices
+        _order_type = "SL"  # always SL-Limit regardless of DB value
+        _buffer = max(1.0, float(ltp) * 0.001)  # ₹1 or 0.1%, whichever larger
+        if direction.lower() in ("buy",):
+            _trigger_price = float(ltp)
+            _limit_price   = float(ltp) + _buffer
+        else:
+            _trigger_price = float(ltp)
+            _limit_price   = float(ltp) - _buffer
+        logger.info(
+            f"[ALGO RUNNER] SL-Limit order — direction={direction} ltp={ltp:.2f} "
+            f"trigger={_trigger_price:.2f} limit={_limit_price:.2f}"
+        )
+
         _placed_at = datetime.now(IST)
         if self._execution_manager:
             order_id_str = await self._execution_manager.place(
@@ -652,8 +666,10 @@ class AlgoRunner:
                 exchange        = "NFO",
                 direction       = direction,
                 quantity        = quantity,
-                order_type      = algo.order_type or "market",
+                order_type      = _order_type,
                 ltp             = ltp,
+                limit_price     = _limit_price,
+                trigger_price   = _trigger_price,
                 algo_tag        = algo_tag,
                 is_practix      = grid_entry.is_practix,
                 is_overnight    = is_overnight,
@@ -670,8 +686,10 @@ class AlgoRunner:
                 exchange        = "NFO",
                 direction       = direction,
                 quantity        = quantity,
-                order_type      = algo.order_type or "market",
+                order_type      = _order_type,
                 ltp             = ltp,
+                limit_price     = _limit_price,
+                trigger_price   = _trigger_price,
                 is_practix      = grid_entry.is_practix,
                 is_overnight    = is_overnight,
                 broker_type     = broker_type,

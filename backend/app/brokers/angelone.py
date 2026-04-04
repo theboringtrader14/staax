@@ -559,8 +559,9 @@ class AngelOneBroker(BaseBroker):
         exchange: str,
         direction: str,      # "buy" | "sell"
         quantity: int,
-        order_type: str,     # "MARKET" | "LIMIT"
+        order_type: str,     # "MARKET" | "LIMIT" | "SL" | "SLM"
         price: Optional[float] = None,
+        trigger_price: Optional[float] = None,
         product: str = "INTRADAY",
         symbol_token: str = "",
         tag: str = "",       # SEBI algo_tag — passed as Angel One order tag
@@ -601,6 +602,7 @@ class AngelOneBroker(BaseBroker):
             "producttype":      product,
             "duration":         "DAY",
             "price":            str(price or 0),
+            "triggerprice":     str(trigger_price or 0),
             "squareoff":        "0",
             "stoploss":         "0",
             "quantity":         str(quantity),

@@ -126,6 +126,7 @@ class ZerodhaBroker:
         quantity: int,
         order_type: str,
         price: Optional[float] = None,
+        trigger_price: Optional[float] = None,
         is_overnight: bool = False,
     ) -> str:
         """
@@ -139,11 +140,16 @@ class ZerodhaBroker:
                 if direction.lower() == "buy"
                 else self.kite.TRANSACTION_TYPE_SELL
             )
-            kite_order_type = (
-                self.kite.ORDER_TYPE_MARKET
-                if order_type.lower() == "market"
-                else self.kite.ORDER_TYPE_LIMIT
-            )
+            _ot = order_type.lower()
+            if _ot == "market":
+                kite_order_type = self.kite.ORDER_TYPE_MARKET
+            elif _ot == "sl":
+                kite_order_type = self.kite.ORDER_TYPE_SL
+            elif _ot == "slm":
+                kite_order_type = self.kite.ORDER_TYPE_SLM
+            else:
+                kite_order_type = self.kite.ORDER_TYPE_LIMIT
+
             product = self.kite.PRODUCT_NRML if is_overnight else self.kite.PRODUCT_MIS
 
             params = {
@@ -155,8 +161,15 @@ class ZerodhaBroker:
                 "product":          product,
                 "validity":         self.kite.VALIDITY_DAY,
             }
-            if order_type.lower() == "limit" and price:
+            if _ot in ("limit",) and price:
                 params["price"] = price
+            if _ot == "sl":
+                if trigger_price:
+                    params["trigger_price"] = trigger_price
+                if price:
+                    params["price"] = price
+            if _ot == "slm" and trigger_price:
+                params["trigger_price"] = trigger_price
 
             order_id = self.kite.place_order(
                 variety=self.kite.VARIETY_REGULAR,

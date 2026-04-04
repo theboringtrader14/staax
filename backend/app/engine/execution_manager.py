@@ -222,6 +222,7 @@ class ExecutionManager:
         is_practix:      bool = True,
         is_overnight:    bool = False,
         limit_price:     Optional[float] = None,
+        trigger_price:   Optional[float] = None,
         broker_type:     str  = "zerodha",
         symbol_token:    str  = "",
     ) -> Optional[str]:
@@ -242,6 +243,7 @@ class ExecutionManager:
                 quantity=quantity, order_type=order_type, ltp=ltp,
                 algo_tag=algo_tag, is_practix=is_practix,
                 is_overnight=is_overnight, limit_price=limit_price,
+                trigger_price=trigger_price,
                 broker_type=broker_type, symbol_token=symbol_token,
             )
 
@@ -261,6 +263,7 @@ class ExecutionManager:
         is_practix:      bool = True,
         is_overnight:    bool = False,
         limit_price:     Optional[float] = None,
+        trigger_price:   Optional[float] = None,
         broker_type:     str  = "zerodha",
         symbol_token:    str  = "",
     ) -> Optional[str]:
@@ -318,6 +321,7 @@ class ExecutionManager:
             is_practix      = is_practix,
             is_overnight    = is_overnight,
             limit_price     = limit_price,
+            trigger_price   = trigger_price,
             broker_type     = broker_type,
             symbol_token    = symbol_token,
             algo_tag        = algo_tag,

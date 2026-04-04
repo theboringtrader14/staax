@@ -46,6 +46,7 @@ class OrderPlacer:
         is_practix: bool = True,
         is_overnight: bool = False,
         limit_price: Optional[float] = None,
+        trigger_price: Optional[float] = None,
         broker_type: str = "zerodha",
         symbol_token: str = "",
         algo_tag: str = "",
@@ -102,6 +103,7 @@ class OrderPlacer:
                     quantity=quantity,
                     order_type=order_type.upper(),
                     price=limit_price,
+                    trigger_price=trigger_price,
                     symbol_token=symbol_token,
                     tag=algo_tag,
                 )
@@ -111,6 +113,7 @@ class OrderPlacer:
                     symbol=symbol, exchange=exchange,
                     direction=direction, quantity=quantity,
                     order_type=order_type, price=limit_price,
+                    trigger_price=trigger_price,
                     is_overnight=is_overnight,
                 )
 
