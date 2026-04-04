@@ -123,7 +123,7 @@ export default function GridPage() {
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [dayModal, setDayModal] = useState<{
-    type: 'sq_confirm' | 'entry_passed' | 'orb_closed'
+    type: 'sq_confirm' | 'entry_passed' | 'orb_closed' | 'recurring_confirm'
     algo: Algo
     day: string
   } | null>(null)
@@ -253,18 +253,22 @@ export default function GridPage() {
   }
 
   // ── Remove cell ──────────────────────────────────────────────────────────────
-  const removeDay = async (algoId: string, day: string) => {
+  const removeDay = async (algoId: string, day: string, removeRecurring = false) => {
     const cell = grid[algoId]?.[day]
     const st = cell?.status
     if (st==='algo_active'||st==='waiting'||st==='open'||st==='order_pending') { flashError('Cannot remove an active algo from this day'); return }
     setGrid(g => { const u={...g[algoId]}; delete u[day]; return { ...g, [algoId]:u } })
-    setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays: x.recurringDays.filter(d => d !== day) } : x))
+    if (removeRecurring) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays: x.recurringDays.filter(d => d !== day) } : x))
     if (cell?.gridEntryId) {
       try {
-        const res = await gridAPI.remove(cell.gridEntryId, true)
+        const res = await gridAPI.remove(cell.gridEntryId, removeRecurring)
         if (Array.isArray(res.data?.algo_recurring_days))
           setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
-      } catch { setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:cell } })); setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:[...x.recurringDays, day] } : x)); flashError('Remove failed') }
+      } catch {
+        setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:cell } }))
+        if (removeRecurring) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:[...x.recurringDays, day] } : x))
+        flashError('Remove failed')
+      }
     }
   }
 
@@ -285,7 +289,7 @@ export default function GridPage() {
 
     if (!isTradeDay) { removeDay(algo.id, day); return }
     if (!isMarketHours) {
-      removeDay(algo.id, day)
+      removeDay(algo.id, day, false)
       setAutoFillToast(`Algo will not run on ${day}s going forward`)
       setTimeout(() => setAutoFillToast(''), 3000)
       return
@@ -293,7 +297,10 @@ export default function GridPage() {
     if (st === 'open' || st === 'order_pending') {
       setDayModal({ type:'sq_confirm', algo, day }); return
     }
-    removeDay(algo.id, day)
+    if (algo.recurringDays.includes(day)) {
+      setDayModal({ type:'recurring_confirm', algo, day }); return
+    }
+    removeDay(algo.id, day, false)
   }
 
   const handleDayCheck = (algo: Algo, day: string) => {
@@ -839,6 +846,22 @@ export default function GridPage() {
                   const today = weekDates[md]
                   if (today) try { await gridAPI.triggerNow(ma.id, today) } catch { flashError('Trigger failed') }
                 }}>Trade Now</button>
+              </div>
+            </div>
+          </div>
+        )
+
+        if (type === 'recurring_confirm') return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth:'380px' }}>
+              <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'8px' }}>Remove {ma.name} on {md}</div>
+              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'18px' }}>
+                This algo recurs every {md}. Remove just today, or stop recurring on {md}s entirely?
+              </div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="btn btn-ghost" onClick={close}>Cancel</button>
+                <button className="btn btn-ghost" onClick={() => { close(); removeDay(ma.id, md, false) }}>Just today</button>
+                <button className="btn btn-danger" onClick={() => { close(); removeDay(ma.id, md, true) }}>Remove recurring</button>
               </div>
             </div>
           </div>

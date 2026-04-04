@@ -699,12 +699,12 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
         logger.warning("[STARTUP MF] ltp_consumer not found on app.state — skipping")
         return
 
-    # Explicit local binding — avoids any future hoisting / closure ambiguity
-    _subscribe_tokens = _subscribe_open_position_tokens
-
+    logger.info("[AO-DEBUG] _auto_start_market_feed reached — ltp_consumer found")
     logger.info("[STARTUP MF] Checking for valid broker token in DB...")
 
     try:
+        # Explicit local binding inside try — captures any NameError with full traceback
+        _subscribe_tokens = _subscribe_open_position_tokens
         async with AsyncSessionLocal() as db:
             # ── Try Zerodha first ──────────────────────────────────────────────
             z_result = await db.execute(
@@ -914,7 +914,8 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
             logger.info("[STARTUP MF] No valid Angel One token found — Market Feed will start after manual login")
 
     except Exception as e:
-        logger.warning(f"[STARTUP MF] Market Feed auto-start failed (non-fatal): {e}")
+        import traceback as _tb
+        logger.error(f"[STARTUP MF] Market Feed auto-start failed:\n{_tb.format_exc()}")
 
 
 async def _print_account_status_summary(app: "FastAPI") -> None:
