@@ -54,30 +54,7 @@ export default function TopBar() {
         </span>
       </div>
 
-      {/* Middle — TradingView ticker */}
-      <div style={{ flex:1, maxWidth:'600px', overflow:'hidden', height:'36px' }}>
-        <div className="tradingview-widget-container" style={{ height:'36px' }}>
-          <div className="tradingview-widget-container__widget" />
-          <script type="text/javascript"
-            src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
-            async
-            dangerouslySetInnerHTML={{ __html: JSON.stringify({
-              symbols:[
-                { description:'NIFTY',    proName:'NSE:NIFTY' },
-                { description:'BANKNIFTY',proName:'NSE:BANKNIFTY' },
-                { description:'SENSEX',   proName:'BSE:SENSEX' },
-                { description:'FINNIFTY', proName:'NSE:FINNIFTY' },
-                { description:'MIDCAP',   proName:'NSE:MIDCPNIFTY' },
-                { description:'GOLD',     proName:'MCX:GOLD1!' },
-              ],
-              showSymbolLogo:false, isTransparent:true,
-              displayMode:'compact', colorTheme:'dark', locale:'in',
-            })}}
-          />
-        </div>
-      </div>
-
-      {/* Right — PRACTIX toggle + Exit */}
+{/* Right — PRACTIX toggle + Exit */}
       <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
 
         {/* PRACTIX / LIVE pill */}
@@ -103,7 +80,7 @@ export default function TopBar() {
 
         {/* Exit to LIFEX — replaces sidebar logout */}
         <button
-          onClick={() => { logout(); window.location.href = 'http://localhost:3000' }}
+          onClick={() => { logout(); window.location.href = 'https://lifexos.co.in' }}
           title="Exit to LIFEX"
           style={{
             display:'flex', alignItems:'center', justifyContent:'center',

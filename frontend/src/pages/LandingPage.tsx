@@ -13,7 +13,7 @@ const MODULES = [
     accentKey: 'indigo',
     status: 'LIVE',
     statusColor: '#10b981',
-    path: '/dashboard',
+    externalUrl: 'https://staax.lifexos.co.in',
   },
   {
     id: 'INVEX',
@@ -25,7 +25,7 @@ const MODULES = [
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
-    externalUrl: (import.meta.env.VITE_INVEX_URL as string) || 'http://localhost:3001',
+    externalUrl: 'https://invex.lifexos.co.in',
   },
   {
     id: 'BUDGEX',
@@ -485,15 +485,14 @@ export default function LandingPage() {
               className="landing-module-card"
               data-accent={mod.accentKey}
               onClick={() => {
-                if (mod.path) navigate(mod.path)
-                else if ('externalUrl' in mod && mod.externalUrl) window.open(mod.externalUrl, '_blank')
+                if ('externalUrl' in mod && mod.externalUrl) window.location.href = mod.externalUrl
               }}
               style={{
                 background: `rgba(10,10,26,0.7)`,
                 border: `1px solid ${mod.accent}30`,
                 borderRadius: '12px',
                 padding: '20px',
-                cursor: mod.path || ('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default',
+                cursor: ('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default',
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
                 borderTop: `2px solid ${mod.accent}`,
@@ -520,7 +519,7 @@ export default function LandingPage() {
               <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
                 {mod.description}
               </div>
-              {(mod.path || ('externalUrl' in mod && mod.externalUrl)) && (
+              {('externalUrl' in mod && mod.externalUrl) && (
                 <div style={{
                   marginTop: '14px', fontSize: '11px', fontWeight: 700,
                   color: mod.accent, display: 'flex', alignItems: 'center', gap: '4px',
