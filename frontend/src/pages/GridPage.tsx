@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI, holidaysAPI } from '@/services/api'
 import { useStore } from '@/store'
+import { StaaxSelect } from '@/components/StaaxSelect'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
@@ -112,61 +113,6 @@ function worstStatus(cells: Record<string,Cell>|undefined): CS {
 }
 
 // ── Custom dropdown ────────────────────────────────────────────────────────────
-function StaaxSelect({ value, onChange, options, width }: {
-  value:string; onChange:(v:string)=>void; options:{value:string;label:string}[]; width?:string
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const label = options.find(o => o.value === value)?.label ?? value
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
-  return (
-    <div ref={ref} style={{ position:'relative', width:width||'130px', flexShrink:0 }}>
-      <button onClick={() => setOpen(v => !v)} style={{
-        width:'100%', height:'32px', padding:'0 28px 0 12px',
-        background:'rgba(10,10,11,0.80)',
-        border: open ? '0.5px solid rgba(255,107,0,0.55)' : '0.5px solid rgba(255,107,0,0.25)',
-        borderRadius:'8px', color:'#F0F0FF', fontSize:'11px',
-        fontFamily:'var(--font-display)', cursor:'pointer', textAlign:'left',
-        display:'flex', alignItems:'center',
-        boxShadow: open ? '0 0 0 2px rgba(255,107,0,0.10)' : 'none',
-        transition:'border-color 0.15s, box-shadow 0.15s',
-      }}>
-        <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{label}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" strokeWidth="2.5"
-          style={{ position:'absolute', right:'8px', flexShrink:0, transition:'transform 0.15s', transform:open?'rotate(180deg)':'none' }}>
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
-      </button>
-      {open && (
-        <div style={{
-          position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:999,
-          background:'rgba(10,10,11,0.98)', backdropFilter:'blur(20px)',
-          border:'0.5px solid rgba(255,107,0,0.30)', borderRadius:'8px',
-          overflow:'hidden', boxShadow:'0 8px 32px rgba(0,0,0,0.7)',
-        }}>
-          {options.map(o => (
-            <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
-              style={{
-                padding:'8px 12px', fontSize:'11px', fontFamily:'var(--font-display)', cursor:'pointer',
-                color: o.value === value ? '#FF6B00' : 'var(--text)',
-                background: o.value === value ? 'rgba(255,107,0,0.12)' : 'transparent',
-                borderLeft: o.value === value ? '2px solid #FF6B00' : '2px solid transparent',
-              }}
-              onMouseEnter={e => { if (o.value !== value) { (e.currentTarget as HTMLDivElement).style.background='rgba(255,107,0,0.07)'; (e.currentTarget as HTMLDivElement).style.color='#FF8C33' } }}
-              onMouseLeave={e => { if (o.value !== value) { (e.currentTarget as HTMLDivElement).style.background='transparent'; (e.currentTarget as HTMLDivElement).style.color='var(--text)' } }}>
-              {o.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function GridPage() {
   const nav            = useNavigate()
@@ -212,7 +158,7 @@ export default function GridPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const algoRes = await algosAPI.list()
+      const algoRes = await algosAPI.list({ include_archived: true })
       const apiAlgos: Algo[] = (algoRes.data || []).map((a: any) => ({
         id:           String(a.id),
         name:         a.name,
@@ -487,7 +433,7 @@ export default function GridPage() {
       {/* ── Archive panel ──────────────────────────────────────────────────── */}
       {showArch && (
         <div style={{ flexShrink:0, background:'rgba(245,158,11,0.07)', border:'0.5px solid rgba(245,158,11,0.22)', borderRadius:'10px', padding:'14px 16px', marginBottom:'10px' }}>
-          <div style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-display)' }}>📦 Archived Algos</div>
+          <div style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-display)' }}>Archived Algos</div>
           {archived.length === 0
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>No archived algos.</span>
             : <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
@@ -497,7 +443,7 @@ export default function GridPage() {
                       <div style={{ fontSize:'12px', fontWeight:600 }}>{a.name}</div>
                       <div style={{ fontSize:'10px', color:'var(--text-dim)' }}>{a.account}</div>
                     </div>
-                    <button className="btn btn-ghost" style={{ fontSize:'11px', height:'26px', padding:'0 10px' }} onClick={() => unarch(a.id)}>↩ Reactivate</button>
+                    <button className="btn btn-ghost" style={{ fontSize:'11px', height:'26px', padding:'0 10px' }} onClick={() => unarch(a.id)}>Reactivate</button>
                   </div>
                 ))}
               </div>}
@@ -579,7 +525,7 @@ export default function GridPage() {
                           onMouseLeave={e => { const d=e.currentTarget; d.style.transform='none'; d.style.boxShadow='none'; d.style.borderColor='rgba(255,255,255,0.07)' }}>
 
                           {/* ── Main row ── */}
-                          <div style={{ display:'flex', alignItems:'stretch', minHeight:'80px' }}>
+                          <div style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
 
                             {/* Status strip — full card height */}
                             <div style={{ width:'4px', flexShrink:0, alignSelf:'stretch',
@@ -587,11 +533,11 @@ export default function GridPage() {
                               boxShadow:`0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
 
                             {/* Card row body */}
-                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'18px 24px' }}>
+                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'20px 24px' }}>
 
                               {/* ── Info block ── */}
-                              <div style={{ display:'flex', gap:'16px', width:'240px', flexShrink:0, alignItems:'flex-start' }}>
-                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', minWidth:0, flex:1 }}>
+                              <div style={{ display:'flex', gap:'16px', width:'290px', flexShrink:0, alignItems:'flex-start' }}>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'6px', minWidth:0, flex:1 }}>
                                   <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
                                     style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
                                       cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
@@ -599,11 +545,11 @@ export default function GridPage() {
                                       marginRight:'8px' }}>
                                     {algo.name}
                                   </span>
-                                  <span style={{ fontSize:'11px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                  <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                                     {algo.account || '—'}
                                   </span>
                                 </div>
-                                <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:0, flex:1 }}>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'6px', minWidth:0, flex:1 }}>
                                   <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
                                     {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
                                   </span>
@@ -621,7 +567,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Entry / Exit time ── */}
-                              <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'80px', flexShrink:0 }}>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'80px', flexShrink:0, marginRight:'16px' }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                                   <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
                                   <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
@@ -633,7 +579,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center' }}
+                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center', alignSelf:'center' }}
                                 onClick={e => e.stopPropagation()}>
                                 <button onClick={() => changeCardMult(algo.id, mult - 1)}
                                   style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
@@ -649,7 +595,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', maxWidth:'240px', flexShrink:0, justifyContent:'center' }}>
+                              <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', flexShrink:0, justifyContent:'center' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isDeployed = !!grid[algo.id]?.[day]
                                   const cell       = grid[algo.id]?.[day]
@@ -666,7 +612,7 @@ export default function GridPage() {
                                       onClick={e => { e.stopPropagation(); isDeployed ? rmCell(algo.id, day) : deployDay(algo.id, day) }}
                                       title={`${day}${isHoliday?' (Holiday)':''}${isDeployed ? ` · ${deployedSt?.label||'Active'} · click to remove` : ' · click to deploy'}`}
                                       style={{
-                                        width:'30px', height:'30px', borderRadius:'50%', cursor:'pointer', position:'relative',
+                                        width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer', position:'relative',
                                         fontFamily:'var(--font-display)', fontSize:'10px', fontWeight:600,
                                         display:'flex', alignItems:'center', justifyContent:'center',
                                         transition:'all 0.15s ease', flexShrink:0,
@@ -709,13 +655,13 @@ export default function GridPage() {
                                 onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 16px', background:'rgba(255,107,0,0.05)', border:'none',
+                                  gap:4, padding:'0 16px', background:'rgba(34,221,136,0.05)', border:'none',
                                   borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
                                   color: isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)',
                                   minWidth:64, transition:'all 150ms',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color = isPractixMode ? '#22DD88' : '#F0F0FF'; e.currentTarget.style.background = 'rgba(255,107,0,0.12)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color = isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'rgba(255,107,0,0.05)' }}>
+                                onMouseEnter={e => { e.currentTarget.style.color = isPractixMode ? '#22DD88' : '#F0F0FF'; e.currentTarget.style.background = 'rgba(34,221,136,0.12)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color = isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'rgba(34,221,136,0.05)' }}>
                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                                   {isPractixMode
                                     ? <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>

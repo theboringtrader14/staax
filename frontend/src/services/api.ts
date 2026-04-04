@@ -48,7 +48,7 @@ export const accountsAPI = {
 
 // ── Algos — CRUD ──────────────────────────────────────────────────────────────
 export const algosAPI = {
-  list:      () => api.get('/algos/'),
+  list:      (params?: Record<string, unknown>) => api.get('/algos/', { params }),
   get:       (id: string) => api.get(`/algos/${id}`),
   create:    (data: object) => api.post('/algos/', data),
   update:    (id: string, data: object) => api.put(`/algos/${id}`, data),

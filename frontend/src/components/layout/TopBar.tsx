@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
 import { useStore } from '../../store'
 import { systemAPI } from '../../services/api'
 
@@ -8,11 +7,7 @@ export default function TopBar() {
   const setIsPractixMode = useStore(s => s.setIsPractixMode)
   const livePnl         = useStore(s => s.livePnl)
   const setLivePnl      = useStore(s => s.setLivePnl)
-  const rawAccounts     = useStore(s => s.accounts)
-  const activeAccount   = useStore(s => s.activeAccount)
-  const setActiveAccount = useStore(s => s.setActiveAccount)
   const logout          = useStore((s: any) => s.logout)
-  const accounts        = Array.isArray(rawAccounts) ? rawAccounts : []
   const [time, setTime] = useState(new Date())
 
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t) }, [])
@@ -36,14 +31,6 @@ export default function TopBar() {
     hour:'2-digit', minute:'2-digit', second:'2-digit',
     timeZone:'Asia/Kolkata', hour12:true,
   })
-
-  const location = useLocation()
-  const accountDropdownActive = ['/grid','/orders','/reports'].some(p => location.pathname.startsWith(p))
-  const accountOptions = [
-    { id: null, label:'All Accounts' },
-    ...accounts.map((a: any) => ({ id: String(a.id), label: a.nickname || a.name || String(a.id) })),
-  ]
-  const selectedLabel = accountOptions.find(o => o.id === activeAccount)?.label ?? 'All Accounts'
 
   return (
     <header style={{
@@ -90,20 +77,8 @@ export default function TopBar() {
         </div>
       </div>
 
-      {/* Right — account select + PRACTIX toggle + Exit */}
+      {/* Right — PRACTIX toggle + Exit */}
       <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-        <select className="staax-select"
-          value={accountDropdownActive ? selectedLabel : 'All Accounts'}
-          onChange={e => {
-            if (!accountDropdownActive) return
-            const opt = accountOptions.find(o => o.label === e.target.value)
-            setActiveAccount(opt?.id ?? null)
-          }}
-          disabled={!accountDropdownActive}
-          style={{ opacity:accountDropdownActive ? 1 : 0.38, cursor:accountDropdownActive ? 'pointer' : 'default', pointerEvents:accountDropdownActive ? 'auto' : 'none', width:'110px', fontSize:'11px' }}
-        >
-          {accountOptions.map(o => <option key={o.id ?? 'all'}>{o.label}</option>)}
-        </select>
 
         {/* PRACTIX / LIVE pill */}
         <button onClick={() => setIsPractixMode(!isPractixMode)} style={{
