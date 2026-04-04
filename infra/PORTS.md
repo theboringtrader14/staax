@@ -6,8 +6,8 @@
 |---|---|---|
 | 80 | nginx HTTP | Redirects all traffic to 443 |
 | 443 | nginx HTTPS | Serves all subdomains |
-| 8000 | STAAX FastAPI backend | Internal only, proxied via api.lifex.in |
-| 8001 | INVEX FastAPI backend | Internal only, proxied via invex-api.lifex.in |
+| 8000 | STAAX FastAPI backend | Internal only, proxied via api.lifexos.co.in |
+| 8001 | INVEX FastAPI backend | Internal only, proxied via invex-api.lifexos.co.in |
 | 5432 | PostgreSQL | Docker container, internal only |
 | 6379 | Redis | Docker container, internal only |
 
@@ -16,7 +16,7 @@
 | Port | Service | URL |
 |---|---|---|
 | 3000 | LIFEX Landing / STAAX frontend | http://localhost:3000 |
-| 3001 | INVEX frontend (if separate) | http://localhost:3001 |
+| 3001 | INVEX frontend | http://localhost:3001 |
 | 8000 | STAAX backend | http://localhost:8000 |
 | 8001 | INVEX backend | http://localhost:8001 |
 | 5432 | PostgreSQL (Docker) | localhost:5432 |
@@ -32,9 +32,9 @@
 | Custom TCP | 8000 | 127.0.0.1 | Backend (internal only) |
 | Custom TCP | 8001 | 127.0.0.1 | INVEX backend (internal only) |
 
-## Subdomain Recommendation
-lifex.in → Landing (family-friendly entry point)
-app.lifex.in → STAAX (algo trading dashboard)
-invex.lifex.in → INVEX (investments dashboard)
-api.lifex.in → STAAX API
-invex-api.lifex.in → INVEX API
+## Subdomain Map
+lifexos.co.in         → Landing (family-friendly entry point)
+staax.lifexos.co.in   → STAAX (algo trading dashboard)
+invex.lifexos.co.in   → INVEX (investments dashboard)
+api.lifexos.co.in     → STAAX API
+invex-api.lifexos.co.in → INVEX API

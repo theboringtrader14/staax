@@ -25,7 +25,7 @@ const MODULES = [
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
-    externalUrl: 'http://localhost:3001',
+    externalUrl: (import.meta.env.VITE_INVEX_URL as string) || 'http://localhost:3001',
   },
   {
     id: 'BUDGEX',

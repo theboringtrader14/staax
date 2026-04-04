@@ -36,6 +36,6 @@ esac
 
 echo ""
 echo "✅ Deployment complete"
-echo "   LIFEX:  https://lifex.in"
-echo "   STAAX:  https://app.lifex.in"
-echo "   INVEX:  https://invex.lifex.in"
+echo "   LIFEX:  https://lifexos.co.in"
+echo "   STAAX:  https://staax.lifexos.co.in"
+echo "   INVEX:  https://invex.lifexos.co.in"

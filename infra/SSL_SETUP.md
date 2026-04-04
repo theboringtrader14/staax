@@ -1,38 +1,33 @@
 # SSL Setup Guide — LIFEX Platform
 
-## Domain Recommendation
-**lifex.in** (~₹600/yr on Namecheap or GoDaddy)
+## Domain
+**lifexos.co.in** (purchased)
 
 ## Subdomain Architecture
 | Subdomain | Service | Notes |
 |---|---|---|
-| lifex.in | LIFEX Landing Page | Public-facing entry point |
-| app.lifex.in | STAAX Dashboard | Family algo trading |
-| invex.lifex.in | INVEX Dashboard | Investments & portfolio |
-| api.lifex.in | STAAX Backend API | Port 8000 proxied |
-| invex-api.lifex.in | INVEX Backend API | Port 8001 proxied |
+| lifexos.co.in | LIFEX Landing Page | Public-facing entry point |
+| staax.lifexos.co.in | STAAX Dashboard | Family algo trading |
+| invex.lifexos.co.in | INVEX Dashboard | Investments & portfolio |
+| api.lifexos.co.in | STAAX Backend API | Port 8000 proxied |
+| invex-api.lifexos.co.in | INVEX Backend API | Port 8001 proxied |
 
-## Step 1 — Purchase Domain
-1. Go to Namecheap.com or GoDaddy.com
-2. Search: lifex.in (₹600-800/yr) or lifex.app (~$12/yr)
-3. Purchase with auto-renew enabled
-
-## Step 2 — Point DNS to EC2
+## Step 1 — Point DNS to EC2
 In your domain registrar's DNS settings, add:
 
 | Type | Host | Value | TTL |
 |---|---|---|---|
 | A | @ | 13.202.164.243 | Auto |
 | A | www | 13.202.164.243 | Auto |
-| A | app | 13.202.164.243 | Auto |
+| A | staax | 13.202.164.243 | Auto |
 | A | invex | 13.202.164.243 | Auto |
 | A | api | 13.202.164.243 | Auto |
 | A | invex-api | 13.202.164.243 | Auto |
 
 Wait 5–30 minutes for DNS propagation.
-Verify: `dig lifex.in` should return 13.202.164.243
+Verify: `dig lifexos.co.in` should return 13.202.164.243
 
-## Step 3 — SSH to EC2 and Install nginx + certbot
+## Step 2 — SSH to EC2 and Install nginx + certbot
 ```bash
 ssh -i your-key.pem ubuntu@13.202.164.243
 
@@ -43,23 +38,23 @@ sudo apt update && sudo apt install -y nginx
 sudo apt install -y certbot python3-certbot-nginx
 
 # Copy nginx config
-sudo cp nginx-lifex.conf /etc/nginx/sites-available/lifex
-sudo ln -s /etc/nginx/sites-available/lifex /etc/nginx/sites-enabled/
+sudo cp nginx-lifex.conf /etc/nginx/sites-available/lifexos
+sudo ln -s /etc/nginx/sites-available/lifexos /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## Step 4 — Get SSL Certificates
+## Step 3 — Get SSL Certificates
 ```bash
 sudo certbot --nginx \
-  -d lifex.in -d www.lifex.in \
-  -d app.lifex.in \
-  -d invex.lifex.in \
-  -d api.lifex.in \
-  -d invex-api.lifex.in
+  -d lifexos.co.in \
+  -d staax.lifexos.co.in \
+  -d invex.lifexos.co.in \
+  -d api.lifexos.co.in \
+  -d invex-api.lifexos.co.in
 ```
 Follow prompts: enter email, agree to ToS, choose redirect (option 2).
 
-## Step 5 — Auto-renew
+## Step 4 — Auto-renew
 ```bash
 # Test renewal
 sudo certbot renew --dry-run
@@ -68,7 +63,7 @@ sudo certbot renew --dry-run
 sudo systemctl status certbot.timer
 ```
 
-## Step 6 — Deploy Built Files
+## Step 5 — Deploy Built Files
 ```bash
 # On local machine, build:
 cd ~/STAXX/staax/frontend && npm run build
