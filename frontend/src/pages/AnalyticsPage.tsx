@@ -5,6 +5,7 @@ import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI } from '@/services/api'
 import type { Order, Algo } from '@/types'
 import { getCurrentFY, getFYOptions } from '@/utils/fy'
+import { StaaxSelect } from '@/components/StaaxSelect'
 
 // ── Local Types ────────────────────────────────────────────────────────────────
 interface MetricRow {
@@ -61,10 +62,26 @@ const secHdr: CSSProperties = {
 
 // Table wrapper
 const tblWrap: CSSProperties = {
-  border: '1px solid var(--bg-border)',
   borderRadius: '7px',
   overflow: 'hidden',
 }
+
+// Glass card style (v5.0)
+const glassCard: CSSProperties = {
+  background: 'var(--glass-bg)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  border: '0.5px solid rgba(255,107,0,0.22)',
+  borderRadius: 'var(--radius-lg)',
+}
+
+// Numeric value style (v5.0)
+const numStyle: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  color: '#F0F0FF',
+  fontWeight: 600,
+}
+
 
 // ── Recharts dark tooltip ───────────────────────────────────────────────────────
 function PnlTooltip({ active, payload, label }: any) {
@@ -104,9 +121,10 @@ function CumulativePnlChart({ orders }: { orders: Order[] }) {
   const isPositive = chartData[chartData.length - 1].cum >= 0
   const color = isPositive ? '#22DD88' : '#FF4444'
   const gradId = `pnlGrad-${isPositive ? 'g' : 'r'}`
+  // stroke color matches chart colors spec: profit=#22DD88, loss=#FF4444
 
   return (
-    <div className="card" style={{ marginBottom: '12px', paddingBottom: '8px' }}>
+    <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', paddingBottom: '8px', padding: '16px 18px' }}>
       <div style={{ ...secHdr, marginBottom: '12px' }}>Cumulative P&amp;L</div>
       <ResponsiveContainer width="100%" height={100}>
         <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
@@ -167,19 +185,6 @@ function SegmentedArcGauge({ score }: { score: number }) {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-function PractixChip({ isPractix }: { isPractix: boolean }) {
-  return (
-    <span style={{
-      fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '100px',
-      background: isPractix ? 'rgba(215,123,18,0.15)' : 'rgba(34,221,136,0.12)',
-      color: isPractix ? 'var(--accent-amber)' : 'var(--green)',
-      border: isPractix ? '1px solid rgba(215,123,18,0.3)' : '1px solid rgba(34,221,136,0.25)',
-    }}>
-      {isPractix ? 'PRACTIX' : 'LIVE'}
-    </span>
-  )
-}
-
 function SummaryCard({ label, value, sub, valueColor }: {
   label: string; value: string; sub?: string; valueColor?: string
 }) {
@@ -295,12 +300,17 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       <CumulativePnlChart orders={allOrders} />
 
       {/* Row 2 — chip toggle: P&L heatmap vs Health Scores */}
-      <div className="card" style={{ marginBottom: '12px', overflowX: 'auto' }}>
+      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', overflowX: 'auto', padding: '16px 18px' }}>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
           {([['heatmap', 'P&L Heatmap'], ['health', 'Health Scores']] as const).map(([v, l]) => (
             <button key={v} onClick={() => setActiveView(v)}
-              className={`chip ${activeView === v ? 'chip-active' : 'chip-inactive'}`}
-              style={{ height: '28px', padding: '0 14px', fontSize: '11px' }}>{l}</button>
+              style={{
+                padding: '4px 12px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer',
+                fontFamily: 'var(--font-display)', fontWeight: 600, border: 'none',
+                background: activeView === v ? 'rgba(255,107,0,0.15)' : 'transparent',
+                color: activeView === v ? '#FF6B00' : 'rgba(232,232,248,0.5)',
+                outline: activeView === v ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
+              }}>{l}</button>
           ))}
         </div>
 
@@ -312,9 +322,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                   <table className="staax-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={{ minWidth: '140px' }}>Algo</th>
-                        {HEATMAP_DAYS.map(d => <th key={d} style={{ textAlign: 'center', width: '100px' }}>{d}</th>)}
-                        <th style={{ textAlign: 'right' }}>FY Total</th>
+                        <th style={{ minWidth: '140px', textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                        {HEATMAP_DAYS.map(d => <th key={d} style={{ textAlign: 'center', width: '100px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{d}</th>)}
+                        <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>FY Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -323,11 +333,11 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                         const fyTotal = HEATMAP_DAYS.reduce((s, d) => s + (row[d]?.pnl ?? 0), 0)
                         return (
                           <tr key={algo}>
-                            <td style={{ fontWeight: 600 }}>{algo}</td>
+                            <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{algo}</td>
                             {HEATMAP_DAYS.map(d => {
                               const cell = row[d]
                               return (
-                                <td key={d} style={{ textAlign: 'center', padding: '6px 4px' }}>
+                                <td key={d} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                                   <div style={{
                                   background: cellBg(cell?.pnl), borderRadius: '5px', padding: '5px 4px',
                                   fontSize: '10px', fontWeight: 700,
@@ -343,7 +353,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                                 </td>
                               )
                             })}
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: fyTotal >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtPnl(fyTotal)}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 700, ...numStyle, color: fyTotal >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(fyTotal)}</td>
                           </tr>
                         )
                       })}
@@ -365,8 +375,12 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                 <table className="staax-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
-                      <th>Algo</th><th style={{ textAlign: 'center' }}>Grade</th>
-                      <th>Score</th><th>Trades</th><th>Win %</th><th>P&amp;L</th>
+                      <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                      <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Grade</th>
+                      <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Score</th>
+                      <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Trades</th>
+                      <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Win %</th>
+                      <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>P&amp;L</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -374,12 +388,12 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                       const g = GRADE_COLORS[s.grade] || GRADE_COLORS['D']
                       return (
                         <tr key={s.algo_name}>
-                          <td style={{ fontWeight: 600 }}>{s.algo_name}</td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.algo_name}</td>
+                          <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', color: g.color, background: g.bg, border: `1px solid ${g.border}` }}>{s.grade}</span>
                           </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
                               <div style={{ width: '80px', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', flexShrink: 0, overflow: 'hidden' }}>
                                 <div style={{
                                   width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: '3px',
@@ -396,12 +410,12 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                                   transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)',
                                 }} />
                               </div>
-                              <span style={{ fontSize: '12px', fontWeight: 700, color: scoreBarColor(s.score) }}>{s.score}</span>
+                              <span style={{ ...numStyle, fontSize: '12px', color: scoreBarColor(s.score) }}>{s.score}</span>
                             </div>
                           </td>
-                          <td>{s.trades}</td>
-                          <td style={{ color: s.win_pct >= 50 ? 'var(--green)' : 'var(--red)' }}>{s.win_pct.toFixed(1)}%</td>
-                          <td style={{ fontWeight: 700, color: s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtPnl(s.total_pnl)}</td>
+                          <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.trades}</td>
+                          <td style={{ textAlign: 'center', ...numStyle, color: s.win_pct >= 50 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.win_pct.toFixed(1)}%</td>
+                          <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: s.total_pnl >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(s.total_pnl)}</td>
                         </tr>
                       )
                     })}
@@ -416,7 +430,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       {timeSlots.length > 0 && (() => {
         const maxAbsPnl = Math.max(...timeSlots.map((s: any) => Math.abs(s.total_pnl)), 1)
         return (
-          <div className="card" style={{ marginBottom: '12px' }}>
+          <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
             <div style={{ marginBottom: '24px' }}>
               <span style={{ ...secHdr, marginBottom: 0 }}>Best Time to Trade</span>
             </div>
@@ -461,33 +475,38 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       })()}
 
       {/* Row 4 — Strategy Type Breakdown */}
-      <div className="card">
+      <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
         <div style={{ marginBottom: '12px' }}>
           <span style={{ ...secHdr, marginBottom: 0 }}>Strategy Type Breakdown</span>
         </div>
+        {stratRows.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No data yet for FY {fy}</div>
+        ) : (
         <div style={tblWrap}>
           <table className="staax-table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Strategy</th><th>Orders</th><th>Total P&amp;L</th><th>Avg P&amp;L</th><th>Win Rate</th>
+                <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Strategy</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Orders</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Total P&amp;L</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Avg P&amp;L</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Win Rate</th>
               </tr>
             </thead>
             <tbody>
-              {stratRows.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No data for FY {fy}</td></tr>
-              )}
               {stratRows.map(r => (
                 <tr key={r.strategy_type}>
-                  <td style={{ fontWeight: 600, textTransform: 'capitalize' }}>{r.strategy_type}</td>
-                  <td>{r.count}</td>
-                  <td style={{ color: r.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtPnl(r.total_pnl)}</td>
-                  <td style={{ color: r.avg_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtPnl(r.avg_pnl)}</td>
-                  <td style={{ color: r.win_rate >= 50 ? 'var(--green)' : 'var(--red)' }}>{r.win_rate.toFixed(1)}%</td>
+                  <td style={{ fontWeight: 600, textTransform: 'capitalize', textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{r.strategy_type}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{r.count}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: r.total_pnl >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(r.total_pnl)}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: r.avg_pnl >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(r.avg_pnl)}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: r.win_rate >= 50 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{r.win_rate.toFixed(1)}%</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   )
@@ -515,51 +534,66 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
         <SummaryCard label="Algos with Errors" value={data.per_algo.length.toString()} />
       </div>
 
-      <div className="card" style={{ marginBottom: '12px' }}>
+      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
         <div style={secHdr}>Errors per Algo</div>
+        {data.per_algo.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No errors on record</div>
+        ) : (
         <div style={tblWrap}>
           <table className="staax-table" style={{ width: '100%' }}>
-            <thead><tr><th>Algo</th><th>Errors</th><th>Last Error</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Errors</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Last Error</th>
+              </tr>
+            </thead>
             <tbody>
-              {data.per_algo.length === 0 && (
-                <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No errors on record</td></tr>
-              )}
               {data.per_algo.map(row => (
                 <tr key={row.algo}>
-                  <td style={{ fontWeight: 600 }}>{row.algo}</td>
-                  <td style={{ color: 'var(--red)', fontWeight: 700 }}>{row.errors}</td>
-                  <td style={{ color: 'var(--text-muted)' }}>{fmtDate(row.last_error ?? undefined)}</td>
+                  <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{row.algo}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: '#FF4444', fontWeight: 700, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{row.errors}</td>
+                  <td style={{ textAlign: 'center', color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtDate(row.last_error ?? undefined)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
-      <div className="card">
+      <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
         <div style={secHdr}>Recent Error Orders (last 20)</div>
+        {data.recent.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No recent errors</div>
+        ) : (
         <div style={{ ...tblWrap, overflowX: 'auto' }}>
           <table className="staax-table" style={{ width: '100%' }}>
-            <thead><tr><th>Time</th><th>Algo</th><th>Symbol</th><th>Error Message</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Time</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Symbol</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Error Message</th>
+              </tr>
+            </thead>
             <tbody>
-              {data.recent.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No recent errors</td></tr>
-              )}
               {data.recent.map(o => {
                 const msg = o.error_message || '—'
                 const short = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
                 return (
                   <tr key={o.id}>
-                    <td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{fmtDate(o.created_at ?? undefined)}</td>
-                    <td style={{ fontWeight: 600 }}>{o.algo}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: '11px' }}>{o.symbol}</td>
-                    <td><span title={msg} style={{ cursor: msg.length > 60 ? 'help' : 'default', color: 'var(--red)', fontSize: '11px' }}>{short}</span></td>
+                    <td style={{ color: 'rgba(232,232,248,0.5)', whiteSpace: 'nowrap', textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtDate(o.created_at ?? undefined)}</td>
+                    <td style={{ fontWeight: 600, textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{o.algo}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{o.symbol}</td>
+                    <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}><span title={msg} style={{ cursor: msg.length > 60 ? 'help' : 'default', color: '#FF4444', fontSize: '11px' }}>{short}</span></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   )
@@ -592,35 +626,40 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
         <SummaryCard label="Algos Tracked" value={data.per_algo.length.toString()} />
       </div>
 
-      <div className="card">
+      <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
         <div style={secHdr}>Slippage per Algo</div>
+        {data.per_algo.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No slippage data on record</div>
+        ) : (
         <div style={{ ...tblWrap, overflowX: 'auto' }}>
           <table className="staax-table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Algo</th><th>Orders</th><th>Avg Slip (pts)</th>
-                <th>Total Slip (₹)</th><th>Best</th><th>Worst</th>
+                <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Orders</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Avg Slip (pts)</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Total Slip (₹)</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Best</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Worst</th>
               </tr>
             </thead>
             <tbody>
-              {data.per_algo.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px' }}>No slippage data on record</td></tr>
-              )}
               {data.per_algo.map(r => (
                 <tr key={r.algo}>
-                  <td style={{ fontWeight: 600 }}>{r.algo}</td>
-                  <td>{r.orders}</td>
-                  <td style={{ fontWeight: 700, color: slipColor(r.avg_slip_pts) }}>{fmtPts(r.avg_slip_pts)}</td>
-                  <td style={{ color: r.total_slip_inr <= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{r.algo}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{r.orders}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: slipColor(r.avg_slip_pts), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPts(r.avg_slip_pts)}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: r.total_slip_inr <= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                     {r.total_slip_inr >= 0 ? '+' : '-'}₹{Math.abs(Math.round(r.total_slip_inr)).toLocaleString('en-IN')}
                   </td>
-                  <td style={{ color: 'var(--green)' }}>{fmtPts(r.best)}</td>
-                  <td style={{ color: r.worst > 5 ? 'var(--red)' : 'var(--text)' }}>{fmtPts(r.worst)}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: '#22DD88', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPts(r.best)}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: r.worst > 5 ? '#FF4444' : '#F0F0FF', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPts(r.worst)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   )
@@ -671,20 +710,25 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 
       {/* Row 2 — By Broker */}
       {data.by_broker.length > 0 && (
-        <div className="card" style={{ marginBottom: '12px' }}>
+        <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
           <div style={secHdr}>By Broker</div>
           <div style={tblWrap}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
-                <tr><th>Broker</th><th>Avg (ms)</th><th>Orders</th><th style={{ width: '160px' }}>Bar</th></tr>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Broker</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Avg (ms)</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Orders</th>
+                  <th style={{ width: '160px', textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Bar</th>
+                </tr>
               </thead>
               <tbody>
                 {data.by_broker.map(b => (
                   <tr key={b.broker}>
-                    <td style={{ fontWeight: 600 }}>{b.broker}</td>
-                    <td style={{ fontWeight: 700, color: latencyColor(b.avg_ms) }}>{b.avg_ms}</td>
-                    <td style={{ color: 'var(--text-muted)' }}>{b.count}</td>
-                    <td>
+                    <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.broker}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(b.avg_ms), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.avg_ms}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.count}</td>
+                    <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                       <div style={{ width: `${Math.round(b.avg_ms / maxBrokerMs * 140)}px`, height: '8px', background: 'rgba(245,158,11,0.6)', borderRadius: '3px', transition: 'width 0.3s' }} />
                     </td>
                   </tr>
@@ -697,20 +741,25 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 
       {/* Row 3 — By Algo */}
       {data.by_algo.length > 0 && (
-        <div className="card">
+        <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
           <div style={secHdr}>By Algo</div>
           <div style={tblWrap}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
-                <tr><th>Algo</th><th>Avg (ms)</th><th>Orders</th><th style={{ width: '160px' }}>Bar</th></tr>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Avg (ms)</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Orders</th>
+                  <th style={{ width: '160px', textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Bar</th>
+                </tr>
               </thead>
               <tbody>
                 {data.by_algo.map(a => (
                   <tr key={a.algo_name}>
-                    <td style={{ fontWeight: 600 }}>{a.algo_name}</td>
-                    <td style={{ fontWeight: 700, color: latencyColor(a.avg_ms) }}>{a.avg_ms}</td>
-                    <td style={{ color: 'var(--text-muted)' }}>{a.count}</td>
-                    <td>
+                    <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{a.algo_name}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{a.avg_ms}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{a.count}</td>
+                    <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                       <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 140)}px`, height: '8px', background: 'rgba(245,158,11,0.6)', borderRadius: '3px', transition: 'width 0.3s' }} />
                     </td>
                   </tr>
@@ -805,22 +854,19 @@ export default function AnalyticsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>Analytics</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            Performance, risk, failures &amp; slippage ·{' '}
-            <PractixChip isPractix={isPractixMode} />
+          <h1 style={{ color: 'var(--ox-radiant)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '22px' }}>Analytics</h1>
+          <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            Performance deep-dive ·{' '}
+            <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>{isPractixMode ? 'PRACTIX' : 'LIVE'}</span>
           </p>
         </div>
         <div className="page-header-actions">
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {getFYOptions(2).map(opt => (
-              <button key={opt.value} onClick={() => setFy(opt.value)}
-                className={`chip ${fy === opt.value ? 'chip-active' : 'chip-inactive'}`}
-                style={{ height: '28px', padding: '0 14px', fontSize: '11px' }}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <StaaxSelect
+            value={fy}
+            onChange={setFy}
+            options={getFYOptions(3)}
+            width="140px"
+          />
         </div>
       </div>
 
@@ -828,8 +874,13 @@ export default function AnalyticsPage() {
         {TABS.map(tab => (
           <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
-            className={`chip ${activeTab === tab ? 'chip-active' : 'chip-inactive'}`}
-            style={{ height: '30px', padding: '0 18px', fontSize: '12px', fontWeight: 600 }}>
+            style={{
+              padding: '4px 12px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontWeight: 600, border: 'none',
+              background: activeTab === tab ? 'rgba(255,107,0,0.15)' : 'transparent',
+              color: activeTab === tab ? '#FF6B00' : 'rgba(232,232,248,0.5)',
+              outline: activeTab === tab ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
+            }}>
             {tab}
           </button>
         ))}
