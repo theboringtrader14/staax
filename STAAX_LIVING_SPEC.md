@@ -3806,3 +3806,32 @@ Use these as source of truth for any future UI work.
 - Orders, Reports, Analytics, Indicators page polish
 - INVEX: connect to live portfolio data
 - Server deploy of v5.0 frontend
+
+## Session Update — 2026-04-03 (Night)
+
+### STAAX v5.0 — Pages Status
+- Dashboard: ✅ Complete — orange brand, live data
+- Smart Cards: ✅ Complete — algo cards, groups, tall buttons, portal dropdown
+- AlgoPage: ✅ Complete — StaaxSelect, orange theme, cloud-fill
+- Landing: ✅ Complete — cosmos background, roadmap, live status
+
+### INVEX v1.0 — Pages Status  
+- Portfolio: ✅ Complete — ₹46.8L live, Redis cache (instant load)
+- SIP Engine: ✅ Built (UI only, backend pending)
+- Watchlist: ✅ Built (UI only, backend pending)
+- IPO Bot: ✅ Placeholder
+- Analysis: ✅ Placeholder
+
+### INVEX Data Status
+- Zerodha: ❌ Token expired — needs daily login in STAAX
+- Angel One: ❌ API keys invalid — PDoWMhNz rejected
+- Existing DB holdings: 37 stocks, 9 MF (from previous load)
+- Redis cache: instant load from cached data ✅
+
+### Pending Next Session
+- STAAX: Orders page redesign
+- STAAX: Reports page redesign  
+- STAAX: Indicators page redesign
+- INVEX: SIP backend wiring
+- INVEX: Fix Angel One API keys for live data
+- Server: Deploy all latest commits
