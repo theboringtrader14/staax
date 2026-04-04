@@ -166,8 +166,8 @@ export default function Layout() {
   return (
     <div style={{ display:'flex', minHeight:'100vh', position:'relative', background:'#030308' }}>
       {isDashboard && <CosmicCanvas />}
-      <Sidebar />
-      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', position:'relative', zIndex:1, overflowY:'auto', height:'100vh' }}>
+      <div className="sidebar"><Sidebar /></div>
+      <div className="main-content" style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', position:'relative', zIndex:1, overflowY:'auto', height:'100vh' }}>
         <TopBar />
         <main style={{ flex:1, padding:'20px 24px' }}>
           <Outlet />

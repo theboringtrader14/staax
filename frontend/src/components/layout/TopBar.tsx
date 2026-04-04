@@ -45,7 +45,7 @@ export default function TopBar() {
 
       {/* Left — welcome + IST time (P&L removed) */}
       <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
-        <span style={{ color:'rgba(240,237,232,0.38)', fontSize:'12px' }}>
+        <span className="topbar-welcome" style={{ color:'rgba(240,237,232,0.38)', fontSize:'12px' }}>
           Welcome, <span style={{ color:'#F0EDE8', fontWeight:600 }}>Karthikeyan</span>
         </span>
         <span style={{ width:'1px', height:'16px', background:'rgba(255,107,0,0.20)' }} />

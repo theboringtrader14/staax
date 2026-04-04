@@ -31,6 +31,12 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
   const isFutureMonth=monthStart>today
   const firstDow=monthStart.getDay(),offset=(firstDow===0?4:firstDow-1)%5
   const tradingDays=Array.from({length:new Date(year,month,0).getDate()},(_,i)=>i+1).filter(d=>{const dow=new Date(year,month-1,d).getDay();return dow!==0&&dow!==6})
+  const monthPnlValues = tradingDays.map(d => {
+    const dk = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    return calendarData[dk] ?? null
+  }).filter((v): v is number => v !== null)
+  const maxProfit = Math.max(...monthPnlValues.filter(v => v > 0), 1)
+  const maxLoss   = Math.max(...monthPnlValues.filter(v => v < 0).map(Math.abs), 1)
   const padded=[...Array(offset).fill(null),...tradingDays]
   const monthKey=`${year}-${String(month).padStart(2,'0')}`
   const monthPnl=Object.keys(calendarData).filter(k=>k.startsWith(monthKey)).reduce((s,k)=>s+calendarData[k],0)
@@ -66,13 +72,13 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
           const pnl=calendarData[dateKey]??null
           const isFuture=new Date(year,month-1,day)>today
-          const bg=pnl!==null
-            ? pnl>0
-              ? `rgba(34,221,136,${Math.min(0.8,Math.abs(pnl)/500*0.6+0.15)})`
-              : `rgba(255,68,68,${Math.min(0.8,Math.abs(pnl)/500*0.6+0.15)})`
+          const bg = pnl !== null
+            ? pnl > 0
+              ? `rgba(34,221,136,${Math.min(0.9, (pnl / maxProfit) * 0.8 + 0.1).toFixed(2)})`
+              : `rgba(255,68,68,${Math.min(0.9, (Math.abs(pnl) / maxLoss) * 0.8 + 0.1).toFixed(2)})`
             : 'rgba(255,255,255,0.04)'
           return(
-            <div key={i} style={{
+            <div key={i} title={pnl != null ? `${pnl >= 0 ? '+' : ''}₹${pnl.toLocaleString('en-IN')}` : undefined} style={{
               aspectRatio:'1',minWidth:'16px',minHeight:'16px',
               borderRadius:'3px',
               background:isFuture?'rgba(255,255,255,0.02)':bg,
@@ -117,7 +123,7 @@ export default function ReportsPage(){
   const isPractixMode = useStore(s => s.isPractixMode)
   const activeAccount = useStore(s => s.activeAccount)
   const [fy,setFy]=useState('2025-26')
-  const [expandedMonth,setExpandedMonth]=useState<string|null>(null)
+  const [monthModal,setMonthModal]=useState<{month:number,year:number,label:string}|null>(null)
   const [metricFilter,setMetricFilter]=useState('fy')
   const [metricFy,setMetricFy]=useState('2025-26')
   const [metricMonth,setMetricMonth]=useState('Apr')
@@ -182,7 +188,6 @@ export default function ReportsPage(){
 
   const months=fyMonths(fy)
   const totalPnl=fyTotal
-  const expandedData=expandedMonth?months.find(m=>m.key===expandedMonth):null
   const activePeriodLabel=metricFilter==='fy'?`FY ${metricFy}`:metricFilter==='month'?`${metricMonth} · FY ${fy}`:metricFilter==='date'&&metricDate?metricDate:metricFilter==='custom'&&metricFrom&&metricTo?`${metricFrom} → ${metricTo}`:'Select period'
 
   // Day-of-week P&L aggregation from real calendar data
@@ -300,7 +305,7 @@ export default function ReportsPage(){
 
         {/* Day-of-week P&L — compact horizontal bars */}
         <div className="card">
-        <div style={{fontSize:'10px',fontWeight:600,color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px',borderLeft:'3px solid #FF6B00',paddingLeft:'8px'}}>P&L by Day</div>
+        <div style={{fontSize:'10px',fontWeight:600,color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px'}}>P&L by Day</div>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-around',height:'64px',gap:'6px'}}>
           {DAY_NAMES.map(day=>{
             const pnl=dowPnl[day]||0
@@ -367,9 +372,8 @@ export default function ReportsPage(){
           </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px'}}>
-          {months.map(m=><MiniCal key={m.key} month={m.month} year={m.year} label={m.label} selected={expandedMonth===m.key} onToggle={()=>setExpandedMonth(p=>p===m.key?null:m.key)} calendarData={calendarData}/>)}
+          {months.map(m=><MiniCal key={m.key} month={m.month} year={m.year} label={m.label} selected={monthModal?.month===m.month&&monthModal?.year===m.year} onToggle={()=>setMonthModal({ month: m.month, year: m.year, label: m.label })} calendarData={calendarData}/>)}
         </div>
-        {expandedData&&<MonthDetail month={expandedData.month} year={expandedData.year} label={expandedData.label} calendarData={calendarData}/>}
       </div>
 
       {/* Per-Algo Metrics */}
@@ -400,13 +404,13 @@ export default function ReportsPage(){
             </div>
           </div>
         </div>
-        <div style={{overflowX:'auto',padding:'0 16px 16px'}}>
-          <table className="staax-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%'}}>
+        <div style={{overflowX:'auto',width:'100%',padding:'0 16px 16px'}}>
+          <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%'}}>
             <thead>
               <tr>
-                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'#0A0A0B',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Key Metrics</th>
-                {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px'}}>{a.name}</th>)}
-                <th style={{color:'var(--indigo)',position:'sticky',right:0,zIndex:2,background:'#0A0A0B',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px'}}>Cumulative</th>
+                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px',textAlign:'left'}}>Key Metrics</th>
+                {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px',textAlign:'center'}}>{a.name}</th>)}
+                <th style={{color:'var(--indigo)',position:'sticky',right:0,zIndex:2,background:'#0A0A0B',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px',textAlign:'center'}}>Cumulative</th>
               </tr>
             </thead>
             <tbody>
@@ -422,13 +426,13 @@ export default function ReportsPage(){
                   : 1
                 return(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,background:'#0A0A0B',zIndex:1,boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{row.label}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,zIndex:1,background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px',textAlign:'left'}}>{row.label}</td>
                     {algoMetrics.map((a:any)=>{
                       const val=(a as any)[row.key]
                       const barPct=isCurrency?Math.round(Math.abs(val||0)/maxAbs*100):0
                       const isNeg=(val||0)<0
                       return(
-                        <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',position:'relative',textAlign:(isCurrency||isPct)?'center' as const:'left' as const}}>
+                        <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',position:'relative',textAlign:'center' as const}}>
                           {isCurrency&&barPct>0&&(
                             <div style={{
                               position:'absolute',bottom:0,left:0,height:'3px',
@@ -449,6 +453,33 @@ export default function ReportsPage(){
           </table>
         </div>
       </div>
+      {/* Month detail modal */}
+      {monthModal && (
+        <div className="modal-overlay" onClick={() => setMonthModal(null)}>
+          <div className="modal-box cloud-fill" style={{ maxWidth: '480px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--ox-radiant)' }}>
+                {monthModal.label} {monthModal.year}
+              </div>
+              <button onClick={() => setMonthModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
+            </div>
+            <MonthDetail month={monthModal.month} year={monthModal.year} label={monthModal.label} calendarData={calendarData} />
+            {/* Month total */}
+            {(() => {
+              const mk = `${monthModal.year}-${String(monthModal.month).padStart(2,'0')}`
+              const total = Object.keys(calendarData).filter(k => k.startsWith(mk)).reduce((s, k) => s + calendarData[k], 0)
+              return (
+                <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Month Total</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700, color: total >= 0 ? '#22DD88' : '#FF4444' }}>
+                    {total >= 0 ? '+' : ''}₹{Math.abs(Math.round(total)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { accountsAPI, botsAPI } from '@/services/api'
 import axios from 'axios'
 import { useStore } from '@/store'
+import { StaaxSelect } from '@/components/StaaxSelect'
 
 const API = 'http://localhost:8000/api/v1'
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
@@ -38,6 +39,11 @@ const STATUS_COLOR: Record<string, string> = {
   active: 'var(--indigo)', live: 'var(--green)', inactive: 'var(--text-dim)',
 }
 
+const indicatorShortLabel = (ind: string) => {
+  const found = INDICATORS.find(i => i.value === ind)
+  return found ? found.label.replace(' Strategy', '').replace(' Bands Strategy', ' Bands') : ind
+}
+
 type Bot = {
   id: string; name: string; account_id: string; instrument: string
   exchange: string; expiry: string; indicator: string
@@ -62,7 +68,7 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
   const btnVariant = isDanger ? 'btn-danger' : isWarn ? 'btn-warn' : 'btn-primary'
   return (
     <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: '380px' }}>
+      <div className="modal-box cloud-fill" style={{ maxWidth: '380px' }}>
         <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '8px' }}>{title}</div>
         <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>{desc}</div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -90,7 +96,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: '420px' }}>
+      <div className="modal-box cloud-fill" style={{ maxWidth: '420px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ fontWeight: 700, fontSize: '15px' }}>Edit Bot — {bot.name}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
@@ -102,15 +108,21 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
           </div>
           <div>
             <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Account</label>
-            <select className="staax-select" value={form.account_id} onChange={e => u('account_id', e.target.value)} style={{ width: '100%' }}>
-              {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.nickname} ({a.broker})</option>)}
-            </select>
+            <StaaxSelect
+              value={form.account_id}
+              onChange={v => u('account_id', v)}
+              options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))}
+              width="100%"
+            />
           </div>
           <div>
             <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Timeframe</label>
-            <select className="staax-select" value={form.timeframe_mins} onChange={e => u('timeframe_mins', parseInt(e.target.value))} style={{ width: '100%' }}>
-              {TIMEFRAMES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+            <StaaxSelect
+              value={String(form.timeframe_mins)}
+              onChange={v => u('timeframe_mins', parseInt(v))}
+              options={TIMEFRAMES.map(t => ({ value: String(t.value), label: t.label }))}
+              width="100%"
+            />
           </div>
           <div>
             <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Lot Size</label>
@@ -119,9 +131,12 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
           {ind?.params.includes('channel_candles') && (
             <div>
               <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Channel Timeframe</label>
-              <select className="staax-select" value={form.channel_tf} onChange={e => u('channel_tf', e.target.value)} style={{ width: '100%' }}>
-                {CHANNEL_TFS.map(t => <option key={t} value={t}>{t === 'D' ? 'Daily' : `${t} min`}</option>)}
-              </select>
+              <StaaxSelect
+                value={form.channel_tf}
+                onChange={v => u('channel_tf', v)}
+                options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))}
+                width="100%"
+              />
               <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginTop: '10px', marginBottom: '6px' }}>Number of Candles</label>
               <input className="staax-input" type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
             </div>
@@ -181,7 +196,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: '480px' }}>
+      <div className="modal-box cloud-fill" style={{ maxWidth: '480px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ fontWeight: 700, fontSize: '15px' }}>Create Bot</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
@@ -277,9 +292,12 @@ function BotConfigurator({ accounts, onSave, onClose }: {
                   <>
                     <div>
                       <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Timeframe for Channel Calculation</label>
-                      <select className="staax-select" value={form.channel_tf} onChange={e => u('channel_tf', e.target.value)} style={{ width: '100%' }}>
-                        {CHANNEL_TFS.map(t => <option key={t} value={t}>{t === 'D' ? 'Daily' : `${t} min`}</option>)}
-                      </select>
+                      <StaaxSelect
+                        value={form.channel_tf}
+                        onChange={v => u('channel_tf', v)}
+                        options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))}
+                        width="100%"
+                      />
                     </div>
                     <div>
                       <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Number of Candles</label>
@@ -318,9 +336,12 @@ function BotConfigurator({ accounts, onSave, onClose }: {
             </div>
             <div>
               <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Account</label>
-              <select className="staax-select" value={form.account_id} onChange={e => u('account_id', e.target.value)} style={{ width: '100%' }}>
-                {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.nickname} ({a.broker})</option>)}
-              </select>
+              <StaaxSelect
+                value={form.account_id}
+                onChange={v => u('account_id', v)}
+                options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))}
+                width="100%"
+              />
             </div>
             <div>
               <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Lot Size</label>
@@ -390,7 +411,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   const openOrder = orders.find(o => o.status === 'open')
   const accountName = accounts.find((a: any) => a.id === bot.account_id)?.nickname || '—'
   const tfLabel = TIMEFRAMES.find(t => t.value === bot.timeframe_mins)?.label || `${bot.timeframe_mins}m`
-  const indLabel = INDICATORS.find(i => i.value === bot.indicator)?.label || bot.indicator
+  const indLabel = indicatorShortLabel(bot.indicator)
 
   const saveLots = async () => {
     const v = parseInt(lotsVal) || 1
@@ -400,32 +421,42 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
 
   return (
     <>
-      <div className="card" style={{ opacity: bot.status === 'inactive' ? 0.7 : 1, transition: 'all 0.15s' }}>
+      <div className="card cloud-fill" style={{ opacity: bot.status === 'inactive' ? 0.7 : 1, transition: 'all 0.15s' }}>
         {/* Status + actions row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
           <span style={{ fontSize: '10px', fontWeight: 700, color: STATUS_COLOR[bot.status] || 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '5px' }}>
             {bot.status === 'live' && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite' }}/>}
             {bot.is_archived ? '📦 Archived' : bot.status}
           </span>
-          {!bot.is_archived && (
-            <button onClick={() => onUpdate(bot.id, { is_practix: !(bot.is_practix ?? true) })}
-              style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
-                border: 'none', cursor: 'pointer', letterSpacing: '0.06em',
-                background: (bot.is_practix ?? true) ? 'rgba(215,123,18,0.15)' : 'rgba(34,197,94,0.15)',
-                color: (bot.is_practix ?? true) ? 'var(--accent-amber)' : 'var(--green)' }}>
-              {(bot.is_practix ?? true) ? 'PRAC' : 'LIVE'}
-            </button>
-          )}
           <div style={{ display: 'flex', gap: '4px' }}>
-
-            {bot.is_archived
-              ? <button title="Unarchive" onClick={() => onUnarchive(bot.id)}
-                  style={{ background: 'none', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--accent-amber)', fontSize: '11px' }}>↩ Restore</button>
-              : <button title="Archive" onClick={() => setShowArch(true)}
-                  style={{ background: 'none', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '11px' }}>📦</button>
-            }
-            <button title="Delete" onClick={() => setShowDel(true)}
-              style={{ background: 'none', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--red)', fontSize: '11px' }}>🗑</button>
+            {bot.is_archived && (
+              <button title="Unarchive" onClick={() => onUnarchive(bot.id)}
+                style={{ background: 'none', border: '1px solid var(--bg-border)', borderRadius: 'var(--radius-sm)', padding: '3px 7px', cursor: 'pointer', color: 'var(--accent-amber)', fontSize: '11px' }}>↩ Restore</button>
+            )}
+            {!bot.is_archived && (
+              <button
+                onClick={() => setShowArch(true)}
+                title="Archive"
+                style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: 'transparent', border: '0.5px solid rgba(255,255,255,0.06)', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', transition: 'all 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(68,136,255,0.12)'; (e.currentTarget as HTMLButtonElement).style.color = '#4488FF' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.35)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
+                </svg>
+              </button>
+            )}
+            <button
+              onClick={() => setShowDel(true)}
+              title="Delete"
+              style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: 'transparent', border: '0.5px solid rgba(255,255,255,0.06)', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', transition: 'all 0.15s' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,68,68,0.12)'; (e.currentTarget as HTMLButtonElement).style.color = '#FF4444' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.35)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -491,19 +522,30 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
           </div>
         )}
 
-        {/* Promote to Live */}
-        {!bot.is_archived && (bot.is_practix ?? true) && (
-          <button className="btn btn-ghost" style={{ width: '100%', fontSize: '11px', marginBottom: '6px', color: 'var(--green)', borderColor: 'rgba(34,197,94,0.3)' }}
-            onClick={() => onUpdate(bot.id, { is_practix: false })}>
-            → Promote to LIVE
-          </button>
-        )}
-        {/* Activate/Deactivate */}
+        {/* LIVE + Deactivate row */}
         {!bot.is_archived && (
-          <button className="btn btn-ghost" style={{ width: '100%', fontSize: '11px', marginBottom: orders.length > 0 ? '8px' : '0' }}
-            onClick={() => onUpdate(bot.id, { status: bot.status === 'inactive' ? 'active' : 'inactive' })}>
-            {bot.status === 'inactive' ? '▶ Activate' : '⏸ Deactivate'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexDirection: 'row', marginBottom: orders.length > 0 ? '8px' : '0' }}>
+            {(bot.is_practix ?? true) && (
+              <button
+                onClick={() => onUpdate(bot.id, { is_practix: false })}
+                style={{
+                  background: 'rgba(34,221,136,0.12)',
+                  border: '0.5px solid rgba(34,221,136,0.4)',
+                  color: '#22DD88',
+                  borderRadius: '6px', padding: '4px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(34,221,136,0.25)'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(34,221,136,0.12)'}
+              >
+                LIVE
+              </button>
+            )}
+            <button className="btn btn-ghost" style={{ flex: 1, fontSize: '11px' }}
+              onClick={() => onUpdate(bot.id, { status: bot.status === 'inactive' ? 'active' : 'inactive' })}>
+              {bot.status === 'inactive' ? '▶ Activate' : '⏸ Deactivate'}
+            </button>
+          </div>
         )}
 
         {/* Orders toggle */}
@@ -662,10 +704,10 @@ export default function IndicatorsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>Indicator Bots</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Indicator Bots</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display:'flex', alignItems:'center', gap:'6px' }}>
             {loading ? 'Loading...' : `${activeBots.filter(b => b.status !== 'inactive').length} running · ${activeBots.length} total`}
-          {' '}·{' '}<span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,221,136,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--sem-long)',border:isPractixMode?'0.5px solid rgba(215,123,18,0.3)':'0.5px solid rgba(34,221,136,0.25)'}}>{isPractixMode?'PRACTIX':'LIVE'}</span></p>
+          {' '}·{' '}<span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')}>{isPractixMode ? 'PRACTIX' : 'LIVE'}</span></p>
         </div>
         <div className="page-header-actions">
           {archivedBots.length > 0 && (

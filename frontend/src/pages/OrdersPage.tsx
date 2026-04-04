@@ -315,6 +315,7 @@ export default function OrdersPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
   const [showWeekends, setShowWeekends] = useState(false)
+  const [accountFilter, setAccountFilter] = useState<string>('all')
 
   // Fetch open positions + holidays once on mount
   useEffect(() => {
@@ -571,8 +572,15 @@ export default function OrdersPage() {
   const filteredOrders  = activeAccountNickname ? orders.filter(g => g.account === activeAccountNickname) : orders
   const filteredWaiting = activeAccountNickname ? waitingAlgos.filter(w => w.account_name === activeAccountNickname) : waitingAlgos
 
+  // Local account filter — derive unique account names from loaded orders
+  const uniqueAccounts = Array.from(new Set(orders.map(g => g.account).filter(Boolean)))
+  const accountChips = ['all', ...uniqueAccounts]
+
+  const localFilteredOrders  = accountFilter === 'all' ? filteredOrders  : filteredOrders.filter(g => g.account === accountFilter)
+  const localFilteredWaiting = accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter)
+
   const groupedByInstrument: Record<string, AlgoGroup[]> = {}
-  for (const group of filteredOrders) {
+  for (const group of localFilteredOrders) {
     const inst = getInstrumentFromGroup(group)
     if (!groupedByInstrument[inst]) groupedByInstrument[inst] = []
     groupedByInstrument[inst].push(group)
@@ -582,11 +590,10 @@ export default function OrdersPage() {
   }
   const instrumentKeys = INSTRUMENT_ORDER.filter(k => groupedByInstrument[k]?.length > 0)
 
-  // Day summary from filteredOrders
+  // Day summary from filteredOrders (retained for potential future use)
   const closedLegsAll = filteredOrders.flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
-  const dayPnl        = closedLegsAll.reduce((s, l) => s + (l.pnl ?? 0), 0)
   const dayWins       = closedLegsAll.filter(l => (l.pnl ?? 0) > 0).length
-  const dayWinRate    = closedLegsAll.length > 0 ? Math.round(dayWins / closedLegsAll.length * 100) : null
+  void dayWins
 
   const isHolidayToday  = holidayDates.has(selectedDate)
 
@@ -601,10 +608,17 @@ export default function OrdersPage() {
         <div className="page-header">
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Orders</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '3px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--gs-muted)' }}>Trade history · P&amp;L by week</span>
-              <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>
-                {isPractixMode ? 'PRACTIX' : 'LIVE'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '3px', justifyContent: 'space-between', flexWrap: 'wrap' as const }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--gs-muted)' }}>Trade history · P&amp;L by week</span>
+                <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>
+                  {isPractixMode ? 'PRACTIX' : 'LIVE'}
+                </span>
+              </div>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+                MTM: <b style={{ color: totalMTM >= 0 ? '#22DD88' : '#FF4444' }}>
+                  {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
+                </b>
               </span>
             </div>
           </div>
@@ -670,7 +684,7 @@ export default function OrdersPage() {
                       {day}{isHoliday && <span style={{ fontSize: '9px' }}>🏛</span>}
                     </span>
                     {isHoliday ? (
-                      <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>holiday</span>
+                      <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
                     ) : pnl != null ? (
                       <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                         {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
@@ -682,42 +696,49 @@ export default function OrdersPage() {
                 )
               })}
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', color: 'var(--text-dim)', cursor: 'pointer', paddingRight: '8px', whiteSpace: 'nowrap' as const }}>
-              <input type="checkbox" checked={showWeekends} onChange={e => setShowWeekends(e.target.checked)} style={{ accentColor: '#FF6B00' }} />
-              Weekends
-            </label>
+            <div
+              onClick={() => setShowWeekends(!showWeekends)}
+              style={{
+                padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                fontSize: 11, fontFamily: 'var(--font-display)',
+                background: showWeekends ? 'rgba(255,107,0,0.15)' : 'transparent',
+                border: showWeekends ? '0.5px solid rgba(255,107,0,0.5)' : '0.5px solid rgba(255,255,255,0.15)',
+                color: showWeekends ? '#FF6B00' : 'rgba(255,255,255,0.4)',
+                whiteSpace: 'nowrap' as const, userSelect: 'none' as const,
+                transition: 'all 0.15s ease',
+              }}
+            >Weekends</div>
           </div>
         </div>
 
-        {/* Stats strip */}
+        {/* Account filter chips */}
+        {uniqueAccounts.length > 1 && (
+          <div style={{ display: 'flex', gap: '6px', padding: '8px 24px', flexWrap: 'wrap' as const }}>
+            {accountChips.map(ac => (
+              <div
+                key={ac}
+                onClick={() => setAccountFilter(ac)}
+                className={'chip ' + (accountFilter === ac ? 'chip-active' : 'chip-inactive')}
+                style={{ fontSize: '11px', padding: '3px 12px', cursor: 'pointer' }}
+              >
+                {ac === 'all' ? 'All' : ac}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Stats banner */}
         <div style={{
           display: 'flex', gap: 32, padding: '10px 24px',
           background: 'rgba(255,107,0,0.04)',
-          borderBottom: '0.5px solid rgba(255,107,0,0.12)',
-          borderTop: '0.5px solid rgba(255,107,0,0.12)',
-          marginBottom: '12px', flexWrap: 'wrap' as const,
+          borderBottom: '0.5px solid rgba(255,107,0,0.10)',
+          borderTop: '0.5px solid rgba(255,107,0,0.10)',
+          fontFamily: 'var(--font-mono)', fontSize: 12, flexWrap: 'wrap' as const,
         }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            MTM: <b style={{ fontFamily: 'var(--font-mono)', color: totalMTM >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
-            </b>
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Trades: <b style={{ color: 'var(--text)' }}>{closedLegsAll.length}</b>
-          </span>
-          {dayWinRate !== null && (
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Win: <b style={{ color: dayWinRate >= 50 ? 'var(--green)' : 'var(--red)' }}>{dayWinRate}%</b>
-            </span>
-          )}
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            P&amp;L: <b style={{ fontFamily: 'var(--font-mono)', color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {dayPnl >= 0 ? '+' : ''}₹{Math.abs(Math.round(dayPnl)).toLocaleString('en-IN')}
-            </b>
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Open: <b style={{ color: 'var(--text)' }}>{orders.filter(g => g.legs.some(l => l.status === 'open')).length}</b>
-          </span>
+          <span style={{ color: 'var(--text-muted)' }}>ALGOS <b style={{ color: 'var(--text)' }}>{localFilteredOrders.filter(g => g.legs.length > 0).length}/{localFilteredOrders.length}</b></span>
+          <span style={{ color: 'var(--text-muted)' }}>TRADES <b style={{ color: 'var(--text)' }}>{localFilteredOrders.reduce((s, g) => s + g.legs.length, 0)}</b></span>
+          <span style={{ color: 'var(--text-muted)' }}>OPEN <b style={{ color: '#22DD88' }}>{localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'open').length, 0)}</b></span>
+          <span style={{ color: 'var(--text-muted)' }}>CLOSED <b style={{ color: 'rgba(255,255,255,0.5)' }}>{localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'closed').length, 0)}</b></span>
         </div>
 
       </div>{/* end fixed zone */}
@@ -736,9 +757,9 @@ export default function OrdersPage() {
         )}
 
         {/* Waiting algos */}
-        {filteredWaiting.length > 0 && !isHolidayToday && (
+        {localFilteredWaiting.length > 0 && !isHolidayToday && (
           <div style={{ marginBottom: '16px' }}>
-            {filteredWaiting.map(w => {
+            {localFilteredWaiting.map(w => {
               const isMissed = !!w.entry_time && (() => {
                 const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
                 return now >= w.entry_time.slice(0, 5)
@@ -770,7 +791,7 @@ export default function OrdersPage() {
         )}
 
         {/* Empty state */}
-        {filteredOrders.length === 0 && (
+        {localFilteredOrders.length === 0 && (
           <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
             No orders for today.
           </div>

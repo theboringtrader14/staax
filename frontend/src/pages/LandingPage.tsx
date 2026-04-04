@@ -305,7 +305,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section style={{
+      <section className="landing-hero" style={{
         position: 'relative', zIndex: 1,
         maxWidth: '1100px', margin: '0 auto',
         padding: '80px 32px 60px',
@@ -332,7 +332,7 @@ export default function LandingPage() {
             LIVE — STAAX v2 running
           </div>
 
-          <h1 style={{
+          <h1 className="landing-hero-title" style={{
             fontSize: '42px', fontWeight: 800, lineHeight: 1.15,
             letterSpacing: '-0.02em', marginBottom: '20px',
             textShadow: '0 0 40px rgba(255,107,0,0.15)',
@@ -474,7 +474,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div style={{
+        <div className="landing-module-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',

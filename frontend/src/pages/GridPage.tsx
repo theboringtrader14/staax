@@ -559,7 +559,7 @@ export default function GridPage() {
                           onMouseLeave={e => { const d=e.currentTarget; d.style.transform='none'; d.style.boxShadow='none'; d.style.borderColor='rgba(255,255,255,0.07)' }}>
 
                           {/* ── Main row ── */}
-                          <div style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
+                          <div className="algo-card" style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
 
                             {/* Status strip — full card height */}
                             <div style={{ width:'4px', flexShrink:0, alignSelf:'stretch',
@@ -630,7 +630,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', flexShrink:0, justifyContent:'center' }}>
+                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', flexShrink:0, justifyContent:'center' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isActive = algo.recurringDays.includes(day)
                                   return (
@@ -658,7 +658,7 @@ export default function GridPage() {
                             </div>{/* end card row body */}
 
                             {/* ── Right panel — tall action buttons ── */}
-                            <div onClick={e => e.stopPropagation()} style={{
+                            <div className="algo-card-actions" onClick={e => e.stopPropagation()} style={{
                               display:'flex', alignSelf:'stretch',
                               borderLeft:'0.5px solid rgba(255,255,255,0.06)',
                             }}>

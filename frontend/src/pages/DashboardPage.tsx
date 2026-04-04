@@ -377,7 +377,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── STAT CARDS ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '0.7fr 0.7fr 1.3fr 1.3fr', gap: '12px', marginBottom: '12px' }}>
+      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: '0.7fr 0.7fr 1.3fr 1.3fr', gap: '12px', marginBottom: '12px' }}>
         <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
           <div className="card-label">Active Algos</div>
           <div style={{ fontSize: '38px', fontWeight: 800, color: 'var(--ox-radiant)', fontFamily: 'var(--font-mono)', letterSpacing: '-2px', lineHeight: 1 }}>{stats['active_algos'] ?? 0}</div>
