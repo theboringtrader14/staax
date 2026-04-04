@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect, useRef } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI } from '@/services/api'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -27,7 +27,7 @@ const CHECKLIST = [
   { key: 'scheduler',         label: 'Scheduler running' },
 ]
 
-function PnlCard({ label, value, isPositive, sparkId }: { label: string; value: number; isPositive: boolean; sparkId: string }) {
+function PnlCard({ label, value, isPositive, sparkId, equityCurve }: { label: string; value: number; isPositive: boolean; sparkId: string; equityCurve?: {month: string; cumulative: number}[] }) {
   const rupee = String.fromCharCode(0x20B9)
   const display = (isPositive ? '+' : '') + rupee + Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })
   const col  = isPositive ? 'var(--ox-radiant)' : 'var(--sem-short)'
@@ -46,8 +46,38 @@ function PnlCard({ label, value, isPositive, sparkId }: { label: string; value: 
             <stop offset="100%" stopColor={col2} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2 L200,36 L0,36Z" fill={'url(#sg-' + sparkId + ')'} />
-        <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2" fill="none" stroke={col2} strokeWidth="1.8" strokeLinecap="round" />
+        {/* Dynamic sparkline */}
+        {(() => {
+          const pts = (equityCurve || []).map(p => p.cumulative)
+          if (pts.length < 2) {
+            // fallback static path
+            return (
+              <>
+                <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2 L200,36 L0,36Z" fill={`url(#sg-${sparkId})`} />
+                <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2" fill="none" stroke={col2} strokeWidth="1.8" strokeLinecap="round" />
+              </>
+            )
+          }
+          const W = 200, H = 36, PAD = 3
+          const minV = Math.min(...pts), maxV = Math.max(...pts)
+          const range = maxV - minV || 1
+          const toX = (i: number) => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
+          const toY = (v: number) => H - PAD - ((v - minV) / range) * (H - PAD * 2 - 4)
+          const coords = pts.map((v, i) => ({ x: toX(i), y: toY(v) }))
+          let line = `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`
+          for (let i = 1; i < coords.length; i++) {
+            const p = coords[i-1], c = coords[i]
+            const mx = ((p.x + c.x) / 2).toFixed(1)
+            line += ` C${mx},${p.y.toFixed(1)} ${mx},${c.y.toFixed(1)} ${c.x.toFixed(1)},${c.y.toFixed(1)}`
+          }
+          const area = line + ` L${coords[coords.length-1].x.toFixed(1)},${H} L${coords[0].x.toFixed(1)},${H}Z`
+          return (
+            <>
+              <path d={area} fill={`url(#sg-${sparkId})`} />
+              <path d={line} fill="none" stroke={col2} strokeWidth="1.8" strokeLinecap="round" />
+            </>
+          )
+        })()}
       </svg>
     </div>
   )
@@ -83,6 +113,7 @@ export default function DashboardPage() {
   const [healthCollapsed, setHCollapsed] = useState(false)
   const algoScrollRef                    = useRef<HTMLDivElement>(null)
   const [scrollPos, setScrollPos]        = useState(0)
+  const [equityCurveData, setEquityCurveData] = useState<{month: string; cumulative: number}[]>([])
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
   useEffect(() => {
@@ -99,6 +130,11 @@ export default function DashboardPage() {
     }).catch(() => {})
   }, [])
   useEffect(() => { systemAPI.stats(isPractixMode).then(r => setStats(r.data)).catch(() => {}) }, [isPractixMode])
+  useEffect(() => {
+    reportsAPI.equityCurve({ fy: '2025-26', is_practix: isPractixMode })
+      .then((r: any) => setEquityCurveData(r.data?.data || []))
+      .catch(() => {})
+  }, [isPractixMode])
   useEffect(() => {
     eventsAPI.list(50).then(res => {
       const entries: any[] = res.data || []
@@ -213,8 +249,9 @@ export default function DashboardPage() {
     setTimeout(() => setScrollPos(el.scrollLeft), 360)
   }
 
-  const todayPnl = stats['today_pnl'] ?? 0
-  const fyPnl    = stats['fy_pnl']    ?? 0
+  const todayPnl  = stats['today_pnl'] ?? 0
+  const fyPnl     = stats['fy_pnl']    ?? 0
+  const fyPnlReal = equityCurveData.length > 0 ? (equityCurveData[equityCurveData.length - 1]?.cumulative ?? fyPnl) : fyPnl
 
   const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
     { id: '1', nickname: 'Karthik',    broker: 'zerodha',  token_valid_today: false },
@@ -352,7 +389,7 @@ export default function DashboardPage() {
           <div style={{ fontSize: '10px', color: 'rgba(34,221,136,0.6)', marginTop: '5px', fontWeight: 600 }}>open lots</div>
         </div>
         <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} sparkId="today" />
-        <PnlCard label="FY P&L"    value={fyPnl}    isPositive={fyPnl >= 0}    sparkId="fy" />
+        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} sparkId="fy" equityCurve={equityCurveData} />
       </div>
 
       {/* ── NEXT ALGO + HOLIDAYS — FIX #1: no separator lines ── */}

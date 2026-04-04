@@ -101,6 +101,8 @@ export const gridAPI = {
   // Promote all entries for an algo to live
   promoteAllToLive: (algoId: string) =>
     api.post(`/grid/${algoId}/promote-live`),
+
+  triggerNow: (algoId: string, date: string) => api.post('/grid/trigger-now', { algo_id: algoId, trading_date: date }),
 }
 
 // ── Orders ────────────────────────────────────────────────────────────────────

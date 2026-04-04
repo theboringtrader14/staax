@@ -2,7 +2,7 @@ import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
 import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI } from '@/services/api'
 
-const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
+const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
 // IST time formatters — all timestamps from backend are UTC ISO strings
 const fmtIST = (iso: string | null | undefined): string => {
@@ -11,7 +11,10 @@ const fmtIST = (iso: string | null | undefined): string => {
     timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
-type LegStatus = 'open' | 'closed' | 'error' | 'pending'
+
+type LegStatus  = 'open' | 'closed' | 'error' | 'pending'
+type AlgoStatus = 'open' | 'closed' | 'error' | 'pending' | 'waiting' | 'no_trade'
+
 interface Leg {
   id: string; parentId?: string; journeyLevel: string; status: LegStatus
   symbol: string; dir: 'BUY' | 'SELL'; lots: string; entryCondition: string
@@ -24,75 +27,152 @@ interface Leg {
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
-  isLive?: boolean   // F3 — true after 09:15 AM activation
+  isLive?: boolean
 }
 interface WaitingAlgo {
   grid_entry_id: string; algo_id: string; algo_name: string
   account_name: string; entry_time: string | null; exit_time: string | null
   is_practix: boolean
 }
-
 interface OpenPosition {
   algo_id: string; algo_name: string; account: string
   strategy_mode: string; day_of_week: string; entry_date: string
   open_count: number; pnl: number
 }
 
-// Demo data — replaced by API data when available
-
+// ── Leg status chip colours ─────────────────────────────────────────────────
 const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
-  open:    { color: '#22DD88', bg: 'rgba(34,221,136,0.12)'  },
-  closed:  { color: '#5A5A61', bg: 'rgba(90,90,97,0.12)'   },
-  error:   { color: '#FF4444', bg: 'rgba(255,68,68,0.12)'   },
-  pending: { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)'  },
+  open:    { color: '#22DD88',              bg: 'rgba(34,221,136,0.12)'  },
+  closed:  { color: 'rgba(34,221,136,0.5)', bg: 'rgba(34,221,136,0.07)' },
+  error:   { color: '#FF4444',              bg: 'rgba(255,68,68,0.12)'   },
+  pending: { color: '#FF8C00',              bg: 'rgba(255,140,0,0.12)'   },
 }
-const COLS = ['36px','66px','174px','66px','140px','54px','76px','58px','88px','62px','82px']
+
+// ── Algo-level status chip ──────────────────────────────────────────────────
+const ALGO_STATUS_CHIP: Record<AlgoStatus, { color: string; bg: string; label: string }> = {
+  open:     { color: '#22DD88',               bg: 'rgba(34,221,136,0.12)',   label: 'OPEN'     },
+  closed:   { color: 'rgba(34,221,136,0.5)',  bg: 'rgba(34,221,136,0.07)',   label: 'CLOSED'   },
+  error:    { color: '#FF4444',               bg: 'rgba(255,68,68,0.12)',    label: 'ERROR'    },
+  pending:  { color: '#FF8C00',               bg: 'rgba(255,140,0,0.12)',    label: 'PENDING'  },
+  waiting:  { color: '#FFD700',               bg: 'rgba(255,215,0,0.12)',    label: 'WAITING'  },
+  no_trade: { color: 'rgba(255,255,255,0.2)', bg: 'rgba(255,255,255,0.04)', label: 'NO TRADE' },
+}
+
+// ── Algo card left status strip ─────────────────────────────────────────────
+const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
+  open:     { color: '#00FF88',               glow: 'rgba(0,255,136,0.70)'   },
+  closed:   { color: 'rgba(0,255,136,0.45)',  glow: 'rgba(0,255,136,0.30)'   },
+  error:    { color: '#FF2244',               glow: 'rgba(255,34,68,0.70)'   },
+  pending:  { color: '#FF8C00',               glow: 'rgba(255,140,0,0.65)'   },
+  waiting:  { color: '#FFE600',               glow: 'rgba(255,230,0,0.70)'   },
+  no_trade: { color: 'rgba(255,255,255,0.20)', glow: 'transparent'            },
+}
+
+const COLS = ['36px','66px','174px','66px','140px','54px','76px','58px','88px','90px','82px']
 const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L']
 
-function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: boolean; liveLtp?: number; onEditExit?: (orderId: string, price: number) => void }) {
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function todayDay(): string {
+  return new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase().slice(0, 3)
+}
+
+function getWeekDates(): Record<string, string> {
+  const now  = new Date()
+  const ist  = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const dow  = ist.getDay()
+  const mon  = new Date(ist)
+  mon.setDate(ist.getDate() - (dow === 0 ? 6 : dow - 1))
+  const names = ['MON','TUE','WED','THU','FRI','SAT','SUN']
+  const map: Record<string, string> = {}
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon); d.setDate(mon.getDate() + i)
+    map[names[i]] = d.toISOString().slice(0, 10)
+  }
+  return map
+}
+
+
+function getInstrumentFromGroup(group: AlgoGroup): string {
+  const name = group.algoName.toUpperCase()
+  for (const inst of INSTRUMENT_ORDER) {
+    if (inst !== 'OTHER' && name.includes(inst)) return inst
+  }
+  for (const leg of (group.legs || [])) {
+    const sym = (leg.symbol || '').toUpperCase()
+    for (const inst of INSTRUMENT_ORDER) {
+      if (inst !== 'OTHER' && sym.startsWith(inst)) return inst
+    }
+  }
+  return 'OTHER'
+}
+
+function getAlgoStatus(group: AlgoGroup): AlgoStatus {
+  if (group.terminated) return 'closed'
+  const legs = group.legs || []
+  if (legs.length === 0) return 'waiting'
+  if (legs.some(l => l.status === 'error'))  return 'error'
+  if (legs.some(l => l.status === 'open'))   return 'open'
+  if (legs.some(l => l.status === 'pending')) return 'pending'
+  if (legs.every(l => l.status === 'closed')) return 'closed'
+  return 'no_trade'
+}
+
+function isMarketLive(): boolean {
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const day = ist.getDay()
+  if (day === 0 || day === 6) return false
+  const t = ist.getHours() * 60 + ist.getMinutes()
+  return t >= 9 * 60 + 15 && t <= 15 * 60 + 30
+}
+
+// ── LegRow ───────────────────────────────────────────────────────────────────
+function LegRow({ leg, isChild, liveLtp, onEditExit }: {
+  leg: Leg; isChild: boolean; liveLtp?: number
+  onEditExit?: (orderId: string, price: number) => void
+}) {
   const st  = STATUS_STYLE[leg.status]
-  const ltp = liveLtp ?? leg.ltp  // prefer live WebSocket value
+  const ltp = liveLtp ?? leg.ltp
+  const C: React.CSSProperties = { textAlign: 'center' }
   return (
     <>
     <tr style={{ background: isChild ? 'rgba(255,107,0,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #FF4444' : undefined }}>
       <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
       </td>
-      <td style={{ width: COLS[1] }}><span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span></td>
+      <td style={{ width: COLS[1], ...C }}>
+        <span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span>
+      </td>
       <td style={{ width: COLS[2] }}>
         <div style={{ fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leg.symbol}</div>
         <div style={{ fontSize: '10px', color: leg.dir === 'BUY' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.dir}</div>
       </td>
-      <td style={{ width: COLS[3], color: 'var(--text-muted)', fontSize: '11px' }}>{leg.lots}</td>
-      <td style={{ width: COLS[4], fontSize: '11px' }}>
+      <td style={{ width: COLS[3], ...C, color: 'var(--text-muted)', fontSize: '11px' }}>{leg.lots}</td>
+      <td style={{ width: COLS[4], fontSize: '11px', ...C }}>
         {leg.fillPrice != null
           ? <div style={{ fontWeight: 600 }}>Fill: {leg.fillPrice}{leg.fillTime && <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '5px', fontSize: '10px' }}>{leg.fillTime}</span>}</div>
           : <div style={{ color: 'var(--text-dim)' }}>Fill: —</div>}
         {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice} · {leg.entryCondition}</div>}
         {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
       </td>
-      <td style={{ width: COLS[5], fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>{ltp != null ? ltp.toFixed(2) : '—'}</td>
-      <td style={{ width: COLS[6], fontSize: '11px' }}>
+      <td style={{ width: COLS[5], ...C, fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>
+        {ltp != null ? ltp.toFixed(2) : '—'}
+      </td>
+      <td style={{ width: COLS[6], fontSize: '11px', ...C }}>
         {(() => {
           const slPrice = leg.fillPrice != null && leg.slOrig != null
             ? leg.fillPrice * (1 - (leg.dir === 'BUY' ? 1 : -1) * leg.slOrig / 100)
             : null
-          // Only show O:/A: format when TSL has actually moved the stop by >1pt
           const hasTSL = leg.slActual != null && slPrice != null && Math.abs(leg.slActual - slPrice) > 1.0
           if (hasTSL && slPrice != null) {
             return <div style={{ color: 'var(--text-muted)' }}>O:{slPrice.toFixed(0)} A:<span style={{ color: 'var(--amber)' }}>{leg.slActual!.toFixed(0)}</span> ({leg.slOrig}%)</div>
           }
-          if (slPrice != null) {
-            return <div style={{ color: 'var(--text-muted)' }}>{slPrice.toFixed(0)} ({leg.slOrig}%)</div>
-          }
-          if (leg.slOrig != null) {
-            return <div style={{ color: 'var(--text-muted)' }}>{leg.slOrig}%</div>
-          }
+          if (slPrice != null) return <div style={{ color: 'var(--text-muted)' }}>{slPrice.toFixed(0)} ({leg.slOrig}%)</div>
+          if (leg.slOrig != null) return <div style={{ color: 'var(--text-muted)' }}>{leg.slOrig}%</div>
           return <>—</>
         })()}
       </td>
-      <td style={{ width: COLS[7], color: 'var(--text-muted)' }}>{leg.target ?? '—'}</td>
-      <td style={{ width: COLS[8], fontSize: '11px' }}>
+      <td style={{ width: COLS[7], ...C, color: 'var(--text-muted)' }}>{leg.target ?? '—'}</td>
+      <td style={{ width: COLS[8], fontSize: '11px', ...C }}>
         {leg.exitPrice != null
           ? <div style={{ cursor: 'pointer' }} title="Click to correct exit price" onClick={() => leg.exitPrice != null && onEditExit && onEditExit(leg.id, leg.exitPrice)}>
               <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)' }}>{leg.exitPrice}</div>
@@ -100,12 +180,12 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
             </div>
           : '—'}
       </td>
-      <td style={{ width: COLS[9] }}>
+      <td style={{ width: COLS[9], ...C }}>
         {leg.exitReason
-          ? <span className="chip chip-error" style={{ fontSize: '10px', padding: '1px 7px', height: 'auto' }}>
+          ? <span style={{ fontSize: '10px', color: leg.status === 'error' ? 'var(--red)' : 'var(--text-muted)' }}>
               {leg.exitReason === 'auto_sq' ? 'Exit Time' : leg.exitReason}
             </span>
-          : '—'}
+          : <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>}
       </td>
       <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'right', color: (leg.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
         {leg.pnl != null && leg.pnl !== 0 ? `${leg.pnl >= 0 ? '+' : ''}₹${Math.abs(leg.pnl).toLocaleString('en-IN')}` : '—'}
@@ -118,10 +198,11 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: { leg: Leg; isChild: bool
         </td>
       </tr>
     )}
-  </>
+    </>
   )
 }
 
+// ── ConfirmModal ─────────────────────────────────────────────────────────────
 interface ModalProps { title: string; desc: string; confirmLabel: string; confirmColor: string; children?: React.ReactNode; onConfirm: () => void; onCancel: () => void }
 function ConfirmModal({ title, desc, confirmLabel, confirmColor, children, onConfirm, onCancel }: ModalProps) {
   const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444')
@@ -142,9 +223,9 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, children, onCon
   )
 }
 
-function setInlineStatus(setOrders: any, idx: number, msg: string, color: string, ms = 3000) {
-  setOrders((o: AlgoGroup[]) => o.map((g, i) => i === idx ? { ...g, inlineStatus: msg, inlineColor: color } : g))
-  setTimeout(() => setOrders((o: AlgoGroup[]) => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
+function setInlineStatus(setOrders: React.Dispatch<React.SetStateAction<AlgoGroup[]>>, idx: number, msg: string, color: string, ms = 3000) {
+  setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: msg, inlineColor: color } : g))
+  setTimeout(() => setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
 }
 
 const STRATEGY_LABEL: Record<string, { label: string; color: string }> = {
@@ -154,50 +235,86 @@ const STRATEGY_LABEL: Record<string, { label: string; color: string }> = {
   positional: { label: 'Positional', color: '#F59E0B' },
 }
 
-/** Returns today's day abbreviation e.g. "MON" in IST */
-function todayDay(): string {
-  return new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase().slice(0, 3)
-}
+// ── SmoothedSparkline ─────────────────────────────────────────────────────────
+function SmoothedSparkline({ algoId, legs, totalPnl }: { algoId: string; legs: Leg[]; totalPnl: number }) {
+  const W = 70, H = 24, PAD = 3
+  const live = isMarketLive()
 
-/** Returns ISO date string for each day of the current week (IST Monday-based) */
-function getWeekDates(): Record<string, string> {
-  const now    = new Date()
-  const ist    = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-  const dow    = ist.getDay()
-  const monday = new Date(ist)
-  monday.setDate(ist.getDate() - (dow === 0 ? 6 : dow - 1))
-  const names  = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-  const map: Record<string, string> = {}
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    map[names[i]] = d.toISOString().slice(0, 10)
+  const closedLegs = legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
+  if (closedLegs.length === 0) return null
+  const pts = closedLegs.flatMap(l => [l.fillPrice!, l.exitPrice!])
+  if (pts.length < 2) return null
+
+  const minP = Math.min(...pts), maxP = Math.max(...pts)
+  const range = maxP - minP || 1
+  const toX = (i: number) => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
+  const toY = (v: number) => H - PAD - ((v - minP) / range) * (H - PAD * 2)
+  const coords = pts.map((v, i) => ({ x: toX(i), y: toY(v) }))
+
+  // Cubic bezier — control points at horizontal midpoint of each segment
+  let d = `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`
+  for (let i = 1; i < coords.length; i++) {
+    const p = coords[i - 1], c = coords[i]
+    const mx = ((p.x + c.x) / 2).toFixed(1)
+    d += ` C${mx},${p.y.toFixed(1)} ${mx},${c.y.toFixed(1)} ${c.x.toFixed(1)},${c.y.toFixed(1)}`
   }
-  return map
+
+  const lastX = coords[coords.length - 1].x
+  const lastY = coords[coords.length - 1].y
+  const lineColor = totalPnl >= 0 ? '#22DD88' : '#FF4444'
+  const gradId = `sg-${algoId.replace(/[^a-z0-9]/gi, '')}`
+  const fillD = `${d} L${lastX.toFixed(1)},${H} L${PAD},${H} Z`
+
+  return (
+    <svg width={W} height={H} style={{ flexShrink: 0, opacity: 0.9 }}>
+      <title>{`P&L: ${totalPnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(totalPnl)).toLocaleString('en-IN')}`}</title>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.20"/>
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={fillD} fill={`url(#${gradId})`} stroke="none"/>
+      <path d={d} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+      {live ? (
+        <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r={3} fill={lineColor}>
+          <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      ) : (
+        <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r="2.5" fill={lineColor}/>
+      )}
+    </svg>
+  )
 }
 
+// ── Main Page ────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const activeAccount = useStore(s => s.activeAccount)
   const storeAccounts = useStore(s => s.accounts)
-  const weekDates = getWeekDates()
-  const [orders, setOrders]           = useState<AlgoGroup[]>([])
+  const weekDates  = getWeekDates()
+  const today      = todayDay()
+  const todayDate  = weekDates[today] || new Date().toISOString().slice(0, 10)
+
+  const [selectedDate, setSelectedDate] = useState<string>(todayDate)
+  const [orders, setOrders]             = useState<AlgoGroup[]>([])
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
-  const [activeDay, setActiveDay]     = useState(todayDay())
-  const [showWeekends, setShowWeekends] = useState(() => localStorage.getItem('orders_show_weekends') === 'true')
-  const [sortBy, setSortBy]             = useState(() => localStorage.getItem('staax_orders_sort') || 'date_desc')
   const [ltpMap, setLtpMap]             = useState<Record<number, number>>({})
-  const [modal, setModal]             = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
-  const [sqChecked, setSqChecked]     = useState<Record<string, boolean>>({})
-  const [loading, setLoading]         = useState<Record<string, boolean>>({})
-  const [showSync, setShowSync]       = useState<number | null>(null)   // algoIdx
-  const [syncForm, setSyncForm]       = useState({ broker_order_id: '', account_id: '' })
-  const [syncLoading, setSyncLoading] = useState(false)
-  const [editExit, setEditExit]       = useState<{ orderId: string; value: string } | null>(null)
-  const [exitSaving, setExitSaving]   = useState(false)
-  const [algoPopup, setAlgoPopup]     = useState<{ algoName: string; data: any } | null>(null)
+  const [modal, setModal]               = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
+  const [sqChecked, setSqChecked]       = useState<Record<string, boolean>>({})
+  const [loading, setLoading]           = useState<Record<string, boolean>>({})
+  const [showSync, setShowSync]         = useState<number | null>(null)
+  const [syncForm, setSyncForm]         = useState({ broker_order_id: '', account_id: '' })
+  const [syncLoading, setSyncLoading]   = useState(false)
+  const [editExit, setEditExit]         = useState<{ orderId: string; value: string } | null>(null)
+  const [exitSaving, setExitSaving]     = useState(false)
+  const [algoPopup, setAlgoPopup]       = useState<{ algoName: string; data: any } | null>(null)
   const [openPositions, setOpenPositions] = useState<OpenPosition[]>([])
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
+  const [showWeekends, setShowWeekends] = useState(false)
 
   // Fetch open positions + holidays once on mount
   useEffect(() => {
@@ -210,10 +327,31 @@ export default function OrdersPage() {
     }).catch(() => {})
   }, [isPractixMode])
 
-  // Load orders + waiting algos from API — re-fetch when day tab changes
+  // Pre-fetch all week P&L on mount
   useEffect(() => {
-    const tradingDate = weekDates[activeDay] || new Date().toISOString().slice(0, 10)
-    ordersAPI.list(tradingDate, isPractixMode)
+    const days = ['MON','TUE','WED','THU','FRI']
+    Promise.all(days.map(day =>
+      ordersAPI.list(weekDates[day], isPractixMode)
+        .then((res: any) => {
+          const groups: any[] = res.data?.groups || []
+          const pnl = groups.flatMap((g: any) => g.orders || [])
+            .filter((o: any) => o.status === 'closed' && o.pnl != null)
+            .reduce((s: number, o: any) => s + (o.pnl || 0), 0)
+          return { day, pnl: groups.length > 0 ? pnl : null }
+        })
+        .catch(() => ({ day, pnl: null as null }))
+    )).then(results => {
+      const map: Record<string, number | null> = {}
+      results.forEach(r => { map[r.day] = r.pnl })
+      setWeekPnl(map)
+    })
+  }, [isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load orders + waiting algos for selectedDate
+  useEffect(() => {
+    setOrders([])
+    setWaitingAlgos([])
+    ordersAPI.list(selectedDate, isPractixMode)
       .then(res => {
         const data = res.data
         const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
@@ -225,43 +363,42 @@ export default function OrdersPage() {
           mtmSL:    g.mtm_sl ?? 0,
           mtmTP:    g.mtm_tp ?? 0,
           legs: (g.orders || []).map((o: any): Leg => ({
-            id:             o.id,
-            journeyLevel:   o.journey_level || '1',
-            status:         (o.status ?? 'pending') as LegStatus,
-            symbol:         o.symbol || '',
-            dir:            ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
-            lots:           String(o.lots ?? ''),
+            id:              o.id,
+            journeyLevel:    o.journey_level || '1',
+            status:          (o.status ?? 'pending') as LegStatus,
+            symbol:          o.symbol || '',
+            dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
+            lots:            String(o.lots ?? ''),
             entryCondition:  o.entry_type || '',
             instrumentToken: o.instrument_token ?? undefined,
             errorMessage:    o.error_message ?? undefined,
             fillPrice:       o.fill_price ?? undefined,
             fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
             ltp:             o.ltp ?? undefined,
-            slOrig:         o.sl_original ?? undefined,
-            slActual:       o.sl_actual ?? undefined,
-            target:         o.target ?? undefined,
-            exitPrice:      o.exit_price ?? undefined,
-            exitTime:       o.exit_time ? fmtIST(o.exit_time) : undefined,
-            exitReason:     o.exit_reason ?? undefined,
-            pnl:            o.pnl ?? undefined,
+            slOrig:          o.sl_original ?? undefined,
+            slActual:        o.sl_actual ?? undefined,
+            target:          o.target ?? undefined,
+            exitPrice:       o.exit_price ?? undefined,
+            exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
+            exitReason:      o.exit_reason ?? undefined,
+            pnl:             o.pnl ?? undefined,
           })),
         })))
       })
-      .catch(() => {}) // keep demo data if API unreachable
+      .catch(() => {})
 
-    ordersAPI.waiting(tradingDate, isPractixMode)
+    ordersAPI.waiting(selectedDate, isPractixMode)
       .then(res => setWaitingAlgos(res.data?.waiting || []))
       .catch(() => {})
-  }, [activeDay, isPractixMode])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDate, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live LTP via WebSocket — updates leg LTP cells in real time
+  // Live LTP via WebSocket
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const WS_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
     let ws: WebSocket | null = null
     let retryTimeout: ReturnType<typeof setTimeout> | null = null
     let retryDelay = 2000
-
     const connect = () => {
       try {
         ws = new WebSocket(`${WS_BASE}/ws/pnl`)
@@ -271,28 +408,17 @@ export default function OrdersPage() {
             if (msg.type === 'ltp_batch') setLtpMap(prev => ({ ...prev, ...msg.data }))
           } catch {}
         }
-        ws.onclose = () => {
-          retryTimeout = setTimeout(connect, retryDelay)
-          retryDelay = Math.min(retryDelay * 1.5, 15000)
-        }
+        ws.onclose = () => { retryTimeout = setTimeout(connect, retryDelay); retryDelay = Math.min(retryDelay * 1.5, 15000) }
         ws.onerror = () => ws?.close()
-      } catch {
-        retryTimeout = setTimeout(connect, retryDelay)
-      }
+      } catch { retryTimeout = setTimeout(connect, retryDelay) }
     }
     connect()
-    return () => {
-      if (retryTimeout) clearTimeout(retryTimeout)
-      ws?.close()
-    }
+    return () => { if (retryTimeout) clearTimeout(retryTimeout); ws?.close() }
   }, [])
 
-  const visibleDays = showWeekends
-    ? [...ALL_DAYS, 'SAT', 'SUN']
-    : ALL_DAYS
-
   const safeOrders = Array.isArray(orders) ? orders : []
-  const totalMTM = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
+  const totalMTM   = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
+
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
     for (const p of (legs || []).filter(l => !l.parentId)) {
@@ -301,10 +427,10 @@ export default function OrdersPage() {
     }
     return r
   }
+
   const openLegs = (idx: number) => (orders[idx]?.legs || []).filter(l => l.status === 'open')
 
-  // ── Actions wired to API ──────────────────────────────────────────────────
-
+  // ── Actions ──────────────────────────────────────────────────────────────
   const doRun = async (idx: number) => {
     const algoId = orders[idx].algoId
     setLoading(l => ({ ...l, [`run-${idx}`]: true }))
@@ -332,13 +458,12 @@ export default function OrdersPage() {
   }
 
   const doSQ = async (idx: number) => {
-    const algoId  = orders[idx].algoId
+    const algoId   = orders[idx].algoId
     const selected = Object.keys(sqChecked).filter(k => sqChecked[k])
     if (selected.length === 0) { setModal(null); return }
     setLoading(l => ({ ...l, [`sq-${idx}`]: true }))
     try {
       await algosAPI.sq(algoId, selected)
-      // Optimistically update leg statuses
       setOrders(o => o.map((g, i) => i !== idx ? g : {
         ...g,
         legs: (g.legs ?? []).map(l => selected.includes(l.id)
@@ -413,31 +538,19 @@ export default function OrdersPage() {
 
   const doSync = async (algoIdx: number) => {
     const algoId = orders[algoIdx].algoId
-    if (!syncForm.broker_order_id.trim()) {
-      alert('Broker Order ID is required')
-      return
-    }
-    if (!syncForm.account_id) {
-      alert('Please select an account')
-      return
-    }
+    if (!syncForm.broker_order_id.trim()) { alert('Broker Order ID is required'); return }
+    if (!syncForm.account_id) { alert('Please select an account'); return }
     const ids = syncForm.broker_order_id.split(',').map(s => s.trim()).filter(Boolean)
     setSyncLoading(true)
     let succeeded = 0, failed = 0
     for (const id of ids) {
-      try {
-        await ordersAPI.syncOrder(algoId, { broker_order_id: id, account_id: syncForm.account_id })
-        succeeded++
-      } catch {
-        failed++
-      }
+      try { await ordersAPI.syncOrder(algoId, { broker_order_id: id, account_id: syncForm.account_id }); succeeded++ }
+      catch { failed++ }
     }
     setSyncLoading(false)
     setShowSync(null)
     setSyncForm({ broker_order_id: '', account_id: '' })
-    const msg = failed === 0
-      ? `✅ ${succeeded} order${succeeded > 1 ? 's' : ''} synced`
-      : `⚠️ ${succeeded} synced, ${failed} failed`
+    const msg = failed === 0 ? `✅ ${succeeded} order${succeeded > 1 ? 's' : ''} synced` : `⚠️ ${succeeded} synced, ${failed} failed`
     setInlineStatus(setOrders, algoIdx, msg, failed === 0 ? 'var(--green)' : 'var(--amber)', 5000)
   }
 
@@ -446,352 +559,409 @@ export default function OrdersPage() {
     const price = parseFloat(editExit.value)
     if (isNaN(price) || price <= 0) return
     setExitSaving(true)
-    try {
-      await ordersAPI.correctExitPrice(editExit.orderId, price)
-      setEditExit(null)
-    } catch {
-      alert('Failed to save exit price')
-    } finally {
-      setExitSaving(false)
-    }
+    try { await ordersAPI.correctExitPrice(editExit.orderId, price); setEditExit(null) }
+    catch { alert('Failed to save exit price') }
+    finally { setExitSaving(false) }
   }
 
-  // Filter by active account — match group.account (nickname) to the selected account
+  // ── Filtering + grouping ─────────────────────────────────────────────────
   const activeAccountNickname = activeAccount
     ? (storeAccounts as any[]).find((a: any) => String(a.id) === activeAccount)?.nickname ?? null
     : null
-  const filteredOrders = activeAccountNickname
-    ? orders.filter(g => g.account === activeAccountNickname)
-    : orders
-  const filteredWaiting = activeAccountNickname
-    ? waitingAlgos.filter(w => w.account_name === activeAccountNickname)
-    : waitingAlgos
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
-    if (sortBy === 'name_asc')  return a.algoName.localeCompare(b.algoName)
-    if (sortBy === 'name_desc') return b.algoName.localeCompare(a.algoName)
-    if (sortBy === 'account')   return a.account.localeCompare(b.account)
-    return 0  // date_desc = API order
-  })
+  const filteredOrders  = activeAccountNickname ? orders.filter(g => g.account === activeAccountNickname) : orders
+  const filteredWaiting = activeAccountNickname ? waitingAlgos.filter(w => w.account_name === activeAccountNickname) : waitingAlgos
 
+  const groupedByInstrument: Record<string, AlgoGroup[]> = {}
+  for (const group of filteredOrders) {
+    const inst = getInstrumentFromGroup(group)
+    if (!groupedByInstrument[inst]) groupedByInstrument[inst] = []
+    groupedByInstrument[inst].push(group)
+  }
+  for (const inst of INSTRUMENT_ORDER) {
+    groupedByInstrument[inst]?.sort((a, b) => a.algoName.localeCompare(b.algoName))
+  }
+  const instrumentKeys = INSTRUMENT_ORDER.filter(k => groupedByInstrument[k]?.length > 0)
+
+  // Day summary from filteredOrders
+  const closedLegsAll = filteredOrders.flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
+  const dayPnl        = closedLegsAll.reduce((s, l) => s + (l.pnl ?? 0), 0)
+  const dayWins       = closedLegsAll.filter(l => (l.pnl ?? 0) > 0).length
+  const dayWinRate    = closedLegsAll.length > 0 ? Math.round(dayWins / closedLegsAll.length * 100) : null
+
+  const isHolidayToday  = holidayDates.has(selectedDate)
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
-      {/* Fixed zone: page header + day tabs — never scrolls */}
-      <div style={{ flexShrink: 0 }}>
-      <div className="page-header">
-        <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, letterSpacing: '0.02em' }}>Orders</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', display:'flex', alignItems:'center', gap:'6px' }}>Trade history · P&L by week ·{' '}
-            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,197,94,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--green)',border:isPractixMode?'1px solid rgba(215,123,18,0.3)':'1px solid rgba(34,197,94,0.25)'}}>
-              {isPractixMode?'PRACTIX':'LIVE'}
-            </span>
-          </p>
-        </div>
-        <div className="page-header-actions">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showWeekends} onChange={e => { setShowWeekends(e.target.checked); localStorage.setItem('orders_show_weekends', String(e.target.checked)) }} style={{ accentColor: 'var(--ox-radiant)' }} />
-            Show Weekends
-          </label>
-          <select value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('staax_orders_sort', e.target.value) }}
-            className="staax-select" style={{ width: '130px' }}>
-            <option value="date_desc">Date Created</option>
-            <option value="name_asc">Name A → Z</option>
-            <option value="name_desc">Name Z → A</option>
-            <option value="account">Account</option>
-          </select>
-        </div>
-      </div>
 
-      {/* Open Positions Panel */}
-      {openPositions.length > 0 && (
-        <div style={{ padding: '10px 0 20px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', paddingLeft: '2px' }}>
-            Open Positions · {openPositions.length}
+      {/* ── Fixed zone ── */}
+      <div style={{ flexShrink: 0 }}>
+
+        {/* Page header */}
+        <div className="page-header">
+          <div>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Orders</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '3px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--gs-muted)' }}>Trade history · P&amp;L by week</span>
+              <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>
+                {isPractixMode ? 'PRACTIX' : 'LIVE'}
+              </span>
+            </div>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {openPositions.map(pos => {
-              const strat = STRATEGY_LABEL[pos.strategy_mode] || { label: pos.strategy_mode, color: '#6B7280' }
-              const pnlColor = pos.pnl >= 0 ? 'var(--green)' : 'var(--red)'
-              return (
-                <div key={pos.algo_id}
-                  onClick={() => setActiveDay(pos.day_of_week.slice(0,3))}
-                  style={{
+        </div>
+
+        {/* Open Positions Panel */}
+        {openPositions.length > 0 && (
+          <div style={{ padding: '0 0 16px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', paddingLeft: '2px' }}>
+              Open Positions · {openPositions.length}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {openPositions.map(pos => {
+                const strat    = STRATEGY_LABEL[pos.strategy_mode] || { label: pos.strategy_mode, color: '#6B7280' }
+                const pnlColor = pos.pnl >= 0 ? 'var(--green)' : 'var(--red)'
+                return (
+                  <div key={pos.algo_id} style={{
                     display: 'flex', alignItems: 'center', gap: '8px',
                     background: 'var(--glass-bg)', border: 'var(--glass-border)',
-                    borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
-                    transition: 'border-color 0.15s', minWidth: 0,
-                    backdropFilter: 'blur(12px)',
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--ox-radiant)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--ox-border)'}
-                >
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.entry_date}</span>
-                  <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '100px', background: `${strat.color}18`, color: strat.color, border: `1px solid ${strat.color}40`, whiteSpace: 'nowrap' }}>{strat.label}</span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{pos.algo_name}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '1px 6px', borderRadius: '100px', border: '1px solid var(--bg-border)', whiteSpace: 'nowrap' }}>{pos.account}</span>
-                  {pos.open_count > 0 && <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.open_count} open</span>}
-                  {pos.pnl !== 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: pnlColor, whiteSpace: 'nowrap' }}>{pos.pnl >= 0 ? '+' : ''}₹{Math.abs(pos.pnl).toLocaleString('en-IN')}</span>}
-                  <span style={{ fontSize: '10px', color: 'var(--ox-radiant)', fontWeight: 700, whiteSpace: 'nowrap' }}>→ {pos.day_of_week.slice(0,3)}</span>
+                    borderRadius: '8px', padding: '6px 12px', cursor: 'default',
+                    backdropFilter: 'blur(12px)', minWidth: 0,
+                  }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.entry_date}</span>
+                    <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '100px', background: `${strat.color}18`, color: strat.color, border: `1px solid ${strat.color}40`, whiteSpace: 'nowrap' }}>{strat.label}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{pos.algo_name}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '1px 6px', borderRadius: '100px', border: '1px solid var(--bg-border)', whiteSpace: 'nowrap' }}>{pos.account}</span>
+                    {pos.open_count > 0 && <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.open_count} open</span>}
+                    {pos.pnl !== 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: pnlColor, whiteSpace: 'nowrap' }}>{pos.pnl >= 0 ? '+' : ''}₹{Math.abs(pos.pnl).toLocaleString('en-IN')}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Date navigation + MTM summary bar */}
+        <div style={{ borderBottom: '0.5px solid var(--ox-border)' }}>
+          {/* Day tabs — full width */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0' }}>
+            <div style={{ display: 'flex', flex: 1 }}>
+              {(showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']).map(day => {
+                const date      = weekDates[day]
+                const isActive  = selectedDate === date
+                const isHoliday = date ? holidayDates.has(date) : false
+                const pnl       = weekPnl[day]
+                const rupee     = '\u20B9'
+                return (
+                  <button
+                    key={day}
+                    onClick={() => date && setSelectedDate(date)}
+                    style={{
+                      flex: 1, padding: '12px 0', textAlign: 'center' as const,
+                      background: isActive ? 'rgba(255,107,0,0.08)' : 'transparent',
+                      border: 'none',
+                      borderBottom: isActive ? '2px solid #FF6B00' : '2px solid transparent',
+                      color: isActive ? '#FF6B00' : 'rgba(255,255,255,0.4)',
+                      fontFamily: 'var(--font-display)', fontSize: '12px', fontWeight: 600,
+                      cursor: 'pointer', transition: 'all 0.15s ease',
+                      display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {day}{isHoliday && <span style={{ fontSize: '9px' }}>🏛</span>}
+                    </span>
+                    {isHoliday ? (
+                      <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>holiday</span>
+                    ) : pnl != null ? (
+                      <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                        {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>—</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', color: 'var(--text-dim)', cursor: 'pointer', paddingRight: '8px', whiteSpace: 'nowrap' as const }}>
+              <input type="checkbox" checked={showWeekends} onChange={e => setShowWeekends(e.target.checked)} style={{ accentColor: '#FF6B00' }} />
+              Weekends
+            </label>
+          </div>
+        </div>
+
+        {/* Stats strip */}
+        <div style={{
+          display: 'flex', gap: 32, padding: '10px 24px',
+          background: 'rgba(255,107,0,0.04)',
+          borderBottom: '0.5px solid rgba(255,107,0,0.12)',
+          borderTop: '0.5px solid rgba(255,107,0,0.12)',
+          marginBottom: '12px', flexWrap: 'wrap' as const,
+        }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            MTM: <b style={{ fontFamily: 'var(--font-mono)', color: totalMTM >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
+            </b>
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            Trades: <b style={{ color: 'var(--text)' }}>{closedLegsAll.length}</b>
+          </span>
+          {dayWinRate !== null && (
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Win: <b style={{ color: dayWinRate >= 50 ? 'var(--green)' : 'var(--red)' }}>{dayWinRate}%</b>
+            </span>
+          )}
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            P&amp;L: <b style={{ fontFamily: 'var(--font-mono)', color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {dayPnl >= 0 ? '+' : ''}₹{Math.abs(Math.round(dayPnl)).toLocaleString('en-IN')}
+            </b>
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            Open: <b style={{ color: 'var(--text)' }}>{orders.filter(g => g.legs.some(l => l.status === 'open')).length}</b>
+          </span>
+        </div>
+
+      </div>{/* end fixed zone */}
+
+      {/* ── Scroll zone ── */}
+      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ height: '6px' }} />
+
+        {/* Holiday banner */}
+        {isHolidayToday && (
+          <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(215,123,18,0.08)', border: '1px solid rgba(215,123,18,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px' }}>🏛</span>
+            <span style={{ fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600 }}>Market Holiday</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>— No trading scheduled for {selectedDate}</span>
+          </div>
+        )}
+
+        {/* Waiting algos */}
+        {filteredWaiting.length > 0 && !isHolidayToday && (
+          <div style={{ marginBottom: '16px' }}>
+            {filteredWaiting.map(w => {
+              const isMissed = !!w.entry_time && (() => {
+                const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
+                return now >= w.entry_time.slice(0, 5)
+              })()
+              return (
+                <div key={w.grid_entry_id} style={{
+                  marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
+                  background: 'var(--glass-bg)', border: 'var(--glass-border)',
+                  borderRadius: '7px', padding: '8px 14px', backdropFilter: 'blur(12px)',
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>{w.algo_name}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px' }}>{w.account_name}</span>
+                  <span style={{
+                    fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
+                    color: isMissed ? 'var(--accent-amber)' : '#F59E0B',
+                    background: isMissed ? 'rgba(215,123,18,0.1)' : 'rgba(245,158,11,0.1)',
+                    border: `1px solid ${isMissed ? 'rgba(215,123,18,0.25)' : 'rgba(245,158,11,0.25)'}`,
+                  }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
+                  {w.entry_time && <span style={{ fontSize: '11px', color: 'var(--ox-radiant)' }}>E: {w.entry_time.slice(0, 5)}</span>}
+                  {w.exit_time && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>X: {w.exit_time.slice(0, 5)}</span>}
+                  <span style={{ marginLeft: 'auto', fontSize: '10px', fontWeight: 600, color: w.is_practix ? 'var(--accent-amber)' : 'var(--ox-radiant)' }}>
+                    {w.is_practix ? 'PRACTIX' : 'LIVE'}
+                  </span>
                 </div>
               )
             })}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Trading Day header + MTM */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 2px 6px' }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trading Day</span>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: totalMTM >= 0 ? 'var(--green)' : 'var(--red)' }}>
-          MTM: {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
-        </span>
-      </div>
+        {/* Empty state */}
+        {filteredOrders.length === 0 && (
+          <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+            No orders for today.
+          </div>
+        )}
 
-      {/* Day tabs — full width, equal spacing, P&L per day */}
-      <div style={{ display: 'flex', borderBottom: '0.5px solid var(--ox-border)', background: 'var(--bg-primary)' }}>
-        {visibleDays.map(d => {
-          const isWeekend  = d === 'SAT' || d === 'SUN'
-          const isToday    = d === todayDay()
-          const isSelected = activeDay === d
-          const isHoliday  = !!weekDates[d] && holidayDates.has(weekDates[d])
-          const pnl: number | null = null
+        {/* ── Instrument groups ── */}
+        {instrumentKeys.map((instrument, gIdx) => {
+          const groupAlgos  = groupedByInstrument[instrument]
+          const isCollapsed = collapsedGroups.has(instrument)
           return (
-            <button key={d} onClick={() => setActiveDay(d)} style={{
-              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: '2px', padding: '8px 4px', fontSize: '12px', fontWeight: 600,
-              fontFamily: 'var(--font-display)',
-              border: 'none', cursor: 'pointer',
-              background: isSelected ? 'rgba(255,107,0,0.08)' : 'transparent',
-              color: isSelected ? 'var(--ox-radiant)' : isWeekend || isHoliday ? 'rgba(240,237,232,0.30)' : 'rgba(240,237,232,0.55)',
-              borderBottom: isSelected ? '2px solid var(--ox-radiant)' : '2px solid transparent',
-              transition: 'all 0.2s ease',
-              opacity: isHoliday && !isSelected ? 0.5 : 1,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>{d}</span>
-                {isToday && !isHoliday && (
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--ox-radiant)', boxShadow: '0 0 6px var(--ox-radiant)', flexShrink: 0 }} />
-                )}
-                {isHoliday && (
-                  <span style={{ fontSize: '9px', color: 'var(--accent-amber)' }} title="Market holiday">🏛</span>
-                )}
-              </div>
-              {pnl != null && (
-                <span style={{ fontSize: '10px', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                  {pnl >= 0 ? '+' : ''}{(pnl / 1000).toFixed(1)}k
+            <div key={instrument}>
+
+              {/* Instrument header */}
+              <div
+                onClick={() => setCollapsedGroups(prev => {
+                  const next = new Set(prev)
+                  if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
+                  return next
+                })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+                  paddingBottom: '8px', marginBottom: '8px', marginTop: gIdx === 0 ? 0 : '20px',
+                  borderBottom: '0.5px solid rgba(255,107,0,0.15)', userSelect: 'none',
+                }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 700, color: 'var(--ox-radiant)', letterSpacing: '1px' }}>
+                  {instrument}
                 </span>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.38)' }}>
+                  {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
+                </span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"
+                  style={{ marginLeft: 'auto', transition: 'transform 0.2s ease', transform: isCollapsed ? 'rotate(-90deg)' : 'none' }}>
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </div>
+
+              {!isCollapsed && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '4px' }}>
+                  {groupAlgos.map(group => {
+                    // gi = global index into orders[] — needed by all action handlers
+                    const gi       = orders.findIndex(g => g.algoId === group.algoId)
+                    const algoSt   = getAlgoStatus(group)
+                    const bar      = ALGO_STATUS_BAR[algoSt]
+                    const chip     = ALGO_STATUS_CHIP[algoSt]
+                    const isClosed = group.legs.length > 0 && group.legs.every(l => l.status === 'closed' || l.status === 'error')
+                    const closedL  = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
+                    const totalPnl = closedL.reduce((s, l) => s + (l.pnl ?? 0), 0)
+                    const showSpark = closedL.length > 0 && !group.legs.some(l => l.status === 'open' || l.status === 'pending')
+
+                    // Action button definitions
+                    const BTNS = [
+                      { label: 'RUN',  col: '#FF6B00', bg: 'rgba(255,107,0,0.05)',   hBg: 'rgba(255,107,0,0.14)',   disabled: !!group.terminated,                                     action: () => setModal({ type: 'run', algoIdx: gi }) },
+                      { label: 'RE',   col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: !!group.terminated,                                     action: () => doRE(gi) },
+                      { label: 'SYNC', col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: !!group.terminated,                                     action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SQ',   col: '#22DD88', bg: 'rgba(34,221,136,0.05)',  hBg: 'rgba(34,221,136,0.14)', disabled: !!group.terminated || isClosed || openLegs(gi).length === 0, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'T',    col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: !!group.terminated || isClosed,                         action: () => setModal({ type: 't', algoIdx: gi }) },
+                    ]
+
+                    return (
+                      <div key={group.algoId} style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '10px', overflow: 'hidden', border: '0.5px solid rgba(255,255,255,0.07)' }}>
+
+                        {/* ── Algo card header ── */}
+                        <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'stretch' }}>
+
+                          {/* Status strip */}
+                          <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: bar.color, boxShadow: `0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
+
+                          {/* Info row */}
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap', minWidth: 0 }}>
+
+                            {group.terminated && <span style={{ fontSize: '13px' }} title="Algo terminated">⛔</span>}
+
+                            {/* Algo name */}
+                            <span
+                              onClick={() => algosAPI.get(group.algoId).then(r => setAlgoPopup({ algoName: group.algoName, data: r.data })).catch(() => setAlgoPopup({ algoName: group.algoName, data: null }))}
+                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: '#F0F0FF', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
+                              {group.algoName}
+                            </span>
+
+                            {/* Account pill */}
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'rgba(255,107,0,0.10)', color: 'var(--ox-glow)', border: '0.5px solid rgba(255,107,0,0.28)', whiteSpace: 'nowrap' }}>
+                              {group.account || '—'}
+                            </span>
+
+                            {/* Status chip */}
+                            <span className="tag" style={{ color: chip.color, background: chip.bg, fontSize: '10px', whiteSpace: 'nowrap' }}>
+                              {chip.label}
+                            </span>
+
+                            {/* MTM SL/TP */}
+                            {!group.terminated && !!(group.mtmSL || group.mtmTP) && (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                {group.mtmSL !== 0 && <>SL: <span style={{ color: 'var(--red)' }}>₹{Math.abs(group.mtmSL).toLocaleString('en-IN')}</span></>}
+                                {group.mtmSL !== 0 && group.mtmTP !== 0 && <>&nbsp;·&nbsp;</>}
+                                {group.mtmTP !== 0 && <>TP: <span style={{ color: 'var(--green)' }}>₹{group.mtmTP.toLocaleString('en-IN')}</span></>}
+                              </span>
+                            )}
+
+                            {/* Error badge */}
+                            {!group.terminated && group.legs.some(l => l.status === 'error') && (() => {
+                              const errLegs = group.legs.filter(l => l.status === 'error')
+                              const firstMsg = errLegs[0]?.errorMessage
+                              const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
+                              return (
+                                <span title={firstMsg || undefined} className="chip chip-error" style={{ fontSize: '10px', cursor: firstMsg ? 'help' : 'default' }}>
+                                  ⚠ {errLegs.length} LEG{errLegs.length > 1 ? 'S' : ''} FAILED{shortMsg}
+                                </span>
+                              )
+                            })()}
+
+                            {/* Inline status feedback */}
+                            {group.inlineStatus && (
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: group.inlineColor, animation: 'fadeIn 0.2s ease' }}>
+                                {group.inlineStatus}
+                              </span>
+                            )}
+
+                            {/* Sparkline + MTM P&L (right side) */}
+                            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {showSpark && (
+                                <SmoothedSparkline algoId={group.algoId} legs={group.legs} totalPnl={totalPnl} />
+                              )}
+                              <span style={{
+                                minWidth: '90px', textAlign: 'right',
+                                fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
+                                color: group.mtm !== 0 ? (group.mtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent',
+                                opacity: group.terminated ? 0.6 : 1,
+                              }}>
+                                {group.mtm !== 0 ? `${group.mtm >= 0 ? '+' : ''}₹${group.mtm.toLocaleString('en-IN')}` : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* ── Tall action buttons ── */}
+                          <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
+                            {BTNS.map(btn => (
+                              <button key={btn.label}
+                                disabled={btn.disabled || !!loading[`${btn.label.toLowerCase()}-${gi}`]}
+                                onClick={btn.action}
+                                style={{
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                  gap: 4, padding: '0 14px', background: btn.bg, border: 'none',
+                                  borderRight: '0.5px solid rgba(255,255,255,0.06)',
+                                  cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                                  color: btn.col, minWidth: 52, transition: 'all 150ms',
+                                  opacity: btn.disabled ? 0.3 : 1,
+                                  pointerEvents: btn.disabled ? 'none' : 'auto',
+                                }}
+                                onMouseEnter={e => { if (!btn.disabled) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = btn.hBg } }}
+                                onMouseLeave={e => { e.currentTarget.style.opacity = btn.disabled ? '0.3' : '1'; e.currentTarget.style.background = btn.bg }}>
+                                <span style={{ fontSize: 9, letterSpacing: '0.5px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{btn.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* ── Legs table ── */}
+                        <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
+                          <table className="staax-table">
+                            <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
+                            <thead>
+                              <tr>
+                                {HDRS.map(h => (
+                                  <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {buildRows(group.legs).map(({ leg, isChild }) => (
+                                <LegRow key={leg.id} leg={leg} isChild={isChild}
+                                  liveLtp={leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined}
+                                  onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
+                                />
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                      </div>
+                    )
+                  })}
+                </div>
               )}
-            </button>
+            </div>
           )
         })}
-      </div>
-      </div>{/* end fixed zone */}
 
-      {/* Scroll zone: waiting algos + all order groups */}
-      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
-      <div style={{ height: '14px' }} />
-      {!!weekDates[activeDay] && holidayDates.has(weekDates[activeDay]) && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(215,123,18,0.08)', border: '1px solid rgba(215,123,18,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '14px' }}>🏛</span>
-          <span style={{ fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600 }}>Market Holiday</span>
-          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>— No trading scheduled for {weekDates[activeDay]}</span>
-        </div>
-      )}
-      {filteredWaiting.length > 0 && !holidayDates.has(weekDates[activeDay] || '') && (
-        <div style={{ marginBottom: '16px' }}>
-          {filteredWaiting.map(w => {
-            // Determine if entry time has passed on today's tab
-            const isToday = activeDay === todayDay()
-            const isMissed = isToday && !!w.entry_time && (() => {
-              const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
-              return now >= w.entry_time.slice(0, 5)
-            })()
-            return (
-            <div key={w.grid_entry_id} style={{
-              marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
-              background: 'var(--glass-bg)', border: 'var(--glass-border)',
-              borderRadius: '7px', padding: '8px 14px',
-              backdropFilter: 'blur(12px)',
-              display: 'flex', alignItems: 'center', gap: '12px',
-            }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>
-                {w.algo_name}
-              </span>
-              <span style={{
-                fontSize: '10px', color: 'var(--text-muted)',
-                background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px',
-              }}>{w.account_name}</span>
-              <span style={{
-                fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
-                color: isMissed ? 'var(--accent-amber)' : '#F59E0B',
-                background: isMissed ? 'rgba(215,123,18,0.1)' : 'rgba(245,158,11,0.1)',
-                border: `1px solid ${isMissed ? 'rgba(215,123,18,0.25)' : 'rgba(245,158,11,0.25)'}`,
-              }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
-              {w.entry_time && (
-                <span style={{ fontSize: '11px', color: 'var(--ox-radiant)' }}>
-                  E: {w.entry_time.slice(0, 5)}
-                </span>
-              )}
-              {w.exit_time && (
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  X: {w.exit_time.slice(0, 5)}
-                </span>
-              )}
-              <span style={{
-                marginLeft: 'auto', fontSize: '10px', fontWeight: 600,
-                color: w.is_practix ? 'var(--accent-amber)' : 'var(--ox-radiant)',
-              }}>{w.is_practix ? 'PRACTIX' : 'LIVE'}</span>
-            </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Day summary bar */}
-      {(() => {
-        const closedLegs = sortedOrders.flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
-        if (closedLegs.length === 0) return null
-        const dayPnl = closedLegs.reduce((s, l) => s + (l.pnl ?? 0), 0)
-        const dayWins = closedLegs.filter(l => (l.pnl ?? 0) > 0).length
-        const dayWinRate = Math.round(dayWins / closedLegs.length * 100)
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 12px', marginBottom: '8px', background: 'rgba(22,22,25,0.65)', border: 'var(--glass-border)', borderRadius: '8px', fontSize: '11px', backdropFilter: 'blur(12px)' }}>
-            <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>{closedLegs.length} trade{closedLegs.length !== 1 ? 's' : ''}</span>
-            <span style={{ color: 'var(--text-dim)' }}>·</span>
-            <span style={{ fontWeight: 700, color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {dayPnl >= 0 ? '+' : ''}₹{Math.abs(Math.round(dayPnl)).toLocaleString('en-IN')}
-            </span>
-            <span style={{ color: 'var(--text-dim)' }}>·</span>
-            <span style={{ color: dayWinRate >= 50 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{dayWinRate}% win</span>
-          </div>
-        )
-      })()}
-
-      {/* Algo groups */}
-      {sortedOrders.map((group, gi) => (
-        <div key={gi} style={{ marginBottom: '12px', opacity: group.terminated ? 0.65 : 1 }}>
-          <div className="cloud-fill-sm" style={{
-            background: 'var(--glass-bg)', border: 'var(--glass-border)',
-            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-            borderRadius: '10px 10px 0 0', padding: '10px 14px',
-            display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-          }}>
-            {/* Terminated icon */}
-            {group.terminated && (
-              <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
-                onMouseEnter={e => { const t = e.currentTarget.querySelector<HTMLElement>('[data-tt]'); if (t) t.style.opacity = '1' }}
-                onMouseLeave={e => { const t = e.currentTarget.querySelector<HTMLElement>('[data-tt]'); if (t) t.style.opacity = '0' }}>
-                <span style={{ fontSize: '14px', cursor: 'default' }}>⛔</span>
-                <span data-tt="" style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', background: '#1E2022', color: '#E5E7EB', fontSize: '10px', fontWeight: 600, padding: '4px 8px', borderRadius: '4px', border: '1px solid #3F4143', whiteSpace: 'nowrap', pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s', zIndex: 50 }}>
-                  Algo terminated
-                </span>
-              </span>
-            )}
-
-            {/* F3 — green live dot */}
-            {group.isLive && !group.terminated && (
-              <span title="Algo is live" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', flexShrink: 0 }} />
-            )}
-
-            {/* Error badge — one or more legs failed */}
-            {!group.terminated && group.legs.some(l => l.status === 'error') && (() => {
-              const errLegs  = group.legs.filter(l => l.status === 'error')
-              const errCount = errLegs.length
-              const firstMsg = errLegs[0]?.errorMessage
-              const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
-              return (
-                <span title={firstMsg || undefined} className="chip chip-error" style={{ fontSize: '10px', cursor: firstMsg ? 'help' : 'default' }}>
-                  ⚠ {errCount} LEG{errCount > 1 ? 'S' : ''} FAILED{shortMsg}
-                </span>
-              )
-            })()}
-
-            <span
-              onClick={() => algosAPI.get(group.algoId).then(r => setAlgoPopup({ algoName: group.algoName, data: r.data })).catch(() => setAlgoPopup({ algoName: group.algoName, data: null }))}
-              style={{ fontWeight: 700, fontSize: '14px', fontFamily: 'var(--font-display)', color: group.terminated ? 'var(--text-dim)' : 'var(--ox-radiant)',
-                cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
-              {group.algoName}
-            </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px' }}>{group.account}</span>
-
-            {!group.terminated && !!(group.mtmSL || group.mtmTP) && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {group.mtmSL !== 0 && <>SL: <span style={{ color: 'var(--red)' }}>₹{Math.abs(group.mtmSL).toLocaleString('en-IN')}</span></>}
-                {group.mtmSL !== 0 && group.mtmTP !== 0 && <>&nbsp;·&nbsp;</>}
-                {group.mtmTP !== 0 && <>TP: <span style={{ color: 'var(--green)' }}>₹{group.mtmTP.toLocaleString('en-IN')}</span></>}
-              </span>
-            )}
-
-            {group.inlineStatus && (
-              <span style={{ fontSize: '11px', fontWeight: 600, color: group.inlineColor, animation: 'fadeIn 0.2s ease' }}>
-                {group.inlineStatus}
-              </span>
-            )}
-
-            {/* Action buttons */}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '5px', alignItems: 'center' }}>
-              {[
-                { label: 'RUN',  color: '#FF6B00', action: () => setModal({ type: 'run', algoIdx: gi }), disabled: group.terminated },
-                { label: 'RE',   color: '#F59E0B', action: () => doRE(gi),                               disabled: group.terminated },
-                { label: 'SYNC', color: '#CC4400', action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) }, disabled: group.terminated },
-                { label: 'SQ',   color: '#22DD88', action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) }, disabled: group.terminated || openLegs(gi).length === 0 },
-                { label: 'T',    color: '#FF4444', action: () => setModal({ type: 't', algoIdx: gi }),   disabled: group.terminated },
-              ].map(btn => (
-                <button key={btn.label} title={btn.label}
-                  disabled={btn.disabled || loading[`${btn.label.toLowerCase()}-${gi}`]}
-                  style={{
-                    height: '26px', minWidth: '42px', padding: '0 12px', fontSize: '11px', fontWeight: 700,
-                    fontFamily: 'var(--font-display)',
-                    border: `0.5px solid ${btn.color}60`, background: `${btn.color}12`, color: btn.color,
-                    borderRadius: '100px', cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.18s ease', opacity: btn.disabled ? 0.35 : 1,
-                    letterSpacing: '0.05em',
-                  }}
-                  onMouseEnter={e => { if (!btn.disabled) { (e.currentTarget as HTMLElement).style.background = `${btn.color}22`; (e.currentTarget as HTMLElement).style.borderColor = `${btn.color}` } }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${btn.color}12`; (e.currentTarget as HTMLElement).style.borderColor = `${btn.color}60` }}
-                  onClick={btn.action}>
-                  {btn.label}
-                </button>
-              ))}
-              {/* P&L Sparkline — show for fully-closed groups with fill + exit prices */}
-              {(() => {
-                const closedLegs = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
-                if (closedLegs.length === 0 || group.legs.some(l => l.status === 'open' || l.status === 'pending')) return null
-                // Build sparkline: one point per closed leg (entry → exit)
-                const pts = closedLegs.flatMap(l => [l.fillPrice!, l.exitPrice!])
-                const minP = Math.min(...pts), maxP = Math.max(...pts)
-                const range = maxP - minP || 1
-                const W = 60, H = 20, PAD = 2
-                const toX = (i: number) => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
-                const toY = (v: number) => H - PAD - ((v - minP) / range) * (H - PAD * 2)
-                const totalPnl = closedLegs.reduce((s, l) => s + (l.pnl ?? 0), 0)
-                const lineColor = totalPnl >= 0 ? '#22DD88' : '#FF4444'
-                const pathD = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
-                return (
-                  <svg width={W} height={H} style={{ flexShrink: 0, opacity: 0.9 }}>
-                    <title>{`P&L: ${totalPnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(totalPnl)).toLocaleString('en-IN')}`}</title>
-                    <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                    <circle cx={toX(pts.length - 1).toFixed(1)} cy={toY(pts[pts.length - 1]).toFixed(1)} r="2.5" fill={lineColor} />
-                  </svg>
-                )
-              })()}
-              <span style={{ minWidth: '90px', textAlign: 'right', fontWeight: 700, fontSize: '14px', marginLeft: '6px', color: group.mtm !== 0 ? (group.mtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent', opacity: group.terminated ? 0.6 : 1 }}>
-                {group.mtm !== 0 ? `${group.mtm >= 0 ? '+' : ''}₹${group.mtm.toLocaleString('en-IN')}` : ''}
-              </span>
-            </div>
-          </div>
-
-          <div style={{ border: 'var(--glass-border)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
-            <table className="staax-table">
-              <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-              <thead><tr>{HDRS.map(h => <th key={h}>{h}</th>)}</tr></thead>
-              <tbody>{buildRows(group.legs).map(({ leg, isChild }) => <LegRow key={leg.id} leg={leg} isChild={isChild} liveLtp={leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined} onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })} />)}</tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+        <div style={{ height: '24px' }} />
       </div>{/* end scroll zone */}
 
-      {/* SYNC Modal */}
+      {/* ── SYNC Modal ── */}
       {showSync !== null && (
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '380px' }}>
@@ -822,8 +992,7 @@ export default function OrdersPage() {
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-ghost" onClick={() => setShowSync(null)}>Cancel</button>
-              <button className="btn btn-primary"
-                disabled={syncLoading} onClick={() => doSync(showSync)}>
+              <button className="btn btn-primary" disabled={syncLoading} onClick={() => doSync(showSync)}>
                 {syncLoading ? '🔄 Fetching from broker...' : '🔗 Sync Order'}
               </button>
             </div>
@@ -831,7 +1000,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Exit Price Correction Modal */}
+      {/* ── Exit Price Correction Modal ── */}
       {editExit && (
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '320px' }}>
@@ -846,8 +1015,7 @@ export default function OrdersPage() {
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-ghost" onClick={() => setEditExit(null)}>Cancel</button>
-              <button className="btn btn-primary"
-                disabled={exitSaving} onClick={doCorrectExit}>
+              <button className="btn btn-primary" disabled={exitSaving} onClick={doCorrectExit}>
                 {exitSaving ? 'Saving...' : '✅ Save'}
               </button>
             </div>
@@ -855,7 +1023,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Strategy popup modal — FIX 6 */}
+      {/* ── Strategy popup modal ── */}
       {algoPopup && (() => {
         const d = algoPopup.data
         const legs: any[] = Array.isArray(d?.legs) ? d.legs : []
@@ -876,7 +1044,6 @@ export default function OrdersPage() {
         return (
           <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setAlgoPopup(null) }}>
             <div className="modal-box" style={{ maxWidth: '600px', width: '95vw', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
-              {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   <div style={{ fontWeight: 700, fontSize: '17px' }}>{algoPopup.algoName}</div>
@@ -893,67 +1060,27 @@ export default function OrdersPage() {
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>Failed to load strategy details</div>
               ) : (
                 <div className="no-scrollbar" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {/* Section 1 — Schedule */}
                   {hasSchedule && (
                     <div>
                       <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Schedule</div>
                       <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: '18px' }}>
-                        {d.entry_type && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry Type</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600 }}>{d.entry_type}</div>
-                          </div>
-                        )}
-                        {d.strategy_mode && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Strategy</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize' }}>{d.strategy_mode}</div>
-                          </div>
-                        )}
-                        {d.entry_time && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--indigo)' }}>{d.entry_time}</div>
-                          </div>
-                        )}
-                        {d.exit_time && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Exit</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{d.exit_time}</div>
-                          </div>
-                        )}
-                        {d.next_day_exit_time && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Next Day Exit</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{d.next_day_exit_time}</div>
-                          </div>
-                        )}
+                        {d.entry_type && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry Type</div><div style={{ fontSize: '12px', fontWeight: 600 }}>{d.entry_type}</div></div>}
+                        {d.strategy_mode && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Strategy</div><div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize' }}>{d.strategy_mode}</div></div>}
+                        {d.entry_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--indigo)' }}>{d.entry_time}</div></div>}
+                        {d.exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{d.exit_time}</div></div>}
+                        {d.next_day_exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Next Day Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{d.next_day_exit_time}</div></div>}
                       </div>
                     </div>
                   )}
-
-                  {/* Section 2 — Risk */}
                   {hasRisk && (
                     <div>
                       <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Risk</div>
                       <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px 14px', display: 'flex', gap: '24px' }}>
-                        {d.mtm_sl != null && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Stop Loss</div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--red)' }}>₹{Math.abs(d.mtm_sl).toLocaleString('en-IN')}</div>
-                          </div>
-                        )}
-                        {d.mtm_tp != null && (
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Target</div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green)' }}>₹{d.mtm_tp.toLocaleString('en-IN')}</div>
-                          </div>
-                        )}
+                        {d.mtm_sl != null && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Stop Loss</div><div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--red)' }}>₹{Math.abs(d.mtm_sl).toLocaleString('en-IN')}</div></div>}
+                        {d.mtm_tp != null && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Target</div><div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green)' }}>₹{d.mtm_tp.toLocaleString('en-IN')}</div></div>}
                       </div>
                     </div>
                   )}
-
-                  {/* Section 3 — Legs table */}
                   {legs.length > 0 && (
                     <div>
                       <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Legs ({legs.length})</div>
@@ -961,12 +1088,7 @@ export default function OrdersPage() {
                         <table className="staax-table" style={{ width: '100%' }}>
                           <thead>
                             <tr>
-                              <th>#</th>
-                              <th>Underlying</th>
-                              <th>Dir</th>
-                              <th>Expiry</th>
-                              <th>Strike</th>
-                              <th>Lots</th>
+                              <th>#</th><th>Underlying</th><th>Dir</th><th>Expiry</th><th>Strike</th><th>Lots</th>
                               {hasSL && <th>SL</th>}
                               {hasTP && <th>TP</th>}
                             </tr>
@@ -976,9 +1098,7 @@ export default function OrdersPage() {
                               <tr key={i}>
                                 <td style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{leg.leg_number ?? i + 1}</td>
                                 <td style={{ fontSize: '11px', fontWeight: 600 }}>{leg.underlying || '—'}</td>
-                                <td style={{ fontSize: '11px', fontWeight: 700, color: (leg.direction || '').toUpperCase() === 'BUY' ? 'var(--green)' : 'var(--red)' }}>
-                                  {(leg.direction || '').toUpperCase() || '—'}
-                                </td>
+                                <td style={{ fontSize: '11px', fontWeight: 700, color: (leg.direction || '').toUpperCase() === 'BUY' ? 'var(--green)' : 'var(--red)' }}>{(leg.direction || '').toUpperCase() || '—'}</td>
                                 <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{leg.expiry || '—'}</td>
                                 <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{leg.strike_type || '—'}</td>
                                 <td style={{ fontSize: '11px' }}>{leg.lots ?? '—'}</td>
@@ -1002,6 +1122,7 @@ export default function OrdersPage() {
         )
       })()}
 
+      {/* ── Confirm Modal ── */}
       {modal && (() => {
         const mc = getModalContent()
         if (!mc) return null
@@ -1012,6 +1133,7 @@ export default function OrdersPage() {
           </ConfirmModal>
         )
       })()}
+
     </div>
   )
 }

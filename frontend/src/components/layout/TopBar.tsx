@@ -103,7 +103,7 @@ export default function TopBar() {
 
         {/* Exit to LIFEX — replaces sidebar logout */}
         <button
-          onClick={logout}
+          onClick={() => { logout(); window.location.href = 'http://localhost:3000' }}
           title="Exit to LIFEX"
           style={{
             display:'flex', alignItems:'center', justifyContent:'center',

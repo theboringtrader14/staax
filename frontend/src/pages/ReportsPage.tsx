@@ -1,6 +1,7 @@
 import { useStore } from '@/store'
 import { reportsAPI } from '@/services/api'
 import { useState, useEffect } from 'react'
+import { StaaxSelect } from '@/components/StaaxSelect'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 const MONTHS_FY=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
@@ -56,22 +57,27 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
       </div>
       {hasRealData&&total>0&&<div style={{height:'3px',borderRadius:'2px',background:'var(--bg-border)',marginBottom:'6px',overflow:'hidden',display:'flex',flexShrink:0}}><div style={{width:`${(winDays/total)*100}%`,height:'100%',background:'var(--green)'}}/><div style={{width:`${(lossDays/total)*100}%`,height:'100%',background:'var(--red)'}}/></div>}
       {!hasRealData&&!isFutureMonth&&<div style={{height:'3px',marginBottom:'6px',flexShrink:0}}/>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'1px',marginBottom:'4px',flexShrink:0}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'2px',marginBottom:'4px',flexShrink:0}}>
         {['M','T','W','T','F'].map((d,i)=><div key={i} style={{textAlign:'center',fontSize:'7px',color:'var(--text-dim)',fontWeight:700}}>{d}</div>)}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px',flex:1,alignContent:'start'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'2px',flex:1,alignContent:'start'}}>
         {padded.map((day,i)=>{
-          if(!day) return <div key={i} style={{width:10,height:10}}/>
+          if(!day) return <div key={i} style={{aspectRatio:'1',minWidth:'16px',minHeight:'16px'}}/>
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
           const pnl=calendarData[dateKey]??null
           const isFuture=new Date(year,month-1,day)>today
+          const bg=pnl!==null
+            ? pnl>0
+              ? `rgba(34,221,136,${Math.min(0.8,Math.abs(pnl)/500*0.6+0.15)})`
+              : `rgba(255,68,68,${Math.min(0.8,Math.abs(pnl)/500*0.6+0.15)})`
+            : 'rgba(255,255,255,0.04)'
           return(
-            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'2px 0'}}>
-              <div style={{width:10,height:10,borderRadius:'3px',
-                background:pnl!==null?(pnl>0?'var(--green)':'var(--red)'):'var(--bg-border)',
-                opacity:isFuture?0.1:pnl!==null?0.85:0.25,
-              }}/>
-            </div>
+            <div key={i} style={{
+              aspectRatio:'1',minWidth:'16px',minHeight:'16px',
+              borderRadius:'3px',
+              background:isFuture?'rgba(255,255,255,0.02)':bg,
+              opacity:isFuture?0.1:1,
+            }}/>
           )
         })}
       </div>
@@ -192,20 +198,25 @@ export default function ReportsPage(){
     <div>
       <div className="page-header">
         <div>
-          <h1 style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800}}>Reports</h1>
+          <h1 style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800,color:'var(--ox-radiant)'}}>Reports</h1>
           <p style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
             Performance analytics ·{' '}
-            <span style={{fontSize:'10px',fontWeight:700,padding:'2px 6px',borderRadius:'4px',background:isPractixMode?'rgba(215,123,18,0.15)':'rgba(34,221,136,0.12)',color:isPractixMode?'var(--accent-amber)':'var(--sem-long)',border:isPractixMode?'0.5px solid rgba(215,123,18,0.3)':'0.5px solid rgba(34,221,136,0.25)'}}>
-              {isPractixMode?'PRACTIX':'LIVE'}
+            <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize:'10px', padding:'2px 8px' }}>
+              {isPractixMode ? 'PRACTIX' : 'LIVE'}
             </span>
           </p>
         </div>
         <div className="page-header-actions">
-          <select className="staax-select" value={fy} onChange={e=>setFy(e.target.value)} style={{width:'120px'}}>
-            <option value="2025-26">FY 2025-26</option>
-            <option value="2024-25">FY 2024-25</option>
-            <option value="2023-24">FY 2023-24</option>
-          </select>
+          <StaaxSelect
+            value={fy}
+            onChange={setFy}
+            options={[
+              { value: '2025-26', label: 'FY 2025-26' },
+              { value: '2024-25', label: 'FY 2024-25' },
+              { value: '2023-24', label: 'FY 2023-24' },
+            ]}
+            width="130px"
+          />
           <div style={{display:'flex',gap:'6px'}}>
             <button className="btn btn-ghost" style={{fontSize:'11px'}} disabled={downloading} onClick={()=>handleDownload('csv')}>{downloading?'⏳':'⬇'} CSV</button>
             <button className="btn btn-ghost" style={{fontSize:'11px'}} disabled={downloading} onClick={()=>handleDownload('excel')}>⬇ Excel</button>
@@ -216,7 +227,7 @@ export default function ReportsPage(){
       {/* Top widgets — 4 columns: FY P&L (wider), Trades, Win Rate, Day P&L */}
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr',gap:'12px',marginBottom:'12px'}}>
         {/* FY P&L */}
-        <div className="card card-stat" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #22DD88',
+        <div className="card card-stat cloud-fill" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderLeft:'3px solid #22DD88',
           '--stat-rgb': totalPnl>=0?'16,185,129':'239,68,68',
           boxShadow: `inset 0 1px 0 rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.25), 0 0 22px rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.2), 0 6px 24px rgba(0,0,0,0.5)`,
         } as React.CSSProperties} onClick={()=>setChartModal(true)}>
@@ -254,7 +265,7 @@ export default function ReportsPage(){
         </div>
 
         {/* Total Trades */}
-        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #FF6B00',
+        <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden', borderLeft:'3px solid #FF6B00',
           '--stat-rgb': '255,107,0',
           boxShadow: 'inset 0 1px 0 rgba(255,107,0,0.25), 0 0 20px rgba(255,107,0,0.18), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
@@ -269,7 +280,7 @@ export default function ReportsPage(){
         </div>
 
         {/* Win Rate */}
-        <div className="card card-stat" style={{maxHeight:'127px', overflow:'hidden', borderTop:'2px solid #CC4400',
+        <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden', borderLeft:'3px solid #22DD88',
           '--stat-rgb': '204,68,0',
           boxShadow: 'inset 0 1px 0 rgba(204,68,0,0.25), 0 4px 24px rgba(0,0,0,0.55)',
         } as React.CSSProperties}>
@@ -347,7 +358,7 @@ export default function ReportsPage(){
       )}
 
       {/* FY Calendar */}
-      <div className="card" style={{marginBottom:'12px', overflow:'hidden'}}>
+      <div className="card cloud-fill" style={{marginBottom:'12px', overflow:'hidden'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>
@@ -372,8 +383,8 @@ export default function ReportsPage(){
             {[['fy','FY'],['month','Month'],['date','Date'],['custom','Custom']].map(([v,l])=>(
               <button key={v} onClick={()=>setMetricFilter(v)} className={`chip ${metricFilter===v?'chip-active':'chip-inactive'}`} style={{height:'32px',padding:'0 12px',fontSize:'11px'}}>{l}</button>
             ))}
-            {metricFilter==='fy'&&(<select className="staax-select" value={metricFy} onChange={e=>setMetricFy(e.target.value)} style={{width:'108px',fontSize:'11px'}}><option value="2025-26">FY 2025-26</option><option value="2024-25">FY 2024-25</option><option value="2023-24">FY 2023-24</option></select>)}
-            {metricFilter==='month'&&(<select className="staax-select" value={metricMonth} onChange={e=>setMetricMonth(e.target.value)} style={{width:'90px',fontSize:'11px'}}>{MONTHS_FY.map(m=><option key={m}>{m}</option>)}</select>)}
+            {metricFilter==='fy'&&(<StaaxSelect value={metricFy} onChange={setMetricFy} options={[{value:'2025-26',label:'FY 2025-26'},{value:'2024-25',label:'FY 2024-25'},{value:'2023-24',label:'FY 2023-24'}]} width="120px"/>)}
+            {metricFilter==='month'&&(<StaaxSelect value={metricMonth} onChange={setMetricMonth} options={MONTHS_FY.map(m=>({value:m,label:m}))} width="100px"/>)}
             {metricFilter==='date'&&(<input type="date" className="staax-input" value={metricDate} onChange={e=>setMetricDate(e.target.value)} style={{width:'140px',fontSize:'11px',colorScheme:'dark'} as any}/>)}
             {metricFilter==='custom'&&(
               <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
@@ -403,7 +414,7 @@ export default function ReportsPage(){
                 const cumVal=algoMetrics.reduce((s:number,a:any)=>s+(a[row.key]||0),0)
                 const isPct=row.key==='win_pct'||row.key==='loss_pct'
                 const isCurrency=row.key==='total_pnl'||row.key==='max_profit'||row.key==='max_loss'
-                const fmt=(n:number)=>isPct?(Math.abs(n).toFixed(1)+"%"):isCurrency?((n<0?"-":"")+"₹"+Math.abs(n).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(n)))
+                const fmt=(n:number)=>isPct?(Math.abs(n*(Math.abs(n)<=1?100:1)).toFixed(1)+"%"):isCurrency?((n<0?"-":"")+"₹"+Math.abs(n).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(n)))
                 const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
                 // For currency rows: compute max abs value for proportional bar width
                 const maxAbs = isCurrency
@@ -417,7 +428,7 @@ export default function ReportsPage(){
                       const barPct=isCurrency?Math.round(Math.abs(val||0)/maxAbs*100):0
                       const isNeg=(val||0)<0
                       return(
-                        <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',position:'relative'}}>
+                        <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',position:'relative',textAlign:(isCurrency||isPct)?'center' as const:'left' as const}}>
                           {isCurrency&&barPct>0&&(
                             <div style={{
                               position:'absolute',bottom:0,left:0,height:'3px',
@@ -430,7 +441,7 @@ export default function ReportsPage(){
                         </td>
                       )
                     })}
-                    <td style={{color:'var(--indigo)',fontWeight:700,position:'sticky',right:0,background:'#0A0A0B',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px'}}>{cumFmt}</td>
+                    <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',position:'sticky',right:0,background:'#0A0A0B',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px',textAlign:'center' as const}}>{cumFmt}</td>
                   </tr>
                 )
               })}

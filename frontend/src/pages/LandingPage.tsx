@@ -361,17 +361,6 @@ export default function LandingPage() {
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <button
-              onClick={handleEnter}
-              style={{
-                background: '#6366f1', border: 'none', color: '#fff',
-                borderRadius: '8px', padding: '0 24px', height: '40px',
-                fontSize: '13px', fontWeight: 700, cursor: 'pointer',
-                boxShadow: '0 0 24px rgba(99,102,241,0.5)',
-                transition: 'all 0.2s',
-              }}
-              className="landing-cta-primary"
-            >Enter LIFEX →</button>
-            <button
               onClick={() => document.getElementById('roadmap')?.scrollIntoView({ behavior: 'smooth' })}
               style={{
                 background: 'transparent', border: '1px solid rgba(99,102,241,0.25)',

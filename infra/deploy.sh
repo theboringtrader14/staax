@@ -1,31 +1,41 @@
 #!/bin/bash
-set -euo pipefail
+# LIFEX Platform — Deployment Script
+# Usage: ./infra/deploy.sh [staax|invex|all]
 
-echo "=== STAAX Deploy $(date) ==="
+set -e
 
-# 1. Pull latest code
-cd ~/staax
-git pull origin main
+EC2_HOST="ubuntu@13.202.164.243"
+EC2_KEY="~/.ssh/lifex-ec2.pem"  # Update with your actual key path
 
-# 2. Install any new Python deps
-cd backend
-source venv/bin/activate
-pip install -r requirements.txt --quiet
+STAAX_DIST="/Users/bjkarthi/STAXX/staax/frontend/dist"
+INVEX_DIST="/Users/bjkarthi/STAXX/invex/frontend/dist"
 
-# 3. Run migrations
-alembic upgrade head
+deploy_staax() {
+    echo "→ Building STAAX frontend..."
+    cd /Users/bjkarthi/STAXX/staax/frontend && npm run build
+    echo "→ Deploying STAAX to EC2..."
+    rsync -avz --delete "$STAAX_DIST/" "$EC2_HOST:/var/www/staax/dist/"
+    rsync -avz --delete "$STAAX_DIST/" "$EC2_HOST:/var/www/lifex/dist/"
+    echo "✓ STAAX deployed"
+}
 
-# 4. Restart backend
-sudo systemctl restart staax-backend
-sleep 3
-sudo systemctl status staax-backend --no-pager | grep Active
+deploy_invex() {
+    echo "→ Building INVEX frontend..."
+    cd /Users/bjkarthi/STAXX/invex/frontend && npm run build
+    echo "→ Deploying INVEX to EC2..."
+    rsync -avz --delete "$INVEX_DIST/" "$EC2_HOST:/var/www/invex/dist/"
+    echo "✓ INVEX deployed"
+}
 
-# 5. Build frontend
-cd ../frontend
-npm install --silent
-npm run build
+case "${1:-all}" in
+    staax) deploy_staax ;;
+    invex) deploy_invex ;;
+    all)   deploy_staax; deploy_invex ;;
+    *)     echo "Usage: $0 [staax|invex|all]"; exit 1 ;;
+esac
 
-# 6. Reload nginx
-sudo systemctl reload nginx
-
-echo "=== Deploy complete ==="
+echo ""
+echo "✅ Deployment complete"
+echo "   LIFEX:  https://lifex.in"
+echo "   STAAX:  https://app.lifex.in"
+echo "   INVEX:  https://invex.lifex.in"

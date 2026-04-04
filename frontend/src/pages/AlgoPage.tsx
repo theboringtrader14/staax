@@ -413,7 +413,6 @@ export default function AlgoPage() {
   const [entryDelayScope, setEntryDelayScope] = useState('all')
   const [exitDelay, setExitDelay]           = useState('0')
   const [exitDelayScope, setExitDelayScope]   = useState('all')
-  const [orderType, setOrderType]   = useState('MARKET')
   const [errorMargin, setErrorMargin] = useState(true)
   const [errorEntry, setErrorEntry] = useState(true)
 
@@ -452,7 +451,7 @@ export default function AlgoPage() {
     if (!formLoadedRef.current) return
     setIsDirty(true)
   }, [algoName, stratMode, entryType, lotMult, entryTime, orbEnd, exitTime, dte, account,
-      mtmUnit, mtmSL, mtmTP, orderType, errorMargin, errorEntry, legs])
+      mtmUnit, mtmSL, mtmTP, errorMargin, errorEntry, legs])
 
   const [dragIdx, setDragIdx]       = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -489,7 +488,6 @@ export default function AlgoPage() {
         setMtmUnit(a.mtm_unit || 'amt')
         setMtmSL(a.mtm_sl != null ? String(a.mtm_sl) : '')
         setMtmTP(a.mtm_tp != null ? String(a.mtm_tp) : '')
-        setOrderType(a.order_type?.toUpperCase() || 'MARKET')
         if (Array.isArray(a.recurring_days) && a.recurring_days.length > 0) setRecurringDays(a.recurring_days)
         if (a.exit_on_margin_error  != null) setErrorMargin(!!a.exit_on_margin_error)
         if (a.exit_on_entry_failure != null) setErrorEntry(!!a.exit_on_entry_failure)
@@ -607,7 +605,6 @@ export default function AlgoPage() {
     account_id:          account,
     strategy_mode:       stratMode,
     entry_type:          entryType,
-    order_type:          orderType.toLowerCase(),
     base_lot_multiplier: parseInt(lotMult) || 1,
     entry_time:          entryTime,
     exit_time:           exitTime,
@@ -780,10 +777,6 @@ export default function AlgoPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Strategy</label>
             <StaaxSelect value={stratMode} onChange={setStratMode} options={[{ value: 'intraday', label: 'Intraday' }, { value: 'btst', label: 'BTST' }, { value: 'stbt', label: 'STBT' }, { value: 'positional', label: 'Positional' }]} width="118px" />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Type</label>
-            <StaaxSelect value={orderType} onChange={setOrderType} options={[{ value: 'MARKET', label: 'MARKET' }, { value: 'LIMIT', label: 'LIMIT' }]} width="100px" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: 'auto' }}>
             <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</label>

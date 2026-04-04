@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { algosAPI, gridAPI, holidaysAPI } from '@/services/api'
+import { algosAPI, gridAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
-const WEEKENDS = ['SAT','SUN']
 const ALL_DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN']
 const DAY_LBL  = ['M','T','W','T','F','S','S']
 const ABBR_TO_UNDERLYING: Record<string,string> = {
@@ -43,16 +42,6 @@ interface Algo {
   strategy_mode?: string
 }
 
-// ── Status config ──────────────────────────────────────────────────────────────
-const SC: Record<CS,{label:string;col:string;bg:string;pct:number}> = {
-  no_trade:     {label:'No Trade', col:'#4A4A58', bg:'rgba(74,74,88,0.10)',    pct:0},
-  waiting:      {label:'Waiting',  col:'#FFD700', bg:'rgba(255,215,0,0.12)',   pct:15},
-  algo_active:  {label:'Active',   col:'#FF6B00', bg:'rgba(255,107,0,0.14)',   pct:30},
-  order_pending:{label:'Pending',  col:'#FFD700', bg:'rgba(255,215,0,0.12)',   pct:50},
-  open:         {label:'Open',     col:'#22DD88', bg:'rgba(34,221,136,0.12)',  pct:75},
-  algo_closed:  {label:'Closed',   col:'#22DD88', bg:'rgba(34,221,136,0.10)', pct:100},
-  error:        {label:'Error',    col:'#FF4444', bg:'rgba(255,68,68,0.14)',   pct:60},
-}
 
 // ── Status bar (left strip) ─────────────────────────────────────────────────────
 const STATUS_BAR: Record<CS,{color:string;glow:string}> = {
@@ -129,13 +118,15 @@ export default function GridPage() {
   const [archConfirm,   setArchConfirm]  = useState<string|null>(null)
   const [opError,       setOpError]      = useState('')
   const [autoFillToast, setAutoFillToast] = useState('')
-  const [holidayDates,  setHolidayDates] = useState<Set<string>>(new Set())
-  const [tick,          setTick]         = useState(0)
-  const [rmModal,       setRmModal]      = useState<{algoId:string;day:string}|null>(null)
   const [cardMults,       setCardMults]       = useState<Record<string,number>>({})
   const [expandedId,      setExpandedId]      = useState<string|null>(null)
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [dayModal, setDayModal] = useState<{
+    type: 'sq_confirm' | 'entry_passed' | 'orb_closed'
+    algo: Algo
+    day: string
+  } | null>(null)
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -243,13 +234,6 @@ export default function GridPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  useEffect(() => {
-    holidaysAPI.list(new Date().getFullYear())
-      .then(res => { const fo = (res.data||[]).filter((h:any) => h.segment==='fo'); setHolidayDates(new Set(fo.map((h:any) => h.date))) })
-      .catch(() => {})
-  }, [])
-
-  useEffect(() => { const t = setInterval(() => setTick(v => v+1), 60000); return () => clearInterval(t) }, [])
 
   // ── Deploy a day (day pill click) ────────────────────────────────────────────
   const deployDay = async (algoId: string, day: string) => {
@@ -269,23 +253,64 @@ export default function GridPage() {
   }
 
   // ── Remove cell ──────────────────────────────────────────────────────────────
-  const rmCell = (algoId: string, day: string) => {
-    const st = grid[algoId]?.[day]?.status
-    if (st==='algo_active'||st==='waiting'||st==='open'||st==='order_pending') { flashError('Cannot remove an active algo from this day'); return }
-    setRmModal({ algoId, day })
-  }
-
-  const doRemove = async (algoId: string, day: string, removeRecurring: boolean) => {
+  const removeDay = async (algoId: string, day: string) => {
     const cell = grid[algoId]?.[day]
-    setRmModal(null)
+    const st = cell?.status
+    if (st==='algo_active'||st==='waiting'||st==='open'||st==='order_pending') { flashError('Cannot remove an active algo from this day'); return }
     setGrid(g => { const u={...g[algoId]}; delete u[day]; return { ...g, [algoId]:u } })
+    setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays: x.recurringDays.filter(d => d !== day) } : x))
     if (cell?.gridEntryId) {
       try {
-        const res = await gridAPI.remove(cell.gridEntryId, removeRecurring)
-        if (removeRecurring && Array.isArray(res.data?.algo_recurring_days))
+        const res = await gridAPI.remove(cell.gridEntryId, true)
+        if (Array.isArray(res.data?.algo_recurring_days))
           setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
-      } catch { setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:cell } })); flashError('Remove failed') }
+      } catch { setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:cell } })); setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:[...x.recurringDays, day] } : x)); flashError('Remove failed') }
     }
+  }
+
+  // ── Smart day toggle helpers ─────────────────────────────────────────────────
+  const TRADING_DAYS = ['MON','TUE','WED','THU','FRI']
+
+  const getISTHour = () =>
+    Number(new Date().toLocaleString('en-US', { timeZone:'Asia/Kolkata', hour:'numeric', hour12:false }))
+
+  const getISTTime = () =>
+    new Date().toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', hour12:false })
+
+  const handleDayUncheck = (algo: Algo, day: string) => {
+    const isTradeDay    = TRADING_DAYS.includes(day)
+    const isMarketHours = getISTHour() >= 9 && getISTHour() < 16
+    const cell          = grid[algo.id]?.[day]
+    const st            = cell?.status
+
+    if (!isTradeDay) { removeDay(algo.id, day); return }
+    if (!isMarketHours) {
+      removeDay(algo.id, day)
+      setAutoFillToast(`Algo will not run on ${day}s going forward`)
+      setTimeout(() => setAutoFillToast(''), 3000)
+      return
+    }
+    if (st === 'open' || st === 'order_pending') {
+      setDayModal({ type:'sq_confirm', algo, day }); return
+    }
+    removeDay(algo.id, day)
+  }
+
+  const handleDayCheck = (algo: Algo, day: string) => {
+    const isTradeDay    = TRADING_DAYS.includes(day)
+    const isMarketHours = getISTHour() >= 9 && getISTHour() < 16
+    const nowIST        = getISTTime()
+    const entryPassed   = nowIST >= (algo.et || '09:16').slice(0, 5)
+
+    if (!isTradeDay) {
+      deployDay(algo.id, day)
+      setAutoFillToast(`Note: ${day} is not a standard trading day`)
+      setTimeout(() => setAutoFillToast(''), 3000)
+      return
+    }
+    if (!isMarketHours || !entryPassed) { deployDay(algo.id, day); return }
+    if (algo.entry_type === 'orb') { setDayModal({ type:'orb_closed', algo, day }); return }
+    setDayModal({ type:'entry_passed', algo, day })
   }
 
   // ── Multiplier ────────────────────────────────────────────────────────────────
@@ -432,7 +457,7 @@ export default function GridPage() {
 
       {/* ── Archive panel ──────────────────────────────────────────────────── */}
       {showArch && (
-        <div style={{ flexShrink:0, background:'rgba(245,158,11,0.07)', border:'0.5px solid rgba(245,158,11,0.22)', borderRadius:'10px', padding:'14px 16px', marginBottom:'10px' }}>
+        <div className="cloud-fill" style={{ flexShrink:0, background:'rgba(245,158,11,0.07)', border:'0.5px solid rgba(245,158,11,0.22)', borderRadius:'10px', padding:'14px 16px', marginBottom:'10px' }}>
           <div style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-display)' }}>Archived Algos</div>
           {loading
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Loading…</span>
@@ -532,7 +557,8 @@ export default function GridPage() {
                             {/* Status strip — full card height */}
                             <div style={{ width:'4px', flexShrink:0, alignSelf:'stretch',
                               background:bar.color, borderRadius:'2px',
-                              boxShadow:`0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
+                              boxShadow:`0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}`,
+                              animation: st === 'open' ? 'statusPulseGreen 2s ease-in-out infinite' : st === 'algo_active' ? 'statusPulseOrange 2s ease-in-out infinite' : 'none' }}/>
 
                             {/* Card row body */}
                             <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'20px 24px' }}>
@@ -599,46 +625,23 @@ export default function GridPage() {
                               {/* ── Day pills M T W T F S S ── */}
                               <div style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', flexShrink:0, justifyContent:'center' }}>
                                 {ALL_DAYS.map((day, i) => {
-                                  const isDeployed = !!grid[algo.id]?.[day]
-                                  const cell       = grid[algo.id]?.[day]
-                                  const isToday    = day === todayDay
-                                  const isWeekend  = WEEKENDS.includes(day)
-                                  const isHoliday  = weekDates[day] ? holidayDates.has(weekDates[day]) : false
-                                  const isMissed   = cell?.status==='waiting' && isToday && !!cell.entry && tick>=0 && (() => {
-                                    const now = new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:false})
-                                    return now >= cell.entry.slice(0,5)
-                                  })()
-                                  const deployedSt = cell ? SC[cell.status] : null
+                                  const isActive = algo.recurringDays.includes(day)
                                   return (
                                     <button key={day}
-                                      onClick={e => { e.stopPropagation(); isDeployed ? rmCell(algo.id, day) : deployDay(algo.id, day) }}
-                                      title={`${day}${isHoliday?' (Holiday)':''}${isDeployed ? ` · ${deployedSt?.label||'Active'} · click to remove` : ' · click to deploy'}`}
+                                      onClick={e => { e.stopPropagation(); isActive ? handleDayUncheck(algo, day) : handleDayCheck(algo, day) }}
+                                      title={`${day} · ${isActive ? 'click to remove' : 'click to deploy'}`}
                                       style={{
-                                        width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer', position:'relative',
-                                        fontFamily:'var(--font-display)', fontSize:'10px', fontWeight:600,
+                                        width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
+                                        fontFamily:'var(--font-display)', fontSize:'10px',
                                         display:'flex', alignItems:'center', justifyContent:'center',
                                         transition:'all 0.15s ease', flexShrink:0,
-                                        border: isDeployed ? '0.5px solid rgba(255,107,0,0.60)'
-                                          : isToday   ? '0.5px solid rgba(255,107,0,0.45)'
-                                          : isHoliday ? '0.5px solid rgba(245,158,11,0.25)'
-                                          : isWeekend ? '0.5px solid rgba(255,255,255,0.05)'
-                                          : '0.5px solid rgba(255,255,255,0.09)',
-                                        background: isDeployed ? (isMissed ? 'rgba(245,158,11,0.18)' : 'rgba(255,107,0,0.20)')
-                                          : isHoliday ? 'rgba(245,158,11,0.06)' : 'transparent',
-                                        color: isDeployed ? (isMissed ? 'var(--accent-amber)' : '#fff')
-                                          : isToday   ? 'rgba(255,107,0,0.75)'
-                                          : isHoliday ? 'var(--accent-amber)'
-                                          : isWeekend ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.40)',
-                                        opacity: isHoliday && !isDeployed ? 0.5 : 1,
-                                        boxShadow: isDeployed ? '0 0 8px rgba(255,107,0,0.18)' : 'none',
+                                        border: isActive ? '0.5px solid rgba(255,107,0,0.60)' : '0.5px solid rgba(255,255,255,0.12)',
+                                        background: isActive ? 'rgba(255,107,0,0.20)' : 'transparent',
+                                        color: isActive ? '#FF6B00' : 'rgba(255,255,255,0.25)',
+                                        fontWeight: isActive ? 700 : 400,
+                                        boxShadow: 'none',
                                       }}>
                                       {DAY_LBL[i]}
-                                      {isDeployed && deployedSt && deployedSt.col !== SC.algo_active.col && (
-                                        <span style={{ position:'absolute', bottom:'1px', right:'1px', width:'5px', height:'5px', borderRadius:'50%', background:deployedSt.col }}/>
-                                      )}
-                                      {isMissed && (
-                                        <span style={{ position:'absolute', top:'0', right:'0', width:'6px', height:'6px', borderRadius:'50%', background:'var(--accent-amber)' }}/>
-                                      )}
                                     </button>
                                   )
                                 })}
@@ -766,26 +769,82 @@ export default function GridPage() {
       </div>
 
       {/* ── Remove cell modal ──────────────────────────────────────────────── */}
-      {rmModal && (() => {
-        const algo = algos.find(x => x.id===rmModal.algoId)
-        const isRecurring = algo?.recurringDays.includes(rmModal.day)
-        return (
+      {/* ── Day action modal ─────────────────────────────────────────────── */}
+      {dayModal && (() => {
+        const { type, algo: ma, day: md } = dayModal
+        const close = () => setDayModal(null)
+
+        if (type === 'sq_confirm') return (
           <div className="modal-overlay">
-            <div className="modal-box" style={{ maxWidth:'360px' }}>
-              <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'8px' }}>Remove {algo?.name} from {rmModal.day}?</div>
+            <div className="modal-box" style={{ maxWidth:'380px' }}>
+              <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'8px' }}>{ma.name} is OPEN on {md}</div>
               <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'18px' }}>
-                {isRecurring
-                  ? <>This algo recurs every <strong>{rmModal.day}</strong>. Remove just this week, or stop it recurring?</>
-                  : <>Remove this entry from {rmModal.day}?</>}
+                This algo has an open position today. Square off today's position and remove {md}?
               </div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
-                <button className="btn btn-ghost" onClick={() => setRmModal(null)}>Cancel</button>
-                <button className="btn btn-ghost" onClick={() => doRemove(rmModal.algoId, rmModal.day, false)}>Just Today</button>
-                {isRecurring && <button className="btn btn-danger" onClick={() => doRemove(rmModal.algoId, rmModal.day, true)}>Remove Recurring</button>}
+                <button className="btn btn-ghost" onClick={close}>Cancel</button>
+                <button className="btn btn-ghost" onClick={() => { close(); removeDay(ma.id, md) }}>Remove going forward</button>
+                <button className="btn btn-danger" onClick={async () => {
+                  close()
+                  try { await algosAPI.sq(ma.id) } catch { flashError('Square off failed') }
+                  removeDay(ma.id, md)
+                }}>SQ &amp; Remove</button>
               </div>
             </div>
           </div>
         )
+
+        if (type === 'orb_closed') return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth:'360px' }}>
+              <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'8px' }}>ORB window closed</div>
+              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'18px' }}>
+                Cannot trigger an ORB algo after the ORB window has closed. Enable for future {md}s only?
+              </div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="btn btn-ghost" onClick={close}>Cancel</button>
+                <button className="btn btn-ghost" onClick={async () => {
+                  close()
+                  try {
+                    const res = await algosAPI.update(ma.id, { recurring_days: [...ma.recurringDays, md] })
+                    if (Array.isArray(res.data?.recurring_days))
+                      setAlgos(a => a.map(x => x.id===ma.id ? { ...x, recurringDays:res.data.recurring_days } : x))
+                  } catch { flashError('Update failed') }
+                }}>Enable for future only</button>
+              </div>
+            </div>
+          </div>
+        )
+
+        if (type === 'entry_passed') return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth:'380px' }}>
+              <div style={{ fontWeight:700, fontSize:'15px', marginBottom:'8px' }}>Entry time passed</div>
+              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'18px' }}>
+                Entry time ({ma.et}) has passed for today. Trade now immediately, or just enable for future {md}s?
+              </div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="btn btn-ghost" onClick={close}>Cancel</button>
+                <button className="btn btn-ghost" onClick={async () => {
+                  close()
+                  try {
+                    const res = await algosAPI.update(ma.id, { recurring_days: [...ma.recurringDays, md] })
+                    if (Array.isArray(res.data?.recurring_days))
+                      setAlgos(a => a.map(x => x.id===ma.id ? { ...x, recurringDays:res.data.recurring_days } : x))
+                  } catch { flashError('Update failed') }
+                }}>Enable for future only</button>
+                <button className="btn btn-ghost" onClick={async () => {
+                  close()
+                  await deployDay(ma.id, md)
+                  const today = weekDates[md]
+                  if (today) try { await gridAPI.triggerNow(ma.id, today) } catch { flashError('Trigger failed') }
+                }}>Trade Now</button>
+              </div>
+            </div>
+          </div>
+        )
+
+        return null
       })()}
 
       {/* ── Archive confirm modal ─────────────────────────────────────────── */}
