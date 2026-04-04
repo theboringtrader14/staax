@@ -3835,3 +3835,43 @@ Use these as source of truth for any future UI work.
 - INVEX: SIP backend wiring
 - INVEX: Fix Angel One API keys for live data
 - Server: Deploy all latest commits
+
+## Session Update — 2026-04-04
+
+### Commits This Session (STAAX)
+- b1f2543: Backend SL-Limit SEBI compliance
+- 80eb23e: Frontend UX overhaul (Orders/Grid/Dashboard/Reports) + Infra files
+- 268a927: Domain rename → lifexos.co.in + VITE_INVEX_URL env var
+- 0b00313: Batch 20 — SmartStream debug + recurring remove modal
+- 1ba4095: Living Spec update
+
+### Domain
+- lifexos.co.in purchased from Namecheap — ₹99 yr1, ₹725/yr renewal
+- DNS A records to add: @ staax invex api invex-api → 13.202.164.243
+- nginx config ready at infra/nginx-lifex.conf
+- SSL setup docs at infra/SSL_SETUP.md
+- Add to frontend/.env.production: VITE_INVEX_URL=https://invex.lifexos.co.in
+
+### Pages Status (STAAX v5.0)
+- Dashboard ✅ — FY P&L + equity curve from /reports/equity-curve
+- Smart Cards ✅ — instrument groups, expand, day pills, portal dropdown
+- AlgoPage ✅ — StaaxSelect, orange, cloud-fill, no order type field
+- Landing ✅ — cosmos, roadmap, live status, BUDGEX, lifexos.co.in URLs
+- Orders ✅ — MON-FRI tabs, instrument groups, sparklines, stats strip
+- Reports 🔄 — redesign in progress
+- Indicators ⏳ — not started
+
+### SEBI Compliance
+- SL-Limit hardcoded in algo_runner.py (order_type = "SL")
+- Angel One: STOPLOSS_LIMIT mapped in angelone.py
+- Zerodha: ORDER_TYPE_SL mapped in zerodha.py
+- Order Type removed from AlgoPage UI
+
+### Next Session Priorities
+1. DNS setup on Namecheap (add A records)
+2. Server deploy: git pull + nginx + certbot + SSL
+3. Reports page redesign completion
+4. Indicators page redesign
+5. INVEX SIP + Watchlist backend wiring
+6. Mom Test-1 PRACTIX test (April 7 — next trading day)
+7. Angel One API keys fix for INVEX
