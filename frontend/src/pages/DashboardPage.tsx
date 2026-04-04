@@ -1,6 +1,7 @@
 import { useStore } from '@/store'
 import { useState, useEffect, useRef } from 'react'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI } from '@/services/api'
+import { getCurrentFY } from '@/utils/fy'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
@@ -131,7 +132,7 @@ export default function DashboardPage() {
   }, [])
   useEffect(() => { systemAPI.stats(isPractixMode).then(r => setStats(r.data)).catch(() => {}) }, [isPractixMode])
   useEffect(() => {
-    reportsAPI.equityCurve({ fy: '2025-26', is_practix: isPractixMode })
+    reportsAPI.equityCurve({ fy: getCurrentFY(), is_practix: isPractixMode })
       .then((r: any) => setEquityCurveData(r.data?.data || []))
       .catch(() => {})
   }, [isPractixMode])

@@ -1,10 +1,10 @@
 import { useStore } from '@/store'
 import { reportsAPI } from '@/services/api'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { StaaxSelect } from '@/components/StaaxSelect'
+import { getCurrentFY, getFYOptions } from '@/utils/fy'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
-const MONTHS_FY=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
 const DAY_NAMES=['Mon','Tue','Wed','Thu','Fri']
 
 const METRIC_ROWS=[
@@ -23,7 +23,6 @@ function fyMonths(fy:string){
   return [4,5,6,7,8,9,10,11,12,1,2,3].map(m=>({month:m,year:m>=4?sy:sy+1,label:['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m],key:`${m}-${m>=4?sy:sy+1}`}))
 }
 
-const CARD_H=148
 
 function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number,year:number,label:string,selected:boolean,onToggle:()=>void,calendarData:Record<string,number>}){
   const today=new Date()
@@ -51,10 +50,10 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
       border:`0.5px solid ${selected?'rgba(255,107,0,0.65)':'rgba(255,107,0,0.22)'}`,
       boxShadow:selected?'0 0 20px rgba(255,107,0,0.20), 0 4px 24px rgba(0,0,0,0.55)':'0 4px 24px rgba(0,0,0,0.45)',
       backdropFilter:'blur(20px)',
-      borderRadius:'8px',padding:'12px 10px 14px 10px',
+      borderRadius:'8px',padding:'8px 10px 10px 10px',
       cursor:isFutureMonth||!hasRealData?'default':'pointer',
-      transition:'all 0.12s',height:`${CARD_H}px`,
-      overflow:'hidden',display:'flex',flexDirection:'column',
+      transition:'all 0.12s',
+      display:'flex',flexDirection:'column',
       opacity:isFutureMonth?0.35:1,
     }}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'4px',flexShrink:0}}>
@@ -63,10 +62,10 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
       </div>
       {hasRealData&&total>0&&<div style={{height:'3px',borderRadius:'2px',background:'var(--bg-border)',marginBottom:'6px',overflow:'hidden',display:'flex',flexShrink:0}}><div style={{width:`${(winDays/total)*100}%`,height:'100%',background:'var(--green)'}}/><div style={{width:`${(lossDays/total)*100}%`,height:'100%',background:'var(--red)'}}/></div>}
       {!hasRealData&&!isFutureMonth&&<div style={{height:'3px',marginBottom:'6px',flexShrink:0}}/>}
-      <div style={{display:'flex',gap:'2px',marginBottom:'4px',flexShrink:0}}>
+      <div style={{display:'flex',gap:'1px',marginBottom:'2px',flexShrink:0}}>
         {['M','T','W','T','F'].map((d,i)=><div key={i} style={{flex:1,textAlign:'center' as const,fontSize:'8px',color:'rgba(255,255,255,0.25)',fontFamily:'var(--font-mono)'}}>{d}</div>)}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'2px',flex:1,alignContent:'start'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'1px',alignContent:'start',width:'100%'}}>
         {padded.map((day,i)=>{
           if(!day) return <div key={i} style={{aspectRatio:'1'}}/>
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
@@ -99,17 +98,17 @@ function MonthDetail({month,year,calendarData}:{month:number,year:number,label:s
   const padded=[...Array(offset).fill(null),...tradingDays]
   return(
     <div style={{background:'var(--glass-bg)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',border:'0.5px solid rgba(255,107,0,0.35)',borderRadius:'8px',padding:'16px',marginTop:'12px'}}>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 40px)',gap:'4px',marginBottom:'4px'}}>
-        {['Mon','Tue','Wed','Thu','Fri'].map(d=><div key={d} style={{width:'40px',textAlign:'center',fontSize:'10px',color:'var(--text-dim)',fontWeight:600}}>{d}</div>)}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:'4px',marginBottom:'4px'}}>
+        {['Mon','Tue','Wed','Thu','Fri'].map(d=><div key={d} style={{textAlign:'center',fontSize:'10px',color:'var(--text-dim)',fontWeight:600}}>{d}</div>)}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 40px)',gap:'4px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:'4px'}}>
         {padded.map((day,i)=>{
           if(!day)return <div key={i}/>
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
           const pnl=calendarData[dateKey]??null
           const isFuture=new Date(year,month-1,day)>today
           return <div key={i} style={{
-            width: '40px', height: '40px',
+            minHeight: '44px',
             borderRadius: '6px',
             textAlign: 'center' as const,
             opacity: isFuture ? 0.2 : 1,
@@ -141,42 +140,43 @@ function MonthDetail({month,year,calendarData}:{month:number,year:number,label:s
 export default function ReportsPage(){
   const isPractixMode = useStore(s => s.isPractixMode)
   const activeAccount = useStore(s => s.activeAccount)
-  const [fy,setFy]=useState('2025-26')
+  const [fy,setFy]=useState(getCurrentFY())
   const [monthModal,setMonthModal]=useState<{month:number,year:number,label:string}|null>(null)
   const [metricFilter,setMetricFilter]=useState('fy')
-  const [metricFy,setMetricFy]=useState('2025-26')
-  const [metricMonth,setMetricMonth]=useState('Apr')
+  const [metricFy,setMetricFy]=useState(getCurrentFY())
+  const [metricMonth,setMetricMonth]=useState(()=>{const n=new Date();return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`})
+  const monthOptions=useMemo(()=>{const opts=[];const n=new Date();for(let i=0;i<24;i++){const d=new Date(n.getFullYear(),n.getMonth()-i,1);const val=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;const label=d.toLocaleString('en-IN',{month:'short',year:'numeric'});opts.push({value:val,label})}return opts},[])
   const [metricDate,setMetricDate]=useState('')
   const [metricFrom,setMetricFrom]=useState('')
   const [metricTo,setMetricTo]=useState('')
   const [downloading, setDownloading] = useState(false)
   const [closeHover, setCloseHover] = useState(false)
   const [algoMetrics, setAlgoMetrics] = useState<any[]>([])
+  const [fyMetrics, setFyMetrics] = useState<any[]>([])
   const [calendarData, setCalendarData] = useState<Record<string,number>>({})
   const [equityCurve, setEquityCurve] = useState<any[]>([])
   const [fyTotal, setFyTotal] = useState(0)
 
+  // FY-level metrics — always FY scope, drives summary cards
+  useEffect(() => {
+    const acctParam = activeAccount ? { account_id: activeAccount } : {}
+    reportsAPI.metrics({ fy, is_practix: isPractixMode, ...acctParam }).then(r => setFyMetrics(r.data?.metrics || [])).catch(() => {})
+  }, [fy, isPractixMode, activeAccount])
+
   useEffect(() => {
     // Derive date range from active metric filter
     let metricParams: Record<string, any> = { fy: metricFy }
-    if (metricFilter === 'month') {
-      // Map month name to number within the FY
-      const monthIdx = MONTHS_FY.indexOf(metricMonth)
-      const fyYear = parseInt(metricFy.split('-')[0])
-      // Apr-Dec use fyYear; Jan-Mar use fyYear+1
-      const mNum = monthIdx + 4  // Apr=4, May=5, ... Dec=12, Jan=13... need to wrap
-      const actualMonth = mNum > 12 ? mNum - 12 : mNum
-      const actualYear  = mNum > 12 ? fyYear + 1 : fyYear
-      const pad = (n: number) => String(n).padStart(2, '0')
-      const lastDay = new Date(actualYear, actualMonth, 0).getDate()
-      metricParams = { ...metricParams, start_date: `${actualYear}-${pad(actualMonth)}-01`, end_date: `${actualYear}-${pad(actualMonth)}-${lastDay}` }
+    if (metricFilter === 'month' && metricMonth) {
+      const [yr, mo] = metricMonth.split('-')
+      const lastDay = new Date(parseInt(yr), parseInt(mo), 0).getDate()
+      metricParams = { ...metricParams, start_date: `${yr}-${mo}-01`, end_date: `${yr}-${mo}-${lastDay}` }
     } else if (metricFilter === 'date' && metricDate) {
       metricParams = { ...metricParams, start_date: metricDate, end_date: metricDate }
     } else if (metricFilter === 'custom' && metricFrom && metricTo) {
       metricParams = { ...metricParams, start_date: metricFrom, end_date: metricTo }
     }
     const acctParam = activeAccount ? { account_id: activeAccount } : {}
-    reportsAPI.metrics({ ...metricParams, ...acctParam }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
+    reportsAPI.metrics({ ...metricParams, ...acctParam, is_practix: isPractixMode }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
 
     reportsAPI.calendar({ fy, is_practix: isPractixMode, ...acctParam }).then(r => {
       const map: Record<string,number> = {}
@@ -208,6 +208,10 @@ export default function ReportsPage(){
 
   const months=fyMonths(fy)
   const totalPnl=fyTotal
+  const fyWins=fyMetrics.reduce((s:number,a:any)=>s+a.wins,0)
+  const fyLosses=fyMetrics.reduce((s:number,a:any)=>s+a.losses,0)
+  const fyTrades=fyMetrics.reduce((s:number,a:any)=>s+a.trades,0)
+  const fyWinRate=fyTrades>0?fyWins/fyTrades*100:0
   const activePeriodLabel=metricFilter==='fy'?`FY ${metricFy}`:metricFilter==='month'?`${metricMonth} · FY ${fy}`:metricFilter==='date'&&metricDate?metricDate:metricFilter==='custom'&&metricFrom&&metricTo?`${metricFrom} → ${metricTo}`:'Select period'
 
   // Day-of-week P&L aggregation from real calendar data
@@ -235,11 +239,7 @@ export default function ReportsPage(){
           <StaaxSelect
             value={fy}
             onChange={setFy}
-            options={[
-              { value: '2025-26', label: 'FY 2025-26' },
-              { value: '2024-25', label: 'FY 2024-25' },
-              { value: '2023-24', label: 'FY 2023-24' },
-            ]}
+            options={getFYOptions(3)}
             width="130px"
           />
           <div style={{display:'flex',gap:'6px'}}>
@@ -254,16 +254,15 @@ export default function ReportsPage(){
         {/* FY P&L */}
         <div className="card card-stat cloud-fill" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '255,107,0',
-          boxShadow: `0 0 22px rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.2), 0 6px 24px rgba(0,0,0,0.5)`,
+          boxShadow: '0 0 22px rgba(255,107,0,0.22), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties} onClick={()=>setChartModal(true)}>
-          <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'4px',fontWeight:600}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--indigo)'}}>↗</span></div>
+          <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'4px',fontWeight:600}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--ox-radiant)'}}>↗</span></div>
           <div style={{display:'flex',alignItems:'flex-end',gap:'12px'}}>
             <div>
               <div style={{
-                fontSize:'22px',fontWeight:700,letterSpacing:'-0.02em',
-                background: totalPnl>=0?'linear-gradient(135deg, #22DD88, #d4f4e8)':'linear-gradient(135deg, #FF4444, #ffd4d4)',
-                WebkitBackgroundClip:'text', backgroundClip:'text',
-                WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
+                fontSize:'26px', fontWeight:700, lineHeight:1,
+                fontFamily:'var(--font-mono)',
+                color: totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : '#F0F0FF',
               }}>
                 {totalPnl!==0?(Math.abs(totalPnl)>=100000?'₹'+(Math.abs(totalPnl)/100000).toFixed(2)+'L':'₹'+Math.abs(totalPnl).toLocaleString('en-IN',{maximumFractionDigits:2})):'—'}
               </div>
@@ -292,39 +291,27 @@ export default function ReportsPage(){
         {/* Total Trades */}
         <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '255,107,0',
-          boxShadow: '0 0 20px rgba(255,107,0,0.18), 0 6px 24px rgba(0,0,0,0.5)',
+          boxShadow: '0 0 22px rgba(255,107,0,0.22), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Total Trades</div>
-          <div style={{
-            fontSize:'26px',fontWeight:700,lineHeight:1,
-            background:'linear-gradient(135deg, #FF6B00, #FF8C33)',
-            WebkitBackgroundClip:'text', backgroundClip:'text',
-            WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
-          }}>{algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)}</div>
-          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{algoMetrics.length} algos</div>
+          <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:'#FF6B00',fontFamily:'var(--font-mono)'}}>{fyTrades}</div>
+          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{fyMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
         <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden',
-          '--stat-rgb': '204,68,0',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.55)',
+          '--stat-rgb': '255,107,0',
+          boxShadow: '0 0 22px rgba(255,107,0,0.22), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Win Rate</div>
-          <div style={{
-            fontSize:'26px',fontWeight:700,lineHeight:1,
-            background: algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)>0
-              ? 'linear-gradient(135deg, #22DD88, #d4f4e8)'
-              : 'linear-gradient(135deg, rgba(232,232,248,0.3), rgba(232,232,248,0.1))',
-            WebkitBackgroundClip:'text', backgroundClip:'text',
-            WebkitTextFillColor:'transparent', color:'transparent', display:'inline-block',
-          }}>
-            {algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)>0?(algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)/algoMetrics.reduce((s:number,a:any)=>s+a.trades,0)*100).toFixed(1)+'%':'—'}
+          <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:fyWins>0?'var(--green)':'rgba(232,232,248,0.35)',fontFamily:'var(--font-mono)'}}>
+            {fyTrades>0?fyWinRate.toFixed(1)+'%':'—'}
           </div>
-          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{algoMetrics.reduce((s:number,a:any)=>s+a.wins,0)}W · {algoMetrics.reduce((s:number,a:any)=>s+a.losses,0)}L</div>
+          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>{fyWins}W · {fyLosses}L</div>
         </div>
 
         {/* Day-of-week P&L — compact horizontal bars */}
-        <div className="card">
+        <div className="card cloud-fill">
         <div style={{fontSize:'10px',fontWeight:600,color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px'}}>P&L by Day</div>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-around',height:'64px',gap:'6px'}}>
           {DAY_NAMES.map(day=>{
@@ -407,8 +394,8 @@ export default function ReportsPage(){
             {[['fy','FY'],['month','Month'],['date','Date'],['custom','Custom']].map(([v,l])=>(
               <button key={v} onClick={()=>setMetricFilter(v)} className={`chip ${metricFilter===v?'chip-active':'chip-inactive'}`} style={{height:'32px',padding:'0 12px',fontSize:'11px'}}>{l}</button>
             ))}
-            {metricFilter==='fy'&&(<StaaxSelect value={metricFy} onChange={setMetricFy} options={[{value:'2025-26',label:'FY 2025-26'},{value:'2024-25',label:'FY 2024-25'},{value:'2023-24',label:'FY 2023-24'}]} width="120px"/>)}
-            {metricFilter==='month'&&(<StaaxSelect value={metricMonth} onChange={setMetricMonth} options={MONTHS_FY.map(m=>({value:m,label:m}))} width="100px"/>)}
+            {metricFilter==='fy'&&(<StaaxSelect value={metricFy} onChange={setMetricFy} options={getFYOptions(3)} width="120px"/>)}
+            {metricFilter==='month'&&(<StaaxSelect value={metricMonth} onChange={setMetricMonth} options={monthOptions} width="120px"/>)}
             {metricFilter==='date'&&(<input type="date" className="staax-input" value={metricDate} onChange={e=>setMetricDate(e.target.value)} style={{width:'140px',fontSize:'11px',colorScheme:'dark'} as any}/>)}
             {metricFilter==='custom'&&(
               <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
@@ -426,15 +413,15 @@ export default function ReportsPage(){
         </div>
         <div style={{display:'flex', overflow:'hidden', padding:'0 16px 16px'}}>
           {/* Left panel — Key Metrics labels, fixed */}
-          <div style={{flexShrink:0, minWidth:'130px', overflowX:'hidden'}}>
+          <div style={{flexShrink:0, minWidth:'130px', overflow:'hidden', borderRadius:'8px 0 0 8px'}}>
             <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'130px',tableLayout:'fixed'}}>
               <thead>
-                <tr><th style={{minWidth:'130px',padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)'}}>Key Metrics</th></tr>
+                <tr><th style={{minWidth:'130px',padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',borderRadius:'8px 0 0 0'}}>Key Metrics</th></tr>
               </thead>
               <tbody>
-                {METRIC_ROWS.map(row=>(
+                {METRIC_ROWS.map((row,idx)=>(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px',whiteSpace:'nowrap'}}>{row.label}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px',whiteSpace:'nowrap',borderRadius:idx===METRIC_ROWS.length-1?'0 0 0 8px':undefined}}>{row.label}</td>
                   </tr>
                 ))}
               </tbody>
@@ -471,20 +458,20 @@ export default function ReportsPage(){
             </table>
           </div>
           {/* Right panel — Cumulative, fixed */}
-          <div style={{flexShrink:0, minWidth:'130px', overflowX:'hidden'}}>
+          <div style={{flexShrink:0, minWidth:'130px', overflow:'hidden', borderRadius:'0 8px 8px 0'}}>
             <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'130px',tableLayout:'fixed'}}>
               <thead>
-                <tr><th style={{padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',color:'var(--indigo)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)'}}>Cumulative</th></tr>
+                <tr><th style={{padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',color:'var(--indigo)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',borderRadius:'0 8px 0 0'}}>Cumulative</th></tr>
               </thead>
               <tbody>
-                {METRIC_ROWS.map(row=>{
+                {METRIC_ROWS.map((row,idx)=>{
                   const isPct=row.key==='win_pct'||row.key==='loss_pct'
                   const isCurrency=row.key==='total_pnl'||row.key==='max_profit'||row.key==='max_loss'
                   const cumVal=algoMetrics.reduce((s:number,a:any)=>s+(a[row.key]||0),0)
                   const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
                   return(
                     <tr key={row.key}>
-                      <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',background:'rgba(10,10,11,0.95)',boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px'}}>{cumFmt}</td>
+                      <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',background:'rgba(10,10,11,0.95)',boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px',borderRadius:idx===METRIC_ROWS.length-1?'0 0 8px 0':undefined}}>{cumFmt}</td>
                     </tr>
                   )
                 })}

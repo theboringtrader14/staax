@@ -556,7 +556,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
               {expanded ? '▲' : '▼'} {orders.length} order{orders.length !== 1 ? 's' : ''}
             </button>
             {expanded && (
-              <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--bg-border)' }}>
+              <div className="cloud-fill" style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--bg-border)' }}>
                 <table className="staax-table">
                   <thead><tr><th>Dir</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th></tr></thead>
                   <tbody>
@@ -748,7 +748,7 @@ export default function IndicatorsPage() {
             </span>
             <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
           </div>
-          <div style={{ border: '0.5px solid rgba(255,107,0,0.18)', borderRadius: '7px', overflow: 'hidden' }}>
+          <div className="cloud-fill" style={{ borderRadius: 8, overflow: 'hidden', border: '0.5px solid rgba(255,107,0,0.18)' }}>
             <table className="staax-table">
               <thead>
                 <tr>
@@ -829,7 +829,7 @@ export default function IndicatorsPage() {
         const openOrders   = allBotOrders.filter(o => o.status === 'open')
         const closedOrders = allBotOrders.filter(o => o.status !== 'open')
         const renderOrdersTable = (rows: AggOrder[]) => (
-          <div style={{ border: '0.5px solid rgba(255,107,0,0.18)', borderRadius: '7px', overflow: 'hidden' }}>
+          <div className="cloud-fill" style={{ borderRadius: 8, overflow: 'hidden', border: '0.5px solid rgba(255,107,0,0.18)' }}>
             <table className="staax-table">
               <thead><tr><th>Bot</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th></tr></thead>
               <tbody>

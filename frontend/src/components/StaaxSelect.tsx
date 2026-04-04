@@ -10,6 +10,7 @@ export function StaaxSelect({ value, onChange, options, width }: {
   const [open, setOpen] = useState(false)
   const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 })
   const triggerRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const label = options.find(o => o.value === value)?.label ?? value
 
   const openDropdown = () => {
@@ -26,7 +27,10 @@ export function StaaxSelect({ value, onChange, options, width }: {
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) setOpen(false)
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target as Node) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+      ) setOpen(false)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -52,7 +56,7 @@ export function StaaxSelect({ value, onChange, options, width }: {
       </button>
 
       {open && createPortal(
-        <div style={{
+        <div ref={dropdownRef} style={{
           position: 'absolute',
           top: dropPos.top,
           left: dropPos.left,

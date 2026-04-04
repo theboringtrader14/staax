@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI } from '@/services/api'
 import type { Order, Algo } from '@/types'
+import { getCurrentFY, getFYOptions } from '@/utils/fy'
 
 // ── Local Types ────────────────────────────────────────────────────────────────
 interface MetricRow {
@@ -741,7 +742,7 @@ export default function AnalyticsPage() {
   const [timeSlots, setTimeSlots]     = useState<any[]>([])
   const [latencyData, setLatencyData] = useState<LatencyData | null>(null)
   const [loading, setLoading]         = useState(true)
-  const [fy, setFy]                   = useState('2025-26')
+  const [fy, setFy]                   = useState(getCurrentFY())
 
   useEffect(() => {
     setLoading(true)
@@ -812,11 +813,11 @@ export default function AnalyticsPage() {
         </div>
         <div className="page-header-actions">
           <div style={{ display: 'flex', gap: '6px' }}>
-            {(['2025-26', '2024-25'] as const).map(f => (
-              <button key={f} onClick={() => setFy(f)}
-                className={`chip ${fy === f ? 'chip-active' : 'chip-inactive'}`}
+            {getFYOptions(2).map(opt => (
+              <button key={opt.value} onClick={() => setFy(opt.value)}
+                className={`chip ${fy === opt.value ? 'chip-active' : 'chip-inactive'}`}
                 style={{ height: '28px', padding: '0 14px', fontSize: '11px' }}>
-                FY {f}
+                {opt.label}
               </button>
             ))}
           </div>

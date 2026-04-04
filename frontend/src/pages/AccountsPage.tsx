@@ -8,12 +8,6 @@ interface AccountLocal {
   globalSL: number | null; globalTP: number | null; fyBrokerage: number | null
 }
 
-// Maps DB nickname → Angel One URL slug
-const AO_SLUG: Record<string, string> = {
-  'Mom':        'mom',
-  'Wife':       'wife',
-  'Karthik AO': 'karthik',
-}
 
 // Returns current financial year string e.g. "2025-26"
 function getCurrentFY(): string {
@@ -51,7 +45,6 @@ export default function AccountsPage() {
   const [saved,      setSaved]      = useState<Record<string, string>>({})
   const [saving,     setSaving]     = useState<Record<string, boolean>>({})
   const [tokenStatus, setTokenStatus] = useState<Record<string, boolean>>({})
-  const [logging,     setLogging]     = useState<Record<string, boolean>>({})
   const [editNick,    setEditNick]    = useState<Record<string, string>>({})
   const [nickEditing, setNickEditing] = useState<Record<string, boolean>>({})
 
@@ -89,7 +82,7 @@ export default function AccountsPage() {
           status: api.status === 'active' ? 'active' : 'pending',
           globalSL: api.global_sl ?? null, globalTP: api.global_tp ?? null,
           fyBrokerage: api.fy_brokerage ?? null,
-          margin: 0, pnl: 0, token: '', color: '',
+          margin: api.fy_margin ?? 0, pnl: 0, token: '', color: '',
           type: api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
         })))
       }).catch(() => {})
@@ -116,7 +109,7 @@ export default function AccountsPage() {
             globalSL:    api.global_sl ?? null,
             globalTP:    api.global_tp ?? null,
             fyBrokerage: api.fy_brokerage ?? null,
-            margin:      0,
+            margin:      api.fy_margin ?? 0,
             pnl:         0,
             token:       '',
             color:       '',
@@ -157,7 +150,7 @@ export default function AccountsPage() {
         globalSL:    api.global_sl ?? null,
         globalTP:    api.global_tp ?? null,
         fyBrokerage: api.fy_brokerage ?? null,
-        margin:      0,
+        margin:      api.fy_margin ?? 0,
         pnl:         0,
         token:       '',
         color:       '',
@@ -226,42 +219,13 @@ export default function AccountsPage() {
     }
   }
 
-  const handleZerodhaLogin = async (acc: AccountLocal) => {
-    try {
-      const urlRes = await accountsAPI.zerodhaLoginUrl()
-      window.open(urlRes.data?.login_url, '_blank')
-    } catch {
-      showSaved(acc.id, '⚠️ Could not get login URL')
-    }
-  }
-
-  const handleAngeloneLogin = async (acc: AccountLocal) => {
-    const slug = AO_SLUG[acc.name]
-    if (!slug) return
-    setLogging(l => ({ ...l, [acc.id]: true }))
-    try {
-      await accountsAPI.angeloneAutoLogin(slug)
-      setTokenStatus(t => ({ ...t, [acc.name]: true }))
-      showSaved(acc.id, '✅ Angel One connected')
-    } catch (e: any) {
-      showSaved(acc.id, `⚠️ Login failed: ${e?.response?.data?.detail || 'Unknown error'}`)
-    } finally {
-      setLogging(l => ({ ...l, [acc.id]: false }))
-    }
-  }
-
-  const cardColors: Record<string, string> = {
-    'Karthik':    '#FF6B00',
-    'Mom':        '#22DD88',
-    'Wife':       '#D77B12',
-    'Karthik AO': '#CC4400',
-  }
 
   return (
     <div>
+      {/* A1 — Page header h1: orange Syne 800 */}
       <div className="page-header">
         <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800 }}>Accounts</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Accounts</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Broker accounts & API tokens</p>
         </div>
         <div className="page-header-actions">
@@ -272,17 +236,38 @@ export default function AccountsPage() {
         </div>
       </div>
 
+      {/* A2 — Summary row: FY Margin | FY Brokerage | FY P&L */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '12px' }}>
+        <div className="card card-stat cloud-fill" style={{ '--stat-rgb': '255,107,0' } as React.CSSProperties}>
+          <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontWeight: 600, fontFamily: 'var(--font-display)' }}>FY Margin</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#F0F0FF', lineHeight: 1 }}>
+            ₹{(accounts.reduce((s: number, a: AccountLocal) => s + (a.margin || 0), 0) / 100000).toFixed(1)}L
+          </div>
+        </div>
+        <div className="card card-stat cloud-fill" style={{ '--stat-rgb': '255,107,0' } as React.CSSProperties}>
+          <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontWeight: 600, fontFamily: 'var(--font-display)' }}>FY Brokerage</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#F0F0FF', lineHeight: 1 }}>
+            ₹{(accounts.reduce((s: number, a: AccountLocal) => s + (a.fyBrokerage || 0), 0)).toLocaleString('en-IN')}
+          </div>
+        </div>
+        <div className="card card-stat cloud-fill" style={{ '--stat-rgb': '255,107,0' } as React.CSSProperties}>
+          <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontWeight: 600, fontFamily: 'var(--font-display)' }}>FY P&L</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#F0F0FF', lineHeight: 1 }}>
+            ₹{(accounts.reduce((s: number, a: AccountLocal) => s + (a.pnl || 0), 0)).toLocaleString('en-IN')}
+          </div>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
         {accounts.map(acc => {
-          const color = cardColors[acc.name] || '#6B7280'
-          const isAO  = acc.broker === 'Angel One'
           const isWife = acc.name === 'Wife'           // Phase 2 — no login yet
           const tokenConnected = tokenStatus[acc.name] ?? false
 
           return (
-            <div key={acc.id} style={{
+            // A7 — cloud-fill on all account cards; A5 — removed borderTop
+            <div key={acc.id} className="cloud-fill" style={{
               background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '0.5px solid rgba(255,107,0,0.22)',
-              borderTop: `2px solid ${color}`, borderRadius: '8px', padding: '16px',
+              borderRadius: 'var(--radius-lg)', padding: '16px',
             }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
@@ -298,8 +283,9 @@ export default function AccountsPage() {
                       onKeyDown={e => { if (e.key === 'Enter') saveNickname(acc); if (e.key === 'Escape') setNickEditing(n => ({ ...n, [acc.id]: false })) }}
                     />
                   ) : (
+                    // A6 — Account nickname: Syne 600, #F0F0FF
                     <div
-                      style={{ fontWeight: 700, fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '16px', color: '#F0F0FF', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                       title="Click to rename"
                       onClick={() => setNickEditing(n => ({ ...n, [acc.id]: true }))}
                     >
@@ -307,32 +293,39 @@ export default function AccountsPage() {
                       <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 400 }}>✎</span>
                     </div>
                   )}
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{acc.broker} · {acc.type}</div>
+                  {/* A6 — Broker chip: orange pill */}
+                  <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ background: 'rgba(255,107,0,0.12)', color: '#FF6B00', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', fontWeight: 600 }}>
+                      {acc.broker}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'rgba(232,232,248,0.4)' }}>{acc.type}</span>
+                  </div>
                 </div>
+                {/* A6 — Status Active: #22DD88 */}
                 <span style={{
                   fontSize: '11px', padding: '3px 8px', borderRadius: '100px', fontWeight: 600,
-                  color: acc.status === 'active' ? 'var(--green)' : 'var(--amber)',
-                  background: acc.status === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)',
+                  color: acc.status === 'active' ? '#22DD88' : 'var(--amber)',
+                  background: acc.status === 'active' ? 'rgba(34,221,136,0.12)' : 'rgba(245,158,11,0.12)',
                 }}>
                   {acc.status.toUpperCase()}
                 </span>
               </div>
 
-              {/* Stats */}
+              {/* Stats — A6 Delta B: mono font on numbers, uppercase labels */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>FY Margin</div>
-                  <div style={{ fontWeight: 700, fontSize: '14px' }}>₹{(acc.margin / 100000).toFixed(1)}L</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-display)' }}>FY Margin</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', fontFamily: 'var(--font-mono)', color: '#F0F0FF' }}>₹{(acc.margin / 100000).toFixed(1)}L</div>
                 </div>
                 <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>FY P&L</div>
-                  <div style={{ fontWeight: 700, fontSize: '14px', color: acc.pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-display)' }}>FY P&L</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', fontFamily: 'var(--font-mono)', color: acc.pnl >= 0 ? '#22DD88' : 'var(--red)' }}>
                     {acc.pnl >= 0 ? '+' : ''}₹{Math.abs(acc.pnl).toLocaleString('en-IN')}
                   </div>
                 </div>
               </div>
 
-              {/* Token status + Login */}
+              {/* Token status — A4: removed login buttons */}
               <div style={{
                 fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px',
                 padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: '5px',
@@ -340,72 +333,45 @@ export default function AccountsPage() {
               }}>
                 <span>
                   API Token:&nbsp;
-                  <span style={{ fontWeight: 600, color: tokenConnected ? 'var(--green)' : isWife ? 'var(--accent-amber)' : 'var(--red)' }}>
-                    {tokenConnected ? '✅ Connected' : isWife ? '⏳ Phase 2' : '⚠️ Login required'}
+                  <span style={{ fontWeight: 600, color: tokenConnected ? '#22DD88' : isWife ? 'var(--accent-amber)' : 'var(--red)' }}>
+                    {tokenConnected ? 'Connected' : isWife ? 'Phase 2' : 'Login required'}
                   </span>
                 </span>
-                {isAO ? (
-                  <button
-                    className="btn btn-ghost"
-                    style={{ fontSize: '10px', padding: '3px 8px', height: '24px' }}
-                    disabled={logging[acc.id]}
-                    onClick={() => handleAngeloneLogin(acc)}
-                  >
-                    {logging[acc.id] ? '...' : tokenConnected ? '🔄 Re-Login' : '🔄 Auto-Login'}
-                  </button>
-                ) : !tokenConnected && (
-                  <button
-                    className="btn btn-ghost"
-                    style={{ fontSize: '10px', padding: '3px 8px', height: '24px' }}
-                    disabled={logging[acc.id]}
-                    onClick={() => handleZerodhaLogin(acc)}
-                  >
-                    {logging[acc.id] ? '...' : '🔑 Login'}
-                  </button>
-                )}
               </div>
 
               {/* Edit controls — active accounts only */}
               {acc.status === 'active' && <>
-                {/* FY Margin */}
+                {/* A3 — FY Margin + FY Brokerage side by side */}
                 <div style={{ marginBottom: '10px' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    FY Margin
+                  <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-display)' }}>
+                    FY Margin / Brokerage
                   </div>
-                  <input className="staax-input" type="number" defaultValue={acc.margin || ''}
-                    placeholder="₹ amount"
-                    onChange={e => setEditMargin(m => ({ ...m, [acc.id]: e.target.value }))}
-                    style={{ width: '100%', fontSize: '12px' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <input className="staax-input" type="number" defaultValue={acc.margin || ''}
+                      placeholder="₹ Margin"
+                      onChange={e => setEditMargin(m => ({ ...m, [acc.id]: e.target.value }))}
+                      style={{ width: '100%', fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
+                    <input className="staax-input" type="number" placeholder="₹ Brokerage"
+                      defaultValue={acc.fyBrokerage ?? ''}
+                      disabled={!isApril()}
+                      onChange={e => setEditBrok(m => ({ ...m, [acc.id]: e.target.value }))}
+                      style={{ width: '100%', fontSize: '12px', fontFamily: 'var(--font-mono)', opacity: isApril() ? 1 : 0.5 }} />
+                  </div>
+                  {!isApril() && <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.3)', marginTop: '3px' }}>Brokerage editable in April</div>}
                 </div>
 
                 {/* Global SL / TP */}
                 <div style={{ marginBottom: '10px' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-display)' }}>
                     Global SL / TP
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                     <input className="staax-input" type="number" placeholder="SL ₹" defaultValue={acc.globalSL ?? ''}
                       onChange={e => setEditSL(s => ({ ...s, [acc.id]: e.target.value }))}
-                      style={{ fontSize: '12px' }} />
+                      style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
                     <input className="staax-input" type="number" placeholder="TP ₹" defaultValue={acc.globalTP ?? ''}
                       onChange={e => setEditTP(s => ({ ...s, [acc.id]: e.target.value }))}
-                      style={{ fontSize: '12px' }} />
-                  </div>
-                </div>
-
-                {/* FY Brokerage */}
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    FY Brokerage Expense
-                    {!isApril() && <span style={{ fontWeight: 400, marginLeft: '6px', color: 'var(--text-dim)' }}>(editable in April)</span>}
-                  </div>
-                  <input className="staax-input" type="number" placeholder="₹0"
-                    defaultValue={acc.fyBrokerage ?? ''}
-                    disabled={!isApril()}
-                    onChange={e => setEditBrok(m => ({ ...m, [acc.id]: e.target.value }))}
-                    style={{ width: '100%', fontSize: '12px', opacity: isApril() ? 1 : 0.5 }} />
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Used for adjusted ROI in Reports
+                      style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
                   </div>
                 </div>
 
@@ -420,10 +386,11 @@ export default function AccountsPage() {
               {/* Save feedback */}
               {saved[acc.id] && (
                 <div style={{
-                  fontSize: '12px', color: saved[acc.id].startsWith('✅') ? 'var(--green)' : 'var(--accent-amber)',
+                  fontSize: '12px', color: saved[acc.id].startsWith('✅') ? '#22DD88' : 'var(--accent-amber)',
                   fontWeight: 600, padding: '6px 10px',
-                  background: saved[acc.id].startsWith('✅') ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)',
+                  background: saved[acc.id].startsWith('✅') ? 'rgba(34,221,136,0.1)' : 'rgba(245,158,11,0.1)',
                   borderRadius: '5px', textAlign: 'center', marginTop: '8px',
+                  fontFamily: 'var(--font-mono)',
                 }}>
                   {saved[acc.id]}
                 </div>
@@ -439,7 +406,13 @@ export default function AccountsPage() {
           <div className="modal-box" style={{ maxWidth: '480px', width: '90%' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div style={{ fontWeight: 700, fontSize: '16px' }}>Add Account</div>
-              <button onClick={closeAddModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>✕</button>
+              {/* A10 — Close button red on hover */}
+              <button
+                onClick={closeAddModal}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', fontSize: '18px' }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#FF4444'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.4)'}
+              >✕</button>
             </div>
 
             {/* Step 1 — Broker selection */}
@@ -463,10 +436,11 @@ export default function AccountsPage() {
                     </div>
                   ))}
                 </div>
+                {/* A8 — No icon on Continue button */}
                 <button className="btn btn-primary" style={{ width: '100%' }}
                   disabled={!addForm.broker}
                   onClick={() => setAddStep(2)}>
-                  Continue →
+                  Continue
                 </button>
               </div>
             )}
@@ -475,7 +449,8 @@ export default function AccountsPage() {
             {addStep === 2 && (
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button onClick={() => setAddStep(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ox-radiant)', fontSize: '12px', padding: 0 }}>← Back</button>
+                  {/* A9 — Back button inside modal step 2 */}
+                  <button className="btn btn-ghost" style={{ fontSize: '11px' }} onClick={() => setAddStep(1)}>← Back</button>
                   <span style={{ fontWeight: 700, color: addForm.broker === 'zerodha' ? 'var(--ox-radiant)' : 'var(--accent-amber)' }}>
                     {addForm.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}
                   </span>
@@ -490,14 +465,15 @@ export default function AccountsPage() {
                     { key: 'totp_secret', label: 'TOTP Secret', type: 'password', placeholder: 'Base32 TOTP secret' },
                   ].map(({ key, label, type, placeholder }) => (
                     <div key={key}>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{label}</div>
+                      {/* Delta B — labels uppercase display font */}
+                      <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', fontFamily: 'var(--font-display)' }}>{label}</div>
                       <input
                         className="staax-input"
                         type={type}
                         placeholder={placeholder}
                         value={(addForm as any)[key]}
                         onChange={e => patchForm({ [key]: e.target.value } as Partial<AddAccountForm>)}
-                        style={{ fontSize: '12px' }}
+                        style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}
                       />
                     </div>
                   ))}
@@ -507,6 +483,7 @@ export default function AccountsPage() {
                     {addError}
                   </div>
                 )}
+                {/* A8 — No icon on Add Account button */}
                 <button className="btn btn-primary" style={{ width: '100%' }}
                   disabled={addSaving}
                   onClick={submitAdd}>
