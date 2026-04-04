@@ -23,7 +23,7 @@ function fyMonths(fy:string){
   return [4,5,6,7,8,9,10,11,12,1,2,3].map(m=>({month:m,year:m>=4?sy:sy+1,label:['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m],key:`${m}-${m>=4?sy:sy+1}`}))
 }
 
-const CARD_H=162
+const CARD_H=148
 
 function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number,year:number,label:string,selected:boolean,onToggle:()=>void,calendarData:Record<string,number>}){
   const today=new Date()
@@ -51,24 +51,24 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
       border:`0.5px solid ${selected?'rgba(255,107,0,0.65)':'rgba(255,107,0,0.22)'}`,
       boxShadow:selected?'0 0 20px rgba(255,107,0,0.20), 0 4px 24px rgba(0,0,0,0.55)':'0 4px 24px rgba(0,0,0,0.45)',
       backdropFilter:'blur(20px)',
-      borderRadius:'8px',padding:'10px 10px 12px',
+      borderRadius:'8px',padding:'12px 10px 14px 10px',
       cursor:isFutureMonth||!hasRealData?'default':'pointer',
       transition:'all 0.12s',height:`${CARD_H}px`,
       overflow:'hidden',display:'flex',flexDirection:'column',
       opacity:isFutureMonth?0.35:1,
     }}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'4px',flexShrink:0}}>
-        <span style={{fontSize:'11px',fontWeight:700,letterSpacing:'0.06em',color:selected?'var(--indigo)':'var(--text)'}}>{label.toUpperCase()}</span>
+        <span style={{fontFamily:'var(--font-display)',fontSize:'11px',fontWeight:600,letterSpacing:'0.5px',color:selected?'var(--indigo)':'rgba(232,232,248,0.5)',textTransform:'uppercase' as const}}>{label}</span>
         {hasRealData&&<span style={{fontSize:'10px',fontWeight:700,color:monthPnl>=0?'var(--green)':'var(--red)'}}>{monthPnl>=0?'+':''}{(monthPnl/1000).toFixed(1)}k</span>}
       </div>
       {hasRealData&&total>0&&<div style={{height:'3px',borderRadius:'2px',background:'var(--bg-border)',marginBottom:'6px',overflow:'hidden',display:'flex',flexShrink:0}}><div style={{width:`${(winDays/total)*100}%`,height:'100%',background:'var(--green)'}}/><div style={{width:`${(lossDays/total)*100}%`,height:'100%',background:'var(--red)'}}/></div>}
       {!hasRealData&&!isFutureMonth&&<div style={{height:'3px',marginBottom:'6px',flexShrink:0}}/>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'2px',marginBottom:'4px',flexShrink:0}}>
-        {['M','T','W','T','F'].map((d,i)=><div key={i} style={{textAlign:'center',fontSize:'7px',color:'var(--text-dim)',fontWeight:700}}>{d}</div>)}
+      <div style={{display:'flex',gap:'2px',marginBottom:'4px',flexShrink:0}}>
+        {['M','T','W','T','F'].map((d,i)=><div key={i} style={{flex:1,textAlign:'center' as const,fontSize:'8px',color:'rgba(255,255,255,0.25)',fontFamily:'var(--font-mono)'}}>{d}</div>)}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'2px',flex:1,alignContent:'start'}}>
         {padded.map((day,i)=>{
-          if(!day) return <div key={i} style={{aspectRatio:'1',minWidth:'16px',minHeight:'16px'}}/>
+          if(!day) return <div key={i} style={{aspectRatio:'1'}}/>
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
           const pnl=calendarData[dateKey]??null
           const isFuture=new Date(year,month-1,day)>today
@@ -79,10 +79,11 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
             : 'rgba(255,255,255,0.04)'
           return(
             <div key={i} title={pnl != null ? `${pnl >= 0 ? '+' : ''}₹${pnl.toLocaleString('en-IN')}` : undefined} style={{
-              aspectRatio:'1',minWidth:'16px',minHeight:'16px',
-              borderRadius:'3px',
-              background:isFuture?'rgba(255,255,255,0.02)':bg,
-              opacity:isFuture?0.1:1,
+              aspectRatio: '1',
+              borderRadius: '3px',
+              background: isFuture ? 'rgba(255,255,255,0.02)' : bg,
+              opacity: isFuture ? 0.1 : 1,
+              cursor: (!isFuture && pnl != null) ? 'pointer' : 'default',
             }}/>
           )
         })}
@@ -91,27 +92,45 @@ function MiniCal({month,year,label,selected,onToggle,calendarData}:{month:number
   )
 }
 
-function MonthDetail({month,year,label,calendarData}:{month:number,year:number,label:string,calendarData:Record<string,number>}){
+function MonthDetail({month,year,calendarData}:{month:number,year:number,label:string,calendarData:Record<string,number>}){
   const today=new Date()
   const firstDow=new Date(year,month-1,1).getDay(),offset=(firstDow===0?4:firstDow-1)%5
   const tradingDays=Array.from({length:new Date(year,month,0).getDate()},(_,i)=>i+1).filter(d=>{const dow=new Date(year,month-1,d).getDay();return dow!==0&&dow!==6})
   const padded=[...Array(offset).fill(null),...tradingDays]
   return(
     <div style={{background:'var(--glass-bg)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',border:'0.5px solid rgba(255,107,0,0.35)',borderRadius:'8px',padding:'16px',marginTop:'12px'}}>
-      <div style={{fontSize:'12px',fontWeight:700,color:'var(--indigo)',marginBottom:'14px'}}>{label} {year} — Day View</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px',marginBottom:'4px'}}>
-        {['Mon','Tue','Wed','Thu','Fri'].map(d=><div key={d} style={{textAlign:'center',fontSize:'10px',color:'var(--text-dim)',fontWeight:600}}>{d}</div>)}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 40px)',gap:'4px',marginBottom:'4px'}}>
+        {['Mon','Tue','Wed','Thu','Fri'].map(d=><div key={d} style={{width:'40px',textAlign:'center',fontSize:'10px',color:'var(--text-dim)',fontWeight:600}}>{d}</div>)}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5, 40px)',gap:'4px'}}>
         {padded.map((day,i)=>{
           if(!day)return <div key={i}/>
           const dateKey=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
           const pnl=calendarData[dateKey]??null
           const isFuture=new Date(year,month-1,day)>today
-          return <div key={i} style={{padding:'8px 4px',borderRadius:'6px',textAlign:'center',opacity:isFuture?0.2:1,background:pnl==null?'transparent':pnl>0?`rgba(34,221,136,${Math.min(pnl/8000,1)*0.35+0.08})`:`rgba(239,68,68,${Math.min(Math.abs(pnl)/3000,1)*0.35+0.08})`}}>
-            <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{day}</div>
-            {pnl!=null&&<div style={{fontSize:'10px',fontWeight:700,marginTop:'2px',color:pnl>0?'var(--green)':'var(--red)'}}>{pnl>0?'+':''}{(pnl/1000).toFixed(1)}k</div>}
-            {pnl==null&&!isFuture&&<div style={{fontSize:'10px',color:'var(--text-dim)',marginTop:'2px'}}>—</div>}
+          return <div key={i} style={{
+            width: '40px', height: '40px',
+            borderRadius: '6px',
+            textAlign: 'center' as const,
+            opacity: isFuture ? 0.2 : 1,
+            background: pnl == null ? 'transparent' : pnl > 0
+              ? `rgba(34,221,136,${Math.min(pnl/8000,1)*0.35+0.08})`
+              : `rgba(239,68,68,${Math.min(Math.abs(pnl)/3000,1)*0.35+0.08})`,
+            display: 'flex',
+            flexDirection: 'column' as const,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1px',
+          }}>
+            <div style={{fontSize:'11px', fontWeight:600, color:'var(--text-muted)', lineHeight:1}}>{day}</div>
+            {pnl != null && (
+              <div style={{fontSize:'9px', fontWeight:700, lineHeight:1, color: pnl > 0 ? 'var(--green)' : 'var(--red)'}}>
+                {pnl > 0 ? '+' : ''}{(pnl/1000).toFixed(1)}k
+              </div>
+            )}
+            {pnl == null && !isFuture && (
+              <div style={{fontSize:'9px', color:'var(--text-dim)', lineHeight:1}}>—</div>
+            )}
           </div>
         })}
       </div>
@@ -131,6 +150,7 @@ export default function ReportsPage(){
   const [metricFrom,setMetricFrom]=useState('')
   const [metricTo,setMetricTo]=useState('')
   const [downloading, setDownloading] = useState(false)
+  const [closeHover, setCloseHover] = useState(false)
   const [algoMetrics, setAlgoMetrics] = useState<any[]>([])
   const [calendarData, setCalendarData] = useState<Record<string,number>>({})
   const [equityCurve, setEquityCurve] = useState<any[]>([])
@@ -232,9 +252,9 @@ export default function ReportsPage(){
       {/* Top widgets — 4 columns: FY P&L (wider), Trades, Win Rate, Day P&L */}
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr',gap:'12px',marginBottom:'12px'}}>
         {/* FY P&L */}
-        <div className="card card-stat cloud-fill" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden', borderLeft:'3px solid #22DD88',
-          '--stat-rgb': totalPnl>=0?'16,185,129':'239,68,68',
-          boxShadow: `inset 0 1px 0 rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.25), 0 0 22px rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.2), 0 6px 24px rgba(0,0,0,0.5)`,
+        <div className="card card-stat cloud-fill" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden',
+          '--stat-rgb': '255,107,0',
+          boxShadow: `0 0 22px rgba(${totalPnl>=0?'16,185,129':'239,68,68'},0.2), 0 6px 24px rgba(0,0,0,0.5)`,
         } as React.CSSProperties} onClick={()=>setChartModal(true)}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'4px',fontWeight:600}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--indigo)'}}>↗</span></div>
           <div style={{display:'flex',alignItems:'flex-end',gap:'12px'}}>
@@ -270,9 +290,9 @@ export default function ReportsPage(){
         </div>
 
         {/* Total Trades */}
-        <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden', borderLeft:'3px solid #FF6B00',
+        <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '255,107,0',
-          boxShadow: 'inset 0 1px 0 rgba(255,107,0,0.25), 0 0 20px rgba(255,107,0,0.18), 0 6px 24px rgba(0,0,0,0.5)',
+          boxShadow: '0 0 20px rgba(255,107,0,0.18), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Total Trades</div>
           <div style={{
@@ -285,9 +305,9 @@ export default function ReportsPage(){
         </div>
 
         {/* Win Rate */}
-        <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden', borderLeft:'3px solid #22DD88',
+        <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '204,68,0',
-          boxShadow: 'inset 0 1px 0 rgba(204,68,0,0.25), 0 4px 24px rgba(0,0,0,0.55)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.55)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Win Rate</div>
           <div style={{
@@ -363,7 +383,7 @@ export default function ReportsPage(){
       )}
 
       {/* FY Calendar */}
-      <div className="card cloud-fill" style={{marginBottom:'12px', overflow:'hidden'}}>
+      <div className="card cloud-fill" style={{marginBottom:'12px', overflow:'hidden', padding:'20px 24px 24px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>
@@ -371,13 +391,13 @@ export default function ReportsPage(){
             <span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'var(--red)',display:'inline-block'}}/> Loss</span>
           </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px',width:'100%',boxSizing:'border-box' as const}}>
           {months.map(m=><MiniCal key={m.key} month={m.month} year={m.year} label={m.label} selected={monthModal?.month===m.month&&monthModal?.year===m.year} onToggle={()=>setMonthModal({ month: m.month, year: m.year, label: m.label })} calendarData={calendarData}/>)}
         </div>
       </div>
 
       {/* Per-Algo Metrics */}
-      <div className="card" style={{padding:0, overflow:'hidden'}}>
+      <div className="card cloud-fill" style={{padding:0, overflow:'hidden'}}>
         <div style={{padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Per-Algo Metrics</div>
@@ -404,76 +424,107 @@ export default function ReportsPage(){
             </div>
           </div>
         </div>
-        <div style={{overflowX:'auto',width:'100%',padding:'0 16px 16px'}}>
-          <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%'}}>
-            <thead>
-              <tr>
-                <th style={{minWidth:'130px',position:'sticky',left:0,zIndex:2,background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px',textAlign:'left'}}>Key Metrics</th>
-                {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px',textAlign:'center'}}>{a.name}</th>)}
-                <th style={{color:'var(--indigo)',position:'sticky',right:0,zIndex:2,background:'#0A0A0B',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',padding:'10px 14px',textAlign:'center'}}>Cumulative</th>
-              </tr>
-            </thead>
-            <tbody>
-              {METRIC_ROWS.map(row=>{
-                const cumVal=algoMetrics.reduce((s:number,a:any)=>s+(a[row.key]||0),0)
-                const isPct=row.key==='win_pct'||row.key==='loss_pct'
-                const isCurrency=row.key==='total_pnl'||row.key==='max_profit'||row.key==='max_loss'
-                const fmt=(n:number)=>isPct?(Math.abs(n*(Math.abs(n)<=1?100:1)).toFixed(1)+"%"):isCurrency?((n<0?"-":"")+"₹"+Math.abs(n).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(n)))
-                const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
-                // For currency rows: compute max abs value for proportional bar width
-                const maxAbs = isCurrency
-                  ? Math.max(...algoMetrics.map((a:any)=>Math.abs((a as any)[row.key]||0)), 1)
-                  : 1
-                return(
+        <div style={{display:'flex', overflow:'hidden', padding:'0 16px 16px'}}>
+          {/* Left panel — Key Metrics labels, fixed */}
+          <div style={{flexShrink:0, minWidth:'130px', overflowX:'hidden'}}>
+            <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'130px',tableLayout:'fixed'}}>
+              <thead>
+                <tr><th style={{minWidth:'130px',padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)'}}>Key Metrics</th></tr>
+              </thead>
+              <tbody>
+                {METRIC_ROWS.map(row=>(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',position:'sticky',left:0,zIndex:1,background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px',textAlign:'left'}}>{row.label}</td>
-                    {algoMetrics.map((a:any)=>{
-                      const val=(a as any)[row.key]
-                      const barPct=isCurrency?Math.round(Math.abs(val||0)/maxAbs*100):0
-                      const isNeg=(val||0)<0
-                      return(
-                        <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',position:'relative',textAlign:'center' as const}}>
-                          {isCurrency&&barPct>0&&(
-                            <div style={{
-                              position:'absolute',bottom:0,left:0,height:'3px',
-                              width:`${barPct}%`,
-                              background:isNeg?'rgba(239,68,68,0.45)':'rgba(34,221,136,0.45)',
-                              borderRadius:'0 2px 0 0',
-                            }}/>
-                          )}
-                          {fmt(val)}
-                        </td>
-                      )
-                    })}
-                    <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',position:'sticky',right:0,background:'#0A0A0B',zIndex:1,boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 14px',textAlign:'center' as const}}>{cumFmt}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px',whiteSpace:'nowrap'}}>{row.label}</td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Middle panel — algo columns, scrollable */}
+          <div style={{flex:1, overflowX:'auto'}}>
+            <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%',tableLayout:'fixed'}}>
+              <thead>
+                <tr>
+                  {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px',textAlign:'center'}}>{a.name}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {METRIC_ROWS.map(row=>{
+                  const isPct=row.key==='win_pct'||row.key==='loss_pct'
+                  const isCurrency=row.key==='total_pnl'||row.key==='max_profit'||row.key==='max_loss'
+                  const fmt=(n:number)=>isPct?(Math.abs(n*(Math.abs(n)<=1?100:1)).toFixed(1)+"%"):isCurrency?((n<0?"-":"")+"₹"+Math.abs(n).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(n)))
+                  return(
+                    <tr key={row.key}>
+                      {algoMetrics.map((a:any)=>{
+                        const val=(a as any)[row.key]
+                        const isNeg=(val||0)<0
+                        return(
+                          <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',textAlign:'center',height:'42px'}}>
+                            {fmt(val)}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {/* Right panel — Cumulative, fixed */}
+          <div style={{flexShrink:0, minWidth:'130px', overflowX:'hidden'}}>
+            <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'130px',tableLayout:'fixed'}}>
+              <thead>
+                <tr><th style={{padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',color:'var(--indigo)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)'}}>Cumulative</th></tr>
+              </thead>
+              <tbody>
+                {METRIC_ROWS.map(row=>{
+                  const isPct=row.key==='win_pct'||row.key==='loss_pct'
+                  const isCurrency=row.key==='total_pnl'||row.key==='max_profit'||row.key==='max_loss'
+                  const cumVal=algoMetrics.reduce((s:number,a:any)=>s+(a[row.key]||0),0)
+                  const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
+                  return(
+                    <tr key={row.key}>
+                      <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',background:'rgba(10,10,11,0.95)',boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px'}}>{cumFmt}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {/* Month detail modal */}
       {monthModal && (
         <div className="modal-overlay" onClick={() => setMonthModal(null)}>
-          <div className="modal-box cloud-fill" style={{ maxWidth: '480px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-box cloud-fill" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--ox-radiant)' }}>
                 {monthModal.label} {monthModal.year}
               </div>
-              <button onClick={() => setMonthModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
+              <button onClick={() => setMonthModal(null)} onMouseEnter={() => setCloseHover(true)} onMouseLeave={() => setCloseHover(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: closeHover ? '#FF4444' : 'var(--text-muted)', fontSize: '18px', transition: 'color 0.15s' }}>×</button>
             </div>
             <MonthDetail month={monthModal.month} year={monthModal.year} label={monthModal.label} calendarData={calendarData} />
             {/* Month total */}
             {(() => {
               const mk = `${monthModal.year}-${String(monthModal.month).padStart(2,'0')}`
               const total = Object.keys(calendarData).filter(k => k.startsWith(mk)).reduce((s, k) => s + calendarData[k], 0)
+              const winDays = Object.keys(calendarData).filter(k => k.startsWith(mk) && calendarData[k] > 0).length
+              const totalDays = Object.keys(calendarData).filter(k => k.startsWith(mk)).length
+              const roi = totalDays > 0 ? ((winDays / totalDays) * 100).toFixed(0) : null
               return (
-                <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Month Total</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700, color: total >= 0 ? '#22DD88' : '#FF4444' }}>
-                    {total >= 0 ? '+' : ''}₹{Math.abs(Math.round(total)).toLocaleString('en-IN')}
-                  </span>
+                <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.15)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Month Total</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700, color: total >= 0 ? '#22DD88' : '#FF4444' }}>
+                      {total >= 0 ? '+' : ''}₹{Math.abs(Math.round(total)).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  {roi !== null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Win Rate</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--indigo)' }}>{roi}% ({winDays}/{totalDays} days)</span>
+                    </div>
+                  )}
                 </div>
               )
             })()}

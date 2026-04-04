@@ -9,6 +9,7 @@ import AccountsPage from '@/pages/AccountsPage'
 import DashboardPage from '@/pages/DashboardPage'
 import IndicatorsPage from '@/pages/IndicatorsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
+import AIAgentPage from '@/pages/AIAgentPage'
 import { useStore } from '@/store'
 import { useEffect } from 'react'
 import { accountsAPI } from '@/services/api'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/accounts"   element={<AccountsPage />} />
           <Route path="/indicators" element={<IndicatorsPage />} />
           <Route path="/analytics"  element={<AnalyticsPage />} />
+          <Route path="/ai"         element={<AIAgentPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

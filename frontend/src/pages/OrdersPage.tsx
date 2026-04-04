@@ -1,6 +1,7 @@
 import { useStore } from '@/store'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI, accountsAPI } from '@/services/api'
+import { StaaxSelect } from '@/components/StaaxSelect'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -74,21 +75,6 @@ const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function todayDay(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase().slice(0, 3)
-}
-
-function getWeekDates(): Record<string, string> {
-  const now  = new Date()
-  const ist  = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-  const dow  = ist.getDay()
-  const mon  = new Date(ist)
-  mon.setDate(ist.getDate() - (dow === 0 ? 6 : dow - 1))
-  const names = ['MON','TUE','WED','THU','FRI','SAT','SUN']
-  const map: Record<string, string> = {}
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(mon); d.setDate(mon.getDate() + i)
-    map[names[i]] = d.toISOString().slice(0, 10)
-  }
-  return map
 }
 
 
@@ -293,9 +279,27 @@ export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const activeAccount = useStore(s => s.activeAccount)
   const storeAccounts = useStore(s => s.accounts)
-  const weekDates  = getWeekDates()
-  const today      = todayDay()
-  const todayDate  = weekDates[today] || new Date().toISOString().slice(0, 10)
+
+  const [weekOffset, setWeekOffset] = useState(0)  // 0 = current week, -1 = last week, etc.
+
+  const weekDates = useMemo(() => {
+    const now = new Date()
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    const dow = ist.getDay()
+    const daysToMon = dow === 0 ? 6 : dow - 1
+    const mon = new Date(ist)
+    mon.setDate(ist.getDate() - daysToMon + weekOffset * 7)
+    const names = ['MON','TUE','WED','THU','FRI','SAT','SUN']
+    const map: Record<string, string> = {}
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(mon); d.setDate(mon.getDate() + i)
+      map[names[i]] = d.toISOString().slice(0, 10)
+    }
+    return map
+  }, [weekOffset])
+
+  const today     = todayDay()
+  const todayDate = weekDates[today] || new Date().toISOString().slice(0, 10)
 
   const [selectedDate, setSelectedDate] = useState<string>(todayDate)
   const [orders, setOrders]             = useState<AlgoGroup[]>([])
@@ -317,6 +321,23 @@ export default function OrdersPage() {
   const [showWeekends, setShowWeekends] = useState(false)
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
+
+  const weekLabel = useMemo(() => {
+    const monDate = weekDates['MON']
+    if (!monDate) return ''
+    const d = new Date(monDate)
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+  }, [weekDates])
+
+  // When navigating weeks, default to Monday of that week (or today if current week)
+  useEffect(() => {
+    if (weekOffset === 0) {
+      setSelectedDate(todayDate)
+    } else {
+      setSelectedDate(weekDates['MON'] || todayDate)
+    }
+  }, [weekOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch accounts list on mount
   useEffect(() => {
@@ -357,7 +378,7 @@ export default function OrdersPage() {
       results.forEach(r => { map[r.day] = r.pnl })
       setWeekPnl(map)
     })
-  }, [isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isPractixMode, weekOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load orders + waiting algos for selectedDate
   useEffect(() => {
@@ -583,12 +604,6 @@ export default function OrdersPage() {
   const filteredOrders  = activeAccountNickname ? orders.filter(g => g.account === activeAccountNickname) : orders
   const filteredWaiting = activeAccountNickname ? waitingAlgos.filter(w => w.account_name === activeAccountNickname) : waitingAlgos
 
-  // Local account filter — use fetched accounts list so chips are always visible
-  const uniqueAccounts = fetchedAccounts.length > 0
-    ? fetchedAccounts.map(a => a.nickname)
-    : Array.from(new Set(orders.map(g => g.account).filter(Boolean)))
-  const accountChips = ['all', ...uniqueAccounts]
-
   const localFilteredOrders  = accountFilter === 'all' ? filteredOrders  : filteredOrders.filter(g => g.account === accountFilter)
   const localFilteredWaiting = accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter)
 
@@ -628,12 +643,40 @@ export default function OrdersPage() {
                   {isPractixMode ? 'PRACTIX' : 'LIVE'}
                 </span>
               </div>
+              {/* Week navigation */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                <button
+                  onClick={() => setWeekOffset(o => o - 1)}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
+                  title="Previous week"
+                >‹</button>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', minWidth: '110px', textAlign: 'center' as const }}>
+                  Week of {weekLabel}
+                </span>
+                <button
+                  onClick={() => setWeekOffset(o => Math.min(0, o + 1))}
+                  disabled={weekOffset === 0}
+                  style={{ background: 'none', border: 'none', color: weekOffset === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.4)', cursor: weekOffset === 0 ? 'default' : 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
+                  title="Next week"
+                >›</button>
+              </div>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
                 MTM: <b style={{ color: totalMTM >= 0 ? '#22DD88' : '#FF4444' }}>
                   {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
                 </b>
               </span>
             </div>
+          </div>
+          <div className="page-header-actions">
+            <StaaxSelect
+              value={accountFilter}
+              onChange={setAccountFilter}
+              options={[
+                { value: 'all', label: 'All Accounts' },
+                ...fetchedAccounts.map(a => ({ value: a.nickname, label: a.nickname })),
+              ]}
+              width="130px"
+            />
           </div>
         </div>
 
@@ -724,22 +767,6 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Account filter chips */}
-        {uniqueAccounts.length > 1 && (
-          <div style={{ display: 'flex', gap: '6px', padding: '8px 24px', flexWrap: 'wrap' as const }}>
-            {accountChips.map(ac => (
-              <div
-                key={ac}
-                onClick={() => setAccountFilter(ac)}
-                className={'chip ' + (accountFilter === ac ? 'chip-active' : 'chip-inactive')}
-                style={{ fontSize: '11px', padding: '3px 12px', cursor: 'pointer' }}
-              >
-                {ac === 'all' ? 'All' : ac}
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Stats banner */}
         <div style={{
           display: 'flex', gap: 32, padding: '10px 24px',
@@ -778,12 +805,16 @@ export default function OrdersPage() {
                 return now >= w.entry_time.slice(0, 5)
               })()
               return (
-                <div key={w.grid_entry_id} style={{
-                  marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
-                  background: 'var(--glass-bg)', border: 'var(--glass-border)',
-                  borderRadius: '7px', padding: '8px 14px', backdropFilter: 'blur(12px)',
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                }}>
+                <div key={w.grid_entry_id}
+                  onMouseEnter={() => setHoveredCard(w.grid_entry_id)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  style={{
+                    marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
+                    background: 'var(--glass-bg)',
+                    border: `0.5px solid ${hoveredCard === w.grid_entry_id ? 'rgba(255,107,0,0.45)' : 'rgba(255,107,0,0.22)'}`,
+                    borderRadius: '7px', padding: '8px 14px', backdropFilter: 'blur(12px)',
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                  }}>
                   <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>{w.algo_name}</span>
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px' }}>{w.account_name}</span>
                   <span style={{
@@ -864,7 +895,10 @@ export default function OrdersPage() {
                     ]
 
                     return (
-                      <div key={group.algoId} style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '10px', overflow: 'hidden', border: '0.5px solid rgba(255,255,255,0.07)' }}>
+                      <div key={group.algoId}
+                        onMouseEnter={() => setHoveredCard(group.algoId)}
+                        onMouseLeave={() => setHoveredCard(null)}
+                        style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '10px', overflow: 'hidden', border: `0.5px solid ${hoveredCard === group.algoId ? 'rgba(255,107,0,0.45)' : 'rgba(255,107,0,0.22)'}` }}>
 
                         {/* ── Algo card header ── */}
                         <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'stretch' }}>
@@ -963,24 +997,26 @@ export default function OrdersPage() {
 
                         {/* ── Legs table ── */}
                         <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
-                          <table className="staax-table">
-                            <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-                            <thead>
-                              <tr>
-                                {HDRS.map(h => (
-                                  <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center' }}>{h}</th>
+                          <div className="cloud-fill" style={{ borderRadius: '8px', overflow: 'hidden', marginTop: '8px' }}>
+                            <table className="staax-table">
+                              <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
+                              <thead>
+                                <tr>
+                                  {HDRS.map(h => (
+                                    <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center' }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {buildRows(group.legs).map(({ leg, isChild }) => (
+                                  <LegRow key={leg.id} leg={leg} isChild={isChild}
+                                    liveLtp={leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined}
+                                    onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
+                                  />
                                 ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {buildRows(group.legs).map(({ leg, isChild }) => (
-                                <LegRow key={leg.id} leg={leg} isChild={isChild}
-                                  liveLtp={leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined}
-                                  onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
-                                />
-                              ))}
-                            </tbody>
-                          </table>
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
 
                       </div>

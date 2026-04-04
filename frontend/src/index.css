@@ -258,9 +258,11 @@ body::before {
 .staax-table th { background:rgba(255,107,0,0.04); font-family:var(--font-display); font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--gs-light); padding:10px 14px; text-align:left; border-bottom:0.5px solid rgba(255,107,0,0.10); white-space:nowrap; overflow:hidden; }
 .staax-table td { padding:11px 14px; border-bottom:0.5px solid rgba(255,255,255,0.03); font-size:13px; font-weight:400; color:var(--gs-muted); overflow:hidden; transition:background var(--dur-fast); }
 .staax-table tr:hover td { background:rgba(255,107,0,0.04); }
-.reports-table td, .reports-table th {
-  border: none;
-  border-bottom: 0.5px solid rgba(255,255,255,0.04);
+.reports-table th {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.reports-table td {
+  border-bottom: none;
 }
 .staax-table tbody tr { transition:background var(--dur-fast); }
 .cell-symbol { color:var(--ox-glow); font-weight:600; font-family:var(--font-mono); }
@@ -709,3 +711,20 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   .landing-module-grid { grid-template-columns: 1fr !important; }
   .landing-hero h1 { font-size: clamp(22px, 6vw, 28px) !important; }
 }
+
+/* ── AI Avatar orb animations ─────────────────────────────────────────────── */
+@keyframes orbPulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.18); }
+}
+@keyframes orbSpeak {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 20px rgba(255,107,0,0.55); }
+  50%       { transform: scale(1.07); box-shadow: 0 0 48px rgba(255,107,0,0.90); }
+}
+@keyframes orbSpin {
+  from { transform: rotate(0deg) scale(1.05); }
+  to   { transform: rotate(360deg) scale(1.05); }
+}
+.orb-pulse { animation: orbPulse 0.9s ease-in-out infinite; }
+.orb-speak { animation: orbSpeak 0.55s ease-in-out infinite; }
+.orb-spin  { animation: orbSpin 1.8s linear infinite; }

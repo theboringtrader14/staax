@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { useEffect } from 'react'
+import AIAvatar from '@/components/AIAvatar'
 
 const MODULES = [
   {
@@ -705,6 +706,8 @@ export default function LandingPage() {
           Private intelligence suite · Built for the family
         </div>
       </footer>
+
+      <AIAvatar />
     </div>
   )
 }
