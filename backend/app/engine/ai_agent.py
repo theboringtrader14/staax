@@ -8,8 +8,20 @@ from google.genai import types
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-client = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY", ""))
 MODEL = "gemma-4-31b-it"
+
+_client = None
+
+def get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        key = os.getenv("GOOGLE_AI_API_KEY")
+        if not key:
+            raise ValueError("GOOGLE_AI_API_KEY missing from .env")
+        _client = genai.Client(api_key=key)
+    return _client
 
 SYSTEM_PROMPT = """You are LIFEX, an intelligent trading analytics AI \
 for Karthikeyan's personal algo trading platform STAAX on NSE/BSE F&O markets.
@@ -120,11 +132,6 @@ async def chat(message: str, context: dict | None = None) -> str | None:
 
 async def chat_with_db(message: str, context: dict, db: AsyncSession) -> str:
     """Full AI analysis with DB data for complex questions."""
-    # Try fast rule-based first
-    quick = await chat(message, context)
-    if quick:
-        return quick
-
     trade_data = await query_trade_data(db, message)
     ctx = context or {}
 
@@ -139,7 +146,7 @@ Live platform data:
 User question: {message}"""
 
     try:
-        response = client.models.generate_content(
+        response = get_client().models.generate_content(
             model=MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(

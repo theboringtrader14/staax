@@ -94,10 +94,8 @@ body::before {
   background-size:28px 28px; pointer-events:none; z-index:0;
 }
 
-::-webkit-scrollbar { width:4px; height:4px; }
-::-webkit-scrollbar-track { background:rgba(10,10,11,0.5); }
-::-webkit-scrollbar-thumb { background:rgba(255,107,0,0.25); border-radius:2px; }
-::-webkit-scrollbar-thumb:hover { background:rgba(255,107,0,0.45); }
+::-webkit-scrollbar { display:none; }
+* { scrollbar-width:none; -ms-overflow-style:none; }
 ::selection { background:rgba(255,107,0,0.28); color:#fff; }
 
 .page-content { padding:var(--page-v-pad) var(--page-h-pad); height:100%; overflow-y:auto; position:relative; z-index:1; }

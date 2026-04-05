@@ -1,29 +1,65 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 type AvatarState = 'idle' | 'listening' | 'processing' | 'speaking'
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
 
+const CSS_ANIMATIONS = `
+@keyframes float {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-4px); }
+}
+@keyframes blink {
+  0%, 95%, 100% { ry: 2; }
+  97%            { ry: 0.3; }
+}
+@keyframes pulse-ring {
+  0%   { r: 44; opacity: 0.8; }
+  100% { r: 60; opacity: 0; }
+}
+@keyframes spin {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -100; }
+}
+@keyframes mouth-open {
+  0%, 100% { ry: 0; }
+  50%       { ry: 4; }
+}
+.lifex-float {
+  animation: float 3s ease-in-out infinite alternate;
+}
+.lifex-eye {
+  animation: blink 3s ease-in-out infinite;
+}
+.lifex-pulse-ring {
+  animation: pulse-ring 1.2s ease-out infinite;
+}
+.lifex-spin-arc {
+  animation: spin 1s linear infinite;
+}
+`
+
 export default function AIAvatar() {
   const [state, setState] = useState<AvatarState>('idle')
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
+  const [mouthOpen, setMouthOpen] = useState(false)
   const recognitionRef = useRef<any>(null)
   const transcriptRef = useRef('')
 
-  const orbColor: Record<AvatarState, string> = {
-    idle:       'rgba(255,107,0,0.7)',
-    listening:  'rgba(34,221,136,0.85)',
-    processing: 'rgba(68,136,255,0.85)',
-    speaking:   'rgba(255,107,0,0.95)',
-  }
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
 
-  const orbGlow: Record<AvatarState, string> = {
-    idle:       '0 0 20px rgba(255,107,0,0.35)',
-    listening:  '0 0 40px rgba(34,221,136,0.55)',
-    processing: '0 0 40px rgba(68,136,255,0.55)',
-    speaking:   '0 0 40px rgba(255,107,0,0.70)',
-  }
+  // Speaking mouth animation
+  useEffect(() => {
+    if (state !== 'speaking') {
+      setMouthOpen(false)
+      return
+    }
+    const interval = setInterval(() => {
+      setMouthOpen(prev => !prev)
+    }, 200)
+    return () => clearInterval(interval)
+  }, [state])
 
   const speak = (text: string) => {
     setState('speaking')
@@ -97,20 +133,26 @@ export default function AIAvatar() {
 
   const stateLabel: Record<AvatarState, string> = {
     idle:       'Click to speak',
-    listening:  '● Listening...',
+    listening:  'Listening...',
     processing: '◌ Thinking...',
     speaking:   '▶ Speaking...',
   }
 
-  const animClass: Record<AvatarState, string> = {
-    idle:       '',
-    listening:  'orb-pulse',
-    processing: 'orb-spin',
-    speaking:   'orb-speak',
+  // Eye dimensions per state
+  const eyeProps: Record<AvatarState, { rx: number; ry: number }> = {
+    idle:       { rx: 3, ry: 2 },
+    listening:  { rx: 4, ry: 3.5 },
+    processing: { rx: 3, ry: 1 },
+    speaking:   { rx: 3, ry: 2 },
   }
+
+  const { rx, ry } = eyeProps[state]
 
   return (
     <div style={{ position: 'fixed', right: 32, bottom: 32, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+
+      {/* Inject CSS animations */}
+      <style dangerouslySetInnerHTML={{ __html: CSS_ANIMATIONS }} />
 
       {/* Expanded panel — shows when there's content */}
       {(transcript || response || state !== 'idle') && (
@@ -139,41 +181,157 @@ export default function AIAvatar() {
         </div>
       )}
 
-      {/* Orb button */}
-      <div
-        onClick={handleOrbClick}
-        className={animClass[state]}
-        style={{
-          width: 56, height: 56,
-          borderRadius: '50%',
-          background: orbColor[state],
-          boxShadow: orbGlow[state],
-          cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background 300ms ease, box-shadow 300ms ease',
-          userSelect: 'none',
-          flexShrink: 0,
-        }}
-        title="Talk to LIFEX AI"
-      >
-        {state === 'processing' ? (
-          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
-            <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-          </svg>
-        ) : (
+      {isMobile ? (
+        /* ── MOBILE: simple 56px orange mic circle ── */
+        <div
+          onClick={handleOrbClick}
+          style={{
+            width: 56, height: 56,
+            borderRadius: '50%',
+            background: 'rgba(255,107,0,0.85)',
+            boxShadow: '0 0 20px rgba(255,107,0,0.35)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 300ms ease, box-shadow 300ms ease',
+            userSelect: 'none',
+            flexShrink: 0,
+          }}
+          title="Talk to LIFEX AI"
+        >
           <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="9" y="1" width="6" height="11" rx="3"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
             <line x1="12" y1="19" x2="12" y2="23"/>
             <line x1="8" y1="23" x2="16" y2="23"/>
           </svg>
-        )}
-      </div>
+        </div>
+      ) : (
+        /* ── DESKTOP: animated SVG face avatar ── */
+        <div
+          onClick={handleOrbClick}
+          className="lifex-float"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+          title="Talk to LIFEX AI"
+        >
+          {/* SVG Avatar */}
+          <svg
+            width={80}
+            height={80}
+            viewBox="0 0 80 80"
+            style={{
+              borderRadius: '50%',
+              background: 'rgba(10,10,14,0.92)',
+              border: '2px solid rgba(255,107,0,0.6)',
+              boxShadow: '0 0 20px rgba(255,107,0,0.35)',
+              overflow: 'visible',
+            }}
+          >
+            {/* Pulse ring — listening state */}
+            {state === 'listening' && (
+              <circle
+                cx="40"
+                cy="40"
+                r="44"
+                fill="none"
+                stroke="rgba(255,107,0,0.6)"
+                strokeWidth="2"
+                className="lifex-pulse-ring"
+              />
+            )}
 
-      {/* LIFEX label */}
-      <div style={{ fontSize: 9, color: 'rgba(255,107,0,0.50)', fontFamily: 'var(--font-display)', letterSpacing: '0.15em', textAlign: 'center', width: 56 }}>
-        LIFEX AI
-      </div>
+            {/* Processing spinner arc */}
+            {state === 'processing' && (
+              <circle
+                cx="40"
+                cy="40"
+                r="38"
+                fill="none"
+                stroke="rgba(255,107,0,0.7)"
+                strokeWidth="2.5"
+                strokeDasharray="60 100"
+                strokeLinecap="round"
+                className="lifex-spin-arc"
+                style={{ transformOrigin: '40px 40px' }}
+              />
+            )}
+
+            {/* Left eye */}
+            <ellipse
+              cx="28"
+              cy="36"
+              rx={rx}
+              ry={ry}
+              fill="#FF6B00"
+              className="lifex-eye"
+            />
+
+            {/* Right eye */}
+            <ellipse
+              cx="52"
+              cy="36"
+              rx={rx}
+              ry={ry}
+              fill="#FF6B00"
+              className="lifex-eye"
+            />
+
+            {/* Mouth */}
+            {state === 'speaking' ? (
+              mouthOpen ? (
+                /* Open mouth — ellipse */
+                <ellipse
+                  cx="40"
+                  cy="52"
+                  rx="8"
+                  ry="4"
+                  fill="#FF6B00"
+                  opacity="0.85"
+                />
+              ) : (
+                /* Closed mouth — line */
+                <line
+                  x1="32"
+                  y1="52"
+                  x2="48"
+                  y2="52"
+                  stroke="#FF6B00"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              )
+            ) : (
+              /* Idle / listening / processing — short resting line */
+              <line
+                x1="32"
+                y1="48"
+                x2="40"
+                y2="48"
+                stroke="#FF6B00"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            )}
+          </svg>
+
+          {/* LIFEX AI label */}
+          <div style={{
+            fontSize: 9,
+            color: 'rgba(255,107,0,0.6)',
+            fontFamily: 'Syne, var(--font-display), sans-serif',
+            letterSpacing: '0.15em',
+            textAlign: 'center',
+          }}>
+            {state === 'listening' ? 'Listening...' : 'LIFEX AI'}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
