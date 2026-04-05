@@ -39,3 +39,6 @@ websockets==13.0.1
 pandas==2.2.2
 numpy==2.1.1
 pyotp==2.9.0
+
+# AI
+google-generativeai>=0.8.0

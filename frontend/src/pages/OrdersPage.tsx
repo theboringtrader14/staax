@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI, accountsAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
+import { TradeReplay } from '@/components/TradeReplay'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -323,6 +324,7 @@ export default function OrdersPage() {
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
+  const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -888,11 +890,12 @@ export default function OrdersPage() {
 
                     // Action button definitions
                     const BTNS = [
-                      { label: 'RUN',  col: '#FF6B00', bg: 'rgba(255,107,0,0.05)',   hBg: 'rgba(255,107,0,0.14)',   disabled: !!group.terminated,                                     action: () => setModal({ type: 'run', algoIdx: gi }) },
-                      { label: 'RE',   col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: !!group.terminated,                                     action: () => doRE(gi) },
-                      { label: 'SYNC', col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: !!group.terminated,                                     action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',   col: '#22DD88', bg: 'rgba(34,221,136,0.05)',  hBg: 'rgba(34,221,136,0.14)', disabled: !!group.terminated || isClosed || openLegs(gi).length === 0, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
-                      { label: 'T',    col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: !!group.terminated || isClosed,                         action: () => setModal({ type: 't', algoIdx: gi }) },
+                      { label: 'RUN',    col: '#FF6B00', bg: 'rgba(255,107,0,0.05)',   hBg: 'rgba(255,107,0,0.14)',   disabled: !!group.terminated,                                         action: () => setModal({ type: 'run', algoIdx: gi }) },
+                      { label: 'RE',     col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: !!group.terminated,                                         action: () => doRE(gi) },
+                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: !!group.terminated,                                         action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  disabled: !!group.terminated || isClosed || openLegs(gi).length === 0, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: !!group.terminated || isClosed,                             action: () => setModal({ type: 't', algoIdx: gi }) },
+                      { label: 'REPLAY', col: '#A78BFA', bg: 'rgba(167,139,250,0.05)', hBg: 'rgba(167,139,250,0.14)', disabled: !isClosed,                                                 action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
                     return (
@@ -1096,6 +1099,16 @@ export default function OrdersPage() {
 
       {/* ── Strategy popup modal ── */}
       <AlgoDetailModal algoName={selectedAlgoName} onClose={() => setSelectedAlgoName(null)} />
+
+      {/* ── Trade Replay modal ── */}
+      {replayAlgo && (
+        <TradeReplay
+          algoId={replayAlgo.id}
+          algoName={replayAlgo.name}
+          date={replayAlgo.date}
+          onClose={() => setReplayAlgo(null)}
+        />
+      )}
 
       {/* ── Confirm Modal ── */}
       {modal && (() => {

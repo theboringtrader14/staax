@@ -65,6 +65,37 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     return {"response": result}
 
 
+@router.post("/analyze")
+async def ai_analyze(body: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """Rich AI analysis with live DB trade data — for complex trading questions."""
+    from app.engine.ai_agent import chat_with_data
+    from sqlalchemy import text as sql_text
+
+    ctx = dict(body.context or {})
+
+    # Enrich with live stats (copy the enrichment logic from /chat if it exists)
+    try:
+        r = await db.execute(sql_text(
+            "SELECT COALESCE(SUM(pnl),0) as fy_pnl, COUNT(*) as total FROM orders "
+            "WHERE status='closed' AND pnl IS NOT NULL"
+        ))
+        row = r.fetchone()
+        if row:
+            ctx.setdefault("fy_pnl", float(row.fy_pnl or 0))
+
+        r2 = await db.execute(sql_text(
+            "SELECT COUNT(*) as cnt FROM algos WHERE is_active=true"
+        ))
+        row2 = r2.fetchone()
+        if row2:
+            ctx.setdefault("active_algos", int(row2.cnt or 0))
+    except Exception:
+        pass
+
+    result = await chat_with_data(body.message, ctx, db)
+    return {"response": result, "model": "gemini-2.0-flash"}
+
+
 @router.post("/analyze-portfolio")
 async def analyze_portfolio(body: PortfolioAnalysisRequest):
     from app.engine.ai_agent import analyze_portfolio

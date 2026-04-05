@@ -227,6 +227,159 @@ async def list_orders(
 
 
 
+@router.get("/replay")
+async def get_trade_replay(
+    algo_id: str,
+    date: str,  # YYYY-MM-DD
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return a Trade Replay payload for a given algo_id and date.
+    Fetches all orders for that algo on that day (using fill_time for date match),
+    builds separate ENTRY and EXIT events, running P&L curve, and summary stats.
+    """
+    from sqlalchemy import cast, Date as SADate
+    import uuid as _uuid_mod
+    import datetime as _dt
+
+    target_date = _parse_date(date)
+    if not target_date:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    try:
+        algo_uuid = _uuid_mod.UUID(algo_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid algo_id UUID.")
+
+    # Fetch algo name
+    algo_result = await db.execute(select(Algo).where(Algo.id == algo_uuid))
+    algo_obj = algo_result.scalar_one_or_none()
+    algo_name = algo_obj.name if algo_obj else algo_id
+
+    # Fetch all orders for this algo on the given date using fill_time
+    result = await db.execute(
+        select(Order).where(
+            Order.algo_id == algo_uuid,
+            cast(Order.fill_time, SADate) == target_date,
+        ).order_by(Order.fill_time)
+    )
+    orders_raw = result.scalars().all()
+
+    empty_summary = {
+        "entry_time": None,
+        "exit_time": None,
+        "total_pnl": 0,
+        "peak_pnl": 0,
+        "max_drawdown": 0,
+        "duration_minutes": 0,
+    }
+
+    if not orders_raw:
+        return {
+            "algo_name": algo_name,
+            "date": date,
+            "events": [],
+            "summary": empty_summary,
+        }
+
+    IST = _dt.timezone(_dt.timedelta(hours=5, minutes=30))
+
+    def _fmt_time(dt) -> str:
+        if dt is None:
+            return "—"
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(IST)
+        return dt.strftime("%H:%M:%S")
+
+    def _map_exit_reason(reason) -> str:
+        if reason is None:
+            return "EXIT"
+        val = reason.value if hasattr(reason, "value") else str(reason)
+        mapping = {
+            "sq":     "AUTO_SQ",
+            "sl":     "SL_HIT",
+            "tsl":    "SL_HIT",
+            "tp":     "TP_HIT",
+            "direct": "EXIT",
+            "manual": "EXIT",
+        }
+        return mapping.get(val.lower(), "EXIT")
+
+    events = []
+    running_pnl = 0.0
+    cumulative_pnl_values = [0.0]
+
+    for order in orders_raw:
+        direction  = (order.direction or "").upper()
+        symbol_str = order.symbol or ""
+
+        # ── ENTRY event (from fill_time) ──────────────────────────────────────
+        if order.fill_time:
+            entry_price = float(order.fill_price or 0)
+            events.append({
+                "type":        "ENTRY",
+                "description": f"{direction} {symbol_str} @{entry_price}",
+                "price":       entry_price,
+                "pnl_at_time": round(running_pnl, 2),
+                "symbol":      symbol_str,
+                "time":        _fmt_time(order.fill_time),
+            })
+
+        # ── EXIT event (from exit_time) ───────────────────────────────────────
+        if order.exit_time:
+            exit_price = float(
+                order.exit_price_manual if order.exit_price_manual is not None
+                else (order.exit_price or 0)
+            )
+            pnl_this   = float(order.pnl or 0)
+            running_pnl = round(running_pnl + pnl_this, 2)
+            cumulative_pnl_values.append(running_pnl)
+            exit_type  = _map_exit_reason(order.exit_reason)
+            pnl_sign   = "+" if pnl_this >= 0 else ""
+            events.append({
+                "type":        exit_type,
+                "description": f"{exit_type.replace('_', ' ')} {symbol_str} @{exit_price}  {pnl_sign}₹{pnl_this:.2f}",
+                "price":       exit_price,
+                "pnl_at_time": running_pnl,
+                "symbol":      symbol_str,
+                "time":        _fmt_time(order.exit_time),
+            })
+
+    # Sort all events chronologically
+    events.sort(key=lambda e: e["time"])
+
+    # Summary
+    first_fill = orders_raw[0].fill_time if orders_raw else None
+    last_exit  = next((o.exit_time for o in reversed(orders_raw) if o.exit_time), None)
+
+    total_pnl    = round(running_pnl, 2)
+    peak_pnl     = round(max(cumulative_pnl_values), 2)
+    max_drawdown = round(min(cumulative_pnl_values), 2)
+
+    duration_minutes = 0
+    if first_fill and last_exit:
+        try:
+            duration_minutes = int((last_exit - first_fill).total_seconds() / 60)
+        except Exception:
+            duration_minutes = 0
+
+    summary = {
+        "entry_time":       _fmt_time(first_fill),
+        "exit_time":        _fmt_time(last_exit) if last_exit else None,
+        "total_pnl":        total_pnl,
+        "peak_pnl":         peak_pnl,
+        "max_drawdown":     max_drawdown,
+        "duration_minutes": duration_minutes,
+    }
+
+    return {
+        "algo_name": algo_name,
+        "date":      date,
+        "events":    events,
+        "summary":   summary,
+    }
+
+
 @router.get("/open-positions")
 async def list_open_positions(
     db: AsyncSession = Depends(get_db),
