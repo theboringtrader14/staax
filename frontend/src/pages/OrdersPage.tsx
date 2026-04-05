@@ -2,6 +2,7 @@ import { useStore } from '@/store'
 import { useState, useEffect, useMemo } from 'react'
 import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI, accountsAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
+import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -313,7 +314,7 @@ export default function OrdersPage() {
   const [syncLoading, setSyncLoading]   = useState(false)
   const [editExit, setEditExit]         = useState<{ orderId: string; value: string } | null>(null)
   const [exitSaving, setExitSaving]     = useState(false)
-  const [algoPopup, setAlgoPopup]       = useState<{ algoName: string; data: any } | null>(null)
+  const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
   const [openPositions, setOpenPositions] = useState<OpenPosition[]>([])
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -913,8 +914,8 @@ export default function OrdersPage() {
 
                             {/* Algo name */}
                             <span
-                              onClick={() => algosAPI.get(group.algoId).then(r => setAlgoPopup({ algoName: group.algoName, data: r.data })).catch(() => setAlgoPopup({ algoName: group.algoName, data: null }))}
-                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: '#F0F0FF', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
+                              onClick={() => setSelectedAlgoName(group.algoName)}
+                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: 'rgba(232,232,248,0.85)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
                               {group.algoName}
                             </span>
 
@@ -1094,103 +1095,7 @@ export default function OrdersPage() {
       )}
 
       {/* ── Strategy popup modal ── */}
-      {algoPopup && (() => {
-        const d = algoPopup.data
-        const legs: any[] = Array.isArray(d?.legs) ? d.legs : []
-        const hasSL = legs.some((l: any) => l.sl_value != null)
-        const hasTP = legs.some((l: any) => l.tp_value != null)
-        const hasSchedule = d && (d.entry_time || d.exit_time || d.entry_type || d.strategy_mode)
-        const hasRisk = d && (d.mtm_sl != null || d.mtm_tp != null)
-        const fmtSL = (l: any) => {
-          if (l.sl_value == null) return '—'
-          const unit = l.sl_type === 'pct' ? '%' : l.sl_type === 'pts' ? ' pts' : ''
-          return `${l.sl_value}${unit}`
-        }
-        const fmtTP = (l: any) => {
-          if (l.tp_value == null) return '—'
-          const unit = l.tp_type === 'pct' ? '%' : l.tp_type === 'pts' ? ' pts' : ''
-          return `${l.tp_value}${unit}`
-        }
-        return (
-          <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setAlgoPopup(null) }}>
-            <div className="modal-box" style={{ maxWidth: '600px', width: '95vw', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 700, fontSize: '17px' }}>{algoPopup.algoName}</div>
-                  {d?.account_nickname && (
-                    <span style={{ fontSize: '11px', fontWeight: 600, background: 'rgba(255,107,0,0.12)', color: 'var(--ox-radiant)', border: '0.5px solid rgba(255,107,0,0.35)', padding: '2px 9px', borderRadius: '20px' }}>
-                      {d.account_nickname}
-                    </span>
-                  )}
-                </div>
-                <button onClick={() => setAlgoPopup(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '20px', lineHeight: 1, flexShrink: 0 }}>×</button>
-              </div>
-
-              {!d ? (
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>Failed to load strategy details</div>
-              ) : (
-                <div className="no-scrollbar" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {hasSchedule && (
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Schedule</div>
-                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: '18px' }}>
-                        {d.entry_type && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry Type</div><div style={{ fontSize: '12px', fontWeight: 600 }}>{d.entry_type}</div></div>}
-                        {d.strategy_mode && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Strategy</div><div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize' }}>{d.strategy_mode}</div></div>}
-                        {d.entry_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--indigo)' }}>{d.entry_time}</div></div>}
-                        {d.exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{d.exit_time}</div></div>}
-                        {d.next_day_exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Next Day Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{d.next_day_exit_time}</div></div>}
-                      </div>
-                    </div>
-                  )}
-                  {hasRisk && (
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Risk</div>
-                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px 14px', display: 'flex', gap: '24px' }}>
-                        {d.mtm_sl != null && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Stop Loss</div><div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--red)' }}>₹{Math.abs(d.mtm_sl).toLocaleString('en-IN')}</div></div>}
-                        {d.mtm_tp != null && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Target</div><div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green)' }}>₹{d.mtm_tp.toLocaleString('en-IN')}</div></div>}
-                      </div>
-                    </div>
-                  )}
-                  {legs.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Legs ({legs.length})</div>
-                      <div style={{ border: '1px solid var(--bg-border)', borderRadius: '6px', overflow: 'hidden' }}>
-                        <table className="staax-table" style={{ width: '100%' }}>
-                          <thead>
-                            <tr>
-                              <th>#</th><th>Underlying</th><th>Dir</th><th>Expiry</th><th>Strike</th><th>Lots</th>
-                              {hasSL && <th>SL</th>}
-                              {hasTP && <th>TP</th>}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {legs.map((leg: any, i: number) => (
-                              <tr key={i}>
-                                <td style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{leg.leg_number ?? i + 1}</td>
-                                <td style={{ fontSize: '11px', fontWeight: 600 }}>{leg.underlying || '—'}</td>
-                                <td style={{ fontSize: '11px', fontWeight: 700, color: (leg.direction || '').toUpperCase() === 'BUY' ? 'var(--green)' : 'var(--red)' }}>{(leg.direction || '').toUpperCase() || '—'}</td>
-                                <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{leg.expiry || '—'}</td>
-                                <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{leg.strike_type || '—'}</td>
-                                <td style={{ fontSize: '11px' }}>{leg.lots ?? '—'}</td>
-                                {hasSL && <td style={{ fontSize: '11px', color: 'var(--amber)' }}>{fmtSL(leg)}</td>}
-                                {hasTP && <td style={{ fontSize: '11px', color: 'var(--green)' }}>{fmtTP(leg)}</td>}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                <button className="btn btn-ghost" onClick={() => setAlgoPopup(null)}>Close</button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      <AlgoDetailModal algoName={selectedAlgoName} onClose={() => setSelectedAlgoName(null)} />
 
       {/* ── Confirm Modal ── */}
       {modal && (() => {

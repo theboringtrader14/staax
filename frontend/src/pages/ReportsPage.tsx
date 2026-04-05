@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { getCurrentFY, getFYOptions } from '@/utils/fy'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 
 const DAY_NAMES=['Mon','Tue','Wed','Thu','Fri']
 
@@ -151,6 +152,7 @@ export default function ReportsPage(){
   const [metricTo,setMetricTo]=useState('')
   const [downloading, setDownloading] = useState(false)
   const [closeHover, setCloseHover] = useState(false)
+  const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
   const [algoMetrics, setAlgoMetrics] = useState<any[]>([])
   const [fyMetrics, setFyMetrics] = useState<any[]>([])
   const [calendarData, setCalendarData] = useState<Record<string,number>>({})
@@ -432,7 +434,7 @@ export default function ReportsPage(){
             <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%',tableLayout:'fixed'}}>
               <thead>
                 <tr>
-                  {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px',textAlign:'center'}}>{a.name}</th>)}
+                  {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px',textAlign:'center',cursor:'pointer'}} onClick={()=>setSelectedAlgo(a.name)}>{a.name}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -518,6 +520,7 @@ export default function ReportsPage(){
           </div>
         </div>
       )}
+      <AlgoDetailModal algoName={selectedAlgo} onClose={() => setSelectedAlgo(null)} />
     </div>
   )
 }

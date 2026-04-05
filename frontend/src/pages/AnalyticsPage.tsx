@@ -6,6 +6,7 @@ import { reportsAPI, ordersAPI, algosAPI } from '@/services/api'
 import type { Order, Algo } from '@/types'
 import { getCurrentFY, getFYOptions } from '@/utils/fy'
 import { StaaxSelect } from '@/components/StaaxSelect'
+import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 
 // ── Local Types ────────────────────────────────────────────────────────────────
 interface MetricRow {
@@ -169,10 +170,6 @@ function SegmentedArcGauge({ score }: { score: number }) {
           style={{ fontSize: '28px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
           {s}
         </text>
-        <text x="80" y="76" textAnchor="middle"
-          style={{ fontSize: '9px', fill: 'rgba(232,232,248,0.38)', letterSpacing: '0.1em', fontFamily: 'inherit' }}>
-          AVG HEALTH
-        </text>
         {/* Grade badge */}
         <text x="80" y="91" textAnchor="middle"
           style={{ fontSize: '11px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
@@ -184,10 +181,16 @@ function SegmentedArcGauge({ score }: { score: number }) {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-function SummaryCard({ label, value, sub }: {
+function SummaryCard({ label, value, sub, valueColor }: {
   label: string; value: string; sub?: string; valueColor?: string
 }) {
   const [hovered, setHovered] = useState(false)
+  const subColor = (() => {
+    const s = String(sub ?? '')
+    if (s.startsWith('+') || (!s.startsWith('-') && !isNaN(Number(s)) && s.trim() !== '' && Number(s) > 0)) return '#22DD88'
+    if (s.startsWith('-')) return '#FF4444'
+    return 'rgba(232,232,248,0.5)'
+  })()
   return (
     <div className="card cloud-fill" style={{
       borderTop: 'none',
@@ -201,12 +204,12 @@ function SummaryCard({ label, value, sub }: {
         {label}
       </div>
       <div style={{
-        fontSize: '20px', fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word',
-        color: '#F0F0FF', fontFamily: 'var(--font-mono)',
+        fontSize: 24, fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word',
+        color: valueColor || 'var(--ox-radiant)', fontFamily: 'var(--font-mono)',
       }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.45)', marginTop: '4px' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '10px', color: subColor, marginTop: '4px' }}>{sub}</div>}
     </div>
   )
 }
@@ -232,6 +235,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 }) {
   const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
   const [showWeekends, setShowWeekends] = useState(false)
+  const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
 
   const bestAlgo       = metrics.length > 0 ? [...metrics].sort((a, b) => b.pnl - a.pnl)[0] : null
   const worstAlgo      = metrics.length > 0 ? [...metrics].sort((a, b) => a.pnl - b.pnl)[0] : null
@@ -260,30 +264,33 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
   // Heatmap
   const heatmapAlgos = Object.keys(breakdown).sort()
-  function scoreBarColor(score: number): string {
-    if (score >= 70) return 'var(--green)'
-    if (score >= 40) return 'var(--accent-amber)'
-    return 'var(--red)'
-  }
-
   return (
     <div>
       {/* Row 1 — 6 summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '12px' }}>
-        <SummaryCard label="Best Algo" value={bestAlgo?.algo_name || '—'}
-          sub={bestAlgo ? `${fmtPnl(bestAlgo.pnl)} · ${bestAlgo.wins}W/${bestAlgo.losses}L` : undefined}
-          valueColor="var(--green)" />
-        <SummaryCard label="Worst Algo" value={worstAlgo?.algo_name || '—'}
-          sub={worstAlgo ? `${fmtPnl(worstAlgo.pnl)} · ${worstAlgo.wins}W/${worstAlgo.losses}L` : undefined}
-          valueColor="var(--red)" />
+        <div onClick={() => bestAlgo?.algo_name && bestAlgo.algo_name !== '—' ? setSelectedAlgo(bestAlgo.algo_name) : undefined} style={{ cursor: bestAlgo ? 'pointer' : 'default' }}>
+          <SummaryCard label="Best Algo" value={bestAlgo?.algo_name || '—'}
+            sub={bestAlgo ? `${fmtPnl(bestAlgo.pnl)} · ${bestAlgo.wins}W/${bestAlgo.losses}L` : undefined}
+            valueColor="var(--green)" />
+        </div>
+        <div onClick={() => worstAlgo?.algo_name && worstAlgo.algo_name !== '—' ? setSelectedAlgo(worstAlgo.algo_name) : undefined} style={{ cursor: worstAlgo ? 'pointer' : 'default' }}>
+          <SummaryCard label="Worst Algo" value={worstAlgo?.algo_name || '—'}
+            sub={worstAlgo ? `${fmtPnl(worstAlgo.pnl)} · ${worstAlgo.wins}W/${worstAlgo.losses}L` : undefined}
+            valueColor="var(--red)" />
+        </div>
         <SummaryCard label="Best Score" value={best ? String(best.score) : '—'}
-          sub={best ? `${best.algo_name} · ${best.grade}` : undefined} valueColor="var(--green)" />
+          sub={best ? `${best.algo_name} · ${best.grade}` : undefined}
+          valueColor={best ? (best.score >= 60 ? '#22DD88' : best.score >= 40 ? '#FFB347' : '#FF4444') : 'var(--ox-radiant)'} />
         <SummaryCard label="Avg Score" value={scores.length > 0 ? String(avgScore) : '—'}
-          valueColor={avgScore >= 70 ? 'var(--green)' : avgScore >= 40 ? 'var(--accent-amber)' : 'var(--red)'} />
-        <SummaryCard label="Most Consistent" value={mostConsistent?.algo_name || '—'}
-          sub={mostConsistent ? `${mostConsistent.trades} trades` : undefined} valueColor="var(--indigo)" />
-        <SummaryCard label="Needs Attention" value={needsAttn?.algo_name || '—'}
-          sub={needsAttn ? `Score ${needsAttn.score} · ${needsAttn.grade}` : undefined} valueColor="var(--red)" />
+          valueColor={scores.length > 0 ? (avgScore >= 60 ? '#22DD88' : avgScore >= 40 ? '#FFB347' : '#FF4444') : 'var(--ox-radiant)'} />
+        <div onClick={() => mostConsistent?.algo_name && mostConsistent.algo_name !== '—' ? setSelectedAlgo(mostConsistent.algo_name) : undefined} style={{ cursor: mostConsistent ? 'pointer' : 'default' }}>
+          <SummaryCard label="Most Consistent" value={mostConsistent?.algo_name || '—'}
+            sub={mostConsistent ? `${mostConsistent.trades} trades` : undefined} valueColor="var(--indigo)" />
+        </div>
+        <div onClick={() => needsAttn?.algo_name && needsAttn.algo_name !== '—' ? setSelectedAlgo(needsAttn.algo_name) : undefined} style={{ cursor: needsAttn ? 'pointer' : 'default' }}>
+          <SummaryCard label="Needs Attention" value={needsAttn?.algo_name || '—'}
+            sub={needsAttn ? `Score ${needsAttn.score} · ${needsAttn.grade}` : undefined} valueColor="var(--red)" />
+        </div>
       </div>
 
       {/* Cumulative P&L chart */}
@@ -291,25 +298,27 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
       {/* Row 2 — chip toggle: P&L heatmap vs Health Scores */}
       <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          {([['heatmap', 'P&L Heatmap'], ['health', 'Health Scores']] as const).map(([v, l]) => (
-            <button key={v} onClick={() => setActiveView(v)}
-              style={{
-                padding: '4px 12px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer',
-                fontFamily: 'var(--font-display)', fontWeight: 600, border: 'none',
-                background: activeView === v ? 'rgba(255,107,0,0.15)' : 'transparent',
-                color: activeView === v ? '#FF6B00' : 'rgba(232,232,248,0.5)',
-                outline: activeView === v ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
-              }}>{l}</button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {([['heatmap', 'P&L Heatmap'], ['health', 'Health Scores']] as const).map(([v, l]) => (
+              <button key={v} onClick={() => setActiveView(v)}
+                style={{
+                  padding: '4px 12px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer',
+                  fontFamily: 'var(--font-display)', fontWeight: 600, border: 'none',
+                  background: activeView === v ? 'rgba(255,107,0,0.15)' : 'transparent',
+                  color: activeView === v ? '#FF6B00' : 'rgba(232,232,248,0.5)',
+                  outline: activeView === v ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
+                }}>{l}</button>
+            ))}
+          </div>
           {activeView === 'heatmap' && (
-            <button onClick={() => setShowWeekends(!showWeekends)} style={{
-              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontFamily: 'Syne',
-              background: showWeekends ? 'rgba(255,107,0,0.15)' : 'transparent',
-              border: '0.5px solid rgba(255,107,0,0.4)',
-              color: showWeekends ? '#FF6B00' : 'rgba(255,255,255,0.4)',
-              cursor: 'pointer'
-            }}>Weekends</button>
+            <div onClick={() => setShowWeekends(!showWeekends)} style={{
+              padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+              fontSize: 11, fontFamily: 'Syne',
+              background: showWeekends ? 'rgba(68,136,255,0.15)' : 'transparent',
+              border: showWeekends ? '0.5px solid rgba(68,136,255,0.5)' : '0.5px solid rgba(255,255,255,0.15)',
+              color: showWeekends ? '#4488FF' : 'rgba(255,255,255,0.4)'
+            }}>Weekends</div>
           )}
         </div>
 
@@ -317,7 +326,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
           const visibleDays = showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']
           return heatmapAlgos.length === 0
             ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No day-breakdown data available.</div>
-            : <div style={tblWrap}>
+            : <>
+              <div style={tblWrap}>
                 <table className="staax-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
@@ -332,7 +342,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                       const fyTotal = visibleDays.reduce((s, d) => s + (row[d]?.pnl ?? 0), 0)
                       return (
                         <tr key={algo}>
-                          <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{algo}</td>
+                          <td onClick={() => setSelectedAlgo(algo)} style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ox-radiant)', fontFamily: 'var(--font-mono)', fontSize: 13, cursor: 'pointer' }}>{algo}</td>
                           {visibleDays.map(d => {
                             const cell = row[d]
                             const pnl = cell?.pnl
@@ -366,6 +376,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                   </tbody>
                 </table>
               </div>
+            </>
         })()}
 
         {activeView === 'health' && (
@@ -392,32 +403,25 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                       const g = GRADE_COLORS[s.grade] || GRADE_COLORS['D']
                       return (
                         <tr key={s.algo_name}>
-                          <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.algo_name}</td>
+                          <td style={{ width: 120, maxWidth: 120, borderBottom: '0.5px solid rgba(255,255,255,0.06)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span onClick={() => setSelectedAlgo(s.algo_name)} style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--ox-radiant)', fontWeight: 600, display: 'block', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>{s.algo_name}</span>
+                          </td>
                           <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', color: g.color, background: g.bg, border: `1px solid ${g.border}` }}>{s.grade}</span>
                           </td>
-                          <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                              <div style={{ width: '80px', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', flexShrink: 0, overflow: 'hidden' }}>
+                          <td style={{ borderBottom: '0.5px solid rgba(255,255,255,0.06)', padding: '6px 8px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
+                              <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
                                 <div style={{
-                                  width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: '3px',
-                                  background: s.score >= 70
-                                    ? 'linear-gradient(90deg, #22DD88, #34d399)'
-                                    : s.score >= 40
-                                    ? 'linear-gradient(90deg, #f59e0b, #fcd34d)'
-                                    : 'linear-gradient(90deg, #FF4444, #f87171)',
-                                  boxShadow: s.score >= 70
-                                    ? '0 0 8px rgba(16,185,129,0.7)'
-                                    : s.score >= 40
-                                    ? '0 0 8px rgba(245,158,11,0.7)'
-                                    : '0 0 8px rgba(239,68,68,0.7)',
+                                  width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 4,
+                                  background: s.score >= 60 ? '#FF6B00' : s.score >= 30 ? '#FFB347' : '#FF4444',
                                   transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)',
                                 }} />
                               </div>
-                              <span style={{ ...numStyle, fontSize: '12px', color: scoreBarColor(s.score) }}>{s.score}</span>
+                              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: s.score >= 60 ? 'var(--ox-radiant)' : s.score >= 30 ? '#FFB347' : '#FF4444', minWidth: 36, textAlign: 'right' }}>{s.score}</span>
                             </div>
                           </td>
-                          <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.trades}</td>
+                          <td style={{ textAlign: 'center', ...numStyle, color: 'rgba(232,232,248,0.6)', fontFamily: 'var(--font-mono)', fontSize: 12, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.trades}</td>
                           <td style={{ textAlign: 'center', ...numStyle, color: s.win_pct >= 50 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.win_pct.toFixed(1)}%</td>
                           <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: s.total_pnl >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(s.total_pnl)}</td>
                         </tr>
@@ -435,10 +439,10 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         const maxAbsPnl = Math.max(...timeSlots.map((s: any) => Math.abs(s.total_pnl)), 1)
         return (
           <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: '12px' }}>
               <span style={{ ...secHdr, marginBottom: 0, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Best Time to Trade</span>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px', paddingTop: '40px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px', marginTop: 32 }}>
               {timeSlots.map((slot: any) => {
                 const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 60))
                 const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
@@ -512,6 +516,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         </div>
         )}
       </div>
+      <AlgoDetailModal algoName={selectedAlgo} onClose={() => setSelectedAlgo(null)} />
     </div>
   )
 }
@@ -539,7 +544,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
       </div>
 
       <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
-        <div style={secHdr}>Errors per Algo</div>
+        <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Errors per Algo</div>
         {data.per_algo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No errors on record</div>
         ) : (
@@ -567,7 +572,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
       </div>
 
       <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
-        <div style={secHdr}>Recent Error Orders (last 20)</div>
+        <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Recent Error Orders (last 20)</div>
         {data.recent.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No recent errors</div>
         ) : (
@@ -631,7 +636,7 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
       </div>
 
       <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
-        <div style={secHdr}>Slippage per Algo</div>
+        <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Slippage per Algo</div>
         {data.per_algo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No slippage data on record</div>
         ) : (
@@ -683,7 +688,7 @@ interface LatencyData {
 function LatencyTab({ data }: { data: LatencyData | null }) {
   if (!data || data.total_orders === 0) {
     return (
-      <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px', fontSize: '13px' }}>
+      <div className="card cloud-fill" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px', fontSize: '13px' }}>
         No latency data yet — execute trades to see metrics.<br />Latency tracking is active from today.
       </div>
     )
@@ -878,7 +883,7 @@ export default function AnalyticsPage() {
         {(['Performance','Failures','Slippage','Latency'] as Tab[]).map(tab => (
           <button key={tab} onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }} style={{
             flex: 1, padding:'12px 0',
-            background: 'transparent', border: 'none',
+            background: activeTab === tab ? 'rgba(255,107,0,0.08)' : 'transparent', border: 'none',
             borderBottom: activeTab===tab ? '2px solid #FF6B00' : '2px solid transparent',
             color: activeTab===tab ? '#FF6B00' : 'rgba(255,255,255,0.4)',
             fontFamily: 'Syne', fontSize: 12, fontWeight: 600,
