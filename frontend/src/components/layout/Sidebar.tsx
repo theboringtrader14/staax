@@ -11,8 +11,6 @@ const IconCandle = () => <svg width={IS} height={IS} viewBox="0 0 24 24" fill="n
 const IconChart = () => <svg width={IS} height={IS} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
 const IconBar = () => <svg width={IS} height={IS} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="10" width="4" height="11" rx="1"/><rect x="10" y="4" width="4" height="17" rx="1"/><rect x="17" y="7" width="4" height="14" rx="1"/></svg>
 const IconUser = () => <svg width={IS} height={IS} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-const IconAI = () => <svg width={IS} height={IS} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 1.1-.4 2-.9 2.8A4 4 0 0 1 16 12a4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1 .9-2.5C8.4 8.7 8 7.8 8 7a4 4 0 0 1 4-4z"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
-
 const NAV = [
   { path:'/dashboard',  label:'Dashboard',      Icon:IconHome,   accent:false },
   { path:'/grid',       label:'Smart Grid',     Icon:IconGrid,   accent:false },
@@ -21,7 +19,6 @@ const NAV = [
   { path:'/indicators', label:'Indicator Bots', Icon:IconCandle, accent:false },
   { path:'/reports',    label:'Reports',        Icon:IconChart,  accent:false },
   { path:'/analytics',  label:'Analytics',      Icon:IconBar,    accent:false },
-  { path:'/ai',         label:'LIFEX AI',       Icon:IconAI,     accent:false },
   { path:'/accounts',   label:'Accounts',       Icon:IconUser,   accent:false },
 ]
 

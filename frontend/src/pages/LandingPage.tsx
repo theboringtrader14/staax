@@ -486,7 +486,12 @@ export default function LandingPage() {
               className="landing-module-card"
               data-accent={mod.accentKey}
               onClick={() => {
-                if ('externalUrl' in mod && mod.externalUrl) window.location.href = mod.externalUrl
+                if (mod.id === 'BUDGEX') {
+                  const budgexUrl = import.meta.env.VITE_BUDGEX_URL || 'http://localhost:3002'
+                  window.location.href = budgexUrl
+                } else if ('externalUrl' in mod && mod.externalUrl) {
+                  window.location.href = mod.externalUrl
+                }
               }}
               style={{
                 background: `rgba(10,10,26,0.7)`,
