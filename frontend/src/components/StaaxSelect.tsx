@@ -17,8 +17,8 @@ export function StaaxSelect({ value, onChange, options, width }: {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
       setDropPos({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
+        top: rect.bottom + 4,
+        left: rect.left,
         width: rect.width,
       })
     }
@@ -57,7 +57,7 @@ export function StaaxSelect({ value, onChange, options, width }: {
 
       {open && createPortal(
         <div ref={dropdownRef} style={{
-          position: 'absolute',
+          position: 'fixed',
           top: dropPos.top,
           left: dropPos.left,
           width: dropPos.width,
@@ -69,6 +69,8 @@ export function StaaxSelect({ value, onChange, options, width }: {
           borderRadius: '8px',
           overflow: 'hidden',
           boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          maxHeight: '240px',
+          overflowY: 'auto',
         }}>
           {options.map(o => (
             <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}

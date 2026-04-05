@@ -6,6 +6,11 @@ interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
   margin: number; pnl: number; token: string; color: string
   globalSL: number | null; globalTP: number | null; fyBrokerage: number | null
+  client_id?: string; api_key?: string
+}
+
+interface EditCredsState {
+  id: string; nickname: string; client_id: string; api_key: string; api_secret: string; totp_secret: string
 }
 
 
@@ -47,6 +52,9 @@ export default function AccountsPage() {
   const [tokenStatus, setTokenStatus] = useState<Record<string, boolean>>({})
   const [editNick,    setEditNick]    = useState<Record<string, string>>({})
   const [nickEditing, setNickEditing] = useState<Record<string, boolean>>({})
+  const [editingCreds, setEditingCreds] = useState<EditCredsState | null>(null)
+  const [showSecret,   setShowSecret]   = useState(false)
+  const [showTotp,     setShowTotp]     = useState(false)
 
   // Add Account modal
   const [addModal,   setAddModal]   = useState(false)
@@ -84,6 +92,7 @@ export default function AccountsPage() {
           fyBrokerage: api.fy_brokerage ?? null,
           margin: api.fy_margin ?? 0, pnl: 0, token: '', color: '',
           type: api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
+          client_id: api.client_id ?? '', api_key: api.api_key ?? '',
         })))
       }).catch(() => {})
       setAddToast('✅ Account added')
@@ -114,6 +123,8 @@ export default function AccountsPage() {
             token:       '',
             color:       '',
             type:        api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
+            client_id:   api.client_id ?? '',
+            api_key:     api.api_key ?? '',
           })))
         }
       })
@@ -155,6 +166,8 @@ export default function AccountsPage() {
         token:       '',
         color:       '',
         type:        api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
+        client_id:   api.client_id ?? '',
+        api_key:     api.api_key ?? '',
       })))
     }
   }, [storeAccounts])
@@ -339,6 +352,22 @@ export default function AccountsPage() {
                 </span>
               </div>
 
+              {/* Edit API Keys button */}
+              <div style={{ marginBottom: '10px' }}>
+                <button onClick={() => setEditingCreds({
+                  id: acc.id,
+                  nickname: acc.name,
+                  client_id: acc.client_id || '',
+                  api_key: acc.api_key || '',
+                  api_secret: '',
+                  totp_secret: ''
+                })} style={{
+                  padding: '4px 10px', borderRadius: 8, fontSize: 10, fontFamily: 'Syne',
+                  background: 'transparent', border: '0.5px solid rgba(255,255,255,0.15)',
+                  color: 'rgba(232,232,248,0.5)', cursor: 'pointer'
+                }}>Edit API Keys</button>
+              </div>
+
               {/* Edit controls — active accounts only */}
               {acc.status === 'active' && <>
                 {/* A3 — FY Margin + FY Brokerage side by side */}
@@ -491,6 +520,52 @@ export default function AccountsPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit API Keys Modal */}
+      {editingCreds && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+          <div className="cloud-fill" style={{width:420,borderRadius:16,border:'0.5px solid rgba(255,107,0,0.3)',padding:28}}>
+            <div style={{fontFamily:'Syne',fontWeight:700,fontSize:16,color:'var(--ox-radiant)',marginBottom:4}}>{editingCreds.nickname}</div>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'rgba(232,232,248,0.4)',marginBottom:20}}>Client ID: {editingCreds.client_id}</div>
+
+            {/* API Key */}
+            <label style={{fontSize:10,fontFamily:'Syne',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:1}}>API Key</label>
+            <input value={editingCreds.api_key} onChange={e => setEditingCreds({...editingCreds, api_key: e.target.value})}
+              style={{width:'100%',marginTop:4,marginBottom:12,padding:'8px 10px',borderRadius:8,border:'0.5px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.05)',color:'#F0F0FF',fontFamily:'var(--font-mono)',fontSize:12,boxSizing:'border-box'}} />
+
+            {/* API Secret */}
+            <label style={{fontSize:10,fontFamily:'Syne',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:1}}>API Secret</label>
+            <div style={{position:'relative',marginTop:4,marginBottom:12}}>
+              <input type={showSecret?'text':'password'} value={editingCreds.api_secret} onChange={e => setEditingCreds({...editingCreds, api_secret: e.target.value})}
+                placeholder="Leave blank to keep existing"
+                style={{width:'100%',padding:'8px 36px 8px 10px',borderRadius:8,border:'0.5px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.05)',color:'#F0F0FF',fontFamily:'var(--font-mono)',fontSize:12,boxSizing:'border-box'}} />
+              <button onClick={() => setShowSecret(!showSecret)} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'rgba(232,232,248,0.4)',cursor:'pointer',fontSize:11}}>{showSecret?'Hide':'Show'}</button>
+            </div>
+
+            {/* TOTP Secret */}
+            <label style={{fontSize:10,fontFamily:'Syne',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:1}}>TOTP Secret</label>
+            <div style={{position:'relative',marginTop:4,marginBottom:20}}>
+              <input type={showTotp?'text':'password'} value={editingCreds.totp_secret} onChange={e => setEditingCreds({...editingCreds, totp_secret: e.target.value})}
+                placeholder="Leave blank to keep existing"
+                style={{width:'100%',padding:'8px 36px 8px 10px',borderRadius:8,border:'0.5px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.05)',color:'#F0F0FF',fontFamily:'var(--font-mono)',fontSize:12,boxSizing:'border-box'}} />
+              <button onClick={() => setShowTotp(!showTotp)} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'rgba(232,232,248,0.4)',cursor:'pointer',fontSize:11}}>{showTotp?'Hide':'Show'}</button>
+            </div>
+
+            {/* Actions */}
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={() => { setEditingCreds(null); setShowSecret(false); setShowTotp(false); }}
+                style={{padding:'8px 16px',borderRadius:8,border:'0.5px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(232,232,248,0.5)',fontFamily:'Syne',fontSize:12,cursor:'pointer'}}>Cancel</button>
+              <button onClick={async () => {
+                const body: Record<string,string> = { api_key: editingCreds.api_key }
+                if (editingCreds.api_secret) body.api_secret = editingCreds.api_secret
+                if (editingCreds.totp_secret) body.totp_secret = editingCreds.totp_secret
+                await fetch(`/api/v1/accounts/${editingCreds.id}/credentials`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+                setEditingCreds(null); setShowSecret(false); setShowTotp(false)
+              }} style={{padding:'8px 20px',borderRadius:8,border:'none',background:'var(--ox-radiant)',color:'#000',fontFamily:'Syne',fontWeight:700,fontSize:12,cursor:'pointer'}}>Save</button>
+            </div>
           </div>
         </div>
       )}

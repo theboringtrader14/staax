@@ -88,11 +88,34 @@ def _display_name(svc_id: str) -> str:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/")
-async def get_status():
+async def get_status(request: Request):
     """
     Get status of all services.
     Frontend polls this every 5 seconds to update the Dashboard status dots.
+    Performs a live Redis and PostgreSQL check on every call so the status dots
+    reflect actual connectivity rather than cached state.
     """
+    # ── Live Redis check ──────────────────────────────────────────────────────
+    redis = getattr(request.app.state, "redis_client", None)
+    if redis:
+        try:
+            await redis.ping()
+            _service_states["redis"] = ServiceStatus.RUNNING
+        except Exception:
+            _service_states["redis"] = ServiceStatus.ERROR
+    else:
+        _service_states["redis"] = ServiceStatus.STOPPED
+
+    # ── Live PostgreSQL check ─────────────────────────────────────────────────
+    try:
+        from app.core.database import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        _service_states["db"] = ServiceStatus.RUNNING
+    except Exception:
+        _service_states["db"] = ServiceStatus.ERROR
+
     return _build_status_response()
 
 
@@ -120,7 +143,7 @@ async def start_all(request: Request):
 
     # ── Redis health check ────────────────────────────────────────────────────
     try:
-        redis = getattr(request.app.state, "redis", None)
+        redis = getattr(request.app.state, "redis_client", None)
         if redis:
             await redis.ping()
             _service_states["redis"] = ServiceStatus.RUNNING

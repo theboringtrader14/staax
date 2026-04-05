@@ -523,7 +523,6 @@ async def system_health(request: Request):
         "broker_karthik_ao": getattr(state, "angelone_karthik", None),
         "broker_mom_ao":     getattr(state, "angelone_mom", None),
         "broker_wife_ao":    getattr(state, "angelone_wife", None),
-        "broker_zerodha":    getattr(state, "zerodha", None),
     }
     broker_ok_count = 0
     for key, broker in broker_map.items():
@@ -537,6 +536,38 @@ async def system_health(request: Request):
                 broker_ok_count += 1
         except Exception as e:
             checks[key] = {"ok": False, "token_valid": False, "error": str(e)}
+
+    # ── Zerodha: token_valid and ok are based on DB access_token (best-effort) ─
+    # Live API calls fail when market is closed — check DB token existence only.
+    try:
+        from app.models.account import Account as _Account, BrokerType as _BrokerType
+        from app.core.database import AsyncSessionLocal as _ASL
+        from sqlalchemy import select as _sa_select
+        async with _ASL() as _zdb:
+            _zres = await _zdb.execute(
+                _sa_select(_Account).where(
+                    _Account.broker == _BrokerType.ZERODHA,
+                    _Account.is_active == True,
+                )
+            )
+            _zacc = _zres.scalar_one_or_none()
+        token_valid = bool(_zacc and _zacc.access_token and _zacc.access_token.strip())
+        checks["broker_zerodha"] = {"ok": token_valid, "token_valid": token_valid}
+        if token_valid:
+            broker_ok_count += 1
+    except Exception as _ze:
+        # Fall back to in-memory adapter check if DB query fails
+        zerodha_broker = getattr(state, "zerodha", None)
+        if zerodha_broker is None:
+            checks["broker_zerodha"] = {"ok": False, "token_valid": False, "error": "not initialised"}
+        else:
+            try:
+                token_ok = bool(zerodha_broker.is_token_set())
+                checks["broker_zerodha"] = {"ok": token_ok, "token_valid": token_ok}
+                if token_ok:
+                    broker_ok_count += 1
+            except Exception as _e2:
+                checks["broker_zerodha"] = {"ok": False, "token_valid": False, "error": str(_e2)}
 
     # ── SmartStream (LTPConsumer) ─────────────────────────────────────────────
     ltp_consumer = getattr(state, "ltp_consumer", None)
@@ -561,37 +592,51 @@ async def system_health(request: Request):
     checks["app_env"] = settings.APP_ENV
 
     # ── Overall readiness ─────────────────────────────────────────────────────
-    db_ok     = checks["database"].get("ok", False)
-    redis_ok  = checks["redis"].get("ok", False)
-    stream_ok = checks["smartstream"].get("connected", False)
-
-    # SmartStream required only during market hours:
-    # NSE session: 09:00–15:30 IST | MCX session: 00:00–23:30 IST
     now_ist = datetime.now(IST)
-    _hm = now_ist.hour * 60 + now_ist.minute
-    _nse_open = 9 * 60 <= _hm <= 15 * 60 + 30
-    _mcx_open = _hm < 23 * 60 + 30
-    smartstream_required = _nse_open or _mcx_open
+    is_market_hours = (
+        now_ist.weekday() < 5 and  # Mon–Fri
+        (now_ist.hour, now_ist.minute) >= (9, 15) and
+        (now_ist.hour, now_ist.minute) <= (15, 30)
+    )
 
-    ready_reason = None
-    if not db_ok:
-        ready_reason = "DB_DOWN"
-    elif not redis_ok:
-        ready_reason = "REDIS_DOWN"
-    elif broker_ok_count == 0:
-        ready_reason = "NO_BROKER_TOKEN"
-    elif smartstream_required and not stream_ok:
-        ready_reason = "FEED_INACTIVE"
+    any_broker_token_valid = (
+        checks.get('broker_mom_ao', {}).get('token_valid', False) or
+        checks.get('broker_karthik_ao', {}).get('token_valid', False) or
+        checks.get('broker_wife_ao', {}).get('token_valid', False) or
+        checks.get('broker_zerodha', {}).get('ok', False)
+    )
 
-    ready  = ready_reason is None
+    ready = (
+        checks.get('database', {}).get('ok', False) and
+        checks.get('redis', {}).get('ok', False) and
+        any_broker_token_valid and
+        checks.get('scheduler', {}).get('ok', True) and
+        (not is_market_hours or checks.get('smartstream', {}).get('connected', False))
+    )
+
+    if not ready:
+        if not checks.get('database', {}).get('ok', False):
+            ready_reason = 'DB_DOWN'
+        elif not checks.get('redis', {}).get('ok', False):
+            ready_reason = 'REDIS_DOWN'
+        elif not any_broker_token_valid:
+            ready_reason = 'NO_BROKER_TOKENS'
+        elif is_market_hours and not checks.get('smartstream', {}).get('connected', False):
+            ready_reason = 'FEED_INACTIVE'
+        else:
+            ready_reason = 'NOT_READY'
+    else:
+        ready_reason = 'READY'
+
     status = "ok" if ready else "degraded"
 
     return {
-        "ready":        ready,
-        "ready_reason": ready_reason,
-        "status":       status,
-        "checks":       checks,
-        "timestamp":    now_ist.isoformat(),
+        "ready":           ready,
+        "ready_reason":    ready_reason,
+        "is_market_hours": is_market_hours,
+        "status":          status,
+        "checks":          checks,
+        "timestamp":       now_ist.isoformat(),
     }
 
 

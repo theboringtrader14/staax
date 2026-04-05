@@ -37,6 +37,11 @@ class AccountCreate(BaseModel):
     totp_secret: Optional[str] = None   # AO only — TOTP secret for auto-login
     is_primary:  bool = False
 
+class CredentialsUpdate(BaseModel):
+    api_key:     Optional[str] = None
+    api_secret:  Optional[str] = None
+    totp_secret: Optional[str] = None
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -201,6 +206,31 @@ async def update_nickname(
     return {"status": "ok", "nickname": account.nickname}
 
 
+@router.patch("/{account_id}/credentials")
+async def update_credentials(
+    account_id: str,
+    data: CredentialsUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update broker API credentials for an account."""
+    result = await db.execute(
+        select(Account).where(Account.id == _uuid.UUID(account_id))
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if data.api_key is not None:
+        account.api_key = data.api_key
+    if data.api_secret is not None:
+        account.api_secret = data.api_secret
+    if data.totp_secret is not None:
+        account.totp_secret = data.totp_secret
+
+    await db.commit()
+    return {"status": "ok", "message": "Credentials updated"}
+
+
 @router.get("/{account_id}")
 async def get_account(account_id: str, db: AsyncSession = Depends(get_db)):
     """Fetch a single account by ID. Used for edit form pre-fill."""
@@ -221,14 +251,66 @@ async def zerodha_login_url():
     return {"login_url": broker.get_login_url()}
 
 @router.get("/zerodha/callback")
-async def zerodha_callback(request: Request):
-    """
-    Catch Zerodha OAuth redirect (http://127.0.0.1/?request_token=XXX).
-    Redirects to frontend callback page which completes token exchange.
-    """
-    from fastapi.responses import RedirectResponse
-    params = str(request.url.query)
-    return RedirectResponse(url=f"http://localhost:3000/zerodha-callback?{params}")
+async def zerodha_callback(request_token: str, db: AsyncSession = Depends(get_db)):
+    """Receive request_token from Kite, exchange for access_token, save to DB."""
+    from fastapi.responses import HTMLResponse
+    from kiteconnect import KiteConnect
+    from datetime import datetime, timezone
+    from app.core.config import settings
+
+    try:
+        kite = KiteConnect(api_key=settings.ZERODHA_API_KEY)
+        session_data = kite.generate_session(request_token, api_secret=settings.ZERODHA_API_SECRET)
+        access_token = session_data["access_token"]
+
+        result = await db.execute(
+            select(Account).where(Account.broker == BrokerType.ZERODHA)
+        )
+        account = result.scalar_one_or_none()
+
+        if account:
+            account.access_token = access_token
+            account.token_generated_at = datetime.now(timezone.utc)
+            account.status = AccountStatus.ACTIVE
+            await db.commit()
+
+            # Log the token refresh
+            from app.models.event_log import EventLog
+            db.add(EventLog(
+                ts=datetime.now(timezone.utc),
+                level="INFO",
+                msg=f"Zerodha access token refreshed for {account.client_id}",
+                source="broker_token_refresh",
+                account_id=str(account.id),
+            ))
+            await db.commit()
+
+        return HTMLResponse(content="""<!DOCTYPE html>
+<html>
+<head><title>Zerodha Connected</title></head>
+<body style="background:#0f0f12;color:#22DD88;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <div style="text-align:center;">
+    <div style="font-size:48px;">✅</div>
+    <p style="font-size:18px;margin-top:16px;">Zerodha connected successfully</p>
+    <p style="color:rgba(255,255,255,0.4);font-size:13px;">This window will close automatically...</p>
+  </div>
+  <script>
+    if (window.opener) { window.opener.location.reload(); }
+    setTimeout(() => window.close(), 1500);
+  </script>
+</body>
+</html>""")
+
+    except Exception as e:
+        return HTMLResponse(content=f"""<!DOCTYPE html>
+<html>
+<body style="background:#0f0f12;color:#FF4444;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <div style="text-align:center;">
+    <div style="font-size:48px;">❌</div>
+    <p>Token exchange failed: {str(e)}</p>
+  </div>
+</body>
+</html>""", status_code=400)
 
 
 @router.post("/zerodha/set-token")
