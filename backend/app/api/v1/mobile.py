@@ -5,7 +5,6 @@ from sqlalchemy import select, func
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from app.core.database import get_db
-from app.core.auth import get_current_user
 from app.models.algo import Algo
 
 router = APIRouter()
@@ -16,7 +15,6 @@ IST = ZoneInfo("Asia/Kolkata")
 @router.get("/dashboard")
 async def mobile_dashboard(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
 ):
     """Single-call response for mobile home screen.
     Returns networth snapshot, today's trading summary, and expenses placeholder.

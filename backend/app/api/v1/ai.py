@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from app.core.auth import get_current_user
 from app.core.database import get_db
 
 router = APIRouter()
@@ -67,14 +66,14 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/analyze-portfolio")
-async def analyze_portfolio(body: PortfolioAnalysisRequest, user=Depends(get_current_user)):
+async def analyze_portfolio(body: PortfolioAnalysisRequest):
     from app.engine.ai_agent import analyze_portfolio
     result = await analyze_portfolio(body.holdings, body.pnl_data)
     return {"response": result}
 
 
 @router.post("/analyze-day")
-async def analyze_day(body: DayAnalysisRequest, user=Depends(get_current_user)):
+async def analyze_day(body: DayAnalysisRequest):
     from app.engine.ai_agent import analyze_trading_day
     result = await analyze_trading_day(body.orders, body.algo_count)
     return {"response": result}
