@@ -25,7 +25,6 @@ interface HealthScore {
 const TABS = ['Performance', 'Failures', 'Slippage', 'Latency'] as const
 type Tab = typeof TABS[number]
 
-const HEATMAP_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 function fmtPnl(v: number): string {
@@ -165,17 +164,17 @@ function SegmentedArcGauge({ score }: { score: number }) {
           pathLength="100" strokeDasharray={`${s} 100`}
           strokeLinecap="round"
           style={{ filter: `drop-shadow(0 0 6px ${color}80)`, transition: 'stroke-dasharray 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
-        {/* Center labels */}
-        <text x="80" y="64" textAnchor="middle" dominantBaseline="middle"
+        {/* Center labels: score number, then AVG HEALTH label, then grade */}
+        <text x="80" y="60" textAnchor="middle" dominantBaseline="middle"
           style={{ fontSize: '28px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
           {s}
         </text>
-        <text x="80" y="80" textAnchor="middle"
+        <text x="80" y="76" textAnchor="middle"
           style={{ fontSize: '9px', fill: 'rgba(232,232,248,0.38)', letterSpacing: '0.1em', fontFamily: 'inherit' }}>
           AVG HEALTH
         </text>
         {/* Grade badge */}
-        <text x="80" y="93" textAnchor="middle"
+        <text x="80" y="91" textAnchor="middle"
           style={{ fontSize: '11px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
           {grade}
         </text>
@@ -185,33 +184,29 @@ function SegmentedArcGauge({ score }: { score: number }) {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-function SummaryCard({ label, value, sub, valueColor }: {
+function SummaryCard({ label, value, sub }: {
   label: string; value: string; sub?: string; valueColor?: string
 }) {
-  const isGreen = valueColor?.includes('green') || valueColor === 'var(--green)'
-  const isRed   = valueColor?.includes('red')   || valueColor === 'var(--red)'
-  const accentColor = isGreen ? '#22DD88' : isRed ? '#FF4444' : '#FF6B00'
-  const accentRgb   = isGreen ? '16,185,129' : isRed ? '239,68,68' : '99,102,241'
+  const [hovered, setHovered] = useState(false)
   return (
-    <div className="card card-stat" style={{
-      borderTop: `2px solid ${accentColor}`,
-      '--stat-rgb': accentRgb,
-      boxShadow: `inset 0 1px 0 rgba(${accentRgb},0.2), 0 0 18px rgba(${accentRgb},0.18), 0 0 40px rgba(${accentRgb},0.07), 0 6px 24px rgba(0,0,0,0.5)`,
-    } as React.CSSProperties}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50px', background: `linear-gradient(to bottom, rgba(${accentRgb},0.07), transparent)`, pointerEvents: 'none', borderRadius: 'inherit' }} />
-      <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontWeight: 600 }}>
+    <div className="card cloud-fill" style={{
+      borderTop: 'none',
+      border: hovered ? '0.5px solid rgba(255,107,0,0.45)' : '0.5px solid rgba(255,107,0,0.22)',
+      transition: 'border 150ms',
+    }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={{ fontFamily: 'Syne', fontSize: 10, textTransform: 'uppercase', color: 'rgba(232,232,248,0.5)', marginBottom: '6px', fontWeight: 600, letterSpacing: '0.08em' }}>
         {label}
       </div>
       <div style={{
         fontSize: '20px', fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word',
-        background: `linear-gradient(135deg, ${accentColor} 0%, #FF8C33 100%)`,
-        WebkitBackgroundClip: 'text', backgroundClip: 'text',
-        WebkitTextFillColor: 'transparent', color: 'transparent',
-        display: 'inline-block',
+        color: '#F0F0FF', fontFamily: 'var(--font-mono)',
       }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: '10px', color: `rgba(${accentRgb},0.6)`, marginTop: '4px' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.45)', marginTop: '4px' }}>{sub}</div>}
     </div>
   )
 }
@@ -236,6 +231,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   timeSlots: any[]
 }) {
   const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
+  const [showWeekends, setShowWeekends] = useState(false)
 
   const bestAlgo       = metrics.length > 0 ? [...metrics].sort((a, b) => b.pnl - a.pnl)[0] : null
   const worstAlgo      = metrics.length > 0 ? [...metrics].sort((a, b) => a.pnl - b.pnl)[0] : null
@@ -264,12 +260,6 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
   // Heatmap
   const heatmapAlgos = Object.keys(breakdown).sort()
-  function cellBg(pnl: number | undefined): string {
-    if (pnl === undefined) return 'var(--bg-border)'
-    if (pnl > 0) return `rgba(34,221,136,${Math.min(Math.abs(pnl) / 5000, 1) * 0.5 + 0.12})`
-    if (pnl < 0) return `rgba(239,68,68,${Math.min(Math.abs(pnl) / 3000, 1) * 0.5 + 0.12})`
-    return 'var(--bg-border)'
-  }
   function scoreBarColor(score: number): string {
     if (score >= 70) return 'var(--green)'
     if (score >= 40) return 'var(--accent-amber)'
@@ -300,8 +290,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       <CumulativePnlChart orders={allOrders} />
 
       {/* Row 2 — chip toggle: P&L heatmap vs Health Scores */}
-      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', overflowX: 'auto', padding: '16px 18px' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           {([['heatmap', 'P&L Heatmap'], ['health', 'Health Scores']] as const).map(([v, l]) => (
             <button key={v} onClick={() => setActiveView(v)}
               style={{
@@ -312,57 +302,71 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                 outline: activeView === v ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
               }}>{l}</button>
           ))}
+          {activeView === 'heatmap' && (
+            <button onClick={() => setShowWeekends(!showWeekends)} style={{
+              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontFamily: 'Syne',
+              background: showWeekends ? 'rgba(255,107,0,0.15)' : 'transparent',
+              border: '0.5px solid rgba(255,107,0,0.4)',
+              color: showWeekends ? '#FF6B00' : 'rgba(255,255,255,0.4)',
+              cursor: 'pointer'
+            }}>Weekends</button>
+          )}
         </div>
 
-        {activeView === 'heatmap' && (
-          <>
-            {heatmapAlgos.length === 0
-              ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No day-breakdown data available.</div>
-              : <div style={tblWrap}>
-                  <table className="staax-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ minWidth: '140px', textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
-                        {HEATMAP_DAYS.map(d => <th key={d} style={{ textAlign: 'center', width: '100px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{d}</th>)}
-                        <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>FY Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {heatmapAlgos.map(algo => {
-                        const row = breakdown[algo]
-                        const fyTotal = HEATMAP_DAYS.reduce((s, d) => s + (row[d]?.pnl ?? 0), 0)
-                        return (
-                          <tr key={algo}>
-                            <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{algo}</td>
-                            {HEATMAP_DAYS.map(d => {
-                              const cell = row[d]
-                              return (
-                                <td key={d} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                                  <div style={{
-                                  background: cellBg(cell?.pnl), borderRadius: '5px', padding: '5px 4px',
-                                  fontSize: '10px', fontWeight: 700,
-                                  color: cell ? (cell.pnl > 0 ? 'var(--green)' : cell.pnl < 0 ? 'var(--red)' : 'var(--text-dim)') : 'var(--text-dim)',
-                                  boxShadow: cell && cell.pnl !== 0
-                                    ? `0 0 8px ${cell.pnl > 0 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`
-                                    : 'none',
-                                  transition: 'all 0.2s ease',
-                                }}>
-                                    {cell ? (cell.pnl >= 0 ? '+' : '') + (cell.pnl / 1000).toFixed(1) + 'k' : '—'}
-                                    {cell && <div style={{ fontSize: '9px', fontWeight: 400, color: 'var(--text-dim)', marginTop: '1px' }}>{cell.trades}t</div>}
-                                  </div>
-                                </td>
-                              )
-                            })}
-                            <td style={{ textAlign: 'center', fontWeight: 700, ...numStyle, color: fyTotal >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(fyTotal)}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-            }
-          </>
-        )}
+        {activeView === 'heatmap' && (() => {
+          const visibleDays = showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']
+          return heatmapAlgos.length === 0
+            ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No day-breakdown data available.</div>
+            : <div style={tblWrap}>
+                <table className="staax-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ minWidth: '120px', maxWidth: '120px', textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Algo</th>
+                      {visibleDays.map(d => <th key={d} style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{d}</th>)}
+                      <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>FY Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {heatmapAlgos.map(algo => {
+                      const row = breakdown[algo]
+                      const fyTotal = visibleDays.reduce((s, d) => s + (row[d]?.pnl ?? 0), 0)
+                      return (
+                        <tr key={algo}>
+                          <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{algo}</td>
+                          {visibleDays.map(d => {
+                            const cell = row[d]
+                            const pnl = cell?.pnl
+                            let bg = 'rgba(255,255,255,0.04)'
+                            if (pnl !== undefined && pnl > 0) {
+                              const alpha = Math.min(Math.abs(pnl) / 5000, 1) * 0.7 + 0.15
+                              bg = `rgba(34,221,136,${alpha})`
+                            } else if (pnl !== undefined && pnl < 0) {
+                              const alpha = Math.min(Math.abs(pnl) / 3000, 1) * 0.7 + 0.15
+                              bg = `rgba(255,68,68,${alpha})`
+                            }
+                            const tooltipText = cell
+                              ? `${algo} · ${d}\nP&L: ${fmtPnl(cell.pnl)}\nTrades: ${cell.trades}`
+                              : `${algo} · ${d}\nNo data`
+                            return (
+                              <td key={d} style={{ textAlign: 'center', padding: '4px 3px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+                                <div title={tooltipText} style={{
+                                  width: 22, height: 22, borderRadius: 3,
+                                  background: bg,
+                                  margin: '0 auto',
+                                  cursor: 'help',
+                                  transition: 'transform 0.15s',
+                                }} />
+                              </td>
+                            )
+                          })}
+                          <td style={{ textAlign: 'center', fontWeight: 700, ...numStyle, color: fyTotal >= 0 ? '#22DD88' : '#FF4444', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{fmtPnl(fyTotal)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+        })()}
 
         {activeView === 'health' && (
           scores.length === 0
@@ -388,7 +392,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                       const g = GRADE_COLORS[s.grade] || GRADE_COLORS['D']
                       return (
                         <tr key={s.algo_name}>
-                          <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{s.algo_name}</td>
+                          <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.algo_name}</td>
                           <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', color: g.color, background: g.bg, border: `1px solid ${g.border}` }}>{s.grade}</span>
                           </td>
@@ -432,9 +436,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         return (
           <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
             <div style={{ marginBottom: '24px' }}>
-              <span style={{ ...secHdr, marginBottom: 0 }}>Best Time to Trade</span>
+              <span style={{ ...secHdr, marginBottom: 0, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Best Time to Trade</span>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', height: '80px', paddingTop: '40px' }}>
               {timeSlots.map((slot: any) => {
                 const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 60))
                 const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
@@ -477,7 +481,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       {/* Row 4 — Strategy Type Breakdown */}
       <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
         <div style={{ marginBottom: '12px' }}>
-          <span style={{ ...secHdr, marginBottom: 0 }}>Strategy Type Breakdown</span>
+          <span style={{ ...secHdr, marginBottom: 0, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Strategy Type Breakdown</span>
         </div>
         {stratRows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No data yet for FY {fy}</div>
@@ -870,17 +874,16 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-        {TABS.map(tab => (
-          <button key={tab}
-            onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
-            style={{
-              padding: '4px 12px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer',
-              fontFamily: 'var(--font-display)', fontWeight: 600, border: 'none',
-              background: activeTab === tab ? 'rgba(255,107,0,0.15)' : 'transparent',
-              color: activeTab === tab ? '#FF6B00' : 'rgba(232,232,248,0.5)',
-              outline: activeTab === tab ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
-            }}>
+      <div style={{display:'flex', borderBottom:'0.5px solid rgba(255,255,255,0.08)', marginBottom:20}}>
+        {(['Performance','Failures','Slippage','Latency'] as Tab[]).map(tab => (
+          <button key={tab} onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }} style={{
+            flex: 1, padding:'12px 0',
+            background: 'transparent', border: 'none',
+            borderBottom: activeTab===tab ? '2px solid #FF6B00' : '2px solid transparent',
+            color: activeTab===tab ? '#FF6B00' : 'rgba(255,255,255,0.4)',
+            fontFamily: 'Syne', fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', transition: 'all 200ms'
+          }}>
             {tab}
           </button>
         ))}
