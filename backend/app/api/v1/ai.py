@@ -68,7 +68,7 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/analyze")
 async def ai_analyze(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Rich AI analysis with live DB trade data — for complex trading questions."""
-    from app.engine.ai_agent import chat_with_data
+    from app.engine.ai_agent import chat_with_db
     from sqlalchemy import text as sql_text
 
     ctx = dict(body.context or {})
@@ -92,8 +92,8 @@ async def ai_analyze(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    result = await chat_with_data(body.message, ctx, db)
-    return {"response": result, "model": "gemini-2.0-flash"}
+    result = await chat_with_db(body.message, ctx, db)
+    return {"response": result, "model": "gemma-4-31b-it"}
 
 
 @router.post("/analyze-portfolio")

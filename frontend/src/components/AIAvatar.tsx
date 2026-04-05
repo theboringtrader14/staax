@@ -39,7 +39,9 @@ export default function AIAvatar() {
     if (!text.trim()) { setState('idle'); return }
     setState('processing')
     try {
-      const res = await fetch(`${API_BASE}/api/v1/ai/analyze`, {
+      const useAnalyze = text.length > 20 || /which|what|compare|best|why|how|strategy/i.test(text)
+      const endpoint = useAnalyze ? `${API_BASE}/api/v1/ai/analyze` : `${API_BASE}/api/v1/ai/chat`
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, context: { name: 'Karthikeyan' } }),
