@@ -228,9 +228,11 @@ function SmoothedSparkline({ algoId, legs, totalPnl }: { algoId: string; legs: L
   const W = 70, H = 24, PAD = 3
   const live = isMarketLive()
 
-  const closedLegs = legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
+  const closedLegs = legs.filter(l => l.status === 'closed' && l.pnl != null)
   if (closedLegs.length === 0) return null
-  const pts = closedLegs.flatMap(l => [l.fillPrice!, l.exitPrice!])
+  // Cumulative P&L series: [0, pnl_after_leg1, pnl_after_leg1+leg2, ...]
+  let cum = 0
+  const pts = [0, ...closedLegs.map(l => { cum += (l.pnl ?? 0); return cum })]
   if (pts.length < 2) return null
 
   const minP = Math.min(...pts), maxP = Math.max(...pts)

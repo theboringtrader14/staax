@@ -5,7 +5,7 @@
  * Layout:
  *   Header → SVG timeline → MTM area chart → Event log → Summary grid
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface ReplayEvent {
   type: 'ENTRY' | 'EXIT' | 'AUTO_SQ' | 'SL_HIT' | 'ERROR' | 'MTM_UPDATE' | string
@@ -159,6 +159,8 @@ function MtmChart({ events }: { events: ReplayEvent[] }) {
   const H = 120
   const PADX = 10
   const PADY = 12
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [hover, setHover] = useState<{ x: number; y: number; time: string; pnl: number } | null>(null)
 
   if (events.length < 2) return null
 
@@ -171,29 +173,126 @@ function MtmChart({ events }: { events: ReplayEvent[] }) {
   const strokeColor = finalPnl >= 0 ? '#22DD88' : '#FF4444'
   const fillColor   = finalPnl >= 0 ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)'
 
-  const toX = (i: number) =>
-    PADX + (i / (pnls.length - 1)) * (W - PADX * 2)
-  const toY = (v: number) =>
-    PADY + ((maxPnl - v) / range) * (H - PADY * 2)
+  const toX = (i: number) => PADX + (i / (pnls.length - 1)) * (W - PADX * 2)
+  const toY = (v: number) => PADY + ((maxPnl - v) / range) * (H - PADY * 2)
 
-  const pts = pnls.map((v, i) => `${toX(i)},${toY(v)}`).join(' ')
+  const coords = pnls.map((v, i) => ({ x: toX(i), y: toY(v) }))
+  const zeroY  = toY(0)
 
-  const zeroY = toY(0)
-  const areaPath = [
-    `M ${toX(0)},${zeroY}`,
-    ...pnls.map((v, i) => `L ${toX(i)},${toY(v)}`),
-    `L ${toX(pnls.length - 1)},${zeroY}`,
-    'Z',
-  ].join(' ')
+  // Smooth cubic bezier path through all data points (midpoint control points)
+  const buildSmooth = (cs: { x: number; y: number }[]) => {
+    let d = `M${cs[0].x.toFixed(1)},${cs[0].y.toFixed(1)}`
+    for (let i = 1; i < cs.length; i++) {
+      const mx = ((cs[i - 1].x + cs[i].x) / 2).toFixed(1)
+      d += ` C${mx},${cs[i-1].y.toFixed(1)} ${mx},${cs[i].y.toFixed(1)} ${cs[i].x.toFixed(1)},${cs[i].y.toFixed(1)}`
+    }
+    return d
+  }
+  const linePath = buildSmooth(coords)
+  // Area: drop to zero baseline, follow the smooth line, close back to baseline
+  const areaPath =
+    `M${coords[0].x.toFixed(1)},${zeroY.toFixed(1)} L${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}` +
+    linePath.substring(linePath.indexOf(' ')) +
+    ` L${coords[coords.length - 1].x.toFixed(1)},${zeroY.toFixed(1)} Z`
+
+  // Pre-build point data for hover interpolation
+  const points = events.map((ev, i) => ({
+    x: coords[i].x,
+    y: coords[i].y,
+    time: ev.time,
+    pnl: ev.pnl_at_time,
+  }))
+
+  // Binary-search for bezier t parameter at a given x (midpoint bezier: cp1x=cp2x=mx)
+  const bezierTForX = (p0x: number, mx: number, p1x: number, targetX: number): number => {
+    let lo = 0, hi = 1
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + hi) * 0.5
+      const x = (1-mid)**3*p0x + 3*(1-mid)**2*mid*mx + 3*(1-mid)*mid**2*mx + mid**3*p1x
+      if (x < targetX) lo = mid; else hi = mid
+    }
+    return (lo + hi) * 0.5
+  }
+
+  // Evaluate bezier Y at t (midpoint bezier: cp1y=p0y, cp2y=p1y)
+  // y(t) = p0y·(1-t)²(1+2t) + p1y·t²(3-2t)
+  const bezierY = (t: number, p0y: number, p1y: number): number =>
+    p0y * (1-t)**2 * (1+2*t) + p1y * t**2 * (3-2*t)
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current || points.length < 2) return
+    const svgRect = svgRef.current.getBoundingClientRect()
+    const mouseXSvg = (e.clientX - svgRect.left) * (W / svgRect.width)
+
+    // Clamp to chart X range
+    const clampedX = Math.max(points[0].x, Math.min(mouseXSvg, points[points.length - 1].x))
+
+    // Find the segment [i, i+1] that contains clampedX
+    let seg = points.length - 2
+    for (let i = 0; i < points.length - 1; i++) {
+      if (clampedX <= points[i + 1].x) { seg = i; break }
+    }
+
+    const p0 = points[seg]
+    const p1 = points[seg + 1]
+    const mx = (p0.x + p1.x) / 2
+
+    // Find exact bezier t for this x, then evaluate exact bezier Y
+    const bt = p0.x === p1.x ? 0 : bezierTForX(p0.x, mx, p1.x, clampedX)
+    const interpY   = bezierY(bt, p0.y, p1.y)
+    const interpPnl = bezierY(bt, p0.pnl, p1.pnl)
+    const time = bt < 0.5 ? p0.time : p1.time
+
+    setHover({ x: clampedX, y: interpY, time, pnl: interpPnl })
+  }
+
+  const tooltipX = hover ? (hover.x + 128 > W ? hover.x - 128 : hover.x + 8) : 0
+  const tooltipY = hover ? Math.max(4, hover.y - 30) : 0
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      height={H}
+      style={{ display: 'block', cursor: 'crosshair', overflow: 'visible' }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHover(null)}
+    >
       {/* zero line */}
       <line x1={PADX} y1={zeroY} x2={W - PADX} y2={zeroY} stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeDasharray="4 4" />
-      {/* fill */}
+      {/* smooth fill */}
       <path d={areaPath} fill={fillColor} />
-      {/* line */}
-      <polyline points={pts} fill="none" stroke={strokeColor} strokeWidth={1.8} />
+      {/* smooth line */}
+      <path d={linePath} fill="none" stroke={strokeColor} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      {/* crosshair — continuous, interpolated */}
+      {hover && (
+        <>
+          <line
+            x1={hover.x} y1={0} x2={hover.x} y2={H}
+            stroke="rgba(255,255,255,0.2)" strokeWidth={1} strokeDasharray="4,4"
+          />
+          <circle
+            cx={hover.x} cy={hover.y} r={4}
+            fill="#FF6B00" stroke="#fff" strokeWidth={1.5}
+          />
+          <foreignObject x={tooltipX} y={tooltipY} width={120} height={50}>
+            <div style={{
+              background: 'rgba(10,10,11,0.9)',
+              border: '0.5px solid rgba(255,107,0,0.4)',
+              borderRadius: 6,
+              padding: '4px 8px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+            }}>
+              <div style={{ color: 'rgba(232,232,248,0.6)' }}>{hover.time}</div>
+              <div style={{ color: hover.pnl >= 0 ? '#22DD88' : '#FF4444', fontWeight: 700 }}>
+                {hover.pnl >= 0 ? '+' : ''}₹{hover.pnl.toFixed(2)}
+              </div>
+            </div>
+          </foreignObject>
+        </>
+      )}
     </svg>
   )
 }
