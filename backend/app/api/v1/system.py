@@ -55,11 +55,11 @@ async def activate_kill_switch(request: Request, body: KillSwitchRequest = None,
         accs_result = await db.execute(select(Account).where(Account.is_active == True))
         accs = accs_result.scalars().all()
         for acc in accs:
-            if acc.broker == BrokerType.zerodha and hasattr(request.app.state, "zerodha"):
+            if acc.broker == BrokerType.ZERODHA and hasattr(request.app.state, "zerodha"):
                 registry[str(acc.id)] = request.app.state.zerodha
-            elif acc.broker == BrokerType.angelone and acc.nickname == "Mom" and hasattr(request.app.state, "angelone_mom"):
+            elif acc.broker == BrokerType.ANGELONE and acc.nickname == "Mom" and hasattr(request.app.state, "angelone_mom"):
                 registry[str(acc.id)] = request.app.state.angelone_mom
-            elif acc.broker == BrokerType.angelone and hasattr(request.app.state, "angelone_wife"):
+            elif acc.broker == BrokerType.ANGELONE and hasattr(request.app.state, "angelone_wife"):
                 registry[str(acc.id)] = request.app.state.angelone_wife
     except (ImportError, Exception):
         registry = {}

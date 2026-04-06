@@ -586,7 +586,7 @@ async def sync_order(
         raise HTTPException(status_code=404, detail="Account not found")
 
     broker = None
-    if account.broker == BrokerType.zerodha:
+    if account.broker == BrokerType.ZERODHA:
         broker = getattr(request.app.state, "zerodha", None)
     elif account.nickname == "Mom":
         broker = getattr(request.app.state, "angelone_mom", None)

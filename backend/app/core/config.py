@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     ANGELONE_WIFE_TOTP_SECRET: str = ""
     ANGELONE_WIFE_PIN: str = ""
 
+    # INVEX integration
+    INVEX_API_URL: str = "http://localhost:8001"
+
     # JWT
     JWT_SECRET_KEY: str = "dev-jwt-secret"
     JWT_ALGORITHM: str = "HS256"

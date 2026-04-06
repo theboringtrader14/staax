@@ -31,7 +31,7 @@ export default function Sidebar() {
   const toggle = (v: boolean) => { setCollapsed(v); localStorage.setItem('sidebar_collapsed', String(v)) }
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('staax_token')
     if (!token) return
     fetch('http://localhost:8000/api/v1/bots/signals/today', { headers:{ Authorization:`Bearer ${token}` } })
       .then(r => r.json())

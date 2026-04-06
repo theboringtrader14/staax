@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 
-const token = localStorage.getItem('token')
+const token = localStorage.getItem('staax_token')
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
 const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
 

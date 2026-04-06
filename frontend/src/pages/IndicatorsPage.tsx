@@ -5,7 +5,7 @@ import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 
 const API = 'http://localhost:8000/api/v1'
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('staax_token')}` } })
 const apiGet  = (p: string) => axios.get(`${API}${p}`, auth())
 const apiPost = (p: string, d: any = {}) => axios.post(`${API}${p}`, d, auth())
 const apiPatch= (p: string, d: any) => axios.patch(`${API}${p}`, d, auth())

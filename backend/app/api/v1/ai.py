@@ -97,14 +97,14 @@ async def ai_analyze(body: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/analyze-portfolio")
-async def analyze_portfolio(body: PortfolioAnalysisRequest):
-    from app.engine.ai_agent import analyze_portfolio
-    result = await analyze_portfolio(body.holdings, body.pnl_data)
+async def analyze_portfolio(body: ChatRequest, db: AsyncSession = Depends(get_db)):
+    from app.engine.ai_agent import chat_with_db
+    result = await chat_with_db(body.message, {}, db)
     return {"response": result}
 
 
 @router.post("/analyze-day")
-async def analyze_day(body: DayAnalysisRequest):
-    from app.engine.ai_agent import analyze_trading_day
-    result = await analyze_trading_day(body.orders, body.algo_count)
+async def analyze_trading_day(body: ChatRequest, db: AsyncSession = Depends(get_db)):
+    from app.engine.ai_agent import chat_with_db
+    result = await chat_with_db(body.message, {}, db)
     return {"response": result}

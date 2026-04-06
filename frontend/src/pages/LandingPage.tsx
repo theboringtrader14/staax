@@ -115,14 +115,19 @@ export default function LandingPage() {
     const ok = '#10b981'
     const err = '#ef4444'
     const unk = 'rgba(232,232,248,0.35)'
-    fetch('http://localhost:8000/api/v1/system/health')
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    fetch(`${apiBase}/api/v1/system/health`)
       .then(r => r.json())
-      .then((data: Record<string, string>) => {
+      .then((data: { checks: { database: { ok: boolean }, redis: { ok: boolean }, smartstream: { ok: boolean, connected?: boolean }, scheduler: { ok: boolean } } }) => {
+        const db = data.checks?.database?.ok
+        const redis = data.checks?.redis?.ok
+        const ss = data.checks?.smartstream?.ok && data.checks?.smartstream?.connected !== false
+        const sched = data.checks?.scheduler?.ok
         setSysLines([
-          { color: data.staax === 'ok' ? ok : err, text: `${data.staax === 'ok' ? '✓' : '✗'} STAAX Engine  — ${data.staax === 'ok' ? 'connected' : 'degraded'}` },
-          { color: data.smartstream === 'ok' ? ok : err, text: `${data.smartstream === 'ok' ? '✓' : '✗'} SmartStream   — ${data.smartstream === 'ok' ? 'active' : 'down'}` },
-          { color: data.db === 'ok' ? ok : err, text: `${data.db === 'ok' ? '✓' : '✗'} Database      — ${data.db === 'ok' ? 'connected' : 'down'}` },
-          { color: data.redis === 'ok' ? ok : err, text: `${data.redis === 'ok' ? '✓' : '✗'} Redis         — ${data.redis === 'ok' ? 'connected' : 'down'}` },
+          { color: db ? ok : err,    text: `${db    ? '✓' : '✗'} Database      — ${db    ? 'connected' : 'down'}` },
+          { color: redis ? ok : err, text: `${redis  ? '✓' : '✗'} Redis         — ${redis  ? 'connected' : 'down'}` },
+          { color: ss ? ok : err,    text: `${ss     ? '✓' : '✗'} SmartStream   — ${ss     ? 'active'    : 'down'}` },
+          { color: sched ? ok : err, text: `${sched  ? '✓' : '✗'} Scheduler     — ${sched  ? 'running'   : 'down'}` },
         ])
       })
       .catch(() => {

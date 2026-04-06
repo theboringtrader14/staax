@@ -33,12 +33,11 @@ interface AddAccountForm {
   nickname: string
   client_id: string
   api_key: string
-  api_secret: string
-  pin: string
+  api_secret: string   // Zerodha: API secret | Angel One: PIN / Password
   totp_secret: string
 }
 
-const EMPTY_FORM: AddAccountForm = { broker: '', nickname: '', client_id: '', api_key: '', api_secret: '', pin: '', totp_secret: '' }
+const EMPTY_FORM: AddAccountForm = { broker: '', nickname: '', client_id: '', api_key: '', api_secret: '', totp_secret: '' }
 
 export default function AccountsPage() {
   const storeAccounts = useStore(s => s.accounts)
@@ -76,10 +75,9 @@ export default function AccountsPage() {
         broker:      addForm.broker,
         nickname:    addForm.nickname.trim(),
         client_id:   addForm.client_id.trim(),
-        api_key:     addForm.api_key.trim(),
-        api_secret:  addForm.api_secret,
-        pin:         addForm.pin,
-        totp_secret: addForm.totp_secret,
+        api_key:     addForm.api_key.trim() || undefined,
+        api_secret:  addForm.api_secret.trim() || undefined,
+        totp_secret: addForm.totp_secret.trim() || undefined,
       })
       closeAddModal()
       accountsAPI.list().then(res => {
@@ -486,12 +484,11 @@ export default function AccountsPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                   {[
-                    { key: 'nickname',   label: 'Nickname',    type: 'text',     placeholder: 'e.g. Karthik' },
-                    { key: 'client_id',  label: 'Client ID',   type: 'text',     placeholder: addForm.broker === 'zerodha' ? 'AB1234' : 'A123456' },
-                    { key: 'api_key',    label: 'API Key',     type: 'text',     placeholder: 'API key from console' },
-                    { key: 'api_secret', label: addForm.broker === 'zerodha' ? 'API Secret' : 'API Secret', type: 'password', placeholder: '••••••••' },
-                    { key: 'pin',        label: addForm.broker === 'zerodha' ? 'Password' : 'PIN / Password', type: 'password', placeholder: '••••••••' },
-                    { key: 'totp_secret', label: 'TOTP Secret', type: 'password', placeholder: 'Base32 TOTP secret' },
+                    { key: 'nickname',    label: 'Nickname',    type: 'text',     placeholder: 'e.g. Karthik' },
+                    { key: 'client_id',   label: 'Client ID',   type: 'text',     placeholder: addForm.broker === 'zerodha' ? 'AB1234' : 'A123456' },
+                    { key: 'api_key',     label: 'API Key',     type: 'text',     placeholder: 'API key from console' },
+                    { key: 'api_secret',  label: addForm.broker === 'zerodha' ? 'API Secret' : 'PIN / Password', type: 'password', placeholder: '••••••••' },
+                    { key: 'totp_secret', label: 'TOTP Secret', type: 'password', placeholder: 'Base32 TOTP secret (Angel One only)' },
                   ].map(({ key, label, type, placeholder }) => (
                     <div key={key}>
                       {/* Delta B — labels uppercase display font */}
