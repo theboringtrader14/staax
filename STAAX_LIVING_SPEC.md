@@ -3949,3 +3949,45 @@ Dashboard | Smart Cards | AlgoPage | Landing | Orders | Reports | Indicators | A
 4. Watch SmartStream logs at 09:15 for Mom AO connection
 5. If SmartStream connects → PRACTIX test on NIFTY straddle
 6. Monitor backend for [AO-DEBUG] errors
+
+## Session Update — 2026-04-06
+
+### STAAX Batch 27 — Audit Fixes + Replay/Sparkline
+
+#### Commits This Session
+- `39a5cee` — 5 CRITICAL audit fixes (AI imports, localStorage key, BrokerType enum, LandingPage health keys, AccountsPage pin→api_secret)
+- `9fb6375` — reports.py FY default staleness fix (get_current_fy())
+- `fd92ac8` — Replay crosshair bezier (bezierTForX binary search), sparkline P&L cumulative fix
+- `7fe9284` — LIFEX AI: Gemma 4 lazy init, SVG avatar, UX polish
+- `8a67ca0` — Batch 27b: replay date filter IST→UTC range boundary fix
+- `76b7083` — lifex-mobile v0.3: mobile app design polish
+
+#### Audit Report (AUDIT_REPORT.md)
+- 40 issues audited: 5 CRITICAL, 15 HIGH, 12 MEDIUM, 8 LOW
+- All 5 CRITICAL fixed this session
+- HIGH/MEDIUM/LOW remain — see AUDIT_REPORT.md
+
+#### Replay Equity Curve — Production-Ready
+- Crosshair: continuous bezier tracking via binary search (bezierTForX, 20 iterations)
+- Marker snaps exactly to bezier curve (analytical bezierY formula)
+- Tooltip: foreignObject with edge-flip (left/right) logic
+- Date filter: IST boundary → UTC range (ZoneInfo), reliable across PG versions
+- Open leg pnl=None: skipped to prevent None arithmetic crash
+
+#### Sparkline Fix
+- Was: plotted [fillPrice, exitPrice] per leg → ↑↓↑↓ wavy wrong shape
+- Now: cumulative realized P&L [0, leg1_pnl, leg1+leg2, ...]
+
+#### Monday April 7 — CRITICAL
+1. `docker start staax_redis staax_db`
+2. Start all backends: staax (8000), invex (8001), budgex (8002)
+3. Watch SmartStream at 09:15 for Mom AO connection
+4. If Mom AO connects → test 1 PRACTIX paper trade NIFTY straddle
+5. Monitor [AO-DEBUG] logs in backend
+
+### Pending
+- HIGH audit items from AUDIT_REPORT.md (orders WebSocket, algo runtime stubs, etc.)
+- EAS Android build: `sudo npm install -g eas-cli && eas build --platform android --profile preview`
+- INVEX Analysis tab (Fundamental + Technical)
+- iOS simulator test
+- Server: final deploy with Batch 27 changes
