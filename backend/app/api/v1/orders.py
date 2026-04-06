@@ -238,9 +238,9 @@ async def get_trade_replay(
     Fetches all orders for that algo on that day (using fill_time for date match),
     builds separate ENTRY and EXIT events, running P&L curve, and summary stats.
     """
-    from sqlalchemy import func
     import uuid as _uuid_mod
     import datetime as _dt
+    from zoneinfo import ZoneInfo
 
     target_date = _parse_date(date)
     if not target_date:
@@ -256,14 +256,22 @@ async def get_trade_replay(
     algo_obj = algo_result.scalar_one_or_none()
     algo_name = algo_obj.name if algo_obj else algo_id
 
-    # Fetch all CLOSED orders for this algo on the given date.
-    # Use func.timezone to convert fill_time to IST before date-casting,
-    # so 09:20 IST (03:50 UTC) is correctly matched to the IST date.
+    # Convert IST date boundaries to UTC for the fill_time filter.
+    # More reliable than PostgreSQL func.timezone casting across PG versions.
+    _IST = ZoneInfo("Asia/Kolkata")
+    _UTC = ZoneInfo("UTC")
+    ist_start = _dt.datetime(target_date.year, target_date.month, target_date.day,
+                             0, 0, 0, tzinfo=_IST)
+    ist_end   = ist_start + _dt.timedelta(days=1)
+    utc_start = ist_start.astimezone(_UTC)
+    utc_end   = ist_end.astimezone(_UTC)
+
     result = await db.execute(
         select(Order).where(
             Order.algo_id == algo_uuid,
             Order.status == OrderStatus.CLOSED,
-            func.date(func.timezone("Asia/Kolkata", Order.fill_time)) == target_date,
+            Order.fill_time >= utc_start,
+            Order.fill_time <  utc_end,
         ).order_by(Order.fill_time)
     )
     orders_raw = result.scalars().all()
