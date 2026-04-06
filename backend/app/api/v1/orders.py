@@ -238,7 +238,7 @@ async def get_trade_replay(
     Fetches all orders for that algo on that day (using fill_time for date match),
     builds separate ENTRY and EXIT events, running P&L curve, and summary stats.
     """
-    from sqlalchemy import cast, Date as SADate
+    from sqlalchemy import func
     import uuid as _uuid_mod
     import datetime as _dt
 
@@ -256,11 +256,14 @@ async def get_trade_replay(
     algo_obj = algo_result.scalar_one_or_none()
     algo_name = algo_obj.name if algo_obj else algo_id
 
-    # Fetch all orders for this algo on the given date using fill_time
+    # Fetch all CLOSED orders for this algo on the given date.
+    # Use func.timezone to convert fill_time to IST before date-casting,
+    # so 09:20 IST (03:50 UTC) is correctly matched to the IST date.
     result = await db.execute(
         select(Order).where(
             Order.algo_id == algo_uuid,
-            cast(Order.fill_time, SADate) == target_date,
+            Order.status == OrderStatus.CLOSED,
+            func.date(func.timezone("Asia/Kolkata", Order.fill_time)) == target_date,
         ).order_by(Order.fill_time)
     )
     orders_raw = result.scalars().all()
@@ -327,11 +330,13 @@ async def get_trade_replay(
 
         # ── EXIT event (from exit_time) ───────────────────────────────────────
         if order.exit_time:
+            if order.pnl is None:
+                continue  # skip legs not yet realized — pnl unrealized, don't skew curve
             exit_price = float(
                 order.exit_price_manual if order.exit_price_manual is not None
                 else (order.exit_price or 0)
             )
-            pnl_this   = float(order.pnl or 0)
+            pnl_this   = float(order.pnl)
             running_pnl = round(running_pnl + pnl_this, 2)
             cumulative_pnl_values.append(running_pnl)
             exit_type  = _map_exit_reason(order.exit_reason)

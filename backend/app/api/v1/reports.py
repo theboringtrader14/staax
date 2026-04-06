@@ -16,6 +16,14 @@ from app.models.account import Account
 router = APIRouter()
 IST = timezone(timedelta(hours=5, minutes=30))
 
+
+def get_current_fy() -> str:
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    start = now.year if now.month >= 4 else now.year - 1
+    return f"{start}-{str(start + 1)[2:]}"
+
+
 def _fy_range(fy: str):
     try:
         start_year = int(fy.split("-")[0])
@@ -165,10 +173,12 @@ async def trade_calendar(
 @router.get("/equity-curve")
 async def equity_curve(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str | None = Query(None),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
+    if fy is None:
+        fy = get_current_fy()
     conditions = _base_query(fy, account_id, is_practix)
     result = await db.execute(
         select(Order).where(*conditions).order_by(Order.fill_time)
