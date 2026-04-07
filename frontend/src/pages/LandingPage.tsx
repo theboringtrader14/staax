@@ -491,8 +491,10 @@ export default function LandingPage() {
               className="landing-module-card"
               data-accent={mod.accentKey}
               onClick={() => {
-                if (mod.id === 'BUDGEX') {
-                  const budgexUrl = import.meta.env.VITE_BUDGEX_URL || 'http://localhost:3002'
+                if (mod.id === 'STAAX') {
+                  navigate(isAuthenticated ? '/dashboard' : '/login')
+                } else if (mod.id === 'BUDGEX') {
+                  const budgexUrl = import.meta.env.VITE_BUDGEX_URL || 'https://budgex.lifexos.co.in'
                   window.location.href = budgexUrl
                 } else if ('externalUrl' in mod && mod.externalUrl) {
                   window.location.href = mod.externalUrl
