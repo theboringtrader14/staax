@@ -76,7 +76,7 @@ function PnlCard({ label, value, isPositive, sparkId, equityCurve }: { label: st
 
 function isPast9am() {
   const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-  return ist.getHours() > 9 || (ist.getHours() === 9 && ist.getMinutes() >= 0)
+  return ist.getHours() > 9 || (ist.getHours() === 9 && ist.getMinutes() >= 15)
 }
 
 

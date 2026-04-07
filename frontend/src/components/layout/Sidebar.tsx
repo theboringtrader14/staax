@@ -33,7 +33,7 @@ export default function Sidebar() {
   useEffect(() => {
     const token = localStorage.getItem('staax_token')
     if (!token) return
-    fetch('http://localhost:8000/api/v1/bots/signals/today', { headers:{ Authorization:`Bearer ${token}` } })
+    fetch('https://api.lifexos.co.in/api/v1/bots/signals/today', { headers:{ Authorization:`Bearer ${token}` } })
       .then(r => r.json())
       .then(d => setHasBotActivity((d?.signals || []).some((s: any) => s.status === 'fired')))
       .catch(() => {})

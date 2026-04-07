@@ -115,7 +115,7 @@ export default function LandingPage() {
     const ok = '#10b981'
     const err = '#ef4444'
     const unk = 'rgba(232,232,248,0.35)'
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const apiBase = import.meta.env.VITE_API_URL || 'https://api.lifexos.co.in'
     fetch(`${apiBase}/api/v1/system/health`)
       .then(r => r.json())
       .then((data: { checks: { database: { ok: boolean }, redis: { ok: boolean }, smartstream: { ok: boolean, connected?: boolean }, scheduler: { ok: boolean } } }) => {
