@@ -2,7 +2,6 @@
 LIFEX AI Agent — powered by Gemma 4 via Google AI Studio.
 Queries live trade data from DB and sends to Gemma for analysis.
 """
-import os
 from google import genai
 from google.genai import types
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,11 +14,10 @@ _client = None
 def get_client() -> genai.Client:
     global _client
     if _client is None:
-        from dotenv import load_dotenv
-        load_dotenv(override=True)
-        key = os.getenv("GOOGLE_AI_API_KEY")
+        from app.core.config import settings
+        key = settings.GOOGLE_AI_API_KEY
         if not key:
-            raise ValueError("GOOGLE_AI_API_KEY missing from .env")
+            raise ValueError("GOOGLE_AI_API_KEY not configured in settings")
         _client = genai.Client(api_key=key)
     return _client
 

@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 
-const token = localStorage.getItem('staax_token')
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
-const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
 
 interface Message {
   role: 'user' | 'ai'
@@ -52,6 +50,7 @@ export default function AIAgentPage() {
     setInput('')
     setLoading(true)
     try {
+      const headers = { 'Authorization': `Bearer ${localStorage.getItem('staax_token')}`, 'Content-Type': 'application/json' }
       const r = await fetch(`${API_BASE}/api/v1/ai/chat`, {
         method: 'POST', headers,
         body: JSON.stringify({ message: text })
@@ -69,6 +68,7 @@ export default function AIAgentPage() {
     setLoading(true)
     setMessages(m => [...m, { role: 'user', text: 'Analyze my portfolio', ts: new Date().toLocaleTimeString() }])
     try {
+      const headers = { 'Authorization': `Bearer ${localStorage.getItem('staax_token')}`, 'Content-Type': 'application/json' }
       const r = await fetch(`${API_BASE}/api/v1/ai/analyze-portfolio`, {
         method: 'POST', headers,
         body: JSON.stringify({ holdings: [], pnl_data: {} })
@@ -86,6 +86,7 @@ export default function AIAgentPage() {
     setLoading(true)
     setMessages(m => [...m, { role: 'user', text: "Give me today's trading summary", ts: new Date().toLocaleTimeString() }])
     try {
+      const headers = { 'Authorization': `Bearer ${localStorage.getItem('staax_token')}`, 'Content-Type': 'application/json' }
       const r = await fetch(`${API_BASE}/api/v1/ai/analyze-day`, {
         method: 'POST', headers,
         body: JSON.stringify({ orders: [], algo_count: 0 })

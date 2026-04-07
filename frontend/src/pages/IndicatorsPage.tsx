@@ -4,7 +4,7 @@ import axios from 'axios'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 
-const API = 'http://localhost:8000/api/v1'
+const API = `${(import.meta as any).env?.VITE_API_URL || 'https://api.lifexos.co.in'}/api/v1`
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('staax_token')}` } })
 const apiGet  = (p: string) => axios.get(`${API}${p}`, auth())
 const apiPost = (p: string, d: any = {}) => axios.post(`${API}${p}`, d, auth())
