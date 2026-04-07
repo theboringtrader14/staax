@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "dev-secret-key"
     APP_PORT: int = 8000
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"]
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     # Database
     DATABASE_URL: str = ""

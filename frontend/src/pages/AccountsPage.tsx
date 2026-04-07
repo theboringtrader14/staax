@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
+import { getCurrentFY } from '@/utils/fy'
 
 interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
@@ -13,15 +14,6 @@ interface EditCredsState {
   id: string; nickname: string; client_id: string; api_key: string; api_secret: string; totp_secret: string
 }
 
-
-// Returns current financial year string e.g. "2025-26"
-function getCurrentFY(): string {
-  const now = new Date()
-  const month = now.getMonth() + 1  // 1-based
-  const year  = now.getFullYear()
-  const fyStart = month >= 4 ? year : year - 1
-  return `${fyStart}-${String(fyStart + 1).slice(2)}`
-}
 
 // True only in April — brokerage is editable once per FY
 function isApril(): boolean {

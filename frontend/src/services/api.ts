@@ -183,7 +183,7 @@ export const eventsAPI = {
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 export function createOrdersWebSocket(): WebSocket {
   const wsBase = API_BASE.replace('http', 'ws')
-  return new WebSocket(`${wsBase}/ws/live`)
+  return new WebSocket(`${wsBase}/api/v1/orders/ws/live`)
 }
 
 export function createNotificationsWebSocket(): WebSocket {

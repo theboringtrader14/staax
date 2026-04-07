@@ -24,6 +24,8 @@ class MarginUpdate(BaseModel):
 class GlobalRiskUpdate(BaseModel):
     global_sl: Optional[float] = None
     global_tp: Optional[float] = None
+    fy_margin: Optional[float] = None
+    fy_brokerage: Optional[float] = None
 
 class NicknameUpdate(BaseModel):
     nickname: str
@@ -135,7 +137,7 @@ async def update_margin(
 ):
     """Update FY margin for an account. Used for ROI calculation in Reports."""
     # Verify account exists
-    result = await db.execute(select(Account).where(Account.id == account_id))
+    result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -172,7 +174,7 @@ async def update_global_risk(
     db: AsyncSession = Depends(get_db),
 ):
     """Update global SL and TP for an account."""
-    result = await db.execute(select(Account).where(Account.id == account_id))
+    result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -181,9 +183,9 @@ async def update_global_risk(
         account.global_sl = body.global_sl
     if body.global_tp is not None:
         account.global_tp = body.global_tp
-    if hasattr(body, "fy_margin") and body.fy_margin is not None:
+    if body.fy_margin is not None:
         account.fy_margin = body.fy_margin
-    if hasattr(body, "fy_brokerage") and body.fy_brokerage is not None:
+    if body.fy_brokerage is not None:
         account.fy_brokerage = body.fy_brokerage
 
     await db.commit()

@@ -44,7 +44,7 @@ async def query_trade_data(db: AsyncSession, question: str) -> str:
                 COUNT(CASE WHEN o.pnl > 0 THEN 1 END) as wins,
                 COUNT(CASE WHEN o.pnl <= 0 THEN 1 END) as losses
             FROM algos a
-            LEFT JOIN orders o ON o.algo_id = a.id AND o.status = 'closed'
+            LEFT JOIN orders o ON o.algo_id = a.id AND o.status = 'CLOSED'
             GROUP BY a.id, a.name, a.strategy_mode, a.entry_type
             HAVING COUNT(o.id) > 0
             ORDER BY total_pnl DESC
@@ -72,7 +72,7 @@ async def query_trade_data(db: AsyncSession, question: str) -> str:
                     COALESCE(SUM(o.pnl), 0) as pnl,
                     COUNT(CASE WHEN o.pnl > 0 THEN 1 END) as wins
                 FROM orders o
-                WHERE o.status = 'closed' AND o.pnl IS NOT NULL
+                WHERE o.status = 'CLOSED' AND o.pnl IS NOT NULL
                 GROUP BY day
                 ORDER BY MIN(EXTRACT(DOW FROM o.fill_time))
             """))
@@ -95,7 +95,7 @@ async def query_trade_data(db: AsyncSession, question: str) -> str:
                     COALESCE(SUM(o.pnl), 0) as pnl,
                     ROUND(COUNT(CASE WHEN o.pnl > 0 THEN 1 END) * 100.0 / NULLIF(COUNT(*),0), 1) as win_rate
                 FROM orders o JOIN algos a ON o.algo_id = a.id
-                WHERE o.status = 'closed'
+                WHERE o.status = 'CLOSED'
                 GROUP BY a.entry_type, a.strategy_mode
             """))
             rows = result.fetchall()

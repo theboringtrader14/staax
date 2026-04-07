@@ -1,4 +1,5 @@
 """Bots API — Indicator Systems CRUD."""
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -9,6 +10,8 @@ from zoneinfo import ZoneInfo
 from app.core.database import get_db
 from app.models.bot import Bot, BotOrder, BotSignal, IndicatorType
 import uuid as uuid_lib
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -80,7 +83,8 @@ async def create_bot(body: BotCreate, db: AsyncSession = Depends(get_db)):
         from app.engine.bot_runner import bot_runner
         bot_runner._bots.append(bot)
         bot_runner._init_bot(bot)
-    except Exception: pass
+    except Exception as e:
+        logger.warning(f"[BOTS] Failed to wire bot to runner: {e}")
     return _bot_dict(bot)
 
 @router.get("/ltp")

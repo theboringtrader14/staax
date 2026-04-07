@@ -38,7 +38,7 @@ const MODULES = [
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
-    externalUrl: 'http://localhost:3002',
+    externalUrl: 'https://budgex.lifexos.co.in',
   },
   {
     id: 'HEALTHEX',

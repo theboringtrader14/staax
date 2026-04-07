@@ -3,6 +3,7 @@ reports.py — Reports API
 """
 import csv
 import io
+import logging
 from datetime import date, datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -14,6 +15,7 @@ from app.models.algo import Algo
 from app.models.account import Account
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
@@ -132,7 +134,8 @@ async def algo_metrics(
             acc_result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
             acc = acc_result.scalar_one_or_none()
             fy_margin = acc.fy_margin if acc and acc.fy_margin else 0
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[REPORTS] Suppressed error: {e}")
             fy_margin = 0
     else:
         acc_result = await db.execute(select(Account))
@@ -740,8 +743,8 @@ async def strategy_breakdown(
             groups[stype]["total_pnl"] += float(bot_order.pnl or 0)
             if (bot_order.pnl or 0) > 0:
                 groups[stype]["wins"] += 1
-    except Exception:
-        pass  # bots table may not exist in all environments
+    except Exception as e:
+        logger.warning(f"[REPORTS] Suppressed error: {e}")
 
     breakdown = [
         {

@@ -719,8 +719,8 @@ async def square_off(
         from app.engine.order_reconciler import order_reconciler
         import asyncio
         asyncio.ensure_future(order_reconciler.run())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[ORDERS] Post-SQ reconciliation trigger failed: {e}")
 
     return {
         "status":      "ok",

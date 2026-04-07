@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from app.core.database import get_db
 from app.core.config import settings
 from app.models.algo import Algo
+from app.models.order import Order, OrderStatus
 
 router = APIRouter()
 
@@ -58,10 +59,9 @@ async def mobile_dashboard(
     today_pnl = 0.0
 
     try:
-        from app.models.order import Order
         orders_today = await db.execute(
             select(Order).where(
-                Order.status == "closed",
+                Order.status == OrderStatus.CLOSED,
                 Order.pnl.isnot(None),
                 func.date(Order.exit_time) == today_ist,
             )
