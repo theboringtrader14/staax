@@ -57,7 +57,7 @@ def _base_query(fy: str, account_id: str | None, is_practix: bool | None = None)
 @router.get("/metrics")
 async def algo_metrics(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
     start_date: str | None = Query(None),
@@ -145,7 +145,7 @@ async def algo_metrics(
 @router.get("/calendar")
 async def trade_calendar(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
@@ -207,7 +207,7 @@ async def equity_curve(
 @router.get("/day-breakdown")
 async def day_breakdown(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
@@ -240,7 +240,7 @@ async def day_breakdown(
 @router.get("/errors")
 async def error_analytics(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
@@ -318,7 +318,7 @@ async def error_analytics(
 @router.get("/slippage")
 async def slippage_analytics(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
@@ -379,7 +379,7 @@ async def slippage_analytics(
 @router.get("/health-scores")
 async def health_scores(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
@@ -433,7 +433,7 @@ async def health_scores(
 @router.get("/all-orders")
 async def all_orders(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
     status: str | None = Query(None),
@@ -617,7 +617,7 @@ async def latency_analytics(
 @router.get("/download")
 async def download_trades(
     db: AsyncSession = Depends(get_db),
-    fy: str = Query("2024-25"),
+    fy: str = Query("2025-26"),
     format: str = Query("csv"),
     account_id: str | None = Query(None),
 ):

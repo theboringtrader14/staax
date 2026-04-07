@@ -119,7 +119,7 @@ async def kill_switch_status(db: AsyncSession = Depends(get_db)):
 # ── Dashboard stats ───────────────────────────────────────────────────────────
 
 @router.get("/stats")
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bool = True):
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bool = False):
     """
     Returns stat card values for the Dashboard:
       active_algos    — grid entries today that have been triggered (not NO_TRADE/ERROR/CLOSED)

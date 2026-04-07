@@ -62,7 +62,7 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
         pass
 
     result = await chat(body.message, ctx)
-    return {"response": result}
+    return {"response": result if result is not None else "AI service unavailable. Please try again."}
 
 
 @router.post("/analyze")

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     ALERT_EMAIL_TO: str = ""
     AWS_SES_REGION: str = "ap-south-1"
 
+    # Google AI
+    GOOGLE_AI_API_KEY: str = ""
+
     # STAAX Auth
     STAAX_USERNAME: str = "karthik"
     STAAX_PASSWORD_HASH: str = ""
