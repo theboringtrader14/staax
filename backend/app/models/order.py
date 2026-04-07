@@ -78,6 +78,17 @@ class Order(Base):
     tsl_trail_count = Column(Integer, default=0)
     target        = Column(Float, nullable=True)
 
+    # ── TSL runtime tracking ───────────────────────────────────────────────────
+    # Persisted on every trail so position rebuilder can restore TSL state after restart.
+    tsl_activated        = Column(Boolean, default=False)    # True once first trail fires
+    tsl_activation_price = Column(Float, nullable=True)      # LTP when TSL first armed (= fill_price)
+    tsl_current_sl       = Column(Float, nullable=True)      # last persisted TSL level (mirrors sl_actual)
+
+    # ── TTP runtime tracking ───────────────────────────────────────────────────
+    ttp_activated        = Column(Boolean, default=False)    # True once first trail fires
+    ttp_activation_price = Column(Float, nullable=True)      # LTP when TTP first armed (= fill_price)
+    ttp_current_tp       = Column(Float, nullable=True)      # last persisted TTP level (mirrors target)
+
     # ── Exit ──────────────────────────────────────────────────────────────────
     exit_price        = Column(Float, nullable=True)
     exit_price_manual = Column(Float, nullable=True)   # user-corrected exit (Phase 1E)

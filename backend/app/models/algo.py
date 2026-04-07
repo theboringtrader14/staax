@@ -155,11 +155,13 @@ class AlgoLeg(Base):
 
     # ── Per-leg TSL (Trailing Stop Loss) ──────────────────────────────────────
     # For every X move in favour, shift SL by Y. Same unit for X and Y.
+    tsl_enabled = Column(Boolean, default=False)   # toggle — must be True for engine to arm TSL
     tsl_x    = Column(Float, nullable=True)
     tsl_y    = Column(Float, nullable=True)
     tsl_unit = Column(String(5), nullable=True)    # "pts" or "pct"
 
     # ── Per-leg TTP (Trailing Target Profit — Phase 1E) ───────────────────────
+    ttp_enabled = Column(Boolean, default=False)   # toggle — must be True for engine to arm TTP
     ttp_x    = Column(Float, nullable=True)
     ttp_y    = Column(Float, nullable=True)
     ttp_unit = Column(String(5), nullable=True)

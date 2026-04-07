@@ -12,6 +12,13 @@ Example: Buy @ 100, TSL X=5pts Y=3pts, initial SL=90
   Price 110 → SL=96  (trail #2)
   Price 115 → SL=99  (trail #3)
   Price falls to 99  → SL Monitor fires exit
+
+DB persistence:
+  On every trail, the new SL and trail_count are written to:
+    orders.sl_actual        — so SLTPMonitor reads the correct level after restart
+    orders.tsl_trail_count  — audit / re-entry AT_COST checks
+    orders.tsl_activated    — True once first trail fires
+    orders.tsl_current_sl   — explicit TSL column (mirrors sl_actual)
 """
 import logging
 from typing import Dict
@@ -82,6 +89,24 @@ class TSLEngine:
         s = self._states.get(order_id)
         return s is not None and s.trail_count > 0
 
+    async def _persist_trail(self, order_id: str, new_sl: float, trail_count: int):
+        """Write updated TSL state to DB. Fire-and-forget — errors are logged, not raised."""
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.models.order import Order
+            from sqlalchemy import select
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(Order).where(Order.id == order_id))
+                order = result.scalar_one_or_none()
+                if order:
+                    order.sl_actual        = new_sl
+                    order.tsl_current_sl   = new_sl
+                    order.tsl_trail_count  = trail_count
+                    order.tsl_activated    = True
+                    await db.commit()
+        except Exception as e:
+            logger.warning(f"[TSL] DB persist failed for {order_id}: {e}")
+
     async def on_tick(self, token: int, ltp: float, tick: dict):
         for order_id, state in list(self._states.items()):
             pos = self.sl_monitor._positions.get(order_id)
@@ -89,3 +114,8 @@ class TSLEngine:
                 continue
             if state.check_and_trail(ltp):
                 self.sl_monitor.update_sl(order_id, state.current_sl)
+                # Persist to DB so position rebuilder can restore state after restart
+                import asyncio
+                asyncio.ensure_future(
+                    self._persist_trail(order_id, state.current_sl, state.trail_count)
+                )

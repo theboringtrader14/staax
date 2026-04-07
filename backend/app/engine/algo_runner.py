@@ -792,7 +792,8 @@ class AlgoRunner:
             )
 
         # ── Register TSL ───────────────────────────────────────────────────────
-        if self._tsl_engine and getattr(leg, "tsl_enabled", False) and leg.tsl_x and leg.tsl_y:
+        # tsl_enabled is now a real DB column — no more getattr fallback
+        if self._tsl_engine and leg.tsl_enabled and leg.tsl_x and leg.tsl_y:
             tsl_state = TSLState(
                 order_id=str(order.id),
                 direction=direction,
@@ -803,9 +804,14 @@ class AlgoRunner:
                 tsl_unit=leg.tsl_unit or "pts",
             )
             self._tsl_engine.register(tsl_state)
+            # Record activation price so position rebuilder and UI can show it
+            order.tsl_activation_price = fill_price
+            order.tsl_current_sl       = order.sl_actual or (fill_price * 0.9)
 
         # ── Register TTP ───────────────────────────────────────────────────────
-        ttp_enabled = getattr(leg, "ttp_enabled", False) or (leg.ttp_x and leg.ttp_y and leg.tp_value)
+        # ttp_enabled is now a real DB column; fallback keeps backward compat with
+        # algos saved before this migration that have ttp_x/y set but no flag.
+        ttp_enabled = leg.ttp_enabled or (leg.ttp_x and leg.ttp_y and leg.tp_value)
         if self._ttp_engine and ttp_enabled and leg.ttp_x and leg.ttp_y:
             # TTP requires TP to be set — initial current_tp from PositionMonitor
             initial_tp = order.target or fill_price * 1.1
@@ -819,6 +825,9 @@ class AlgoRunner:
                 ttp_unit=leg.ttp_unit or "pts",
             )
             self._ttp_engine.register(ttp_state)
+            # Record activation price so position rebuilder and UI can show it
+            order.ttp_activation_price = fill_price
+            order.ttp_current_tp       = initial_tp
 
         # ── Register Journey ────────────────────────────────────────────────────
         journey_cfg = getattr(leg, "journey_config", None)
