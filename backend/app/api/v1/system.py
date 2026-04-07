@@ -143,7 +143,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
         sa_select(func.count(func.distinct(Order.algo_id))).where(
             Order.status == OrderStatus.OPEN,
             Order.is_practix == is_practix,
-            Order.entry_time >= today_start_utc,
+            Order.created_at >= today_start_utc,
         )
     )
     active_algos = active_result.scalar() or 0
@@ -153,7 +153,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
         sa_select(func.count(Order.id)).where(
             Order.status == OrderStatus.OPEN,
             Order.is_practix == is_practix,
-            Order.entry_time >= today_start_utc,
+            Order.created_at >= today_start_utc,
         )
     )
     open_positions = open_result.scalar() or 0
