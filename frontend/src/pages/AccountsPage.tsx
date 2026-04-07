@@ -556,10 +556,10 @@ export default function AccountsPage() {
               <button onClick={() => { setEditingCreds(null); setShowSecret(false); setShowTotp(false); }}
                 style={{padding:'8px 16px',borderRadius:8,border:'0.5px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(232,232,248,0.5)',fontFamily:'Syne',fontSize:12,cursor:'pointer'}}>Cancel</button>
               <button onClick={async () => {
-                const body: Record<string,string> = { api_key: editingCreds.api_key }
-                if (editingCreds.api_secret) body.api_secret = editingCreds.api_secret
-                if (editingCreds.totp_secret) body.totp_secret = editingCreds.totp_secret
-                await fetch(`/api/v1/accounts/${editingCreds.id}/credentials`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+                const creds: { api_key?: string; api_secret?: string; totp_secret?: string } = { api_key: editingCreds.api_key }
+                if (editingCreds.api_secret) creds.api_secret = editingCreds.api_secret
+                if (editingCreds.totp_secret) creds.totp_secret = editingCreds.totp_secret
+                await accountsAPI.updateCredentials(editingCreds.id, creds)
                 setEditingCreds(null); setShowSecret(false); setShowTotp(false)
               }} style={{padding:'8px 20px',borderRadius:8,border:'none',background:'var(--ox-radiant)',color:'#000',fontFamily:'Syne',fontWeight:700,fontSize:12,cursor:'pointer'}}>Save</button>
             </div>

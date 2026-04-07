@@ -39,6 +39,9 @@ export const accountsAPI = {
   angeloneTokenStatus: (account: string) =>
     api.get(`/accounts/angelone/${account}/token-status`),
 
+  updateCredentials: (id: string, creds: { api_key?: string; api_secret?: string; totp_secret?: string }) =>
+    api.patch(`/accounts/${id}/credentials`, creds),
+
   // Zerodha token flow
   zerodhaLoginUrl:    () => api.get('/accounts/zerodha/login-url'),
   zerodhaSetToken:    (requestToken: string) =>

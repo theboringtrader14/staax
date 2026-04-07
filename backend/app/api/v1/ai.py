@@ -26,15 +26,17 @@ class DayAnalysisRequest(BaseModel):
 
 @router.post("/chat")
 async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
-    """Open endpoint — no auth. Enriches context with live DB data then runs rule-based response."""
-    from app.engine.ai_agent import chat
+    """Open endpoint — no auth. Tries Gemma first, falls back to rule-based on failure."""
+    from app.engine.ai_agent import chat, chat_with_db
     from datetime import datetime
     from zoneinfo import ZoneInfo
+    import logging
+    logger = logging.getLogger(__name__)
 
     IST = ZoneInfo("Asia/Kolkata")
     ctx = dict(body.context or {})
 
-    # Fetch FY P&L (Indian FY: April–March)
+    # Enrich context with live FY P&L
     try:
         from app.models.order import Order
         now = datetime.now(IST)
@@ -51,7 +53,7 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # Fetch active algo count
+    # Enrich context with active algo count
     try:
         from app.models.algo import Algo
         res = await db.execute(
@@ -61,8 +63,14 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    result = await chat(body.message, ctx)
-    return {"response": result if result is not None else "AI service unavailable. Please try again."}
+    # Try Gemma first — fall back to rule-based only on exception
+    try:
+        result = await chat_with_db(body.message, ctx, db)
+        return {"response": result, "model": "gemma-4-31b-it"}
+    except Exception as e:
+        logger.warning(f"[AI/CHAT] Gemma failed: {e} — falling back to rule-based")
+        fallback = await chat(body.message, ctx)
+        return {"response": fallback or "AI service unavailable. Please try again.", "model": "rule-based"}
 
 
 @router.post("/analyze")

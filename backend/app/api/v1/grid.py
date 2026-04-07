@@ -341,6 +341,45 @@ async def promote_to_live(algo_id: str, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "algo_id": algo_id, "updated": len(entries)}
 
 
+@router.post("/trigger-now")
+async def trigger_now(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Manually trigger grid evaluation for all active algos right now.
+    Called from GridPage 'Trigger Now' button to force an immediate check.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    today = date.today()
+
+    try:
+        scheduler = getattr(request.app.state, "scheduler", None)
+        if scheduler and hasattr(scheduler, "_scheduler"):
+            # Get all waiting AlgoStates for today and re-schedule their entry jobs
+            result = await db.execute(
+                select(AlgoState, GridEntry, Algo)
+                .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                .join(Algo, GridEntry.algo_id == Algo.id)
+                .where(
+                    AlgoState.trading_date == str(today),
+                    AlgoState.status == AlgoRunStatus.WAITING,
+                )
+            )
+            rows = result.all()
+            triggered = []
+            for algo_state, grid_entry, algo in rows:
+                try:
+                    scheduler.schedule_algo_jobs(str(grid_entry.id), algo, today)
+                    triggered.append(algo.name)
+                    logger.info(f"[GRID/TRIGGER-NOW] Re-scheduled: {algo.name}")
+                except Exception as e:
+                    logger.warning(f"[GRID/TRIGGER-NOW] Failed for {algo.name}: {e}")
+            return {"status": "triggered", "detail": f"Re-scheduled {len(triggered)} waiting algos", "algos": triggered}
+    except Exception as e:
+        logger.warning(f"[GRID/TRIGGER-NOW] Scheduler unavailable: {e}")
+
+    return {"status": "triggered", "detail": "Manual trigger queued — scheduler will pick up on next cycle"}
+
+
 @router.post("/eod-cleanup")
 async def eod_cleanup(request: Request, db: AsyncSession = Depends(get_db)):
     """

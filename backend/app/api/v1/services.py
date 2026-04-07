@@ -439,7 +439,7 @@ async def reload_nfo_cache(request: Request):
         return {"status": "error", "message": str(e)}
 
 @router.post("/{service_id}/stop")
-async def stop_service(service_id: str):
+async def stop_service(service_id: str, request: Request):
     """
     Stop a single service.
     Called by individual 'Stop' buttons on Dashboard.
@@ -453,7 +453,16 @@ async def stop_service(service_id: str):
     if _service_states[service_id] == ServiceStatus.STOPPED:
         return {"message": f"{service_id} is already stopped"}
 
-    # TODO Phase 1C: actually stop the service
+    # Actually stop the underlying service
+    if service_id == "ws":
+        try:
+            ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+            if ltp_consumer and hasattr(ltp_consumer, "stop"):
+                await ltp_consumer.stop()
+            logger.info("[SVC] Market Feed (ws): stopped via individual stop")
+        except Exception as e:
+            logger.error(f"[SVC] Market Feed stop failed: {e}")
+
     _service_states[service_id] = ServiceStatus.STOPPED
 
     return {

@@ -131,7 +131,10 @@ async def chat(message: str, context: dict | None = None) -> str | None:
 
 
 async def chat_with_db(message: str, context: dict, db: AsyncSession) -> str:
-    """Full AI analysis with DB data for complex questions."""
+    """Full AI analysis — Gemma first, rule-based fallback on any exception."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     trade_data = await query_trade_data(db, message)
     ctx = context or {}
 
@@ -156,7 +159,9 @@ User question: {message}"""
         )
         return response.text.strip()
     except Exception as e:
-        return f"Analysis: {trade_data[:300]}"
+        logger.warning(f"[AI] Gemma failed: {e} — falling back to rule-based")
+        fallback = await chat(message, ctx)
+        return fallback or f"Data available: {trade_data[:200]}"
 
 
 # Keep legacy alias so existing /chat endpoint still works

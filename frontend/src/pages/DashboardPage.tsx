@@ -18,7 +18,7 @@ const STATUS_CLR: Record<ServiceStatus, string> = {
 }
 
 
-function PnlCard({ label, value, isPositive, sparkId, equityCurve }: { label: string; value: number; isPositive: boolean; sparkId: string; equityCurve?: {month: string; cumulative: number}[] }) {
+function PnlCard({ label, value, isPositive, sparkId, equityCurve, roi }: { label: string; value: number; isPositive: boolean; sparkId: string; equityCurve?: {month: string; cumulative: number}[]; roi?: string }) {
   const rupee = String.fromCharCode(0x20B9)
   const display = (isPositive ? '+' : '') + rupee + Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })
   const col  = isPositive ? 'var(--ox-radiant)' : 'var(--sem-short)'
@@ -28,7 +28,7 @@ function PnlCard({ label, value, isPositive, sparkId, equityCurve }: { label: st
       <div className="card-label">{label}</div>
       <div style={{ fontSize: 'clamp(20px,2.2vw,28px)', fontWeight: 800, color: col, fontFamily: 'var(--font-mono)', letterSpacing: '-1px', lineHeight: 1 }}>{display}</div>
       <div style={{ fontSize: '10px', color: isPositive ? 'rgba(255,107,0,0.65)' : 'rgba(255,68,68,0.65)', marginTop: '3px', fontWeight: 600 }}>
-        {isPositive ? '▲' : '▼'} {isPositive ? 'Profit' : 'Loss'} · 0.00% ROI
+        {isPositive ? '▲' : '▼'} {isPositive ? 'Profit' : 'Loss'} · {roi ?? '0.00'}% ROI
       </div>
       <svg width="100%" height="36" viewBox="0 0 200 36" preserveAspectRatio="none" style={{ marginTop: '10px', display: 'block' }}>
         <defs>
@@ -237,6 +237,8 @@ export default function DashboardPage() {
   const todayPnl  = stats['today_pnl'] ?? 0
   const fyPnl     = stats['fy_pnl']    ?? 0
   const fyPnlReal = equityCurveData.length > 0 ? (equityCurveData[equityCurveData.length - 1]?.cumulative ?? fyPnl) : fyPnl
+  const fyMargin  = (accounts as any[]).reduce((sum, a) => sum + (a.margin ?? a.fy_margin ?? 0), 0)
+  const fyRoi     = fyMargin > 0 ? (fyPnlReal / fyMargin * 100).toFixed(2) : '0.00'
 
   // ── isMarketHours (component scope, shared by health container + chip row) ──
   const isMarketHours: boolean = health?.is_market_hours ?? (() => {
@@ -653,7 +655,7 @@ export default function DashboardPage() {
           <div style={{ fontSize: '10px', color: 'rgba(34,221,136,0.6)', marginTop: '5px', fontWeight: 600 }}>open lots</div>
         </div>
         <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} sparkId="today" />
-        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} sparkId="fy" equityCurve={equityCurveData} />
+        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} sparkId="fy" equityCurve={equityCurveData} roi={fyRoi} />
       </div>
 
       {/* ── NEXT ALGO + HOLIDAYS — FIX #1: no separator lines ── */}
