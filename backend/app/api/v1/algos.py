@@ -2,19 +2,23 @@
 Algos API — CRUD for algo configuration + runtime controls.
 Fully wired to PostgreSQL.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid as uuid_lib
+import logging
+from datetime import date, datetime, timezone
 from app.core.database import get_db
 from app.models.algo import Algo, AlgoLeg, StrategyMode, EntryType, OrderType, ReentryMode
-from app.models.account import Account
+from app.models.account import Account, AccountStatus
 from app.models.grid import GridEntry, GridStatus
-from app.models.algo_state import AlgoState
-from app.models.order import Order
+from app.models.algo_state import AlgoState, AlgoRunStatus
+from app.models.order import Order, OrderStatus, ExitReason
 from app.models.trade import Trade
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -515,25 +519,24 @@ async def demote_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
 
 # ── Runtime controls ──────────────────────────────────────────────────────────
 
-@router.post("/{algo_id}/start")
-async def start_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    return {"algo_id": algo_id, "action": "start", "message": "Entry triggered"}
-
-
 @router.post("/{algo_id}/re")
 async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
     """
-    RE — retry the last failed order for this algo.
-    Only valid when the most recent order is in ERROR status.
-    Calls OrderRetryQueue.retry_order() which resets state and retries up to 3 times.
-    Engine wiring (OrderPlacer context) handled in Phase 1F via ExecutionManager.
+    RE — retry all ERROR orders for this algo today.
+    Guards (in order):
+      1. Kill switch
+      2. Grid entry exists
+      3. PRACTIX mode detection (skip broker checks for PRACTIX)
+      4. Broker token validity (LIVE only)
+      5. Duplicate open position guard per instrument
+      6. Max retry count (3 attempts)
+    Updates AlgoState to ACTIVE if any orders are retried.
     """
-    from app.models.order import Order, OrderStatus
-    from app.models.grid import GridEntry
-    from sqlalchemy import select
-    from datetime import date
     from app.engine import order_retry_queue
 
+    MAX_RETRIES = 3
+
+    # Guard 0: Kill switch
     if order_retry_queue.disabled:
         raise HTTPException(status_code=503, detail="Kill Switch is active — retry not allowed")
 
@@ -549,7 +552,22 @@ async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
     if not grid_entry:
         raise HTTPException(status_code=404, detail="No grid entry found for this algo today")
 
-    # Find the most recent ERROR order for this grid entry
+    # Guard 1: PRACTIX mode detection
+    is_practix = grid_entry.is_practix
+
+    # Guard 2: Broker token check (LIVE only)
+    if not is_practix:
+        account_result = await db.execute(
+            select(Account).where(Account.id == grid_entry.account_id)
+        )
+        account = account_result.scalar_one_or_none()
+        if not account or account.status != AccountStatus.ACTIVE or not account.access_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Broker token invalid or expired. Re-login via Angel One / Zerodha portal."
+            )
+
+    # Find all ERROR orders for this grid entry
     orders_result = await db.execute(
         select(Order).where(
             Order.grid_entry_id == grid_entry.id,
@@ -561,30 +579,211 @@ async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
     if not error_orders:
         raise HTTPException(status_code=400, detail="No orders in ERROR state for this algo today")
 
-    # Reset all ERROR orders to PENDING — engine will pick them up
-    # Full broker retry wiring happens in Phase 1F via ExecutionManager
-    reset_count = 0
-    for order in error_orders:
-        order.status = OrderStatus.PENDING
-        order.error_message = "Manual RE triggered — awaiting engine retry"
-        order.retry_count = 0
-        reset_count += 1
+    retried_count   = 0
+    skipped_count   = 0
+    maxed_count     = 0
+
+    for error_order in error_orders:
+        # Guard 3: Duplicate open position guard
+        existing_result = await db.execute(
+            select(Order).where(
+                Order.algo_id == error_order.algo_id,
+                Order.instrument_token == error_order.instrument_token,
+                Order.status == OrderStatus.OPEN,
+            )
+        )
+        if existing_result.scalar_one_or_none():
+            logger.warning(
+                f"[RE] Skipping leg {error_order.id} — open position already exists "
+                f"for instrument_token={error_order.instrument_token}"
+            )
+            skipped_count += 1
+            continue
+
+        # Guard 4: Max retry count
+        current_count = error_order.retry_count or 0
+        if current_count >= MAX_RETRIES:
+            error_order.error_message = f"Max retries ({MAX_RETRIES}) reached — manual intervention required"
+            logger.warning(f"[RE] Order {error_order.id} has hit max retries ({MAX_RETRIES})")
+            maxed_count += 1
+            continue
+
+        # Increment retry count and reset to PENDING
+        error_order.retry_count  = current_count + 1
+        error_order.status       = OrderStatus.PENDING
+        error_order.error_message = f"Manual RE — retry {current_count + 1}/{MAX_RETRIES} initiated"
+        retried_count += 1
+
+    # Update AlgoState if any orders were retried
+    if retried_count > 0:
+        state_result = await db.execute(
+            select(AlgoState).where(
+                AlgoState.grid_entry_id == grid_entry.id,
+            )
+        )
+        algo_state = state_result.scalar_one_or_none()
+        if algo_state:
+            algo_state.status        = AlgoRunStatus.ACTIVE
+            algo_state.error_message = None
+            logger.info(f"[RE] AlgoState for grid_entry {grid_entry.id} set to ACTIVE")
 
     await db.commit()
 
+    logger.info(
+        f"[RE] algo_id={algo_id} retried={retried_count} "
+        f"skipped_duplicate={skipped_count} max_retries_reached={maxed_count}"
+    )
+
     return {
-        "algo_id":     algo_id,
-        "action":      "re",
-        "reset_count": reset_count,
-        "message":     f"{reset_count} order(s) reset to PENDING — engine will retry",
+        "status":              "ok",
+        "retried":             retried_count,
+        "skipped_duplicate":   skipped_count,
+        "max_retries_reached": maxed_count,
     }
 
 
-@router.post("/{algo_id}/sq")
-async def square_off(algo_id: str, body: SquareOffRequest, db: AsyncSession = Depends(get_db)):
-    return {"algo_id": algo_id, "action": "sq", "leg_ids": body.leg_ids or "all"}
-
-
 @router.post("/{algo_id}/terminate")
-async def terminate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    return {"algo_id": algo_id, "action": "terminate"}
+async def terminate_algo(algo_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Terminate an algo:
+      1. Square off all open/pending orders (PRACTIX: simulate; LIVE: attempt broker SQ)
+      2. Cancel APScheduler jobs for this algo
+      3. Deregister from TSL/TTP/SLTPMonitor engines
+      4. Mark AlgoState as TERMINATED
+      5. Mark GridEntry as ALGO_CLOSED
+    Always persists DB changes even if broker SQ fails — cannot leave dangling state.
+    """
+    # 1. Verify algo exists
+    try:
+        algo_uuid = uuid_lib.UUID(algo_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid algo_id UUID")
+
+    algo = await db.get(Algo, algo_uuid)
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+
+    today = date.today()
+    today_str = today.isoformat()
+
+    # 2. Find today's GridEntry
+    ge_result = await db.execute(
+        select(GridEntry).where(
+            GridEntry.algo_id == algo_uuid,
+            GridEntry.trading_date == today,
+        )
+    )
+    grid_entry = ge_result.scalar_one_or_none()
+
+    # 3. Find today's AlgoState
+    as_result = await db.execute(
+        select(AlgoState).where(
+            AlgoState.algo_id == algo_uuid,
+            AlgoState.trading_date == today_str,
+        )
+    )
+    algo_state = as_result.scalar_one_or_none()
+
+    # 4. Get all open/pending orders for this algo today
+    open_orders_result = await db.execute(
+        select(Order).where(
+            Order.algo_id == algo_uuid,
+            Order.status.in_([OrderStatus.OPEN, OrderStatus.PENDING]),
+        )
+    )
+    open_orders = open_orders_result.scalars().all()
+
+    squared_off: list = []
+    failed: list = []
+    now = datetime.now(timezone.utc)
+
+    # 5. Square off all open/pending orders
+    ltp_cache = getattr(request.app.state, "ltp_cache", None)
+    is_practix = grid_entry.is_practix if grid_entry else False
+
+    for order in open_orders:
+        try:
+            if is_practix or order.is_practix:
+                # PRACTIX: simulate exit using LTP from cache, fallback to fill_price
+                ltp = order.fill_price
+                try:
+                    if ltp_cache and order.instrument_token:
+                        cached = await ltp_cache.get(order.instrument_token)
+                        if cached is not None:
+                            ltp = cached
+                except Exception:
+                    pass
+                order.exit_price = ltp
+            else:
+                # LIVE: attempt broker square-off, mark DB closed regardless of broker result
+                try:
+                    from app.engine.execution_manager import execution_manager as _em
+                    await _em.square_off(
+                        broker_order_id=order.broker_order_id,
+                        order_placer=_em._order_placer,
+                    )
+                except Exception as broker_err:
+                    logger.warning(
+                        f"[TERMINATE] Broker SQ failed for order {order.id}: {broker_err} — "
+                        f"marking closed in DB anyway"
+                    )
+                order.exit_price = order.fill_price  # best available
+
+            order.status = OrderStatus.CLOSED
+            order.exit_reason = ExitReason.SQ
+            order.exit_time = now
+            squared_off.append(str(order.id))
+        except Exception as e:
+            logger.error(f"[TERMINATE] Unexpected error closing order {order.id}: {e}")
+            failed.append({"order_id": str(order.id), "error": str(e)})
+
+    # 6. Cancel APScheduler jobs for this algo's grid entry
+    try:
+        scheduler = getattr(request.app.state, "scheduler", None)
+        if scheduler and grid_entry:
+            scheduler.cancel_algo_jobs(str(grid_entry.id))
+    except Exception as e:
+        logger.warning(f"[TERMINATE] Could not cancel scheduler jobs: {e}")
+
+    # 7. Deregister from TSL/TTP/SLTPMonitor via the algo_runner singleton
+    try:
+        from app.engine.algo_runner import algo_runner as _runner
+        tsl_eng = getattr(_runner, "_tsl_engine", None)
+        ttp_eng = getattr(_runner, "_ttp_engine", None)
+        sl_tp   = getattr(_runner, "_sl_tp_monitor", None)
+        for order in open_orders:
+            oid_str = str(order.id)
+            if tsl_eng:
+                try: tsl_eng.deregister(oid_str)
+                except Exception: pass
+            if ttp_eng:
+                try: ttp_eng.deregister(oid_str)
+                except Exception: pass
+            if sl_tp:
+                try: sl_tp.remove_position(oid_str)
+                except Exception: pass
+    except Exception as e:
+        logger.warning(f"[TERMINATE] Could not deregister engines: {e}")
+
+    # 8. Update AlgoState → TERMINATED (AlgoRunStatus.TERMINATED is a valid enum value)
+    if algo_state:
+        algo_state.status = AlgoRunStatus.TERMINATED
+        algo_state.closed_at = now
+        algo_state.exit_reason = "terminated"
+
+    # 9. Update GridEntry → ALGO_CLOSED (GridStatus has no TERMINATED value)
+    if grid_entry:
+        grid_entry.status = GridStatus.ALGO_CLOSED
+
+    await db.commit()
+
+    logger.info(
+        f"[TERMINATE] algo={algo_id} squared_off={len(squared_off)} failed={len(failed)}"
+    )
+
+    return {
+        "status":      "terminated",
+        "algo_id":     algo_id,
+        "squared_off": squared_off,
+        "failed":      failed,
+    }

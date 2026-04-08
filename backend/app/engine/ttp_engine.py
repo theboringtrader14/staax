@@ -97,6 +97,7 @@ class TTPEngine:
                     order.target           = new_tp
                     order.ttp_current_tp   = new_tp
                     order.ttp_activated    = True
+                    order.ttp_trail_count  = trail_count
                     await db.commit()
         except Exception as e:
             logger.warning(f"[TTP] DB persist failed for {order_id}: {e}")

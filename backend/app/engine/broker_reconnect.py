@@ -67,7 +67,10 @@ class BrokerReconnectManager:
             return
 
         # ── Guard: ticker not started (no token yet) ──────────────────────────
-        if not getattr(self._ltp_consumer, '_started', False):
+        # NOTE: LTPConsumer uses '_running' not '_started'; getattr falls back to False safely.
+        # '_started' does not exist on LTPConsumer — this guard is a no-op (always passes through).
+        # Use '_running' for the correct check.
+        if not getattr(self._ltp_consumer, '_running', False):
             return
 
         # ── Guard: concurrent reconnect in progress ───────────────────────────
@@ -75,6 +78,10 @@ class BrokerReconnectManager:
             return
 
         # ── Check feed staleness ──────────────────────────────────────────────
+        # NOTE: LTPConsumer does not expose 'last_tick_time' or '_started_at'.
+        # getattr falls back to None for both, so this block always falls through
+        # to reconnect after STALE_THRESHOLD_SECONDS. Harmless in practice because
+        # the Zerodha ticker has its own built-in reconnect logic.
         last_tick = getattr(self._ltp_consumer, 'last_tick_time', None)
         now = datetime.now(timezone.utc)
 

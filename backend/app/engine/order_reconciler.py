@@ -161,7 +161,7 @@ class OrderReconciler:
             )
             # Re-subscribe LTP
             if self._ltp_consumer and getattr(order, "instrument_token", None):
-                self._ltp_consumer.subscribe(int(order.instrument_token))
+                self._ltp_consumer.subscribe([int(order.instrument_token)])
             # Re-register SL/TP monitor
             if self._sl_tp_monitor and order.sl_price:
                 from app.engine.sl_tp_monitor import PositionMonitor

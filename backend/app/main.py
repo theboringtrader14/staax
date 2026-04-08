@@ -206,6 +206,8 @@ async def lifespan(app: FastAPI):
     # ── 8. Wire new Phase 1F engines ─────────────────────────────────────────
     execution_manager.wire(order_placer)
     app.state.execution_manager = execution_manager
+    app.state.tsl_engine        = tsl_engine_ins
+    app.state.ttp_engine        = ttp_engine_ins
 
     position_rebuilder.wire(
         sl_tp_monitor = sl_tp_monitor,

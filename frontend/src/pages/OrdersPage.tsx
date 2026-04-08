@@ -318,8 +318,10 @@ export default function OrdersPage() {
   const [orders, setOrders]             = useState<AlgoGroup[]>([])
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
   const [ltpMap, setLtpMap]             = useState<Record<number, number>>({})
-  const [modal, setModal]               = useState<{ type: 'run' | 'sq' | 't'; algoIdx: number } | null>(null)
+  const [modal, setModal]               = useState<{ type: 'sq' | 't'; algoIdx: number } | null>(null)
   const [sqChecked, setSqChecked]       = useState<Record<string, boolean>>({})
+  const [sqResults, setSqResults]       = useState<{ squared_off: {order_id: string; exit_price?: number}[]; failed: {order_id: string; error: string}[] } | null>(null)
+  const [sqError, setSqError]           = useState<string | null>(null)
   const [loading, setLoading]           = useState<Record<string, boolean>>({})
   const [showSync, setShowSync]         = useState<number | null>(null)
   const [syncForm, setSyncForm]         = useState({ broker_order_id: '', account_id: '' })
@@ -501,29 +503,24 @@ export default function OrdersPage() {
   const openLegs = (idx: number) => (orders[idx]?.legs || []).filter(l => l.status === 'open')
 
   // ── Actions ──────────────────────────────────────────────────────────────
-  const doRun = async (idx: number) => {
-    const algoId = orders[idx].algoId
-    setLoading(l => ({ ...l, [`run-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '▶ Executing...', 'var(--indigo)')
-    try {
-      await algosAPI.start(algoId)
-      setInlineStatus(setOrders, idx, '✅ Algo running', 'var(--green)')
-    } catch {
-      setInlineStatus(setOrders, idx, '⚠️ Execute failed', 'var(--red)')
-    } finally {
-      setLoading(l => ({ ...l, [`run-${idx}`]: false }))
-    }
-    setModal(null)
-  }
-
   const doRE = async (idx: number) => {
     const algoId = orders[idx].algoId
+    setLoading(l => ({ ...l, [`re-${idx}`]: true }))
     setInlineStatus(setOrders, idx, '↻ Retrying...', 'var(--accent-amber)')
     try {
-      await algosAPI.re(algoId)
-      setInlineStatus(setOrders, idx, '✅ Retry sent', 'var(--green)')
+      const res  = await algosAPI.re(algoId)
+      const data = res.data as { retried: number; skipped_duplicate: number; max_retries_reached: number }
+      if (data.retried === 0 && data.skipped_duplicate > 0) {
+        setInlineStatus(setOrders, idx, '⚠️ Position already open at broker', 'var(--amber)')
+      } else if (data.retried === 0 && data.max_retries_reached > 0) {
+        setInlineStatus(setOrders, idx, '⛔ Max retries reached', 'var(--red)')
+      } else {
+        setInlineStatus(setOrders, idx, `↻ Retrying ${data.retried} leg${data.retried !== 1 ? 's' : ''}`, 'var(--green)')
+      }
     } catch {
       setInlineStatus(setOrders, idx, '⚠️ Retry failed', 'var(--red)')
+    } finally {
+      setLoading(l => ({ ...l, [`re-${idx}`]: false }))
     }
   }
 
@@ -532,21 +529,65 @@ export default function OrdersPage() {
     const selected = Object.keys(sqChecked).filter(k => sqChecked[k])
     if (selected.length === 0) { setModal(null); return }
     setLoading(l => ({ ...l, [`sq-${idx}`]: true }))
+    setSqResults(null)
+    setSqError(null)
     try {
-      await algosAPI.sq(algoId, selected)
-      setOrders(o => o.map((g, i) => i !== idx ? g : {
-        ...g,
-        legs: (g.legs ?? []).map(l => selected.includes(l.id)
-          ? { ...l, status: 'closed' as LegStatus, exitPrice: l.ltp, exitTime: new Date().toLocaleTimeString('en-IN', { hour12: false }), exitReason: 'Manual SQ' }
-          : l),
-      }))
-      setInlineStatus(setOrders, idx, `✅ ${selected.length} leg${selected.length > 1 ? 's' : ''} squared off`, 'var(--green)')
-    } catch {
+      const res = await algosAPI.sq(algoId, selected)
+      const data = res.data as { squared_off: {order_id: string; exit_price?: number}[]; failed: {order_id: string; error: string}[]; algo_state?: string }
+      setSqResults({ squared_off: data.squared_off || [], failed: data.failed || [] })
+
+      // Refetch orders from server so UI reflects real DB state
+      ordersAPI.list(selectedDate, isPractixMode)
+        .then(r => {
+          const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
+          setOrders(raw.map((g: any): AlgoGroup => ({
+            algoId:   g.algo_id,
+            algoName: g.algo_name || g.algo_id,
+            account:  g.account || '',
+            mtm:      g.mtm ?? 0,
+            mtmSL:    g.mtm_sl ?? 0,
+            mtmTP:    g.mtm_tp ?? 0,
+            legs: (g.orders || []).map((o: any): Leg => ({
+              id:              o.id,
+              journeyLevel:    o.journey_level || '1',
+              status:          (o.status ?? 'pending') as LegStatus,
+              symbol:          o.symbol || '',
+              dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
+              lots:            String(o.lots ?? ''),
+              entryCondition:  o.entry_type || '',
+              instrumentToken: o.instrument_token ?? undefined,
+              errorMessage:    o.error_message ?? undefined,
+              fillPrice:       o.fill_price ?? undefined,
+              fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
+              ltp:             o.ltp ?? undefined,
+              slOrig:          o.sl_original ?? undefined,
+              slActual:        o.sl_actual ?? undefined,
+              target:          o.target ?? undefined,
+              exitPrice:       o.exit_price ?? undefined,
+              exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
+              exitReason:      o.exit_reason ?? undefined,
+              pnl:             o.pnl ?? undefined,
+            })),
+          })))
+        })
+        .catch(() => {})
+
+      const nOk   = (data.squared_off || []).length
+      const nFail = (data.failed || []).length
+      if (nFail === 0) {
+        setInlineStatus(setOrders, idx, `✅ ${nOk} leg${nOk !== 1 ? 's' : ''} squared off`, 'var(--green)')
+        setSqChecked({})
+        setModal(null)
+      } else {
+        // Keep modal open to show per-leg results
+        setInlineStatus(setOrders, idx, `⚠️ ${nOk} squared off, ${nFail} failed`, 'var(--amber)')
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'SQ failed'
+      setSqError(msg)
       setInlineStatus(setOrders, idx, '⚠️ SQ failed', 'var(--red)')
     } finally {
       setLoading(l => ({ ...l, [`sq-${idx}`]: false }))
-      setSqChecked({})
-      setModal(null)
     }
   }
 
@@ -554,26 +595,68 @@ export default function OrdersPage() {
     const algoId = orders[idx].algoId
     setLoading(l => ({ ...l, [`t-${idx}`]: true }))
     try {
-      await algosAPI.terminate(algoId)
-      setOrders(o => o.map((g, i) => i !== idx ? g : {
-        ...g, terminated: true,
-        legs: (g.legs ?? []).map(l => l.status === 'open'
-          ? { ...l, status: 'closed' as LegStatus, exitPrice: l.ltp, exitTime: new Date().toLocaleTimeString('en-IN', { hour12: false }), exitReason: 'Terminated' }
-          : l),
-      }))
-      setInlineStatus(setOrders, idx, '⛔ Algo terminated', 'var(--red)', 5000)
-    } catch {
-      setInlineStatus(setOrders, idx, '⚠️ Terminate failed', 'var(--red)')
+      const res = await algosAPI.terminate(algoId)
+      const data = res.data as {
+        status: string
+        squared_off: string[]
+        failed: { order_id: string; error: string }[]
+      }
+
+      // Trigger a full orders refetch — do NOT do optimistic update
+      ordersAPI.list(selectedDate, isPractixMode)
+        .then(r => {
+          const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
+          setOrders(raw.map((g: any): AlgoGroup => ({
+            algoId:   g.algo_id,
+            algoName: g.algo_name || g.algo_id,
+            account:  g.account || '',
+            mtm:      g.mtm ?? 0,
+            mtmSL:    g.mtm_sl ?? 0,
+            mtmTP:    g.mtm_tp ?? 0,
+            legs: (g.orders || []).map((o: any): Leg => ({
+              id:              o.id,
+              journeyLevel:    o.journey_level || '1',
+              status:          (o.status ?? 'pending') as LegStatus,
+              symbol:          o.symbol || '',
+              dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
+              lots:            String(o.lots ?? ''),
+              entryCondition:  o.entry_type || '',
+              instrumentToken: o.instrument_token ?? undefined,
+              errorMessage:    o.error_message ?? undefined,
+              fillPrice:       o.fill_price ?? undefined,
+              fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
+              ltp:             o.ltp ?? undefined,
+              slOrig:          o.sl_original ?? undefined,
+              slActual:        o.sl_actual ?? undefined,
+              target:          o.target ?? undefined,
+              exitPrice:       o.exit_price ?? undefined,
+              exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
+              exitReason:      o.exit_reason ?? undefined,
+              pnl:             o.pnl ?? undefined,
+            })),
+          })))
+        })
+        .catch(() => {})
+
+      const nFailed = (data.failed || []).length
+      if (nFailed > 0) {
+        setInlineStatus(setOrders, idx, `⛔ Terminated — ${nFailed} order${nFailed !== 1 ? 's' : ''} may still be open at broker`, 'var(--amber)', 8000)
+      } else {
+        setInlineStatus(setOrders, idx, '⛔ Algo terminated', 'var(--red)', 5000)
+      }
+      setModal(null)
+    } catch (err: any) {
+      // Backend error — do NOT mark algo as terminated locally
+      const msg = err?.response?.data?.detail || err?.message || 'Terminate failed'
+      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)')
     } finally {
       setLoading(l => ({ ...l, [`t-${idx}`]: false }))
-      setModal(null)
     }
   }
 
   const doConfirm = () => {
     if (!modal) return
     const { type, algoIdx } = modal
-    if (type === 'run') doRun(algoIdx)
     if (type === 'sq')  doSQ(algoIdx)
     if (type === 't')   doTerminate(algoIdx)
   }
@@ -582,24 +665,49 @@ export default function OrdersPage() {
     if (!modal) return null
     const { type, algoIdx } = modal
     const name = orders[algoIdx].algoName
-    if (type === 'run') return { title: `Execute ${name}?`, desc: `Execute ${name} immediately with the configured entry strategy.`, confirmLabel: 'Execute', confirmColor: 'var(--ox-radiant)', children: undefined }
     if (type === 't')   return { title: `Terminate ${name}?`, desc: `Square off ALL open positions, cancel pending + SL orders at broker, and terminate ${name}. Cannot be undone.`, confirmLabel: 'Terminate', confirmColor: 'var(--red)', children: undefined }
     if (type === 'sq')  return {
-      title: `Square Off — ${name}`, desc: 'Select open legs to square off:',
+      title: `Square Off — ${name}`, desc: sqResults ? 'SQ result:' : 'Select open legs to square off:',
       confirmLabel: 'Square Off', confirmColor: '#22C55E',
       children: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {openLegs(algoIdx).map(leg => (
-            <label key={leg.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '5px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!sqChecked[leg.id]}
-                onChange={e => setSqChecked(s => ({ ...s, [leg.id]: e.target.checked }))}
-                style={{ accentColor: 'var(--green)', width: '15px', height: '15px' }} />
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 600 }}>{leg.symbol}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{leg.dir} · {leg.lots} · Fill: {leg.fillPrice} · LTP: {leg.ltp}</div>
-              </div>
-            </label>
-          ))}
+          {sqError && (
+            <div style={{ color: 'var(--red)', fontSize: '12px', padding: '8px', background: 'rgba(255,0,0,0.08)', borderRadius: '5px' }}>
+              {sqError}
+            </div>
+          )}
+          {sqResults ? (
+            <>
+              {sqResults.squared_off.map(r => (
+                <div key={r.order_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--bg-secondary)', borderRadius: '5px', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--green)' }}>✅</span>
+                  <span style={{ fontFamily: 'monospace', opacity: 0.7 }}>{r.order_id.slice(-8)}</span>
+                  {r.exit_price != null && <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>exit: {r.exit_price}</span>}
+                </div>
+              ))}
+              {sqResults.failed.map(r => (
+                <div key={r.order_id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 12px', background: 'rgba(255,0,0,0.08)', borderRadius: '5px', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--red)' }}>❌</span>
+                  <div>
+                    <div style={{ fontFamily: 'monospace', opacity: 0.7 }}>{r.order_id.slice(-8)}</div>
+                    <div style={{ color: 'var(--red)', marginTop: '2px' }}>{r.error}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            openLegs(algoIdx).map(leg => (
+              <label key={leg.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '5px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!sqChecked[leg.id]}
+                  onChange={e => setSqChecked(s => ({ ...s, [leg.id]: e.target.checked }))}
+                  style={{ accentColor: 'var(--green)', width: '15px', height: '15px' }} />
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 600 }}>{leg.symbol}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{leg.dir} · {leg.lots} · Fill: {leg.fillPrice} · LTP: {leg.ltp}</div>
+                </div>
+              </label>
+            ))
+          )}
         </div>
       )
     }
@@ -954,8 +1062,7 @@ export default function OrdersPage() {
 
                     // Action button definitions
                     const BTNS = [
-                      { label: 'RUN',    col: '#FF6B00', bg: 'rgba(255,107,0,0.05)',   hBg: 'rgba(255,107,0,0.14)',   disabled: !!group.terminated,                                         action: () => setModal({ type: 'run', algoIdx: gi }) },
-                      { label: 'RE',     col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: !!group.terminated,                                         action: () => doRE(gi) },
+                      { label: 'RE',     col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: !!group.terminated || !!loading[`re-${gi}`],               action: () => doRE(gi) },
                       { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: !!group.terminated,                                         action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
                       { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  disabled: !!group.terminated || isClosed || openLegs(gi).length === 0, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: !!group.terminated || isClosed,                             action: () => setModal({ type: 't', algoIdx: gi }) },
@@ -1138,6 +1245,34 @@ export default function OrdersPage() {
               Re-link an order that got delinked from STAAX.<br/>
               Find the <b>Order ID</b> in your broker platform (Zerodha: Order Book → Order ID · Angel One: Order Book → Broker Order No.)
             </div>
+
+            {/* ── Legs needing sync ── */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>
+                Legs needing sync
+              </div>
+              {(orders[showSync]?.legs ?? [])
+                .filter((l: Leg) => l.status === 'error' || l.status === 'pending')
+                .map((l: Leg) => (
+                  <div key={l.id} style={{
+                    display: 'flex', gap: 12, alignItems: 'center',
+                    padding: '6px 10px', marginBottom: 4,
+                    background: 'rgba(255,68,68,0.08)',
+                    border: '0.5px solid rgba(255,68,68,0.2)',
+                    borderRadius: 6, fontSize: 11
+                  }}>
+                    <span style={{ color: '#FF4444', fontWeight: 600 }}>{l.journeyLevel}</span>
+                    <span style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{l.symbol}</span>
+                    <span style={{ color: l.dir === 'BUY' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{l.dir}</span>
+                    <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{l.status.toUpperCase()}</span>
+                  </div>
+                ))
+              }
+              {(orders[showSync]?.legs ?? []).filter((l: Leg) => l.status === 'error' || l.status === 'pending').length === 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No legs in error state</div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Broker Order ID(s) * <span style={{ fontWeight: 400, textTransform: 'none' }}>(comma-separated for multiple)</span></div>
@@ -1210,7 +1345,7 @@ export default function OrdersPage() {
         if (!mc) return null
         return (
           <ConfirmModal title={mc.title} desc={mc.desc} confirmLabel={mc.confirmLabel}
-            confirmColor={mc.confirmColor} onCancel={() => setModal(null)} onConfirm={doConfirm}>
+            confirmColor={mc.confirmColor} onCancel={() => { setModal(null); setSqResults(null); setSqError(null); setSqChecked({}) }} onConfirm={doConfirm}>
             {mc.children}
           </ConfirmModal>
         )

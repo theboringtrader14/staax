@@ -62,10 +62,9 @@ export const algosAPI = {
   unarchive: (id: string) => api.post(`/algos/${id}/unarchive`),
 
   // Runtime controls (Orders page buttons)
-  start:     (id: string) => api.post(`/algos/${id}/start`),
   re:        (id: string) => api.post(`/algos/${id}/re`),
-  sq:        (id: string, legIds: string[] = []) =>
-    api.post(`/algos/${id}/sq`, { leg_ids: legIds }),
+  sq:        (id: string, orderIds: string[] = []) =>
+    api.post(`/orders/${id}/square-off`, { order_ids: orderIds.length ? orderIds : null, reason: 'manual_sq' }),
   terminate: (id: string) => api.post(`/algos/${id}/terminate`),
 }
 

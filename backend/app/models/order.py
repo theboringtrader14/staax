@@ -88,6 +88,7 @@ class Order(Base):
     ttp_activated        = Column(Boolean, default=False)    # True once first trail fires
     ttp_activation_price = Column(Float, nullable=True)      # LTP when TTP first armed (= fill_price)
     ttp_current_tp       = Column(Float, nullable=True)      # last persisted TTP level (mirrors target)
+    ttp_trail_count      = Column(Integer, default=0)        # number of TTP trails fired (mirrors tsl_trail_count)
 
     # ── Exit ──────────────────────────────────────────────────────────────────
     exit_price        = Column(Float, nullable=True)

@@ -42,6 +42,11 @@ class SyncOrderRequest(BaseModel):
     account_id:      str   # which account this order belongs to (to pick correct broker)
 
 
+class SquareOffRequest(BaseModel):
+    order_ids: Optional[list] = None  # if None/empty → SQ all open legs
+    reason: str = "manual_sq"
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _order_to_dict(order: Order) -> dict:
@@ -716,6 +721,7 @@ async def sync_order(
     then links it to the matching unconfirmed Order in DB.
     """
     from app.models.account import Account, BrokerType
+    from app.core.config import settings as _settings
 
     # 1. Get broker instance from app.state
     acc_result = await db.execute(select(Account).where(Account.id == body.account_id))
@@ -726,10 +732,19 @@ async def sync_order(
     broker = None
     if account.broker == BrokerType.ZERODHA:
         broker = getattr(request.app.state, "zerodha", None)
-    elif account.nickname == "Mom":
-        broker = getattr(request.app.state, "angelone_mom", None)
-    elif account.nickname == "Wife":
-        broker = getattr(request.app.state, "angelone_wife", None)
+    elif account.broker == BrokerType.ANGELONE:
+        # Resolve the correct Angel One broker instance using client_id → state key mapping.
+        # This handles any number of AO accounts without hardcoding nicknames.
+        _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+            (_settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+            (_settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+            (_settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+        ] if k}
+        broker_key = _CLIENT_ID_TO_BROKER_KEY.get(account.client_id)
+        if broker_key:
+            broker = getattr(request.app.state, broker_key, None)
+    else:
+        raise HTTPException(status_code=503, detail=f"Broker type '{account.broker}' not supported for sync")
 
     if not broker:
         raise HTTPException(status_code=503, detail="Broker not connected — login first")
@@ -743,7 +758,16 @@ async def sync_order(
     if not broker_order:
         raise HTTPException(status_code=404, detail="Order not found at broker")
 
-    # 3. Find unlinked order in DB for this algo today
+    # 3. Validate fill price — reject sync if broker returned 0 or missing
+    fill_price = broker_order.get("fill_price") or broker_order.get("averageprice") or broker_order.get("average_price", 0)
+    fill_price = float(fill_price or 0)
+    if fill_price <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Broker returned invalid fill price ({fill_price}) for order {body.broker_order_id}. Cannot sync."
+        )
+
+    # 4. Find unlinked order in DB for this algo today
     # Match by algo_id + no broker_order_id yet (delinked) + today
     today = date.today()
     orders_result = await db.execute(
@@ -755,37 +779,124 @@ async def sync_order(
     )
     unlinked = orders_result.scalars().first()
 
-    if unlinked:
-        # Re-link existing order
-        unlinked.broker_order_id = body.broker_order_id
-        unlinked.fill_price      = broker_order.get("fill_price") or broker_order.get("averageprice") or unlinked.fill_price
-        unlinked.status          = OrderStatus.OPEN
-        unlinked.is_synced       = True
-        await db.commit()
-        await db.refresh(unlinked)
-        return {
-            "status":  "ok",
-            "message": f"✅ Order re-linked — {unlinked.symbol}",
-            "order":   _order_to_dict(unlinked),
-        }
-    else:
+    if not unlinked:
         raise HTTPException(
             status_code=404,
             detail="No unlinked order found for this algo today. The order may already be linked or doesn't exist in STAAX."
         )
 
+    # 5. Re-link the order
+    unlinked.broker_order_id = body.broker_order_id
+    unlinked.fill_price      = fill_price
+    unlinked.status          = OrderStatus.OPEN
+    unlinked.is_synced       = True
+    await db.commit()
+    await db.refresh(unlinked)
+
+    # 6. Subscribe LTP for the synced order so live price feed starts
+    try:
+        ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+        if ltp_consumer and unlinked.instrument_token:
+            ltp_consumer.subscribe([int(unlinked.instrument_token)])
+            logger.info(f"[SYNC] Subscribed token {unlinked.instrument_token} for synced order {unlinked.id}")
+    except Exception as e:
+        logger.warning(f"[SYNC] Could not subscribe LTP: {e}")
+
+    # 7. Update AlgoState — clear ERROR if no more error orders remain for this algo
+    try:
+        from sqlalchemy import func as _func
+        error_count_result = await db.execute(
+            select(_func.count(Order.id)).where(
+                Order.algo_id == algo_id,
+                Order.status == OrderStatus.ERROR,
+            )
+        )
+        error_count = error_count_result.scalar()
+
+        algo_state_result = await db.execute(
+            select(AlgoState).where(
+                AlgoState.algo_id == algo_id,
+                AlgoState.trading_date == str(today),
+            )
+        )
+        algo_state = algo_state_result.scalar_one_or_none()
+
+        if algo_state and error_count == 0:
+            algo_state.status = AlgoRunStatus.ACTIVE
+            algo_state.error_message = None
+            await db.commit()
+            logger.info(f"[SYNC] AlgoState set to ACTIVE for algo {algo_id} after sync")
+    except Exception as e:
+        logger.warning(f"[SYNC] Could not update AlgoState: {e}")
+
+    # 8. Register with TSL/TTP engines if the leg has trailing config
+    try:
+        from app.models.algo import AlgoLeg
+        from app.engine.tsl_engine import TSLState
+        from app.engine.ttp_engine import TTPState
+
+        tsl_engine = getattr(request.app.state, "tsl_engine", None)
+        ttp_engine = getattr(request.app.state, "ttp_engine", None)
+
+        if (tsl_engine or ttp_engine) and unlinked.leg_id:
+            leg_result = await db.execute(select(AlgoLeg).where(AlgoLeg.id == unlinked.leg_id))
+            leg = leg_result.scalar_one_or_none()
+
+            if leg and tsl_engine and getattr(leg, "tsl_enabled", False) and leg.tsl_x and leg.tsl_y:
+                tsl_state = TSLState(
+                    order_id=str(unlinked.id),
+                    direction=unlinked.direction or "buy",
+                    entry_price=fill_price,
+                    current_sl=unlinked.sl_actual or (fill_price * 0.9),
+                    tsl_x=leg.tsl_x,
+                    tsl_y=leg.tsl_y,
+                    tsl_unit=leg.tsl_unit or "pts",
+                )
+                tsl_engine.register(tsl_state)
+                logger.info(f"[SYNC] TSL registered for synced order {unlinked.id}")
+
+            ttp_enabled = getattr(leg, "ttp_enabled", False) if leg else False
+            if leg and not ttp_enabled:
+                ttp_enabled = bool(leg.ttp_x and leg.ttp_y and unlinked.target)
+            if leg and ttp_engine and ttp_enabled and leg.ttp_x and leg.ttp_y:
+                initial_tp = unlinked.target or fill_price * 1.1
+                ttp_state = TTPState(
+                    order_id=str(unlinked.id),
+                    direction=unlinked.direction or "buy",
+                    entry_price=fill_price,
+                    current_tp=initial_tp,
+                    ttp_x=leg.ttp_x,
+                    ttp_y=leg.ttp_y,
+                    ttp_unit=leg.ttp_unit or "pts",
+                )
+                ttp_engine.register(ttp_state)
+                logger.info(f"[SYNC] TTP registered for synced order {unlinked.id}")
+    except Exception as e:
+        logger.warning(f"[SYNC] Could not register TSL/TTP: {e}")
+
+    return {
+        "status":  "ok",
+        "message": f"✅ Order re-linked — {unlinked.symbol}",
+        "order":   _order_to_dict(unlinked),
+    }
+
 
 @router.post("/{algo_id}/square-off")
 async def square_off(
     algo_id: str,
+    body: SquareOffRequest = SquareOffRequest(),
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Square off all open positions for an algo.
-    Updates all OPEN orders for today's grid entry to CLOSED with exit_reason=SQ.
-    Note: actual broker square-off is handled by the engine — this endpoint
-    marks the intent and updates DB state. Engine wiring in Phase 1F.
+    Square off open positions for an algo.
+    - If body.order_ids is provided: only those specific orders are squared off.
+    - Otherwise: all open orders for today's grid entry are squared off.
+    Supports PRACTIX (no-broker, LTP-based) and LIVE (broker call) modes.
+    Deregisters from TSL/TTP engines after closing each order.
+    Updates AlgoState to 'closed' when all legs are gone, or 'active' if partial.
     """
+    from sqlalchemy import func as sa_func
     today = date.today()
     grid_result = await db.execute(
         select(GridEntry).where(
@@ -797,47 +908,142 @@ async def square_off(
     if not grid_entry:
         raise HTTPException(status_code=404, detail="No grid entry found for this algo today")
 
-    # Find all open orders for this grid entry
-    open_orders_result = await db.execute(
-        select(Order).where(
-            Order.grid_entry_id == grid_entry.id,
-            Order.status == OrderStatus.OPEN,
-        )
+    # Build query for open orders
+    base_query = select(Order).where(
+        Order.grid_entry_id == grid_entry.id,
+        Order.status == OrderStatus.OPEN,
     )
+    if body.order_ids:
+        base_query = base_query.where(Order.id.in_(body.order_ids))
+
+    open_orders_result = await db.execute(base_query)
     open_orders = open_orders_result.scalars().all()
 
     now = datetime.now(timezone.utc)
 
-    # ── SQ-1: Wire real broker square-off via ExecutionManager ────────────────
-    broker_sq_results = []
-    for order in open_orders:
-        try:
-            # Get broker adapter from app state via request
-            broker = None
-            if hasattr(order, 'account_id'):
-                from app.models.account import Account, BrokerType
-                from sqlalchemy import select as sa_select
-                acc_res = await db.execute(sa_select(Account).where(Account.id == order.account_id))
-                acc = acc_res.scalar_one_or_none()
-                if acc:
-                    from fastapi import Request as _Req
-                    import inspect
-                    # Use execution_manager.square_off if order_placer is wired
-                    result = await execution_manager.square_off(
-                        broker_order_id=order.broker_order_id,
-                        order_placer=execution_manager._order_placer,
-                    )
-                    broker_sq_results.append({"order_id": str(order.id), "result": result})
-        except Exception as e:
-            logger.warning(f"[SQ] Broker square-off failed for order {order.id}: {e}")
-            broker_sq_results.append({"order_id": str(order.id), "error": str(e)})
+    # Get engine references from app state
+    tsl_engine = getattr(request.app.state, "tsl_engine", None) if request else None
+    ttp_engine = getattr(request.app.state, "ttp_engine", None) if request else None
+    ltp_cache  = getattr(request.app.state, "ltp_cache",  None) if request else None
 
-        # Always update DB regardless of broker result
-        order.status = OrderStatus.CLOSED
-        order.exit_reason = ExitReason.SQ
-        order.exit_time = now
+    # Look up broker_type from account (all orders share the same account)
+    sq_broker_type = "zerodha"
+    if open_orders:
+        try:
+            acc_result = await db.execute(
+                select(Account).where(Account.id == open_orders[0].account_id)
+            )
+            sq_account = acc_result.scalar_one_or_none()
+            if sq_account and sq_account.broker:
+                sq_broker_type = sq_account.broker.value
+        except Exception as e:
+            logger.warning(f"[SQ] Could not resolve broker_type from account: {e}")
+
+    squared_off = []
+    failed      = []
+
+    for order in open_orders:
+        order_id_str = str(order.id)
+
+        if order.is_practix:
+            # ── PRACTIX mode: no broker call, use LTP from cache ──────────────
+            exit_price = order.fill_price  # fallback
+            if ltp_cache and order.instrument_token:
+                try:
+                    ltp_val = await ltp_cache.get(order.instrument_token)
+                    if ltp_val is not None:
+                        exit_price = ltp_val
+                except Exception as e:
+                    logger.warning(f"[SQ] ltp_cache.get failed for token {order.instrument_token}: {e}")
+
+            order.status      = OrderStatus.CLOSED
+            order.exit_price  = exit_price
+            order.exit_reason = ExitReason.SQ
+            order.exit_time   = now
+
+            # Deregister from TSL/TTP
+            if tsl_engine:
+                tsl_engine.deregister(order_id_str)
+            if ttp_engine:
+                ttp_engine.deregister(order_id_str)
+
+            squared_off.append({"order_id": order_id_str, "exit_price": exit_price})
+
+        else:
+            # ── LIVE mode: call broker via ExecutionManager ───────────────────
+            broker_ok = False
+            try:
+                result = await execution_manager.square_off(
+                    db              = db,
+                    idempotency_key = f"manualsq:{order.id}:{reason}",
+                    algo_id         = str(order.algo_id),
+                    account_id      = str(order.account_id),
+                    symbol          = order.symbol,
+                    exchange        = order.exchange or "NFO",
+                    direction       = order.direction,
+                    quantity        = order.quantity,
+                    algo_tag        = order.algo_tag or "",
+                    is_practix      = order.is_practix,
+                    broker_type     = sq_broker_type,
+                    symbol_token    = str(getattr(order, "instrument_token", None) or ""),
+                    broker_order_id = order.broker_order_id,
+                )
+                broker_ok = True
+                # result is the new exit broker_order_id (str) or None; use fill_price as exit_price
+                exit_price = order.fill_price
+
+                order.status      = OrderStatus.CLOSED
+                order.exit_price  = exit_price
+                order.exit_reason = ExitReason.SQ
+                order.exit_time   = now
+
+                # Deregister from TSL/TTP
+                if tsl_engine:
+                    tsl_engine.deregister(order_id_str)
+                if ttp_engine:
+                    ttp_engine.deregister(order_id_str)
+
+                squared_off.append({"order_id": order_id_str, "exit_price": exit_price})
+
+            except Exception as e:
+                logger.warning(f"[SQ] Broker square-off failed for order {order.id}: {e}")
+                if not broker_ok:
+                    failed.append({"order_id": order_id_str, "error": str(e)})
 
     await db.commit()
+
+    # ── Update AlgoState ──────────────────────────────────────────────────────
+    algo_state = None
+    try:
+        today_str = today.isoformat()
+        algo_state_result = await db.execute(
+            select(AlgoState).where(
+                AlgoState.algo_id == algo_id,
+                AlgoState.trading_date == today_str,
+            )
+        )
+        algo_state = algo_state_result.scalar_one_or_none()
+
+        if algo_state:
+            remaining_result = await db.execute(
+                select(sa_func.count(Order.id)).where(
+                    Order.grid_entry_id == grid_entry.id,
+                    Order.status == OrderStatus.OPEN,
+                )
+            )
+            remaining_count = remaining_result.scalar() or 0
+
+            if remaining_count == 0:
+                algo_state.status     = AlgoRunStatus.CLOSED
+                algo_state.closed_at  = now
+                algo_state.exit_reason = "sq"
+            else:
+                # Partial SQ — keep active (no partial_sq enum value)
+                algo_state.status = AlgoRunStatus.ACTIVE
+
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"[SQ] AlgoState update failed for algo {algo_id}: {e}")
 
     # Trigger immediate reconciliation after square-off
     try:
@@ -850,9 +1056,9 @@ async def square_off(
     return {
         "status":      "ok",
         "algo_id":     algo_id,
-        "squared_off": len(open_orders),
-        "message":     f"{len(open_orders)} order(s) squared off",
-        "broker_results": broker_sq_results,
+        "squared_off": squared_off,
+        "failed":      failed,
+        "algo_state":  algo_state.status.value if algo_state else None,
     }
 
 
