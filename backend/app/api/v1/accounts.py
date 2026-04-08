@@ -381,7 +381,7 @@ _AO_ACCOUNT_MAP = {
 }
 
 
-async def _ao_perform_login(broker, pin: str, nickname: str, db) -> dict:
+async def _ao_perform_login(broker, pin: str, nickname: str, db, max_attempts: int = 3) -> dict:
     """
     Core Angel One login: TOTP → jwt_token → DB persist → broker.load_token().
 
@@ -394,7 +394,7 @@ async def _ao_perform_login(broker, pin: str, nickname: str, db) -> dict:
     """
     from datetime import datetime, timezone
 
-    result        = await broker.login_with_totp(password=pin)
+    result        = await broker.login_with_totp(password=pin, max_attempts=max_attempts)
     jwt_token     = result.get("jwt_token", "")
     feed_token    = result.get("feed_token", "")
     refresh_token = result.get("refresh_token", "")

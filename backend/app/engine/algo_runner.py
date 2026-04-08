@@ -629,7 +629,7 @@ class AlgoRunner:
 
         # ── Lot size ───────────────────────────────────────────────────────────
         lot_size = instrument.get("lot_size", 1) if instrument else 1
-        quantity = leg.lots * lot_size * grid_entry.lot_multiplier
+        quantity = leg.lots * lot_size * (algo.base_lot_multiplier or 1) * grid_entry.lot_multiplier
 
         # ── Rate limit (SEBI: max 10/s; we cap at 8) ──────────────────────────
         await self._rate_limiter.acquire()
@@ -785,6 +785,13 @@ class AlgoRunner:
         if self._sl_tp_monitor and (leg.sl_type or leg.tp_type):
             underlying_token = getattr(leg, "underlying_token", 0) or 0
             orb_high, orb_low = self._orb_levels.get(str(grid_entry.id), (0.0, 0.0))
+            # For underlying-based SL/TP types, the reference price must be the
+            # underlying spot LTP at entry, not the option fill price.
+            _needs_ul_ref = leg.sl_type in ("pts_underlying", "pct_underlying") or \
+                            leg.tp_type in ("pts_underlying", "pct_underlying")
+            underlying_entry_price = 0.0
+            if _needs_ul_ref and underlying_token and self._ltp_consumer:
+                underlying_entry_price = self._ltp_consumer.get_ltp(underlying_token) or 0.0
             pos_monitor = PositionMonitor(
                 order_id=str(order.id),
                 grid_entry_id=str(grid_entry.id),
@@ -793,6 +800,7 @@ class AlgoRunner:
                 instrument_token=instrument_token,
                 underlying_token=underlying_token,
                 entry_price=fill_price,
+                underlying_entry_price=underlying_entry_price,
                 quantity=quantity,   # lot_size × lots × multiplier — for ₹ MTM PNL
                 sl_type=leg.sl_type,
                 sl_value=leg.sl_value,

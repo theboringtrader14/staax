@@ -29,6 +29,7 @@ Order types:
 """
 import asyncio
 import logging
+import time
 from datetime import date as _date, datetime as _dt
 from typing import Optional, Dict, List
 
@@ -114,7 +115,7 @@ class AngelOneBroker(BaseBroker):
     # Angel One login URL — bypass SDK to avoid clientCode/clientcode casing bug
     _LOGIN_URL = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
 
-    async def login_with_totp(self, password: str) -> dict:
+    async def login_with_totp(self, password: str, max_attempts: int = 3) -> dict:
         """
         Full login using TOTP. Called once per day after market open.
 
@@ -128,6 +129,11 @@ class AngelOneBroker(BaseBroker):
           - ANGELONE_{ACCOUNT}_TOTP_SECRET in .env (base32 secret from Angel One app)
           - ANGELONE_{ACCOUNT}_CLIENT_ID (your Angel One client ID, e.g. A123456)
           - password: Angel One PIN / password
+
+        Retries up to max_attempts times with exponential backoff. Before each
+        attempt, if fewer than 5 seconds remain in the current 30-second TOTP
+        window, waits until the next window to avoid using a code that is about
+        to expire mid-request.
         """
         try:
             import pyotp
@@ -137,7 +143,7 @@ class AngelOneBroker(BaseBroker):
                 "Required for Angel One TOTP generation."
             )
 
-        totp = pyotp.TOTP(self.totp_secret).now()
+        import httpx
 
         headers = {
             "Content-Type":     "application/json",
@@ -149,78 +155,112 @@ class AngelOneBroker(BaseBroker):
             "X-MACAddress":     "00:00:00:00:00:00",
             "X-PrivateKey":     self.api_key,
         }
-        payload = {
-            "clientcode": self.client_id,
-            "password":   password,
-            "totp":       totp,
-        }
 
-        logger.info(
-            f"[ANGEL ONE] Login attempt — account={self.account} "
-            f"client_id={self.client_id} url={self._LOGIN_URL}"
-        )
+        last_exc: Exception = RuntimeError("login_with_totp: no attempts made")
 
-        import httpx
-        async with httpx.AsyncClient(timeout=15.0) as http:
-            resp = await http.post(self._LOGIN_URL, json=payload, headers=headers)
+        for attempt in range(1, max_attempts + 1):
+            # ── Guard: if TOTP window is about to expire, wait for the next one ──
+            time_remaining = 30 - (int(time.time()) % 30)
+            if time_remaining <= 5:
+                wait_secs = time_remaining + 1
+                logger.info(
+                    f"[ANGEL ONE] TOTP window expires in {time_remaining}s — "
+                    f"waiting {wait_secs}s for fresh window (account={self.account})"
+                )
+                await asyncio.sleep(wait_secs)
 
-        logger.info(
-            f"[ANGEL ONE] Login response — account={self.account} "
-            f"http_status={resp.status_code}"
-        )
+            # Fresh TOTP each attempt (window may have changed after sleep)
+            totp = pyotp.TOTP(self.totp_secret).now()
 
-        try:
-            data = resp.json()
-        except Exception:
-            raise RuntimeError(
-                f"Angel One login: invalid JSON response (status={resp.status_code})"
+            payload = {
+                "clientcode": self.client_id,
+                "password":   password,
+                "totp":       totp,
+            }
+
+            logger.info(
+                f"[ANGEL ONE] Login attempt {attempt}/{max_attempts} — account={self.account} "
+                f"client_id={self.client_id} url={self._LOGIN_URL}"
             )
 
-        # Angel One returns status as bool True or string "true" — handle both
-        raw_status = data.get("status")
-        login_ok = raw_status is True or str(raw_status).lower() == "true"
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as http:
+                    resp = await http.post(self._LOGIN_URL, json=payload, headers=headers)
 
-        logger.info(
-            f"[ANGEL ONE] Login response body — account={self.account} "
-            f"status={raw_status!r} message={data.get('message')!r} "
-            f"errorcode={data.get('errorcode')!r} "
-            f"data_keys={list((data.get('data') or {}).keys())}"
-        )
+                logger.info(
+                    f"[ANGEL ONE] Login response — account={self.account} "
+                    f"http_status={resp.status_code} attempt={attempt}"
+                )
 
-        if not login_ok:
-            msg = data.get("message", "Unknown error")
-            err = data.get("errorcode", "")
-            raise RuntimeError(f"Angel One login failed [{err}]: {msg}")
+                try:
+                    data = resp.json()
+                except Exception:
+                    raise RuntimeError(
+                        f"Angel One login: invalid JSON response (status={resp.status_code})"
+                    )
 
-        tokens = data.get("data", {})
-        self._access_token  = tokens.get("jwtToken")
-        self._refresh_token = tokens.get("refreshToken")
-        self._feed_token    = tokens.get("feedToken")
+                # Angel One returns status as bool True or string "true" — handle both
+                raw_status = data.get("status")
+                login_ok = raw_status is True or str(raw_status).lower() == "true"
 
-        if not self._access_token:
-            raise RuntimeError(
-                f"Angel One login returned no jwtToken — response: {data}"
-            )
+                logger.info(
+                    f"[ANGEL ONE] Login response body — account={self.account} "
+                    f"status={raw_status!r} message={data.get('message')!r} "
+                    f"errorcode={data.get('errorcode')!r} "
+                    f"data_keys={list((data.get('data') or {}).keys())}"
+                )
 
-        # Keep SDK instance in sync so subsequent API calls (orders, LTP) work
-        client = self._get_client()
-        client.setAccessToken(self._access_token)
-        if self._feed_token:
-            client.setFeedToken(self._feed_token)
-        if self._refresh_token:
-            client.setRefreshToken(self._refresh_token)
+                if not login_ok:
+                    msg = data.get("message", "Unknown error")
+                    err = data.get("errorcode", "")
+                    raise RuntimeError(f"Angel One login failed [{err}]: {msg}")
 
-        logger.info(
-            f"[ANGEL ONE] ✅ Login successful for account={self.account} "
-            f"client_id={self.client_id}"
-        )
+                tokens = data.get("data", {})
+                self._access_token  = tokens.get("jwtToken")
+                self._refresh_token = tokens.get("refreshToken")
+                self._feed_token    = tokens.get("feedToken")
 
-        return {
-            "jwt_token":     self._access_token,
-            "refresh_token": self._refresh_token,
-            "feed_token":    self._feed_token,
-            "client_code":   self.client_id,
-        }
+                if not self._access_token:
+                    raise RuntimeError(
+                        f"Angel One login returned no jwtToken — response: {data}"
+                    )
+
+                # Keep SDK instance in sync so subsequent API calls (orders, LTP) work
+                client = self._get_client()
+                client.setAccessToken(self._access_token)
+                if self._feed_token:
+                    client.setFeedToken(self._feed_token)
+                if self._refresh_token:
+                    client.setRefreshToken(self._refresh_token)
+
+                logger.info(
+                    f"[ANGEL ONE] Login successful for account={self.account} "
+                    f"client_id={self.client_id} (attempt {attempt}/{max_attempts})"
+                )
+
+                return {
+                    "jwt_token":     self._access_token,
+                    "refresh_token": self._refresh_token,
+                    "feed_token":    self._feed_token,
+                    "client_code":   self.client_id,
+                }
+
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_attempts:
+                    backoff = 2 ** (attempt - 1)  # 1s, 2s
+                    logger.warning(
+                        f"[ANGEL ONE] Login attempt {attempt}/{max_attempts} failed for "
+                        f"account={self.account}: {exc} — retrying in {backoff}s"
+                    )
+                    await asyncio.sleep(backoff)
+                else:
+                    logger.error(
+                        f"[ANGEL ONE] All {max_attempts} login attempts failed for "
+                        f"account={self.account}: {exc}"
+                    )
+
+        raise last_exc
 
     async def load_token(self, jwt_token: str, feed_token: str = "", refresh_token: str = "") -> None:
         """

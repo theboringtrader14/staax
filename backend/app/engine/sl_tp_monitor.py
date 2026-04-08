@@ -30,6 +30,7 @@ class PositionMonitor:
     sl_value:          Optional[float]
     tp_type:           Optional[str]
     tp_value:          Optional[float]
+    underlying_entry_price: float = 0.0   # underlying spot LTP at entry — for pts/pct_underlying SL/TP
     quantity:          int   = 1     # lot_size × lots × multiplier — for ₹ MTM PNL
     sl_actual:         float = 0.0   # updated by TSLEngine
     tp_level:          float = 0.0
@@ -73,10 +74,10 @@ class PositionMonitor:
         if self.sl_type in ("pts_instrument", "pct_instrument"):
             return ltp <= self.sl_actual if self.direction == "buy" else ltp >= self.sl_actual
         if self.sl_type == "pts_underlying" and ul_ltp:
-            ref = self.entry_price  # entry underlying price stored separately
+            ref = self.underlying_entry_price or self.entry_price
             return ul_ltp <= ref - self.sl_value if self.direction == "buy" else ul_ltp >= ref + self.sl_value
         if self.sl_type == "pct_underlying" and ul_ltp:
-            ref = self.entry_price
+            ref = self.underlying_entry_price or self.entry_price
             return ul_ltp <= ref * (1 - self.sl_value/100) if self.direction == "buy" else ul_ltp >= ref * (1 + self.sl_value/100)
         return False
 
@@ -86,10 +87,10 @@ class PositionMonitor:
         if self.tp_type in ("pts_instrument", "pct_instrument"):
             return ltp >= self.tp_level if self.direction == "buy" else ltp <= self.tp_level
         if self.tp_type == "pts_underlying" and ul_ltp:
-            ref = self.entry_price
+            ref = self.underlying_entry_price or self.entry_price
             return ul_ltp >= ref + self.tp_value if self.direction == "buy" else ul_ltp <= ref - self.tp_value
         if self.tp_type == "pct_underlying" and ul_ltp:
-            ref = self.entry_price
+            ref = self.underlying_entry_price or self.entry_price
             return ul_ltp >= ref * (1 + self.tp_value/100) if self.direction == "buy" else ul_ltp <= ref * (1 - self.tp_value/100)
         return False
 

@@ -36,6 +36,39 @@ from app.models.algo_state import AlgoState, AlgoRunStatus
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
+# NSE trading holidays — used by _next_trading_day() and _prev_trading_day()
+# to avoid scheduling BTST/STBT exit/SL-check jobs on market-closed days.
+# NOTE: Verify and update NSE_HOLIDAYS annually using the official NSE circular.
+NSE_HOLIDAYS_2026_27: frozenset = frozenset({
+    # 2026
+    date(2026, 1, 26),   # Republic Day
+    date(2026, 3, 18),   # Holi (Dhulandi)
+    date(2026, 3, 31),   # Eid ul-Fitr (Id-Ul-Fitr)
+    date(2026, 4, 3),    # Good Friday
+    date(2026, 4, 6),    # Ram Navami
+    date(2026, 5, 1),    # Maharashtra Day
+    date(2026, 7, 6),    # Moharram (Ashura)
+    date(2026, 8, 15),   # Independence Day
+    date(2026, 8, 26),   # Janmashtami (Dahi Handi)
+    date(2026, 10, 2),   # Gandhi Jayanti / Dussehra (check NSE circular — may split)
+    date(2026, 10, 21),  # Diwali Laxmi Puja (approximate — confirm via NSE Muhurat)
+    date(2026, 11, 5),   # Gurunanak Jayanti (approximate)
+    date(2026, 12, 25),  # Christmas
+    # 2027 — add after NSE publishes the official holiday list
+})
+
+# ── Module-level singleton ─────────────────────────────────────────────────────
+_scheduler_instance: Optional["AlgoScheduler"] = None
+
+
+def set_scheduler(instance: "AlgoScheduler") -> None:
+    global _scheduler_instance
+    _scheduler_instance = instance
+
+
+def get_scheduler() -> Optional["AlgoScheduler"]:
+    return _scheduler_instance
+
 
 async def _run_orb_safe(coro, algo_id: str, grid_entry_id: str):
     """Run ORB coroutine with error handling — logs failures so they are never silently dropped."""
@@ -135,9 +168,9 @@ class AlgoScheduler:
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
     def _next_trading_day(self, from_date: date) -> date:
-        """Return the next Mon–Fri after from_date (no holiday calendar)."""
+        """Return the next Mon–Fri trading day after from_date, skipping NSE holidays."""
         d = from_date + timedelta(days=1)
-        while d.weekday() >= 5:  # 5=Sat, 6=Sun
+        while d.weekday() >= 5 or d in NSE_HOLIDAYS_2026_27:
             d += timedelta(days=1)
         return d
 
@@ -1013,8 +1046,8 @@ class AlgoScheduler:
                 logger.error(f"[RECOVERY-ORB] failed: {e}")
 
     def _prev_trading_day(self, from_date: date) -> date:
-        """Return the most recent Mon–Fri before from_date (no holiday calendar)."""
+        """Return the most recent Mon–Fri trading day before from_date, skipping NSE holidays."""
         d = from_date - timedelta(days=1)
-        while d.weekday() >= 5:  # 5=Sat, 6=Sun
+        while d.weekday() >= 5 or d in NSE_HOLIDAYS_2026_27:
             d -= timedelta(days=1)
         return d

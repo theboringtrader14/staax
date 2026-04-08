@@ -48,6 +48,7 @@ from app.engine.orb_tracker        import ORBTracker
 from app.engine.reentry_engine     import reentry_engine
 from app.engine.algo_runner        import algo_runner
 from app.engine.scheduler          import AlgoScheduler
+import app.engine.scheduler as scheduler_module
 from app.engine.strike_selector    import StrikeSelector
 from app.engine.execution_manager  import execution_manager
 from app.engine.position_rebuilder import position_rebuilder
@@ -231,6 +232,7 @@ async def lifespan(app: FastAPI):
     scheduler = AlgoScheduler()
     scheduler.set_algo_runner(algo_runner)
     app.state.scheduler = scheduler
+    scheduler_module.set_scheduler(scheduler)
 
     # ── 9. Register LTP callbacks ─────────────────────────────────────────────
     ltp_consumer.register_callback(orb_tracker.on_tick)
@@ -695,10 +697,10 @@ async def _ao_startup_auto_login(app: "FastAPI") -> None:
             )
             continue
 
-        logger.info(f"[STARTUP] Auto-login starting for {nickname}...")
+        logger.info(f"[STARTUP] Auto-login starting for {nickname} (max_attempts=3)...")
         try:
             async with AsyncSessionLocal() as db:
-                await _ao_perform_login(ao_broker, pin, nickname, db)
+                await _ao_perform_login(ao_broker, pin, nickname, db, max_attempts=3)
 
             logger.info(f"✅ [startup] Auto-login succeeded for {nickname}")
 

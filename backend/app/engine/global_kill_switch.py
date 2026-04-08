@@ -297,8 +297,10 @@ def _freeze_engine():
         logger.warning("[KILL SWITCH] ReEntryEngine not available — skipping")
 
     try:
-        from app.engine import scheduler
-        scheduler.pause()
+        from app.engine.scheduler import get_scheduler
+        sched = get_scheduler()
+        if sched and sched._scheduler:
+            sched._scheduler.pause()
         logger.critical("[KILL SWITCH] Scheduler paused")
     except (ImportError, AttributeError):
         logger.warning("[KILL SWITCH] Scheduler not available — skipping")
