@@ -304,6 +304,15 @@ async def list_bot_signals(bot_id: str, limit: int = Query(50), db: AsyncSession
 async def list_signals_today(db: AsyncSession = Depends(get_db)):
     today_start = datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
     result = await db.execute(
-        select(BotSignal).where(BotSignal.fired_at >= today_start).order_by(desc(BotSignal.fired_at))
+        select(BotSignal, Bot.name.label("bot_name"))
+        .outerjoin(Bot, Bot.id == BotSignal.bot_id)
+        .where(BotSignal.fired_at >= today_start)
+        .order_by(desc(BotSignal.fired_at))
     )
-    return {"signals": [_signal_dict(s) for s in result.scalars().all()]}
+    rows = result.all()
+    signals = []
+    for sig, bot_name in rows:
+        d = _signal_dict(sig)
+        d["bot_name"] = bot_name or "—"
+        signals.append(d)
+    return {"signals": signals}

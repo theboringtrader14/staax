@@ -60,7 +60,7 @@ function fmtDuration(minutes: number): string {
 }
 
 function fmtPnl(val: number): string {
-  const sign = val >= 0 ? '+' : ''
+  const sign = val >= 0 ? '+' : '-'
   return `${sign}₹${Math.abs(val).toLocaleString('en-IN')}`
 }
 

@@ -24,7 +24,7 @@ interface Leg {
   instrumentToken?: number
   errorMessage?: string
   refPrice?: number; fillPrice?: number; fillTime?: string; ltp?: number
-  slOrig?: number; slActual?: number; target?: number
+  slOrig?: number; slActual?: number; tslTrailCount?: number; target?: number
   exitPrice?: number; exitTime?: string; exitReason?: string; pnl?: number
 }
 interface AlgoGroup {
@@ -156,15 +156,17 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
       </td>
       <td style={{ width: COLS[6], fontSize: '11px', ...C }}>
         {(() => {
-          const slPrice = leg.fillPrice != null && leg.slOrig != null
-            ? leg.fillPrice * (1 - (leg.dir === 'BUY' ? 1 : -1) * leg.slOrig / 100)
-            : null
-          const hasTSL = leg.slActual != null && slPrice != null && Math.abs(leg.slActual - slPrice) > 1.0
+          // sl_actual is the true SL price level set by the engine (fill ± sl_value for pts,
+          // fill * (1 ± sl_value/100) for pct). Always use it directly — never recompute
+          // from sl_original which could be pts OR pct.
+          const slPrice = leg.slActual ?? null
+          const hasTSL  = leg.tslTrailCount != null && leg.tslTrailCount > 0
           if (hasTSL && slPrice != null) {
-            return <div style={{ color: 'var(--text-muted)' }}>O:{slPrice.toFixed(0)} A:<span style={{ color: 'var(--amber)' }}>{leg.slActual!.toFixed(0)}</span> ({leg.slOrig}%)</div>
+            // TSL has trailed: show original anchor → current level
+            const origLevel = leg.slOrig != null ? `O:${leg.slOrig}` : ''
+            return <div style={{ color: 'var(--text-muted)' }}>{origLevel} A:<span style={{ color: 'var(--amber)' }}>{slPrice.toFixed(0)}</span></div>
           }
-          if (slPrice != null) return <div style={{ color: 'var(--text-muted)' }}>{slPrice.toFixed(0)} ({leg.slOrig}%)</div>
-          if (leg.slOrig != null) return <div style={{ color: 'var(--text-muted)' }}>{leg.slOrig}%</div>
+          if (slPrice != null) return <div style={{ color: 'var(--text-muted)' }}>{slPrice.toFixed(0)}</div>
           return <>—</>
         })()}
       </td>
@@ -428,6 +430,7 @@ export default function OrdersPage() {
             ltp:             o.ltp ?? undefined,
             slOrig:          o.sl_original ?? undefined,
             slActual:        o.sl_actual ?? undefined,
+            tslTrailCount:   o.tsl_trail_count ?? undefined,
             target:          o.target ?? undefined,
             exitPrice:       o.exit_price ?? undefined,
             exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,

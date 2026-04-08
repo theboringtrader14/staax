@@ -56,6 +56,7 @@ class BotRunner:
         self._aggregators: Dict[str, Any] = {}   # bot_id → CandleAggregator
         self._strategies:  Dict[str, Any] = {}   # bot_id → DTRStrategy | ChannelStrategy
         self._positions:   Dict[str, Optional[dict]] = {}  # bot_id → open position
+        self._last_signal: Dict[str, str] = {}             # bot_id → last signal type+dir acted on
 
         logger.info("[BOT] BotRunner initialised")
 
@@ -134,7 +135,7 @@ class BotRunner:
     async def load_bots(self):
         """Load all active bots from DB and set up their strategy instances."""
         from app.core.database import AsyncSessionLocal
-        from app.models.bot import Bot
+        from app.models.bot import Bot, BotOrder, BotOrderStatus
         from sqlalchemy import select
 
         # Refresh tokens from instrument master before subscribing bots.
@@ -146,6 +147,23 @@ class BotRunner:
                                   Bot.is_archived == False)
             )
             self._bots = list(result.scalars().all())
+
+            # Restore in-memory positions from any OPEN BotOrders.
+            # Without this, a server restart wipes _positions → sell signals
+            # fire but has_position=False → no exit orders created.
+            open_result = await db.execute(
+                select(BotOrder).where(BotOrder.status == BotOrderStatus.OPEN)
+            )
+            for bo in open_result.scalars().all():
+                bot_id = str(bo.bot_id)
+                self._positions[bot_id] = {
+                    "order_id":    str(bo.id),
+                    "entry_price": float(bo.entry_price or 0),
+                }
+                logger.info(
+                    "[BOT] Restored open position for bot %s: entry=%.2f",
+                    bot_id, bo.entry_price or 0,
+                )
 
         logger.info(f"[BOT] Loaded {len(self._bots)} active bots")
         for bot in self._bots:
@@ -247,11 +265,40 @@ class BotRunner:
             f"{signal.type} @ {signal.price:.2f} ({signal.reason})"
         )
 
-        # ── Save to bot_signals ───────────────────────────────────────────────
-        await self._save_signal(bot, signal)
+        # ── Order decision (entry / exit) ─────────────────────────────────────
+        has_position = self._positions.get(bot_id) is not None
+        sig_key      = f"{signal.type}:{signal.direction}"
 
-        # ── Broadcast to frontend via WebSocket ───────────────────────────────
-        if self._ws_manager:
+        acted = False
+        if signal.type == "entry" and signal.direction == "buy" and not has_position:
+            # Dedup: skip if we already acted on a buy entry this candle run
+            if self._last_signal.get(bot_id) != sig_key:
+                await self._enter_trade(bot, current_price, signal)
+                self._last_signal[bot_id] = sig_key
+                acted = True
+            else:
+                logger.debug("[BOT] Dedup: skipping duplicate %s signal for %s", sig_key, bot.name)
+        elif signal.type in ("entry", "exit") and signal.direction == "sell" and has_position:
+            if self._last_signal.get(bot_id) != sig_key:
+                await self._exit_trade(bot, current_price)
+                self._last_signal[bot_id] = sig_key
+                acted = True
+            else:
+                logger.debug("[BOT] Dedup: skipping duplicate %s signal for %s", sig_key, bot.name)
+        else:
+            # Signal fired but no valid position state to act on (e.g. sell with no position).
+            logger.info(
+                "[BOT] Signal %s %s for %s — no action (has_position=%s)",
+                signal.direction.upper(), signal.type, bot.name, has_position,
+            )
+
+        # ── Save to bot_signals (only when acted or new unique condition) ─────
+        # "fired" = order action taken; "skipped" = condition met but no position
+        signal_status = "fired" if acted else "skipped"
+        await self._save_signal(bot, signal, status=signal_status)
+
+        # ── Broadcast to frontend via WebSocket (only if acted) ───────────────
+        if acted and self._ws_manager:
             asyncio.ensure_future(self._ws_manager.notify(
                 "info",
                 f"{bot.name} · {signal.direction.upper()} {signal.type} "
@@ -259,18 +306,13 @@ class BotRunner:
                 bot.name,
             ))
 
-        # ── Order decision (entry / exit) ─────────────────────────────────────
-        has_position = self._positions.get(bot_id) is not None
-
-        if signal.type == "entry" and signal.direction == "buy" and not has_position:
-            await self._enter_trade(bot, current_price, signal)
-        elif signal.type in ("entry", "exit") and signal.direction == "sell" and has_position:
-            await self._exit_trade(bot, current_price)
-
     # ── Signal persistence ────────────────────────────────────────────────────
 
-    async def _save_signal(self, bot, signal):
-        """Persist signal to bot_signals table."""
+    async def _save_signal(self, bot, signal, status: str = "fired"):
+        """Persist signal to bot_signals table.
+
+        status: "fired" = order action taken, "skipped" = condition met but no position.
+        """
         try:
             from app.core.database import AsyncSessionLocal
             from app.models.bot import BotSignal
@@ -285,13 +327,13 @@ class BotRunner:
                     instrument=bot.instrument,
                     expiry=bot.expiry,
                     trigger_price=signal.price,
-                    status="fired",
+                    status=status,
                     fired_at=datetime.now(timezone.utc),
                     created_at=datetime.now(timezone.utc),
                 )
                 db.add(sig)
                 await db.commit()
-                logger.info(f"[BOT] Signal saved: {signal.reason} {signal.direction}")
+                logger.info(f"[BOT] Signal saved ({status}): {signal.reason} {signal.direction}")
         except Exception as e:
             logger.error(f"[BOT] Failed to save signal: {e}")
 

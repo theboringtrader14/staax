@@ -350,48 +350,68 @@ async def get_trade_replay(
         }
         return mapping.get(val.lower(), "EXIT")
 
-    events = []
-    running_pnl = 0.0
-    cumulative_pnl_values = [0.0]
+    # Build ENTRY and EXIT event lists separately.
+    # Running P&L is only accumulated on exits (in exit_time order).
+    # This ensures ENTRY events always show pnl_at_time=0 (no realized P&L
+    # at the moment of entry), and EXIT pnl_at_time reflects the true
+    # cumulative P&L after each leg closes — not the processing order.
+    entry_events: list = []
+    exit_raw: list = []
 
     for order in orders_raw:
         direction  = (order.direction or "").upper()
         symbol_str = order.symbol or ""
 
-        # ── ENTRY event (from fill_time) ──────────────────────────────────────
         if order.fill_time:
             entry_price = float(order.fill_price or 0)
-            events.append({
+            entry_events.append({
                 "type":        "ENTRY",
                 "description": f"{direction} {symbol_str} @{entry_price}",
                 "price":       entry_price,
-                "pnl_at_time": round(running_pnl, 2),
+                "pnl_at_time": 0.0,
                 "symbol":      symbol_str,
                 "time":        _fmt_time(order.fill_time),
+                "_sort_dt":    order.fill_time,
             })
 
-        # ── EXIT event (from exit_time) ───────────────────────────────────────
-        if order.exit_time:
-            if order.pnl is None:
-                continue  # skip legs not yet realized — pnl unrealized, don't skew curve
+        if order.exit_time and order.pnl is not None:
             exit_price = float(
                 order.exit_price_manual if order.exit_price_manual is not None
                 else (order.exit_price or 0)
             )
-            pnl_this   = float(order.pnl)
-            running_pnl = round(running_pnl + pnl_this, 2)
-            cumulative_pnl_values.append(running_pnl)
-            exit_type  = _map_exit_reason(order.exit_reason)
-            pnl_sign   = "+" if pnl_this >= 0 else ""
-            events.append({
-                "type":        exit_type,
-                "description": f"{exit_type.replace('_', ' ')} {symbol_str} @{exit_price}  {pnl_sign}₹{pnl_this:.2f}",
-                "price":       exit_price,
-                "pnl_at_time": running_pnl,
+            exit_raw.append({
+                "order":       order,
+                "exit_price":  exit_price,
+                "pnl_this":    float(order.pnl),
                 "symbol":      symbol_str,
-                "time":        _fmt_time(order.exit_time),
+                "_sort_dt":    order.exit_time,
             })
 
+    # Sort exits by exit_time, then accumulate running P&L
+    exit_raw.sort(key=lambda x: x["_sort_dt"])
+    running_pnl = 0.0
+    cumulative_pnl_values = [0.0]
+    exit_events: list = []
+    for ex in exit_raw:
+        pnl_this    = ex["pnl_this"]
+        running_pnl = round(running_pnl + pnl_this, 2)
+        cumulative_pnl_values.append(running_pnl)
+        exit_type   = _map_exit_reason(ex["order"].exit_reason)
+        pnl_sign    = "+" if pnl_this >= 0 else ""
+        exit_events.append({
+            "type":        exit_type,
+            "description": f"{exit_type.replace('_', ' ')} {ex['symbol']} @{ex['exit_price']}  {pnl_sign}₹{pnl_this:.2f}",
+            "price":       ex["exit_price"],
+            "pnl_at_time": running_pnl,
+            "symbol":      ex["symbol"],
+            "time":        _fmt_time(ex["order"].exit_time),
+        })
+
+    # Strip internal sort key and combine
+    for e in entry_events:
+        del e["_sort_dt"]
+
+    events = entry_events + exit_events
     # Sort all events chronologically
     events.sort(key=lambda e: e["time"])
 

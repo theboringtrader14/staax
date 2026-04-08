@@ -602,7 +602,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
 
 type AggOrder = BotOrder & { botName: string }
 type BotSignal = {
-  id: string; bot_id: string; signal_type: string; direction: string | null
+  id: string; bot_id: string; bot_name?: string; signal_type: string; direction: string | null
   instrument: string; expiry: string; trigger_price: number | null
   status: string; bot_order_id: string | null; error_message: string | null; fired_at: string | null
 }
@@ -752,16 +752,17 @@ export default function IndicatorsPage() {
             <table className="staax-table">
               <thead>
                 <tr>
-                  <th>Signal</th><th>Instrument</th><th>Dir</th><th>Trigger ₹</th><th>Fired At</th><th>Status</th>
+                  <th>Bot</th><th>Signal</th><th>Instrument</th><th>Dir</th><th>Trigger ₹</th><th>Fired At</th><th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {signals.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>
                     No signals today
                   </td></tr>
                 ) : signals.map(s => (
                   <tr key={s.id}>
+                    <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)' }}>{s.bot_name || '—'}</td>
                     <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px' }}>{s.signal_type}</td>
                     <td style={{ fontSize: '11px' }}>{s.instrument} · {s.expiry}</td>
                     <td style={{ fontSize: '11px', fontWeight: 700, color: s.direction === 'BUY' ? 'var(--green)' : s.direction === 'SELL' ? 'var(--red)' : 'var(--text-muted)' }}>
@@ -774,8 +775,8 @@ export default function IndicatorsPage() {
                     <td>
                       <span style={{
                         fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
-                        color: s.status === 'executed' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'missed' ? 'var(--accent-amber)' : 'var(--indigo)',
-                        background: s.status === 'executed' ? 'rgba(34,221,136,0.12)' : s.status === 'error' ? 'rgba(255,68,68,0.12)' : s.status === 'missed' ? 'rgba(215,123,18,0.12)' : 'rgba(255,107,0,0.12)',
+                        color: s.status === 'executed' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'missed' ? 'var(--accent-amber)' : s.status === 'skipped' ? 'rgba(232,232,248,0.35)' : 'var(--indigo)',
+                        background: s.status === 'executed' ? 'rgba(34,221,136,0.12)' : s.status === 'error' ? 'rgba(255,68,68,0.12)' : s.status === 'missed' ? 'rgba(215,123,18,0.12)' : s.status === 'skipped' ? 'rgba(232,232,248,0.06)' : 'rgba(255,107,0,0.12)',
                       }}>{s.status.toUpperCase()}</span>
                     </td>
                   </tr>

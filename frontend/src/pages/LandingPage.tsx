@@ -41,6 +41,18 @@ const MODULES = [
     externalUrl: 'https://budgex.lifexos.co.in',
   },
   {
+    id: 'FINEX',
+    tagline: 'Personal CFO',
+    description: 'Your financial command center. Daily briefings, LIFEX Score, and cross-module intelligence.',
+    accent: '#F59E0B',
+    accentDim: 'rgba(245,158,11,0.12)',
+    accentKey: 'gold',
+    status: 'BETA',
+    statusColor: '#F59E0B',
+    path: null,
+    externalUrl: 'https://finex.lifexos.co.in',
+  },
+  {
     id: 'HEALTHEX',
     tagline: 'Health & Fitness Intelligence',
     description: 'Log workouts, track nutrition, and monitor biomarkers with integrated wearable data.',
@@ -52,20 +64,33 @@ const MODULES = [
     path: null,
   },
   {
-    id: 'GOALEX',
-    tagline: 'Life Goals & Milestones',
-    description: 'Define life goals, break them into milestones, and track progress with structured habit loops.',
-    accent: '#38bdf8',
-    accentDim: 'rgba(56,189,248,0.12)',
-    accentKey: 'sky',
-    status: 'COMING SOON',
+    id: 'NETEX',
+    tagline: 'Net Worth Engine',
+    description: 'Complete balance sheet — assets, liabilities, and real-time net worth tracking.',
+    accent: 'rgba(255,255,255,0.15)',
+    accentDim: 'rgba(255,255,255,0.04)',
+    accentKey: 'muted',
+    status: '🚧 Coming Soon',
     statusColor: 'rgba(232,232,248,0.4)',
     path: null,
+    comingSoon: true,
+  },
+  {
+    id: 'GOALEX',
+    tagline: 'Goals & FI Planning',
+    description: 'Track financial goals and your path to Financial Independence.',
+    accent: 'rgba(255,255,255,0.15)',
+    accentDim: 'rgba(255,255,255,0.04)',
+    accentKey: 'muted',
+    status: '🚧 Coming Soon',
+    statusColor: 'rgba(232,232,248,0.4)',
+    path: null,
+    comingSoon: true,
   },
 ]
 
 const STATS = [
-  { value: '5', label: 'Modules' },
+  { value: '7', label: 'Modules' },
   { value: '3', label: 'Live Accounts' },
   { value: '24/7', label: 'Monitoring' },
   { value: '₹0', label: 'Setup Cost' },
@@ -130,6 +155,9 @@ export default function LandingPage() {
           { color: redis ? ok : err, text: `${redis  ? '✓' : '✗'} Redis         — ${redis  ? 'connected' : 'down'}` },
           { color: ss ? ok : err,    text: `${ss     ? '✓' : '✗'} SmartStream   — ${ss     ? 'active'    : 'down'}` },
           { color: sched ? ok : err, text: `${sched  ? '✓' : '✗'} Scheduler     — ${sched  ? 'running'   : 'down'}` },
+          { color: '#F59E0B',        text: '◈ FINEX         — beta' },
+          { color: unk,              text: '— NETEX         — coming soon' },
+          { color: unk,              text: '— GOALEX        — coming soon' },
         ])
       })
       .catch(() => {
@@ -138,6 +166,9 @@ export default function LandingPage() {
           { color: unk, text: '— SmartStream   — unknown' },
           { color: unk, text: '— Database      — unknown' },
           { color: unk, text: '— Redis         — unknown' },
+          { color: '#F59E0B', text: '◈ FINEX         — beta' },
+          { color: unk,       text: '— NETEX         — coming soon' },
+          { color: unk,       text: '— GOALEX        — coming soon' },
         ])
       })
   }, [])
@@ -235,8 +266,10 @@ export default function LandingPage() {
         .landing-module-card[data-accent="indigo"]:hover  { box-shadow: 0 0 40px rgba(99,102,241,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="emerald"]:hover { box-shadow: 0 0 40px rgba(16,185,129,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="amber"]:hover   { box-shadow: 0 0 40px rgba(245,158,11,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="gold"]:hover    { box-shadow: 0 0 40px rgba(245,158,11,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="red"]:hover     { box-shadow: 0 0 40px rgba(239,68,68,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="sky"]:hover     { box-shadow: 0 0 40px rgba(56,189,248,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="muted"]:hover   { transform: none !important; box-shadow: none !important; }
         .landing-terminal { position: relative; overflow: hidden; }
         .landing-terminal::after {
           content: '';
@@ -488,7 +521,7 @@ export default function LandingPage() {
           <h2 style={{
             fontSize: '28px', fontWeight: 800, letterSpacing: '-0.02em',
             color: '#f0f0ff', marginBottom: '12px',
-          }}>Five Modules. One Life.</h2>
+          }}>Seven Modules. One Life.</h2>
           <p style={{ fontSize: '14px', color: 'rgba(232,232,248,0.55)', maxWidth: '500px', margin: '0 auto' }}>
             Every aspect of your financial and personal life, managed with the same intelligence and precision.
           </p>
@@ -504,17 +537,18 @@ export default function LandingPage() {
               key={mod.id}
               className="landing-module-card"
               data-accent={mod.accentKey}
-              onClick={() => mod.externalUrl && (window.location.href = mod.externalUrl)}
+              onClick={() => !('comingSoon' in mod && mod.comingSoon) && ('externalUrl' in mod) && mod.externalUrl && (window.location.href = mod.externalUrl)}
               style={{
                 background: `rgba(10,10,26,0.7)`,
-                border: `1px solid ${mod.accent}30`,
+                border: ('comingSoon' in mod && mod.comingSoon) ? '0.5px solid rgba(255,255,255,0.08)' : `1px solid ${mod.accent}30`,
                 borderRadius: '12px',
                 padding: '20px',
-                cursor: ('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default',
+                cursor: ('comingSoon' in mod && mod.comingSoon) ? 'default' : (('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default'),
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
-                borderTop: `2px solid ${mod.accent}`,
-                boxShadow: `inset 0 1px 0 ${mod.accent}20, 0 4px 24px rgba(0,0,0,0.4)`,
+                borderTop: ('comingSoon' in mod && mod.comingSoon) ? '0.5px solid rgba(255,255,255,0.08)' : `2px solid ${mod.accent}`,
+                boxShadow: ('comingSoon' in mod && mod.comingSoon) ? 'none' : `inset 0 1px 0 ${mod.accent}20, 0 4px 24px rgba(0,0,0,0.4)`,
+                opacity: ('comingSoon' in mod && mod.comingSoon) ? 0.55 : 1,
               } as React.CSSProperties}
             >
               {/* Header */}
