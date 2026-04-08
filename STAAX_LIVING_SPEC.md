@@ -4067,3 +4067,48 @@ All PRACTIX algos to test:
 NF-STBT ✅ (tested today) | S-STBT | S-WIDE
 NF-INT (W&T fixed) | NF-BTST (premium fixed)
 BNF-BTST | BNF-ORB (ORB fixed)
+
+## Session Update — 2026-04-08 (End of Day)
+
+### Critical Safety Fixes — Pre-LIVE Required
+All 5 fixes committed — platform now safe for LIVE:
+
+1. pts_underlying entry_price — was using option fill
+   price instead of underlying spot price for SL/TP
+   trigger. Now correctly uses underlying LTP at fill time.
+
+2. NSE holiday calendar — BTST/STBT exits now skip
+   NSE holidays (13 holidays added for FY 2026-27).
+   Previously would try to exit on market holidays.
+
+3. Kill switch — scheduler.pause() was hitting module
+   not live instance (silent fail). Fixed with singleton
+   pattern. Kill switch now actually stops all jobs.
+
+4. base_lot_multiplier — was silently ignored in quantity
+   formula. Now: lots × lot_size × base_multiplier × 
+   grid_multiplier. Position sizes were understated.
+
+5. TOTP retry — 3 attempts with window boundary check.
+   30-second TOTP window handled correctly.
+   No more silent login failures at window boundaries.
+
+### Documentation
+STAAX_PLATFORM_DOCUMENTATION.md — 1,399 lines
+DOCUMENTATION_GAP_REPORT.md — 10 items verified
+ENGINE_AUDIT_REPORT.md — all P0/P1 fixed
+BUTTON_AUDIT_REPORT.md — all 4 buttons fixed
+
+### Platform Status — Ready for PRACTIX
+All engine bugs fixed. Safe for extended PRACTIX testing.
+NOT ready for LIVE until:
+- Karthik AO + Wife AO IP registered in Angel One portal
+- All PRACTIX algos tested: NF-STBT ✅ | S-STBT | S-WIDE
+  NF-INT (W&T) | NF-BTST (premium) | BNF-BTST | BNF-ORB
+
+### Tomorrow (April 9)
+- Monitor auto-login cron at 08:45 IST
+- Test S-STBT + S-WIDE in PRACTIX
+- Verify W&T fix with NF-INT
+- Verify premium selector with NF-BTST
+- Verify ORB with BNF-ORB
