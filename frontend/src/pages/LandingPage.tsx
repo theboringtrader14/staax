@@ -9,9 +9,9 @@ const MODULES = [
     id: 'STAAX',
     tagline: 'Algorithmic Trading Intelligence',
     description: 'Deploy, monitor, and analyse trading algorithms with real-time P&L, SmartStream execution, and per-algo analytics.',
-    accent: '#6366f1',
-    accentDim: 'rgba(99,102,241,0.12)',
-    accentKey: 'indigo',
+    accent: '#FF6B00',
+    accentDim: 'rgba(255,107,0,0.12)',
+    accentKey: 'orange',
     status: 'LIVE',
     statusColor: '#10b981',
     externalUrl: 'https://staax.lifexos.co.in',
@@ -20,9 +20,9 @@ const MODULES = [
     id: 'INVEX',
     tagline: 'Investment Portfolio Management',
     description: 'Track long-term holdings, rebalance portfolios, and visualise compound growth across equity and debt.',
-    accent: '#10b981',
-    accentDim: 'rgba(16,185,129,0.12)',
-    accentKey: 'emerald',
+    accent: '#00C9A7',
+    accentDim: 'rgba(0,201,167,0.12)',
+    accentKey: 'teal',
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
@@ -32,9 +32,9 @@ const MODULES = [
     id: 'BUDGEX',
     tagline: 'Intelligent Budget Tracking',
     description: 'Categorise expenses, set smart budgets, and surface spending patterns with AI-powered insights.',
-    accent: '#f59e0b',
-    accentDim: 'rgba(245,158,11,0.12)',
-    accentKey: 'amber',
+    accent: '#7C3AED',
+    accentDim: 'rgba(124,58,237,0.12)',
+    accentKey: 'purple',
     status: 'BETA',
     statusColor: '#f59e0b',
     path: null,
@@ -67,8 +67,8 @@ const MODULES = [
     id: 'NETEX',
     tagline: 'Net Worth Engine',
     description: 'Complete balance sheet — assets, liabilities, and real-time net worth tracking.',
-    accent: 'rgba(255,255,255,0.15)',
-    accentDim: 'rgba(255,255,255,0.04)',
+    accent: '#64748B',
+    accentDim: 'rgba(100,116,139,0.08)',
     accentKey: 'muted',
     status: '🚧 Coming Soon',
     statusColor: 'rgba(232,232,248,0.4)',
@@ -79,8 +79,8 @@ const MODULES = [
     id: 'GOALEX',
     tagline: 'Goals & FI Planning',
     description: 'Track financial goals and your path to Financial Independence.',
-    accent: 'rgba(255,255,255,0.15)',
-    accentDim: 'rgba(255,255,255,0.04)',
+    accent: '#64748B',
+    accentDim: 'rgba(100,116,139,0.08)',
     accentKey: 'muted',
     status: '🚧 Coming Soon',
     statusColor: 'rgba(232,232,248,0.4)',
@@ -175,6 +175,18 @@ export default function LandingPage() {
 
   const handleEnter = () => navigate(isAuthenticated ? '/dashboard' : '/login')
 
+  const handleModuleClick = (moduleId: string) => {
+    const isProd = window.location.hostname !== 'localhost'
+    const routes: Record<string, { prod: string; local: string }> = {
+      STAAX:  { prod: 'https://staax.lifexos.co.in',  local: 'http://localhost:3000/dashboard' },
+      INVEX:  { prod: 'https://invex.lifexos.co.in',  local: 'http://localhost:3001/portfolio' },
+      BUDGEX: { prod: 'https://budgex.lifexos.co.in', local: 'http://localhost:3002/dashboard' },
+      FINEX:  { prod: 'https://finex.lifexos.co.in',  local: 'http://localhost:3003/dashboard' },
+    }
+    const r = routes[moduleId]
+    if (r) window.location.href = isProd ? r.prod : r.local
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -263,12 +275,11 @@ export default function LandingPage() {
         }
         .landing-module-card:hover { transform: translateY(-6px); }
         .landing-module-card:hover::before { opacity: 1; }
-        .landing-module-card[data-accent="indigo"]:hover  { box-shadow: 0 0 40px rgba(99,102,241,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="emerald"]:hover { box-shadow: 0 0 40px rgba(16,185,129,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="amber"]:hover   { box-shadow: 0 0 40px rgba(245,158,11,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="gold"]:hover    { box-shadow: 0 0 40px rgba(245,158,11,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="red"]:hover     { box-shadow: 0 0 40px rgba(239,68,68,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="sky"]:hover     { box-shadow: 0 0 40px rgba(56,189,248,0.2),  0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="orange"]:hover  { box-shadow: 0 0 40px rgba(255,107,0,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="teal"]:hover    { box-shadow: 0 0 40px rgba(0,201,167,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="purple"]:hover  { box-shadow: 0 0 40px rgba(124,58,237,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="gold"]:hover    { box-shadow: 0 0 40px rgba(245,158,11,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="red"]:hover     { box-shadow: 0 0 40px rgba(239,68,68,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="muted"]:hover   { transform: none !important; box-shadow: none !important; }
         .landing-terminal { position: relative; overflow: hidden; }
         .landing-terminal::after {
@@ -537,7 +548,7 @@ export default function LandingPage() {
               key={mod.id}
               className="landing-module-card"
               data-accent={mod.accentKey}
-              onClick={() => !('comingSoon' in mod && mod.comingSoon) && ('externalUrl' in mod) && mod.externalUrl && (window.location.href = mod.externalUrl)}
+              onClick={() => { if (!('comingSoon' in mod && mod.comingSoon) && ('externalUrl' in mod) && mod.externalUrl) handleModuleClick(mod.id) }}
               style={{
                 background: `rgba(10,10,26,0.7)`,
                 border: ('comingSoon' in mod && mod.comingSoon) ? '0.5px solid rgba(255,255,255,0.08)' : `1px solid ${mod.accent}30`,
