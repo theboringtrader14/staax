@@ -37,6 +37,17 @@ IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 
+async def _run_orb_safe(coro, algo_id: str, grid_entry_id: str):
+    """Run ORB coroutine with error handling — logs failures so they are never silently dropped."""
+    try:
+        await coro
+    except Exception as e:
+        logger.error(
+            f"[ORB] algo_id={algo_id} grid_entry={grid_entry_id} FAILED: {e}",
+            exc_info=True,
+        )
+
+
 class AlgoScheduler:
     """
     Central scheduler for all time-based algo triggers.
@@ -199,21 +210,23 @@ class AlgoScheduler:
                 )
                 jobs.append(job.id)
                 logger.info(f"BTST/STBT SL check: {algo.name} @ {sl_check_dt.strftime('%Y-%m-%d %H:%M')}")
-            if algo.exit_time:
-                h, m = map(int, algo.exit_time.split(":")[:2])
-                exit_dt = datetime(
-                    next_day.year, next_day.month, next_day.day,
-                    h, m, 0, tzinfo=IST
-                )
-                job = self._scheduler.add_job(
-                    self._job_auto_sq,
-                    DateTrigger(run_date=exit_dt, timezone=IST),
-                    args=[grid_entry_id],
-                    id=f"exit_{grid_entry_id}",
-                    replace_existing=True,
-                )
-                jobs.append(job.id)
-                logger.info(f"BTST/STBT exit job: {algo.name} @ {exit_dt.strftime('%Y-%m-%d %H:%M')}")
+            # Use next_day_exit_time for BTST/STBT exit — NOT exit_time (which is intraday-only).
+            # Default to 09:15 if next_day_exit_time is not configured.
+            raw_next_day_exit = algo.next_day_exit_time or "09:15"
+            h, m = map(int, raw_next_day_exit.split(":")[:2])
+            exit_dt = datetime(
+                next_day.year, next_day.month, next_day.day,
+                h, m, 0, tzinfo=IST
+            )
+            job = self._scheduler.add_job(
+                self._job_auto_sq,
+                DateTrigger(run_date=exit_dt, timezone=IST),
+                args=[grid_entry_id],
+                id=f"exit_{grid_entry_id}",
+                replace_existing=True,
+            )
+            jobs.append(job.id)
+            logger.info(f"BTST/STBT exit job: {algo.name} @ {exit_dt.strftime('%Y-%m-%d %H:%M')}")
 
         self._per_algo_jobs[grid_entry_id] = jobs
 
@@ -464,8 +477,12 @@ class AlgoScheduler:
                     if algo.entry_type == EntryType.ORB and self._algo_runner:
                         import asyncio
                         asyncio.ensure_future(
-                            self._algo_runner.register_orb(
-                                str(grid_entry.id), algo, grid_entry
+                            _run_orb_safe(
+                                self._algo_runner.register_orb(
+                                    str(grid_entry.id), algo, grid_entry
+                                ),
+                                algo_id=str(algo.id),
+                                grid_entry_id=str(grid_entry.id),
                             )
                         )
 
@@ -801,3 +818,203 @@ class AlgoScheduler:
             except Exception as e:
                 await db.rollback()
                 logger.error(f"Job recovery failed: {e}")
+
+    async def recover_multiday_jobs(self):
+        """
+        Called once at server startup — recovers jobs lost on restart for:
+
+        1. BTST/STBT positions that entered the previous trading day and still
+           have open orders today.  Their exit job (scheduled for today) was
+           lost on restart so we must re-schedule it (or execute immediately
+           if the exit window has already passed).
+
+        2. ORB algos that were activated today (AlgoState = WAITING) but whose
+           ORB-tracker registration was lost on restart:
+             - Window still open  → re-register with AlgoRunner.register_orb()
+               and re-schedule the orb_end job.
+             - Window already passed → mark status = NO_TRADE immediately.
+             - ORB already fired + order is OPEN → treated as regular open
+               position; exit job recovery is handled via the AlgoState ACTIVE
+               branch below (same as BTST/STBT section).
+        """
+        today = date.today()
+        now = datetime.now(IST)
+        prev_trading_day = self._prev_trading_day(today)
+
+        # ── 1. BTST/STBT: recover exit + SL-check jobs ───────────────────────
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(
+                        and_(
+                            AlgoState.trading_date == str(prev_trading_day),
+                            Algo.strategy_mode.in_([StrategyMode.BTST, StrategyMode.STBT]),
+                            AlgoState.status == AlgoRunStatus.ACTIVE,
+                        )
+                    )
+                )
+                rows = result.all()
+
+                recovered_exits   = 0
+                recovered_sl      = 0
+                immediate_exits   = 0
+
+                for algo_state, grid_entry, algo in rows:
+                    geid = str(grid_entry.id)
+
+                    # Compute exit datetime: next_day_exit_time on today (== next trading day
+                    # relative to the entry day, which is already `today` for the server).
+                    raw_exit = algo.next_day_exit_time or "09:15"
+                    h, m = map(int, raw_exit.split(":")[:2])
+                    exit_dt = now.replace(
+                        year=today.year, month=today.month, day=today.day,
+                        hour=h, minute=m, second=0, microsecond=0,
+                    )
+
+                    if exit_dt <= now:
+                        # Exit time already passed — execute immediately
+                        logger.warning(
+                            f"[RECOVERY-BTST] Exit time {raw_exit} already passed for "
+                            f"{algo.name} — executing exit_all immediately"
+                        )
+                        if self._algo_runner:
+                            import asyncio
+                            asyncio.ensure_future(
+                                self._algo_runner.exit_all(geid, reason="auto_sq")
+                            )
+                        immediate_exits += 1
+                    else:
+                        # Exit still in future — re-register job
+                        job_id = f"exit_{geid}"
+                        if not self._scheduler.get_job(job_id):
+                            self._scheduler.add_job(
+                                self._job_auto_sq,
+                                DateTrigger(run_date=exit_dt, timezone=IST),
+                                args=[geid],
+                                id=job_id,
+                                replace_existing=True,
+                            )
+                            recovered_exits += 1
+                            logger.info(
+                                f"[RECOVERY-BTST] Re-registered exit job: {algo.name} "
+                                f"@ {exit_dt.strftime('%Y-%m-%d %H:%M')}"
+                            )
+
+                    # Re-register SL check job (entry_time - 2 min on today)
+                    if algo.entry_time:
+                        h2, m2 = map(int, algo.entry_time.split(":")[:2])
+                        sl_check_dt = now.replace(
+                            year=today.year, month=today.month, day=today.day,
+                            hour=h2, minute=m2, second=0, microsecond=0,
+                        ) - timedelta(minutes=2)
+                        if sl_check_dt > now:
+                            job_id = f"sl_check_{geid}"
+                            if not self._scheduler.get_job(job_id):
+                                self._scheduler.add_job(
+                                    self._job_overnight_sl_check_single,
+                                    DateTrigger(run_date=sl_check_dt, timezone=IST),
+                                    args=[geid],
+                                    id=job_id,
+                                    replace_existing=True,
+                                )
+                                recovered_sl += 1
+                                logger.info(
+                                    f"[RECOVERY-BTST] Re-registered SL check: {algo.name} "
+                                    f"@ {sl_check_dt.strftime('%Y-%m-%d %H:%M')}"
+                                )
+
+                logger.info(
+                    f"✅ BTST/STBT recovery — {recovered_exits} exit jobs, "
+                    f"{recovered_sl} SL check jobs, {immediate_exits} immediate exits"
+                )
+
+            except Exception as e:
+                logger.error(f"[RECOVERY-BTST] failed: {e}")
+
+        # ── 2. ORB: recover tracker registration + orb_end jobs ──────────────
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(
+                        and_(
+                            AlgoState.trading_date == str(today),
+                            Algo.entry_type == EntryType.ORB,
+                            AlgoState.status == AlgoRunStatus.WAITING,
+                        )
+                    )
+                )
+                rows = result.all()
+
+                recovered_orb   = 0
+                notrade_orb     = 0
+                needs_commit    = False
+
+                for algo_state, grid_entry, algo in rows:
+                    geid = str(grid_entry.id)
+
+                    # Parse ORB window times
+                    orb_end_str = algo.orb_end_time or "11:16"
+                    h_end, m_end = map(int, orb_end_str.split(":")[:2])
+                    orb_end_dt = now.replace(
+                        hour=h_end, minute=m_end, second=0, microsecond=0
+                    )
+
+                    if now > orb_end_dt:
+                        # ORB window already passed with no breakout → NO_TRADE
+                        algo_state.status    = AlgoRunStatus.NO_TRADE
+                        algo_state.closed_at = now
+                        grid_entry.status    = GridStatus.NO_TRADE
+                        notrade_orb += 1
+                        needs_commit = True
+                        logger.info(
+                            f"[RECOVERY-ORB] ORB window expired → NO_TRADE: {algo.name} "
+                            f"(orb_end was {orb_end_str})"
+                        )
+                    else:
+                        # ORB window still open — re-register tracker + orb_end job
+                        if self._algo_runner:
+                            import asyncio
+                            asyncio.ensure_future(
+                                self._algo_runner.register_orb(geid, algo, grid_entry)
+                            )
+
+                        # Re-register orb_end job
+                        job_id = f"orb_end_{geid}"
+                        if not self._scheduler.get_job(job_id):
+                            self._scheduler.add_job(
+                                self._job_orb_end,
+                                DateTrigger(run_date=orb_end_dt, timezone=IST),
+                                args=[geid],
+                                id=job_id,
+                                replace_existing=True,
+                            )
+                        recovered_orb += 1
+                        logger.info(
+                            f"[RECOVERY-ORB] Re-registered ORB tracker + orb_end job: "
+                            f"{algo.name} (window closes {orb_end_str})"
+                        )
+
+                if needs_commit:
+                    await db.commit()
+
+                logger.info(
+                    f"✅ ORB recovery — {recovered_orb} re-registered, "
+                    f"{notrade_orb} marked NO_TRADE"
+                )
+
+            except Exception as e:
+                await db.rollback()
+                logger.error(f"[RECOVERY-ORB] failed: {e}")
+
+    def _prev_trading_day(self, from_date: date) -> date:
+        """Return the most recent Mon–Fri before from_date (no holiday calendar)."""
+        d = from_date - timedelta(days=1)
+        while d.weekday() >= 5:  # 5=Sat, 6=Sun
+            d -= timedelta(days=1)
+        return d

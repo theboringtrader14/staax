@@ -28,7 +28,7 @@ interface Algo {
   id:            string
   name:          string
   account:       string
-  legs:          {i:string; d:'B'|'S'; lots?:number; strikeType?:string; wtEnabled?:boolean; hasJourney?:boolean; tslX?:number; tslY?:number; ttpX?:number; ttpY?:number; reSlEnabled?:boolean; reTpEnabled?:boolean}[]
+  legs:          {i:string; d:'B'|'S'; lots?:number; strikeType?:string; wtEnabled?:boolean; wtValue?:number; wtUnit?:string; hasJourney?:boolean; tslX?:number; tslY?:number; ttpX?:number; ttpY?:number; reSlEnabled?:boolean; reTpEnabled?:boolean}[]
   et:            string
   xt:            string
   arch:          boolean
@@ -161,6 +161,8 @@ export default function GridPage() {
           lots:         l.lots ?? undefined,
           strikeType:   l.strike_type ?? undefined,
           wtEnabled:    !!l.wt_enabled,
+          wtValue:      l.wt_value ?? undefined,
+          wtUnit:       l.wt_unit ?? undefined,
           hasJourney:   !!(l.journey_config?.child),
           tslX:         l.tsl_x ?? undefined,
           tslY:         l.tsl_y ?? undefined,
@@ -733,9 +735,10 @@ export default function GridPage() {
                                 <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>ARCHIVE</span>
                               </button>
 
-                              {/* Delete */}
+                              {/* Delete (soft-archive) */}
                               <button
                                 onClick={() => setDel(algo.id)}
+                                title="Algo will be archived. All historical data preserved."
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
                                   gap:4, padding:'0 14px', background:'rgba(255,68,68,0.05)', border:'none',
@@ -744,7 +747,7 @@ export default function GridPage() {
                                 onMouseEnter={e => { e.currentTarget.style.color='#FF4444'; e.currentTarget.style.background='rgba(255,68,68,0.12)' }}
                                 onMouseLeave={e => { e.currentTarget.style.color='rgba(255,68,68,0.6)'; e.currentTarget.style.background='rgba(255,68,68,0.05)' }}>
                                 <TrashIcon/>
-                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>DELETE</span>
+                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>REMOVE</span>
                               </button>
                             </div>
 
@@ -780,7 +783,7 @@ export default function GridPage() {
                                 </div>
                                 {/* Row 3 — Strategy settings (first leg) */}
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
-                                  <div>{lbl('W&T')}{boolVal(leg0?.wtEnabled)}</div>
+                                  <div>{lbl('W&T')}{leg0?.wtEnabled && leg0?.wtValue != null ? val(`${leg0.wtValue}${leg0.wtUnit === 'pct' ? '%' : leg0.wtUnit === 'pts' ? ' pts' : ''}`, '#22DD88') : boolVal(leg0?.wtEnabled)}</div>
                                   <div>{lbl('Journey')}{boolVal(leg0?.hasJourney)}</div>
                                   <div>{lbl('TSL')}{val(leg0?.tslX != null ? `${leg0.tslX} → ${leg0.tslY}` : '—')}</div>
                                   <div>{lbl('TTP')}{val(leg0?.ttpX != null ? `${leg0.ttpX} → ${leg0.ttpY}` : '—')}</div>
@@ -926,15 +929,15 @@ export default function GridPage() {
         return (
           <div className="modal-overlay">
             <div className="modal-box" style={{ maxWidth:'380px' }}>
-              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Delete {a?.name}?</div>
+              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Remove {a?.name} from Smart Cards?</div>
               <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>
-                Permanently removes this algo and all grid deployments.<br/>
-                <span style={{ color:'var(--accent-amber)', fontSize:'12px' }}>Tip: Archive keeps it recoverable.</span>
+                This algo will be archived and hidden from the grid.<br/>
+                <span style={{ color:'#22DD88', fontSize:'12px' }}>All historical orders and P&L data are preserved.</span>
               </div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button className="btn btn-ghost" onClick={() => setDel(null)}>Cancel</button>
                 <button className="btn btn-warn" onClick={() => { archAlgo(del); setDel(null) }}>📦 Archive Instead</button>
-                <button className="btn btn-danger" onClick={() => delAlgo(del)}>Delete</button>
+                <button className="btn btn-danger" onClick={() => delAlgo(del)}>Remove from Smart Cards</button>
               </div>
             </div>
           </div>

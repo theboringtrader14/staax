@@ -575,7 +575,15 @@ async def system_health(request: Request):
     ltp_consumer = getattr(state, "ltp_consumer", None)
     if ltp_consumer:
         angel_adapter = getattr(ltp_consumer, "_angel_adapter", None)
-        connected = bool(getattr(angel_adapter, "_connected", False)) if angel_adapter else False
+        if angel_adapter is not None:
+            connected = bool(getattr(angel_adapter, "_connected", False))
+            if not connected:
+                # Fallback: during reconnect window _connected is False but
+                # _running stays True — treat as connected if adapter is running
+                connected = bool(getattr(angel_adapter, "_running", False))
+        else:
+            # Fallback: adapter not yet set, use LTPConsumer._running
+            connected = bool(getattr(ltp_consumer, "_running", False))
         checks["smartstream"] = {"ok": connected, "connected": connected}
     else:
         checks["smartstream"] = {"ok": False, "connected": False, "error": "not initialised"}

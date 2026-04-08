@@ -225,7 +225,7 @@ async def day_breakdown(
             sa_func.sum(Order.pnl).label('pnl'),
             sa_func.count(Order.id).label('trades'),
         )
-        .join(Algo, Order.algo_id == Algo.id)
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .where(*conditions)
         .group_by(Algo.name, extract('dow', Order.fill_time))
         .order_by(Algo.name)
@@ -272,7 +272,7 @@ async def error_analytics(
             func.count(Order.id).label('errors'),
             func.max(Order.created_at).label('last_error'),
         )
-        .join(Algo, Order.algo_id == Algo.id)
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .where(*conditions)
         .group_by(Algo.name)
         .order_by(func.count(Order.id).desc())
@@ -282,7 +282,7 @@ async def error_analytics(
     # Last 20 error orders
     recent = await db.execute(
         select(Order, Algo.name.label('algo_name'))
-        .join(Algo, Order.algo_id == Algo.id)
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .where(*conditions)
         .order_by(Order.created_at.desc())
         .limit(20)
@@ -333,7 +333,7 @@ async def slippage_analytics(
 
     result = await db.execute(
         select(Order, Algo.name.label('algo_name'))
-        .join(Algo, Order.algo_id == Algo.id)
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .where(*conditions)
         .order_by(Order.fill_time.desc())
     )
@@ -397,7 +397,7 @@ async def health_scores(
             func.sum(Order.pnl).label('total_pnl'),
             func.sum(func.cast(Order.pnl > 0, Integer)).label('wins'),
         )
-        .join(Algo, Order.algo_id == Algo.id)
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .where(*conditions)
         .group_by(Algo.name)
     )
@@ -454,7 +454,7 @@ async def all_orders(
 
     result = await db.execute(
         select(Order, Algo.name.label('algo_name'))
-        .join(Algo, Order.algo_id == Algo.id)
+        .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .where(*conditions)
         .order_by(Order.fill_time.desc())
         .limit(limit)

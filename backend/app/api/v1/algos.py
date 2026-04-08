@@ -18,6 +18,15 @@ from app.models.trade import Trade
 
 router = APIRouter()
 
+# ── Underlying index token map (used for pts_underlying / pct_underlying SL/TP) ──
+UNDERLYING_TOKENS = {
+    "NIFTY":      99926000,
+    "BANKNIFTY":  99926009,
+    "SENSEX":     99919000,
+    "MIDCPNIFTY": 99926074,
+    "FINNIFTY":   99926037,
+}
+
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -190,6 +199,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         reentry_enabled=leg_data.reentry_enabled,
         reentry_mode=ReentryMode(leg_data.reentry_mode) if leg_data.reentry_mode else None,
         reentry_max=leg_data.reentry_max,
+        underlying_token=UNDERLYING_TOKENS.get((leg_data.underlying or "").upper(), 0),
     )
 
 
@@ -444,29 +454,15 @@ async def deploy_week(algo_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/{algo_id}")
 async def delete_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    """Delete an algo and all associated data permanently (cascade)."""
+    """Soft-delete (archive) an algo. All historical data is preserved."""
     result = await db.execute(select(Algo).where(Algo.id == algo_id))
     algo = result.scalar_one_or_none()
     if not algo:
         raise HTTPException(status_code=404, detail="Algo not found")
 
-    # Resolve grid_entry_ids for this algo (needed for AlgoState / Order FK)
-    ge_result = await db.execute(
-        select(GridEntry.id).where(GridEntry.algo_id == algo_id)
-    )
-    grid_entry_ids = [row[0] for row in ge_result.all()]
-
-    # Delete in FK-safe order
-    if grid_entry_ids:
-        await db.execute(delete(Order).where(Order.grid_entry_id.in_(grid_entry_ids)))
-        await db.execute(delete(AlgoState).where(AlgoState.grid_entry_id.in_(grid_entry_ids)))
-    await db.execute(delete(Order).where(Order.algo_id == algo_id))
-    await db.execute(delete(Trade).where(Trade.algo_id == algo_id))
-    await db.execute(delete(GridEntry).where(GridEntry.algo_id == algo_id))
-    await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
-    await db.delete(algo)
+    algo.is_archived = True
     await db.commit()
-    return {"status": "ok", "message": f"Algo '{algo.name}' deleted"}
+    return {"status": "archived", "id": str(algo_id)}
 
 
 # ── Archive / Unarchive ───────────────────────────────────────────────────────

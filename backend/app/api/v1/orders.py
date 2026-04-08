@@ -539,6 +539,9 @@ async def get_waiting_algos(
     """
     target_date = _parse_date(trading_date) or date.today()
 
+    IST = timezone(timedelta(hours=5, minutes=30))
+    one_hour_ago = datetime.now(IST) - timedelta(hours=1)
+
     # Post-09:15: ALGO_ACTIVE grid entries with a WAITING AlgoState
     activated_result = await db.execute(
         select(GridEntry, Algo, Account, AlgoState)
@@ -560,6 +563,29 @@ async def get_waiting_algos(
     waiting = []
 
     for ge, a, acc, _state in activated_rows:
+        # Fetch latest FAILED execution log in the past hour for this algo
+        latest_error = None
+        try:
+            err_result = await db.execute(
+                select(ExecutionLog)
+                .where(
+                    ExecutionLog.algo_id == a.id,
+                    ExecutionLog.status == "FAILED",
+                    ExecutionLog.timestamp >= one_hour_ago,
+                )
+                .order_by(ExecutionLog.timestamp.desc())
+                .limit(1)
+            )
+            err = err_result.scalar_one_or_none()
+            if err:
+                latest_error = {
+                    "reason":     err.reason,
+                    "event_type": err.event_type,
+                    "timestamp":  err.timestamp.isoformat() if err.timestamp else None,
+                }
+        except Exception as e:
+            logger.warning(f"[waiting] latest_error fetch failed for algo {a.id}: {e}")
+
         waiting.append({
             "grid_entry_id":  str(ge.id),
             "algo_id":        str(a.id),
@@ -571,6 +597,7 @@ async def get_waiting_algos(
             "is_practix":     ge.is_practix,
             "lot_multiplier": ge.lot_multiplier,
             "phase":          "activated",   # post-09:15, waiting for entry_time
+            "latest_error":   latest_error,
         })
 
     # Sort combined list by entry_time

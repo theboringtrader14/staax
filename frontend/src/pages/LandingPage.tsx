@@ -265,7 +265,7 @@ export default function LandingPage() {
       `}</style>
 
       {/* Nav */}
-      <nav style={{
+      <nav className="landing-nav" style={{
         position: 'sticky', top: 0, zIndex: 50,
         background: 'rgba(5,5,16,0.92)',
         backdropFilter: 'blur(20px)',
@@ -372,7 +372,7 @@ export default function LandingPage() {
             }}>Managed.</span>
           </h1>
 
-          <p style={{
+          <p className="landing-hero-subtitle" style={{
             fontSize: '15px', color: 'rgba(232,232,248,0.65)',
             lineHeight: 1.7, marginBottom: '32px', maxWidth: '420px',
           }}>

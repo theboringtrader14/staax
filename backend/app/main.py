@@ -259,6 +259,8 @@ async def lifespan(app: FastAPI):
 
     # ── 11b. Re-register exit jobs for any today's algos that survived restart ─
     await scheduler.recover_today_jobs()
+    # ── 11c. Recover BTST/STBT overnight positions + ORB tracker registrations ─
+    await scheduler.recover_multiday_jobs()
 
     # ── 12. Run PositionRebuilder (once at startup) ───────────────────────────
     await position_rebuilder.run()

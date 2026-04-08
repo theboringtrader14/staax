@@ -37,6 +37,7 @@ interface WaitingAlgo {
   grid_entry_id: string; algo_id: string; algo_name: string
   account_name: string; entry_time: string | null; exit_time: string | null
   is_practix: boolean
+  latest_error?: { reason: string; event_type: string; timestamp: string } | null
 }
 interface OpenPosition {
   algo_id: string; algo_name: string; account: string
@@ -72,7 +73,7 @@ const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
   no_trade: { color: 'rgba(255,255,255,0.20)', glow: 'transparent'            },
 }
 
-const COLS = ['36px','66px','174px','66px','140px','54px','76px','58px','88px','90px','82px']
+const COLS = ['36px','66px','174px','66px','140px','68px','76px','58px','88px','90px','82px']
 const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L']
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -115,8 +116,8 @@ function isMarketLive(): boolean {
 }
 
 // ── LegRow ───────────────────────────────────────────────────────────────────
-function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit }: {
-  leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean
+function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
+  leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
   onEditExit?: (orderId: string, price: number) => void
 }) {
   const st  = STATUS_STYLE[leg.status]
@@ -183,8 +184,8 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit }: {
             </span>
           : <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>}
       </td>
-      <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'right', color: (leg.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
-        {leg.pnl != null && leg.pnl !== 0 ? `${leg.pnl >= 0 ? '+' : ''}₹${Math.abs(leg.pnl).toLocaleString('en-IN')}` : '—'}
+      <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'right', color: (livePnl ?? leg.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+        {(() => { const p = livePnl ?? leg.pnl; return p != null && p !== 0 ? `${p >= 0 ? '+' : ''}₹${Math.abs(p).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—' })()}
       </td>
     </tr>
     {leg.status === 'error' && leg.errorMessage && (
@@ -336,6 +337,7 @@ export default function OrdersPage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
   const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
+  const [expandedError, setExpandedError] = useState<string | null>(null)
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -467,20 +469,25 @@ export default function OrdersPage() {
   useEffect(() => {
     const hasOpenOrders = orders.some(g => g.legs.some(l => l.status === 'open'))
     if (!hasOpenOrders) return
-    const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
     const poll = () => {
-      fetch(`${API_BASE}/api/v1/orders/ltp`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data) setLtpData(data) })
+      ordersAPI.ltp()
+        .then(res => { if (res.data?.ltp) setLtpData(res.data.ltp) })
         .catch(() => {})
     }
     poll()
-    const interval = setInterval(poll, 3000)
+    const interval = setInterval(poll, 1000)
     return () => clearInterval(interval)
   }, [orders])
 
   const safeOrders = Array.isArray(orders) ? orders : []
   const totalMTM   = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
+
+  // Live MTM strip — computed from polling data
+  const ltpDataEntries = Object.values(ltpData)
+  const hasLiveData    = ltpDataEntries.length > 0
+  const liveTotalMtm   = hasLiveData
+    ? ltpDataEntries.reduce((sum, e) => sum + (e?.pnl ?? 0), 0)
+    : 0
 
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
@@ -690,10 +697,11 @@ export default function OrdersPage() {
                   title="Next week"
                 >›</button>
               </div>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
-                MTM: <b style={{ color: totalMTM >= 0 ? '#22DD88' : '#FF4444' }}>
-                  {totalMTM >= 0 ? '+' : ''}₹{totalMTM.toLocaleString('en-IN')}
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                MTM: <b style={{ color: (hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '#22DD88' : '#FF4444' }}>
+                  {(hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '+' : ''}₹{(hasLiveData ? liveTotalMtm : totalMTM).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </b>
+                {hasLiveData && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22DD88', display: 'inline-block', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />}
               </span>
             </div>
           </div>
@@ -817,6 +825,8 @@ export default function OrdersPage() {
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ height: '6px' }} />
 
+        {/* Live MTM wired to header — strip removed */}
+
         {/* Holiday banner */}
         {isHolidayToday && (
           <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(215,123,18,0.08)', border: '1px solid rgba(215,123,18,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -834,30 +844,57 @@ export default function OrdersPage() {
                 const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
                 return now >= w.entry_time.slice(0, 5)
               })()
+              // Derive instrument from algo name
+              const wInstrument = (() => {
+                const n = w.algo_name.toUpperCase()
+                for (const inst of INSTRUMENT_ORDER) {
+                  if (inst !== 'OTHER' && n.includes(inst)) return inst
+                }
+                return ''
+              })()
               return (
-                <div key={w.grid_entry_id}
-                  onMouseEnter={() => setHoveredCard(w.grid_entry_id)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                  style={{
-                    marginBottom: '6px', opacity: isMissed ? 0.4 : 0.55,
-                    background: 'var(--glass-bg)',
-                    border: `0.5px solid ${hoveredCard === w.grid_entry_id ? 'rgba(255,107,0,0.45)' : 'rgba(255,107,0,0.22)'}`,
-                    borderRadius: '7px', padding: '8px 14px', backdropFilter: 'blur(12px)',
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                  }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>{w.algo_name}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 7px', borderRadius: '100px' }}>{w.account_name}</span>
-                  <span style={{
-                    fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
-                    color: isMissed ? 'var(--accent-amber)' : '#F59E0B',
-                    background: isMissed ? 'rgba(215,123,18,0.1)' : 'rgba(245,158,11,0.1)',
-                    border: `1px solid ${isMissed ? 'rgba(215,123,18,0.25)' : 'rgba(245,158,11,0.25)'}`,
-                  }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
-                  {w.entry_time && <span style={{ fontSize: '11px', color: 'var(--ox-radiant)' }}>E: {w.entry_time.slice(0, 5)}</span>}
-                  {w.exit_time && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>X: {w.exit_time.slice(0, 5)}</span>}
-                  <span style={{ marginLeft: 'auto', fontSize: '10px', fontWeight: 600, color: w.is_practix ? 'var(--accent-amber)' : 'var(--ox-radiant)' }}>
-                    {w.is_practix ? 'PRACTIX' : 'LIVE'}
-                  </span>
+                <div key={w.grid_entry_id} style={{
+                  borderLeft: `3px solid ${isMissed ? 'rgba(255,215,0,0.35)' : '#FFD700'}`,
+                  background: 'rgba(255,215,0,0.05)',
+                  borderRadius: 8, padding: '10px 14px',
+                  marginBottom: 8,
+                  opacity: isMissed ? 0.5 : 1,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13 }}>
+                      {w.algo_name}
+                    </span>
+                    <span style={{
+                      background: 'rgba(255,215,0,0.15)',
+                      color: '#FFD700', fontSize: 10,
+                      padding: '2px 8px', borderRadius: 20, letterSpacing: 1,
+                    }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(232,232,248,0.5)', marginTop: 4 }}>
+                    {w.entry_time && <>Entry at {w.entry_time.slice(0, 5)}</>}
+                    {wInstrument && <> · {wInstrument}</>}
+                    {w.account_name && <> · {w.account_name}</>}
+                  </div>
+                  {w.latest_error && (
+                    <div style={{
+                      marginTop: 6, padding: '4px 8px',
+                      background: 'rgba(255,68,68,0.1)',
+                      border: '0.5px solid rgba(255,68,68,0.3)',
+                      borderRadius: 4, fontSize: 11, color: '#FF4444',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setExpandedError(prev => prev === w.algo_id ? null : w.algo_id)}>
+                      ⛔ {w.latest_error.reason?.slice(0, 60)}...
+                      {expandedError === w.algo_id && (
+                        <div style={{ marginTop: 4 }}>
+                          <div style={{ color: 'rgba(255,68,68,0.8)' }}>{w.latest_error.reason}</div>
+                          <div style={{ color: 'rgba(232,232,248,0.4)', fontSize: 10, marginTop: 2 }}>
+                            {w.latest_error.timestamp}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -1070,6 +1107,7 @@ export default function OrdersPage() {
                                     <LegRow key={leg.id} leg={leg} isChild={isChild}
                                       liveLtp={resolvedLtp}
                                       hasLivePoll={!!pollEntry}
+                                      livePnl={leg.status === 'open' ? pollEntry?.pnl : undefined}
                                       onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
                                     />
                                   )

@@ -213,17 +213,49 @@ class StrikeSelector:
                 })
         return instruments
 
+    @staticmethod
+    async def _get_ltp_for_instrument(inst: Dict, broker: BaseBroker) -> float:
+        """
+        Fetch LTP for a single instrument, using token-aware path when available.
+
+        Angel One's get_ltp() passes symboltoken="" which returns LTP=0.
+        When the broker has get_ltp_by_token() (AngelOneBroker) AND the
+        instrument has a non-zero instrument_token, use that method instead.
+        This ensures the correct symboltoken is passed to ltpData().
+
+        Falls back to broker.get_ltp() for Zerodha and any instrument without a token.
+        """
+        token     = inst.get("instrument_token", 0)
+        exchange  = inst.get("exchange", "NFO")
+        symbol    = inst.get("tradingsymbol", "")
+
+        if token and hasattr(broker, "get_ltp_by_token"):
+            ltp = await broker.get_ltp_by_token(exchange, symbol, str(token))
+            if ltp and ltp > 0:
+                return ltp
+            logger.warning(
+                f"[STRIKE] get_ltp_by_token returned 0 for {exchange}:{symbol} "
+                f"token={token} — falling back to get_ltp()"
+            )
+
+        # Zerodha path or fallback
+        key  = f"{exchange}:{symbol}"
+        ltps = await broker.get_ltp([key])
+        return ltps.get(key, 0.0)
+
     async def _by_premium(
         self, instruments: List[Dict], target: float, broker: BaseBroker
     ) -> Optional[Dict]:
-        symbols = [f"NFO:{i['tradingsymbol']}" for i in instruments]
-        ltps    = await broker.get_ltp(symbols)
         best, best_diff = None, float("inf")
         for inst in instruments:
-            ltp  = ltps.get(f"NFO:{inst['tradingsymbol']}", 0)
+            ltp  = await self._get_ltp_for_instrument(inst, broker)
             diff = abs(ltp - target)
             if diff < best_diff:
                 best_diff, best = diff, inst
+        logger.info(
+            f"[STRIKE] _by_premium target={target} → best={best.get('tradingsymbol') if best else None} "
+            f"ltp_diff={best_diff:.2f}"
+        )
         return best
 
     async def _by_straddle_premium(
@@ -247,13 +279,9 @@ class StrikeSelector:
             )
             if not ce or not pe:
                 continue
-            ltps = await broker.get_ltp(
-                [f"NFO:{ce['tradingsymbol']}", f"NFO:{pe['tradingsymbol']}"]
-            )
-            combined = (
-                ltps.get(f"NFO:{ce['tradingsymbol']}", 0)
-                + ltps.get(f"NFO:{pe['tradingsymbol']}", 0)
-            )
+            ce_ltp = await self._get_ltp_for_instrument(ce, broker)
+            pe_ltp = await self._get_ltp_for_instrument(pe, broker)
+            combined = ce_ltp + pe_ltp
             diff = abs(combined - target)
             if diff < best_diff:
                 best_diff, best_strike = diff, strike

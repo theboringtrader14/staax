@@ -700,7 +700,6 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   .landing-module-grid { grid-template-columns: 1fr 1fr !important; }
   .landing-hero { grid-template-columns: 1fr !important; padding: 40px 20px 30px !important; }
   .landing-hero h1 { font-size: clamp(24px, 6vw, 36px) !important; }
-  .landing-terminal { display: none !important; }
 }
 
 @media (max-width: 480px) {
@@ -735,12 +734,15 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 .landing-mobile-menu a:hover { color: #FF6B00; }
 
 @media (max-width: 768px) {
+  .landing-nav { padding: 12px 16px !important; }
   .landing-nav-items { display: none !important; }
   .landing-hamburger { display: flex !important; }
   .landing-modules-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-  .landing-hero-title { font-size: clamp(2rem, 8vw, 3.5rem) !important; }
-  .landing-hero-subtitle { font-size: clamp(0.9rem, 3vw, 1.1rem) !important; }
-  .landing-terminal { width: 100% !important; max-width: 100% !important; }
-  .landing-section { padding-left: 16px !important; padding-right: 16px !important; }
+  .landing-hero-title { font-size: clamp(1.8rem, 7vw, 3rem) !important; }
+  .landing-hero-subtitle { font-size: clamp(0.85rem, 3vw, 1.1rem) !important; }
+  .landing-terminal { width: 100% !important; max-width: 100% !important; font-size: 11px !important; }
+  .landing-section { padding: 40px 16px !important; }
   .landing-module-btn { width: 100% !important; }
+  .landing-cta-row { flex-direction: column !important; width: 100% !important; }
+  .landing-cta { width: 100% !important; }
 }

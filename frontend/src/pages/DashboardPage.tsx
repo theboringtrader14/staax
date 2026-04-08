@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect, useRef } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI, algosAPI } from '@/services/api'
 import { getCurrentFY } from '@/utils/fy'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
@@ -100,18 +100,25 @@ export default function DashboardPage() {
   const [selKill, setSelKill]            = useState<string[]>([])
   const [killedIds, setKilledIds]        = useState<string[]>([])
   const [now, setNow]                    = useState(new Date())
-  const [todayGrid, setTodayGrid]        = useState<any[]>([])
+  const [_todayGrid, _setTodayGrid]      = useState<any[]>([])
   const [health, setHealth]              = useState<any>(null)
   const [healthCollapsed, setHCollapsed] = useState(false)
   const algoScrollRef                    = useRef<HTMLDivElement>(null)
   const [scrollPos, setScrollPos]        = useState(0)
   const [equityCurveData, setEquityCurveData] = useState<{month: string; cumulative: number}[]>([])
+  const [algoList, setAlgoList]              = useState<any[]>([])
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
   useEffect(() => {
+    algosAPI.list().then(res => {
+      const data = res.data
+      setAlgoList(Array.isArray(data) ? data : (data?.algos || data?.items || []))
+    }).catch(() => {})
+  }, [])
+  useEffect(() => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     const run = () => gridAPI.list({ week_start: today, week_end: today, is_practix: isPractixMode })
-      .then(r => setTodayGrid(r.data?.entries || r.data?.groups || r.data || [])).catch(() => {})
+      .then(r => _setTodayGrid(r.data?.entries || r.data?.groups || r.data || [])).catch(() => {})
     run(); const t = setInterval(run, 30000); return () => clearInterval(t)
   }, [isPractixMode])
   useEffect(() => {
@@ -219,22 +226,40 @@ export default function DashboardPage() {
   const istStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   const [ih, im, is_] = istStr.split(':').map(Number)
   const nowSecs = ih * 3600 + im * 60 + is_
-  const mktOpen = 9 * 3600; const mktClose = 15 * 3600 + 30 * 60
-  const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
-  const scheduledAlgos = (nowSecs >= mktOpen && nowSecs <= mktClose)
-    ? (Array.isArray(todayGrid) ? todayGrid : [])
-        .filter((e: any) => e.status === 'waiting')
-        .map((e: any) => {
-          const algo = algoMap.get(e.algo_id) as any
-          const et = e.entry_time || algo?.entry_time || algo?.et
-          if (!et) return null
-          const [eh, em] = (et as string).split(':').map(Number)
-          return { name: algo?.name || e.algo_name || 'Unknown', secs: eh*3600+em*60, time: et as string }
-        })
-        .filter(Boolean)
-        .sort((a: any, b: any) => a.secs - b.secs)
-    : []
-  const nextAlgo = scheduledAlgos.find((a: any) => a.secs > nowSecs)
+
+  const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  const todayDay = DAYS[new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]
+
+  const todayAlgos = algoList.filter((a: any) =>
+    a.is_active &&
+    !a.is_archived &&
+    Array.isArray(a.recurring_days) &&
+    a.recurring_days.includes(todayDay)
+  )
+
+  const scheduledAlgos = todayAlgos
+    .filter((a: any) => !!a.entry_time)
+    .map((a: any) => {
+      const [eh, em] = (a.entry_time as string).split(':').map(Number)
+      return { ...a, secs: eh * 3600 + em * 60, time: a.entry_time as string }
+    })
+    .sort((a: any, b: any) => a.secs - b.secs)
+
+  const nowIst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+
+  const getTimeRemaining = (entryTime: string): string => {
+    const [h, m] = entryTime.split(':').map(Number)
+    const entry = new Date(nowIst)
+    entry.setHours(h, m, 0, 0)
+    const diffMs = entry.getTime() - nowIst.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    if (diffMins < 60) return `in ${diffMins} mins`
+    const hrs = Math.floor(diffMins / 60)
+    const mins = diffMins % 60
+    return `in ${hrs}h ${mins}m`
+  }
+
+  const nextAlgo = scheduledAlgos.find((a: any) => a.secs > nowSecs) || null
   const scrollAlgos = (dir: 'left' | 'right') => {
     const el = algoScrollRef.current; if (!el) return
     el.scrollBy({ left: dir === 'right' ? 130 : -130, behavior: 'smooth' })
@@ -258,13 +283,15 @@ export default function DashboardPage() {
   })()
 
   // ── overallState for health card container ──
+  const ssConnected = (health?.checks?.smartstream?.connected || health?.checks?.smartstream?.ok) ?? false
+
   const criticalRed =
     !(health?.checks?.database?.ok ?? false) ||
     !(health?.checks?.redis?.ok ?? false) ||
     !(health?.checks?.scheduler?.ok ?? false) ||
-    (isMarketHours && !(health?.checks?.smartstream?.connected ?? false))
+    (isMarketHours && !ssConnected)
 
-  const smartstreamAmber = !isMarketHours && !(health?.checks?.smartstream?.connected ?? false)
+  const smartstreamAmber = !isMarketHours && !ssConnected
 
   const overallState: 'green' | 'amber' | 'red' =
     criticalRed ? 'red' : smartstreamAmber ? 'amber' : 'green'
@@ -386,7 +413,8 @@ export default function DashboardPage() {
                 {/* ── SECTION 1: 5 infrastructure chips ── */}
                 {(() => {
                   // isMarketHours is computed at component scope — reuse it here
-                  const smartstreamConnected = health?.checks?.smartstream?.connected ?? false
+                  const ssData = health?.checks?.smartstream
+                  const smartstreamConnected = (ssData?.connected || ssData?.ok) ?? false
 
                   const chips = [
                     {
@@ -701,6 +729,8 @@ export default function DashboardPage() {
             <div style={{ fontSize: '13px', color: '#FF4444', fontStyle: 'italic', opacity: 0.8 }}>Market Closed</div>
           ) : scheduledAlgos.length === 0 ? (
             <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No algos scheduled today</div>
+          ) : !nextAlgo ? (
+            <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No more algos today</div>
           ) : (
             <>
               <div style={{ position: 'relative', marginBottom: '10px' }}>
@@ -721,14 +751,18 @@ export default function DashboardPage() {
                 </div>
                 <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
               </div>
-              {nextAlgo && (
-                <>
-                  <div style={{ fontSize: 'clamp(22px,2.5vw,30px)', fontWeight: 800, color: 'var(--sem-warn)', fontFamily: 'var(--font-mono)', textShadow: '0 0 18px rgba(255,215,0,0.5)', letterSpacing: '-1px' }}>
-                    {Math.floor((nextAlgo.secs - nowSecs) / 60)}m {String((nextAlgo.secs - nowSecs) % 60).padStart(2, '0')}s
-                  </div>
-                  <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>until {nextAlgo.name} at {nextAlgo.time}</div>
-                </>
-              )}
+              <div style={{ fontSize: 'clamp(15px,1.6vw,20px)', fontWeight: 800, color: 'var(--ox-glow)', fontFamily: 'var(--font-display)', letterSpacing: '-0.5px', marginBottom: '4px' }}>{nextAlgo.name}</div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--sem-warn)' }}>{nextAlgo.time}</span>
+                {nextAlgo.instrument && <span style={{ fontSize: '11px', color: 'var(--gs-muted)' }}>{nextAlgo.instrument}</span>}
+                {(nextAlgo.account_nickname || nextAlgo.account_name || nextAlgo.broker) && (
+                  <span style={{ fontSize: '11px', color: 'var(--gs-muted)', opacity: 0.7 }}>{nextAlgo.account_nickname || nextAlgo.account_name || nextAlgo.broker}</span>
+                )}
+              </div>
+              <div style={{ fontSize: 'clamp(18px,2vw,26px)', fontWeight: 800, color: 'var(--sem-warn)', fontFamily: 'var(--font-mono)', textShadow: '0 0 18px rgba(255,215,0,0.5)', letterSpacing: '-1px' }}>
+                {getTimeRemaining(nextAlgo.time)}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>until {nextAlgo.name} at {nextAlgo.time}</div>
             </>
           )}
         </div>

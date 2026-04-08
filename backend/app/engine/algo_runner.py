@@ -129,6 +129,11 @@ class AlgoRunner:
         # Execution layer — single control point (wired via wire_engines)
         self._execution_manager: Optional[ExecutionManager] = None
 
+        # Track which underlying tokens already have an LTP callback registered
+        # for pts_underlying / pct_underlying SL/TP (P0-3).
+        # Prevents duplicate callback registration when multiple legs share the same underlying.
+        self._ul_subscribed_tokens: set = set()
+
     def wire_engines(
         self,
         strike_selector:   StrikeSelector,
@@ -508,31 +513,28 @@ class AlgoRunner:
 
         # ── W&T: register watcher and defer — order placed when threshold hits ─
         if leg.wt_enabled and leg.wt_value and not reentry:
-            # Strike selection must happen here to resolve instrument_token for the watcher
-            wt_instrument = None
-            if self._strike_selector:
+            # W&T monitors the UNDERLYING INDEX, not the option premium.
+            # Map the underlying name to its spot index token.
+            wt_underlying = (leg.underlying or "").upper()
+            # Primary lookup: _WT_UNDERLYING_TOKENS (canonical AlgoLeg.underlying names)
+            wt_underlying_token = self._WT_UNDERLYING_TOKENS.get(wt_underlying, 0)
+            if not wt_underlying_token:
+                # Secondary: _ORB_UNDERLYING_TOKENS (covers MIDCAPNIFTY alias)
+                wt_underlying_token = self._ORB_UNDERLYING_TOKENS.get(wt_underlying, 0)
+            if not wt_underlying_token:
+                # Fallback: MCX or unknown underlying
                 try:
-                    wt_instrument = await self._strike_selector.select(
-                        underlying=leg.underlying,
-                        instrument_type=leg.instrument,
-                        expiry=leg.expiry or "current_weekly",
-                        strike_type=leg.strike_type or "atm",
-                        strike_value=leg.strike_value,
-                        broker=account_broker,
-                    )
-                except Exception as _we:
-                    logger.warning(
-                        f"[W&T] Strike selection failed for leg {leg.leg_number} "
-                        f"({leg.underlying} {leg.instrument} {leg.strike_type}): {_we}"
-                    )
-            wt_token = wt_instrument.get("instrument_token", 0) if wt_instrument else 0
-            if self._wt_evaluator and wt_token:
+                    from app.engine.bot_runner import MCX_TOKENS as _MCX_WT
+                    wt_underlying_token = _MCX_WT.get(wt_underlying, 0)
+                except ImportError:
+                    pass
+            if self._wt_evaluator and wt_underlying_token:
                 window = WTWindow(
                     grid_entry_id=str(grid_entry.id),
                     algo_id=str(algo.id),
                     direction=leg.wt_direction or "up",
                     entry_time=self._parse_time(algo.entry_time or "09:16"),
-                    instrument_token=wt_token,
+                    instrument_token=wt_underlying_token,
                     wt_value=leg.wt_value,
                     wt_unit=leg.wt_unit or "pts",
                 )
@@ -540,11 +542,18 @@ class AlgoRunner:
                     window,
                     on_entry=self._make_wt_callback(str(grid_entry.id)),
                 )
-                logger.info(f"W&T registered for leg {leg.leg_number}: {algo.name}")
+                # Ensure the underlying index token is subscribed so ticks flow
+                if self._ltp_consumer:
+                    self._ltp_consumer.subscribe([wt_underlying_token])
+                logger.info(
+                    f"W&T registered for leg {leg.leg_number}: {algo.name} | "
+                    f"underlying={wt_underlying} token={wt_underlying_token}"
+                )
             else:
                 logger.error(
-                    f"[W&T] instrument_token missing for leg {leg.leg_number} ({algo.name}) — "
-                    f"W&T NOT registered. strike_selector returned: {wt_instrument!r}"
+                    f"[W&T] underlying token not found for '{wt_underlying}' "
+                    f"(leg {leg.leg_number}, {algo.name}) — "
+                    f"add to _WT_UNDERLYING_TOKENS. W&T NOT registered."
                 )
             return None  # deferred — order placed when W&T fires
 
@@ -798,6 +807,35 @@ class AlgoRunner:
                 on_sl=self._make_sl_callback(),
                 on_tp=self._make_tp_callback(),
             )
+
+            # ── Subscribe underlying token for pts_underlying / pct_underlying ─
+            # When SL or TP is based on the underlying index move, we must receive
+            # ticks for the underlying token and forward them to SLTPMonitor.
+            _needs_ul = leg.sl_type in ("pts_underlying", "pct_underlying") or \
+                        leg.tp_type in ("pts_underlying", "pct_underlying")
+            if _needs_ul and underlying_token and self._ltp_consumer:
+                self._ltp_consumer.subscribe([underlying_token])
+                # Only register one callback per unique underlying token —
+                # multiple legs on the same underlying share the same subscription.
+                if underlying_token not in self._ul_subscribed_tokens:
+                    self._ul_subscribed_tokens.add(underlying_token)
+                    _ul_monitor = self._sl_tp_monitor   # capture for closure
+                    _ul_token   = underlying_token
+
+                    async def _underlying_tick_cb(token: int, ltp: float, tick: dict,
+                                                  _monitor=_ul_monitor, _tok=_ul_token):
+                        if token == _tok:
+                            _monitor.update_underlying_ltp(_tok, ltp)
+
+                    self._ltp_consumer.register_callback(_underlying_tick_cb)
+                    logger.info(
+                        f"[P0-3] Underlying LTP callback registered: "
+                        f"underlying_token={underlying_token}"
+                    )
+                logger.info(
+                    f"[P0-3] Underlying LTP wired: order={order.id} "
+                    f"underlying_token={underlying_token} sl_type={leg.sl_type} tp_type={leg.tp_type}"
+                )
 
         # ── Register TSL ───────────────────────────────────────────────────────
         # tsl_enabled is now a real DB column — no more getattr fallback
@@ -1117,6 +1155,13 @@ class AlgoRunner:
                         return
 
                     await self._close_order(db, order, ltp, "tp")
+
+                    # Capture TSL trail state BEFORE deregister clears in-memory state
+                    tsl_trailed = (
+                        self._tsl_engine.has_trailed(order_id)
+                        if self._tsl_engine else False
+                    )
+
                     if self._tsl_engine:
                         self._tsl_engine.deregister(order_id)
                     if self._ttp_engine:
@@ -1135,10 +1180,6 @@ class AlgoRunner:
                     )
 
                     if self._reentry_engine:
-                        tsl_trailed = (
-                            self._tsl_engine.has_trailed(order_id)
-                            if self._tsl_engine else False
-                        )
                         await self._reentry_engine.on_exit(
                             db, order, "tp", tsl_trailed=tsl_trailed
                         )
@@ -1196,6 +1237,17 @@ class AlgoRunner:
         "BANKNIFTY":   99926009,
         "FINNIFTY":    99926037,
         "MIDCAPNIFTY": 99926014,
+        "SENSEX":      99919000,
+    }
+
+    # Angel One index tokens for W&T underlying tracking.
+    # Uses the canonical underlying names stored in AlgoLeg.underlying.
+    # MIDCPNIFTY (not MIDCAPNIFTY) is the value stored by AlgoLeg — token 99926074.
+    _WT_UNDERLYING_TOKENS = {
+        "NIFTY":       99926000,
+        "BANKNIFTY":   99926009,
+        "FINNIFTY":    99926037,
+        "MIDCPNIFTY":  99926074,
         "SENSEX":      99919000,
     }
 

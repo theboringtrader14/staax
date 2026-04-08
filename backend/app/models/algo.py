@@ -184,6 +184,9 @@ class AlgoLeg(Base):
 
     # ── Runtime strike resolution (set by algo_runner after strike selection) ──
     # Stored so LTP tracking and position monitors can access it via leg reference.
-    instrument_token = Column(Integer, nullable=True)
+    instrument_token  = Column(Integer, nullable=True)
+    # Underlying index token for pts_underlying / pct_underlying SL/TP evaluation.
+    # Populated on leg creation/update from UNDERLYING_TOKENS map.
+    underlying_token  = Column(Integer, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

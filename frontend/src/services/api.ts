@@ -118,6 +118,8 @@ export const ordersAPI = {
     api.get('/orders/', { params: { ...(date ? { trading_date: date } : {}), ...(isPractix !== undefined ? { is_practix: isPractix } : {}) } }),
   waiting: (date?: string, isPractix?: boolean) =>
     api.get('/orders/waiting', { params: { ...(date ? { trading_date: date } : {}), ...(isPractix !== undefined ? { is_practix: isPractix } : {}) } }),
+  ltp: () =>
+    api.get('/orders/ltp'),
   correctExitPrice: (orderId: string, price: number) =>
     api.patch(`/orders/${orderId}/exit-price`, { exit_price: price }),
   syncOrder: (algoId: string, data: object) =>
