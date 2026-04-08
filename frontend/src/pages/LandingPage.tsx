@@ -145,17 +145,23 @@ export default function LandingPage() {
     const apiBase = import.meta.env.VITE_API_URL || 'https://api.lifexos.co.in'
     fetch(`${apiBase}/api/v1/system/health`)
       .then(r => r.json())
-      .then((data: { checks: { database: { ok: boolean }, redis: { ok: boolean }, smartstream: { ok: boolean, connected?: boolean }, scheduler: { ok: boolean } } }) => {
+      .then(async (data: { checks: { database: { ok: boolean }, redis: { ok: boolean }, smartstream: { ok: boolean, connected?: boolean }, scheduler: { ok: boolean } } }) => {
         const db = data.checks?.database?.ok
         const redis = data.checks?.redis?.ok
         const ss = data.checks?.smartstream?.ok && data.checks?.smartstream?.connected !== false
         const sched = data.checks?.scheduler?.ok
+        // Also probe FINEX health
+        let finexOk = false
+        try {
+          const fr = await fetch('https://finex-api.lifexos.co.in/health', { signal: AbortSignal.timeout(4000) })
+          finexOk = fr.ok
+        } catch { /* unreachable */ }
         setSysLines([
           { color: db ? ok : err,    text: `${db    ? '✓' : '✗'} Database      — ${db    ? 'connected' : 'down'}` },
           { color: redis ? ok : err, text: `${redis  ? '✓' : '✗'} Redis         — ${redis  ? 'connected' : 'down'}` },
           { color: ss ? ok : err,    text: `${ss     ? '✓' : '✗'} SmartStream   — ${ss     ? 'active'    : 'down'}` },
           { color: sched ? ok : err, text: `${sched  ? '✓' : '✗'} Scheduler     — ${sched  ? 'running'   : 'down'}` },
-          { color: '#F59E0B',        text: '◈ FINEX         — beta' },
+          { color: finexOk ? ok : err, text: `${finexOk ? '✓' : '✗'} FINEX         — ${finexOk ? 'online' : 'offline'}` },
           { color: unk,              text: '— NETEX         — coming soon' },
           { color: unk,              text: '— GOALEX        — coming soon' },
         ])
@@ -166,9 +172,9 @@ export default function LandingPage() {
           { color: unk, text: '— SmartStream   — unknown' },
           { color: unk, text: '— Database      — unknown' },
           { color: unk, text: '— Redis         — unknown' },
-          { color: '#F59E0B', text: '◈ FINEX         — beta' },
-          { color: unk,       text: '— NETEX         — coming soon' },
-          { color: unk,       text: '— GOALEX        — coming soon' },
+          { color: unk, text: '— FINEX         — unknown' },
+          { color: unk, text: '— NETEX         — coming soon' },
+          { color: unk, text: '— GOALEX        — coming soon' },
         ])
       })
   }, [])
