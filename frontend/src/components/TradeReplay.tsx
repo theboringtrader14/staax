@@ -25,6 +25,12 @@ interface ReplaySummary {
   duration_minutes: number
 }
 
+interface CandlePoint {
+  time: string
+  ltp: number
+  pnl: number
+}
+
 interface LegData {
   symbol: string
   direction: string
@@ -32,6 +38,12 @@ interface LegData {
   exit_time: string
   entry_price: number
   exit_price: number
+  pnl: number
+  candles?: CandlePoint[]
+}
+
+interface MtmPoint {
+  time: string
   pnl: number
 }
 
@@ -41,6 +53,7 @@ interface ReplayData {
   events: ReplayEvent[]
   summary: ReplaySummary
   legs?: LegData[]
+  mtm_curve?: MtmPoint[]
 }
 
 export interface TradeReplayProps {
@@ -172,11 +185,19 @@ function timeToSecs(t: string): number {
   return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0)
 }
 
-function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[] }) {
+function MultiLegChart({
+  events,
+  legs,
+  mtmCurve,
+}: {
+  events: ReplayEvent[]
+  legs: LegData[]
+  mtmCurve: MtmPoint[]
+}) {
   const W = 800
-  const H = 130
+  const H = 150
   const PADX = 10
-  const PADY = 14
+  const PADY = 16
   const svgRef = useRef<SVGSVGElement>(null)
   const [hiddenLegs, setHiddenLegs] = useState<Set<number>>(new Set())
   const [showCombined, setShowCombined] = useState(true)
@@ -184,44 +205,68 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
 
   if (events.length < 2 && legs.length === 0) return null
 
-  // Collect all times and P&L values to build unified axis
+  // Use precise mtm_curve if available, otherwise fall back to event-based points
+  const hasPreciseCurve = mtmCurve.length >= 2
+  const combinedSrc: { time: string; pnl: number }[] = hasPreciseCurve
+    ? mtmCurve
+    : events.map(e => ({ time: e.time, pnl: e.pnl_at_time }))
+
+  // Collect all time seconds + P&L values for unified axis
   const allSecs = [
-    ...events.map(e => timeToSecs(e.time)),
-    ...legs.flatMap(l => [timeToSecs(l.entry_time), timeToSecs(l.exit_time)]),
+    ...combinedSrc.map(p => timeToSecs(p.time)),
+    ...legs.flatMap(l => {
+      const pts = l.candles && l.candles.length > 0 ? l.candles : []
+      return pts.length > 0
+        ? pts.map(c => timeToSecs(c.time))
+        : [timeToSecs(l.entry_time), timeToSecs(l.exit_time)]
+    }),
   ]
   const allPnls = [
     0,
-    ...events.map(e => e.pnl_at_time),
-    ...legs.map(l => l.pnl),
+    ...combinedSrc.map(p => p.pnl),
+    ...legs.flatMap(l => {
+      if (l.candles && l.candles.length > 0) return l.candles.map(c => c.pnl)
+      return [0, l.pnl]
+    }),
   ]
 
-  const minT  = Math.min(...allSecs)
-  const maxT  = Math.max(...allSecs)
+  const minT   = Math.min(...allSecs)
+  const maxT   = Math.max(...allSecs)
   const tRange = maxT - minT || 1
 
-  const minPnl = Math.min(...allPnls)
-  const maxPnl = Math.max(...allPnls)
+  const rawMin = Math.min(...allPnls)
+  const rawMax = Math.max(...allPnls)
+  // Add 5% headroom so lines don't touch the edges
+  const pad    = (rawMax - rawMin) * 0.05 || 50
+  const minPnl = rawMin - pad
+  const maxPnl = rawMax + pad
   const pRange = maxPnl - minPnl || 1
 
-  const toX = (secs: number)  => PADX + ((secs - minT) / tRange) * (W - PADX * 2)
-  const toY = (v: number)     => PADY + ((maxPnl - v) / pRange) * (H - PADY * 2)
+  const toX = (secs: number) => PADX + ((secs - minT) / tRange) * (W - PADX * 2)
+  const toY = (v: number)    => PADY + ((maxPnl - v) / pRange) * (H - PADY * 2)
   const zeroY = toY(0)
 
-  const finalPnl     = events.length > 0 ? events[events.length - 1].pnl_at_time : 0
+  const finalPnl       = combinedSrc.length > 0 ? combinedSrc[combinedSrc.length - 1].pnl : 0
   const combinedStroke = finalPnl >= 0 ? '#22DD88' : '#FF4444'
   const combinedFill   = finalPnl >= 0 ? 'rgba(34,221,136,0.10)' : 'rgba(255,68,68,0.10)'
 
-  // Combined polyline coords (straight lines between event data points)
-  const combinedPts = events.map(e => ({ x: toX(timeToSecs(e.time)), y: toY(e.pnl_at_time), time: e.time, pnl: e.pnl_at_time }))
-
-  // Per-leg: entry → exit line
-  const legLines = legs.map((leg, i) => ({
-    color:  LEG_COLORS[i % LEG_COLORS.length],
-    label:  `${leg.symbol} ${leg.direction}`,
-    pnl:    leg.pnl,
-    p0:     { x: toX(timeToSecs(leg.entry_time)), y: toY(0) },
-    p1:     { x: toX(timeToSecs(leg.exit_time)),  y: toY(leg.pnl) },
+  // Combined polyline coords
+  const combinedPts = combinedSrc.map(p => ({
+    x: toX(timeToSecs(p.time)), y: toY(p.pnl), time: p.time, pnl: p.pnl,
   }))
+
+  // Per-leg: use candle series if present, else entry→exit straight line
+  const legLines = legs.map((leg, i) => {
+    const color = LEG_COLORS[i % LEG_COLORS.length]
+    const hasCandles = leg.candles && leg.candles.length >= 2
+    const pts = hasCandles
+      ? leg.candles!.map(c => ({ x: toX(timeToSecs(c.time)), y: toY(c.pnl) }))
+      : [
+          { x: toX(timeToSecs(leg.entry_time)), y: toY(0) },
+          { x: toX(timeToSecs(leg.exit_time)),  y: toY(leg.pnl) },
+        ]
+    return { color, label: `${leg.symbol} ${leg.direction}`, pnl: leg.pnl, pts, hasCandles: !!hasCandles }
+  })
 
   const toggleLeg = (i: number) =>
     setHiddenLegs(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })
@@ -229,8 +274,8 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
   // Hover: linear interpolation on combined line
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current || combinedPts.length < 2) return
-    const rect = svgRef.current.getBoundingClientRect()
-    const mx   = (e.clientX - rect.left) * (W / rect.width)
+    const rect    = svgRef.current.getBoundingClientRect()
+    const mx      = (e.clientX - rect.left) * (W / rect.width)
     const clamped = Math.max(combinedPts[0].x, Math.min(mx, combinedPts[combinedPts.length - 1].x))
     let seg = combinedPts.length - 2
     for (let i = 0; i < combinedPts.length - 1; i++) {
@@ -238,12 +283,10 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
     }
     const a = combinedPts[seg], b = combinedPts[seg + 1]
     const t  = a.x === b.x ? 0 : (clamped - a.x) / (b.x - a.x)
-    const iy = a.y + t * (b.y - a.y)
-    const ip = a.pnl + t * (b.pnl - a.pnl)
-    setHover({ x: clamped, y: iy, time: t < 0.5 ? a.time : b.time, pnl: ip })
+    setHover({ x: clamped, y: a.y + t * (b.y - a.y), time: t < 0.5 ? a.time : b.time, pnl: a.pnl + t * (b.pnl - a.pnl) })
   }
 
-  const tooltipX = hover ? (hover.x + 128 > W ? hover.x - 128 : hover.x + 8) : 0
+  const tooltipX = hover ? (hover.x + 130 > W ? hover.x - 130 : hover.x + 8) : 0
   const tooltipY = hover ? Math.max(4, hover.y - 30) : 0
 
   return (
@@ -259,7 +302,7 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
             color: showCombined ? combinedStroke : 'rgba(232,232,248,0.35)',
             fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
           }}
-        >Combined</button>
+        >Combined{hasPreciseCurve ? ' ●' : ''}</button>
         {legLines.map((leg, i) => (
           <button
             key={i}
@@ -271,9 +314,15 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
               color: !hiddenLegs.has(i) ? leg.color : 'rgba(232,232,248,0.35)',
               fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
             }}
-          >{leg.label} {leg.pnl >= 0 ? '+' : ''}₹{Math.abs(leg.pnl).toFixed(0)}</button>
+          >{leg.label}{leg.hasCandles ? ' ●' : ''} {leg.pnl >= 0 ? '+' : ''}₹{Math.abs(leg.pnl).toFixed(0)}</button>
         ))}
       </div>
+      {/* ● = precise 1-min candle data */}
+      {(hasPreciseCurve || legLines.some(l => l.hasCandles)) && (
+        <div style={{ fontSize: 10, color: 'rgba(232,232,248,0.3)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>
+          ● 1-min candle precision
+        </div>
+      )}
 
       {/* SVG */}
       <svg
@@ -286,16 +335,16 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
         onMouseLeave={() => setHover(null)}
       >
         {/* zero line */}
-        <line x1={PADX} y1={zeroY} x2={W - PADX} y2={zeroY} stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeDasharray="4 4" />
+        <line x1={PADX} y1={zeroY} x2={W - PADX} y2={zeroY}
+          stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeDasharray="4 4" />
 
-        {/* Combined fill */}
+        {/* Combined fill area */}
         {showCombined && combinedPts.length >= 2 && (() => {
           const first = combinedPts[0], last = combinedPts[combinedPts.length - 1]
-          const areaPath =
-            `M${first.x.toFixed(1)},${zeroY.toFixed(1)} ` +
+          const d = `M${first.x.toFixed(1)},${zeroY.toFixed(1)} ` +
             combinedPts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
             ` L${last.x.toFixed(1)},${zeroY.toFixed(1)} Z`
-          return <path d={areaPath} fill={combinedFill} />
+          return <path d={d} fill={combinedFill} />
         })()}
 
         {/* Combined polyline */}
@@ -307,28 +356,39 @@ function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[
           />
         )}
 
-        {/* Per-leg lines */}
+        {/* Per-leg curves / lines */}
         {legLines.map((leg, i) => !hiddenLegs.has(i) && (
           <g key={i}>
-            <line
-              x1={leg.p0.x.toFixed(1)} y1={leg.p0.y.toFixed(1)}
-              x2={leg.p1.x.toFixed(1)} y2={leg.p1.y.toFixed(1)}
-              stroke={leg.color} strokeWidth={1.5} strokeDasharray="5 3" strokeLinecap="round"
-            />
+            {leg.hasCandles ? (
+              /* Precise candle-based polyline */
+              <polyline
+                points={leg.pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+                fill="none" stroke={leg.color} strokeWidth={1.5}
+                strokeLinecap="round" strokeLinejoin="round" opacity={0.85}
+              />
+            ) : (
+              /* Fallback: straight entry→exit dashed line */
+              <line
+                x1={leg.pts[0].x.toFixed(1)} y1={leg.pts[0].y.toFixed(1)}
+                x2={leg.pts[leg.pts.length - 1].x.toFixed(1)} y2={leg.pts[leg.pts.length - 1].y.toFixed(1)}
+                stroke={leg.color} strokeWidth={1.5} strokeDasharray="5 3" strokeLinecap="round"
+              />
+            )}
             {/* entry dot */}
-            <circle cx={leg.p0.x} cy={leg.p0.y} r={3} fill={leg.color} opacity={0.6} />
+            <circle cx={leg.pts[0].x} cy={leg.pts[0].y} r={3} fill={leg.color} opacity={0.7} />
             {/* exit dot */}
-            <circle cx={leg.p1.x} cy={leg.p1.y} r={4} fill={leg.color} opacity={0.9} />
+            <circle cx={leg.pts[leg.pts.length - 1].x} cy={leg.pts[leg.pts.length - 1].y}
+              r={4} fill={leg.color} opacity={0.95} />
           </g>
         ))}
 
-        {/* Hover crosshair on combined */}
+        {/* Hover crosshair */}
         {hover && showCombined && (
           <>
             <line x1={hover.x} y1={0} x2={hover.x} y2={H}
               stroke="rgba(255,255,255,0.20)" strokeWidth={1} strokeDasharray="4,4" />
             <circle cx={hover.x} cy={hover.y} r={4} fill="#FF6B00" stroke="#fff" strokeWidth={1.5} />
-            <foreignObject x={tooltipX} y={tooltipY} width={120} height={50}>
+            <foreignObject x={tooltipX} y={tooltipY} width={126} height={50}>
               <div style={{
                 background: 'rgba(10,10,11,0.9)',
                 border: '0.5px solid rgba(255,107,0,0.4)',
@@ -540,7 +600,7 @@ export function TradeReplay({ algoId, algoName, date, onClose }: TradeReplayProp
                     MTM Curve
                   </div>
                   <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '10px 12px 6px' }}>
-                    <MultiLegChart events={events} legs={data.legs ?? []} />
+                    <MultiLegChart events={events} legs={data.legs ?? []} mtmCurve={data.mtm_curve ?? []} />
                   </div>
                 </div>
               )}

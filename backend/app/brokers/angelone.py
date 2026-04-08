@@ -822,6 +822,8 @@ class AngelOneBroker(BaseBroker):
         interval: str = "ONE_DAY",
         days_back: int = 3,
         symbol_token: str = "",
+        from_dt: str = "",
+        to_dt: str = "",
     ) -> list:
         """
         Fetch OHLCV candle data via Angel One SmartAPI getCandleData.
@@ -831,15 +833,19 @@ class AngelOneBroker(BaseBroker):
 
         interval options: ONE_MINUTE, THREE_MINUTE, FIVE_MINUTE, TEN_MINUTE,
                           FIFTEEN_MINUTE, THIRTY_MINUTE, ONE_HOUR, ONE_DAY
+
+        from_dt / to_dt: explicit IST date strings "YYYY-MM-DD HH:MM".
+        If omitted, falls back to days_back calculation from now.
         """
         from datetime import datetime, timedelta, timezone as _tz
         client = self._get_client()
         loop = asyncio.get_event_loop()
 
-        # Date range: days_back days ago → today
-        now      = datetime.now(_tz.utc)
-        from_dt  = (now - timedelta(days=days_back)).strftime("%Y-%m-%d %H:%M")
-        to_dt    = now.strftime("%Y-%m-%d %H:%M")
+        # Date range: explicit or computed from days_back
+        if not from_dt or not to_dt:
+            now     = datetime.now(_tz.utc)
+            from_dt = (now - timedelta(days=days_back)).strftime("%Y-%m-%d %H:%M")
+            to_dt   = now.strftime("%Y-%m-%d %H:%M")
 
         # Resolve token from instrument master if not supplied
         if not symbol_token:

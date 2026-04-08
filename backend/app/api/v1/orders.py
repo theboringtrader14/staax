@@ -265,6 +265,7 @@ async def list_orders(
 async def get_trade_replay(
     algo_id: str,
     date: str,  # YYYY-MM-DD
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -439,23 +440,123 @@ async def get_trade_replay(
         "duration_minutes": duration_minutes,
     }
 
-    # Per-leg data for multi-leg MTM chart: each closed order is one leg
+    # ── Per-leg candle fetch helpers ──────────────────────────────────────────
+    _IST_zone = _dt.timezone(_dt.timedelta(hours=5, minutes=30))
+
+    def _to_ist_api_str(utc_dt: _dt.datetime) -> str:
+        """UTC datetime → 'YYYY-MM-DD HH:MM' in IST for Angel One API."""
+        if utc_dt.tzinfo is None:
+            utc_dt = utc_dt.replace(tzinfo=_dt.timezone.utc)
+        return utc_dt.astimezone(_IST_zone).strftime("%Y-%m-%d %H:%M")
+
+    def _parse_candle_ts(ts_str: str) -> str:
+        """Angel One candle timestamp → 'HH:MM:SS' in IST."""
+        try:
+            dt = _dt.datetime.fromisoformat(str(ts_str))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_IST_zone)
+            return dt.astimezone(_IST_zone).strftime("%H:%M:%S")
+        except Exception:
+            return "—"
+
+    # Find any valid Angel One broker on app.state
+    angel_broker = None
+    for _key in ("angelone_karthik", "angelone_wife", "angelone_mom"):
+        _b = getattr(request.app.state, _key, None)
+        if _b and _b.is_token_set():
+            angel_broker = _b
+            break
+
+    async def _fetch_candles(order) -> list[dict]:
+        """Return [{time, ltp, pnl}] from 1-min Angel One candles, or [] on failure."""
+        if not angel_broker:
+            return []
+        if not order.instrument_token or not order.fill_time or not order.exit_time:
+            return []
+        try:
+            raw = await angel_broker.get_candle_data(
+                symbol       = order.symbol or "",
+                exchange     = order.exchange or "NFO",
+                interval     = "ONE_MINUTE",
+                symbol_token = str(order.instrument_token),
+                from_dt      = _to_ist_api_str(order.fill_time),
+                to_dt        = _to_ist_api_str(order.exit_time),
+            )
+            if not raw:
+                return []
+            fp  = float(order.fill_price or 0)
+            qty = float(order.quantity or 1)
+            buy = (order.direction or "buy").lower() == "buy"
+            pts = []
+            for c in raw:
+                if len(c) < 5:
+                    continue
+                close = float(c[4])
+                c_pnl = (close - fp) * qty if buy else (fp - close) * qty
+                pts.append({"time": _parse_candle_ts(c[0]), "ltp": close, "pnl": round(c_pnl, 2)})
+            return pts
+        except Exception as e:
+            logger.warning(f"[REPLAY] Candle fetch failed for order {order.id}: {e}")
+            return []
+
+    # Build legs with 1-min candle series
     legs = []
     for order in orders_raw:
-        if order.fill_time and order.exit_time and order.pnl is not None:
-            exit_price = float(
-                order.exit_price_manual if order.exit_price_manual is not None
-                else (order.exit_price or 0)
-            )
-            legs.append({
-                "symbol":      order.symbol or "",
-                "direction":   (order.direction or "").upper(),
-                "entry_time":  _fmt_time(order.fill_time),
-                "exit_time":   _fmt_time(order.exit_time),
-                "entry_price": float(order.fill_price or 0),
-                "exit_price":  exit_price,
-                "pnl":         float(order.pnl),
-            })
+        if not (order.fill_time and order.exit_time and order.pnl is not None):
+            continue
+        ep  = float(order.fill_price or 0)
+        xp  = float(
+            order.exit_price_manual if order.exit_price_manual is not None
+            else (order.exit_price or 0)
+        )
+        op_pnl  = float(order.pnl)
+        candles = await _fetch_candles(order)
+
+        # Always anchor to exact entry (pnl=0) and exit (pnl=final) points
+        if candles:
+            entry_pt = {"time": _fmt_time(order.fill_time),  "ltp": ep, "pnl": 0.0}
+            exit_pt  = {"time": _fmt_time(order.exit_time),  "ltp": xp, "pnl": round(op_pnl, 2)}
+            # De-dup: drop any candle whose time == entry or exit time, then bookend
+            inner = [c for c in candles if c["time"] not in (entry_pt["time"], exit_pt["time"])]
+            candles = [entry_pt] + inner + [exit_pt]
+
+        legs.append({
+            "symbol":      order.symbol or "",
+            "direction":   (order.direction or "").upper(),
+            "entry_time":  _fmt_time(order.fill_time),
+            "exit_time":   _fmt_time(order.exit_time),
+            "entry_price": ep,
+            "exit_price":  xp,
+            "pnl":         op_pnl,
+            "candles":     candles,
+        })
+
+    # ── Combined MTM curve from per-leg candle data ───────────────────────────
+    # Build a minute-by-minute combined P&L series for the main chart.
+    # Falls back to [] if no candle data was fetched (frontend uses events array).
+    mtm_curve: list[dict] = []
+    if any(leg["candles"] for leg in legs):
+        # Collect all unique HH:MM:SS times
+        all_times: set[str] = set()
+        for leg in legs:
+            for c in leg["candles"]:
+                all_times.add(c["time"])
+
+        for t in sorted(all_times):
+            combined = 0.0
+            for leg in legs:
+                et = leg["entry_time"]
+                xt = leg["exit_time"]
+                if t < et:
+                    pass  # not yet entered
+                elif t >= xt:
+                    combined += leg["pnl"]  # fully realised
+                else:
+                    # Open — find nearest candle at or before t
+                    before = [c for c in leg["candles"] if c["time"] <= t]
+                    if before:
+                        combined += before[-1]["pnl"]
+            mtm_curve.append({"time": t, "pnl": round(combined, 2)})
 
     return {
         "algo_name": algo_name,
@@ -463,6 +564,7 @@ async def get_trade_replay(
         "events":    events,
         "summary":   summary,
         "legs":      legs,
+        "mtm_curve": mtm_curve,
     }
 
 
