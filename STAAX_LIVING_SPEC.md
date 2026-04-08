@@ -4112,3 +4112,23 @@ NOT ready for LIVE until:
 - Verify W&T fix with NF-INT
 - Verify premium selector with NF-BTST
 - Verify ORB with BNF-ORB
+
+## Session Update — 2026-04-09
+
+### Commits
+- 2d1fc58: Critical safety — underlying entry_price,
+  NSE holidays, kill switch, base_lot_multiplier, TOTP retry
+- 0b9627c: SQ/T/RE/SYNC buttons production-ready
+- 54f5a78: LIFEX AI natural voice, conversational prompt
+- b895f96: Living Spec EOD April 8
+
+### LIFEX AI Improvements
+- Natural voice: Neural → Google en-IN → Samantha priority
+- Sentence chunking with 100ms gaps between sentences
+- Conversational prompt: 2-3 sentences, warm tone, ₹ symbol
+- No markdown/bullets in responses (optimized for speech)
+
+### Platform Status
+STAAX: All pages ✅ | All buttons ✅ | Engine P0+P1 fixed ✅
+Critical safety fixes deployed ✅
+PRACTIX tested: NF-STBT +₹57.55 ✅
