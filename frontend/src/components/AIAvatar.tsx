@@ -61,14 +61,50 @@ export default function AIAvatar() {
     return () => clearInterval(interval)
   }, [state])
 
-  const speak = (text: string) => {
+  const selectBestVoice = (): SpeechSynthesisVoice | null => {
+    const voices = speechSynthesis.getVoices()
+    const matchers: Array<(v: SpeechSynthesisVoice) => boolean> = [
+      v => v.name.includes('Neural') && v.lang.includes('en'),
+      v => v.name.includes('Google') && v.lang.includes('en-IN'),
+      v => v.name.includes('Google') && v.lang.includes('en-GB'),
+      v => v.name.includes('Google') && v.lang.includes('en-US'),
+      v => v.name === 'Samantha',
+      v => v.name === 'Karen',
+      v => v.name === 'Daniel',
+      v => v.lang.includes('en-IN'),
+      v => v.lang.includes('en-GB'),
+      v => v.lang.includes('en'),
+    ]
+    for (const matcher of matchers) {
+      const voice = voices.find(matcher)
+      if (voice) return voice
+    }
+    return voices[0] ?? null
+  }
+
+  const speakNaturally = (text: string) => {
     setState('speaking')
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-IN'
-    utterance.rate = 1.0
-    utterance.pitch = 1.0
-    utterance.onend = () => setState('idle')
-    window.speechSynthesis.speak(utterance)
+    speechSynthesis.cancel()
+    const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [text]
+    let index = 0
+    const speakNext = () => {
+      if (index >= sentences.length) { setState('idle'); return }
+      const utterance = new SpeechSynthesisUtterance(sentences[index].trim())
+      utterance.voice = selectBestVoice()
+      utterance.rate = 0.92
+      utterance.pitch = 1.0
+      utterance.volume = 1.0
+      utterance.onend = () => {
+        index++
+        setTimeout(speakNext, 100)
+      }
+      speechSynthesis.speak(utterance)
+    }
+    if (speechSynthesis.getVoices().length === 0) {
+      speechSynthesis.addEventListener('voiceschanged', () => speakNext(), { once: true })
+    } else {
+      speakNext()
+    }
   }
 
   const sendToAI = async (text: string) => {
@@ -84,7 +120,7 @@ export default function AIAvatar() {
       })
       const data = await res.json()
       setResponse(data.response || '')
-      speak(data.response || '')
+      speakNaturally(data.response || '')
     } catch {
       setState('idle')
     }
