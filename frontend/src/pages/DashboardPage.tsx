@@ -223,8 +223,15 @@ export default function DashboardPage() {
   const algoMap = new Map((algos as any[]).map((a: any) => [a.id, a]))
   const scheduledAlgos = (nowSecs >= mktOpen && nowSecs <= mktClose)
     ? (Array.isArray(todayGrid) ? todayGrid : [])
-        .filter((e: any) => e.status === 'waiting' && e.entry_time)
-        .map((e: any) => { const [eh,em] = (e.entry_time as string).split(':').map(Number); return { name: (algoMap.get(e.algo_id) as any)?.name || e.algo_name || 'Unknown', secs: eh*3600+em*60, time: e.entry_time as string } })
+        .filter((e: any) => e.status === 'waiting')
+        .map((e: any) => {
+          const algo = algoMap.get(e.algo_id) as any
+          const et = e.entry_time || algo?.entry_time || algo?.et
+          if (!et) return null
+          const [eh, em] = (et as string).split(':').map(Number)
+          return { name: algo?.name || e.algo_name || 'Unknown', secs: eh*3600+em*60, time: et as string }
+        })
+        .filter(Boolean)
         .sort((a: any, b: any) => a.secs - b.secs)
     : []
   const nextAlgo = scheduledAlgos.find((a: any) => a.secs > nowSecs)

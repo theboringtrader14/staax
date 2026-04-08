@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import logging
 import uuid as _uuid
 from app.core.database import get_db
@@ -26,6 +26,7 @@ from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo
 from app.models.account import Account
 from app.models.algo_state import AlgoState, AlgoRunStatus
+from app.models.execution_log import ExecutionLog
 
 router = APIRouter()
 
@@ -204,17 +205,45 @@ async def list_orders(
             logger.warning(f"[orders] groups metadata fetch failed: {e}")
             algo_meta = {}
 
+        IST = timezone(timedelta(hours=5, minutes=30))
+        one_hour_ago = datetime.now(IST) - timedelta(hours=1)
+
         for aid, group_orders in by_algo.items():
             meta = algo_meta.get(aid, {})
             mtm  = round(sum((o.get("pnl") or 0.0) for o in group_orders), 2)
+
+            # Fetch latest FAILED execution log in the past hour for this algo
+            latest_error = None
+            try:
+                group_algo_id_uuid = _uuid.UUID(aid)
+                err_result = await db.execute(
+                    select(ExecutionLog)
+                    .where(
+                        ExecutionLog.algo_id == group_algo_id_uuid,
+                        ExecutionLog.status == "FAILED",
+                        ExecutionLog.timestamp >= one_hour_ago,
+                    )
+                    .order_by(ExecutionLog.timestamp.desc())
+                    .limit(1)
+                )
+                err = err_result.scalar_one_or_none()
+                latest_error = {
+                    "reason":     err.reason,
+                    "event_type": err.event_type,
+                    "timestamp":  err.timestamp.isoformat() if err.timestamp else None,
+                } if err else None
+            except Exception as e:
+                logger.warning(f"[orders] latest_error fetch failed for algo {aid}: {e}")
+
             groups.append({
-                "algo_id":   aid,
-                "algo_name": meta.get("algo_name", ""),
-                "account":   meta.get("account", ""),
-                "mtm":       mtm,
-                "mtm_sl":    meta.get("mtm_sl", 0),
-                "mtm_tp":    meta.get("mtm_tp", 0),
-                "orders":    group_orders,
+                "algo_id":      aid,
+                "algo_name":    meta.get("algo_name", ""),
+                "account":      meta.get("account", ""),
+                "mtm":          mtm,
+                "mtm_sl":       meta.get("mtm_sl", 0),
+                "mtm_tp":       meta.get("mtm_tp", 0),
+                "latest_error": latest_error,
+                "orders":       group_orders,
             })
 
     return {
@@ -395,6 +424,7 @@ async def get_trade_replay(
 
 @router.get("/open-positions")
 async def list_open_positions(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     is_practix: bool | None = Query(None),
 ):
@@ -417,15 +447,35 @@ async def list_open_positions(
     if not rows:
         return {"open_positions": [], "total": 0}
 
+    ltp_cache = getattr(request.app.state, "ltp_cache", None)
+
     # Group by algo_id
     by_algo: dict = {}
     ge_map: dict = {}
+    open_orders_raw: list = []
     for order, ge in rows:
         aid = str(order.algo_id)
         if aid not in by_algo:
             by_algo[aid] = []
             ge_map[aid] = ge
-        by_algo[aid].append(_order_to_dict(order))
+        open_orders_raw.append((aid, order))
+
+    # Enrich each order dict with live LTP from cache
+    for aid, order in open_orders_raw:
+        od = _order_to_dict(order)
+        if ltp_cache and order.instrument_token:
+            try:
+                live_ltp = await ltp_cache.get(order.instrument_token)
+                if live_ltp is not None:
+                    od["ltp"] = live_ltp
+                    if order.fill_price and order.quantity:
+                        if order.direction == "sell":
+                            od["pnl"] = round((order.fill_price - live_ltp) * order.quantity, 2)
+                        else:
+                            od["pnl"] = round((live_ltp - order.fill_price) * order.quantity, 2)
+            except Exception as e:
+                logger.warning(f"[open-positions] ltp_cache.get failed for token {order.instrument_token}: {e}")
+        by_algo[aid].append(od)
 
     # Fetch algo + account metadata
     try:
@@ -530,6 +580,54 @@ async def get_waiting_algos(
         "trading_date": target_date.isoformat(),
         "waiting":      waiting,
     }
+
+
+@router.get("/ltp")
+async def get_orders_ltp(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns live LTP and unrealised P&L for all OPEN orders.
+    LTP is read from ltp_cache (Redis). P&L is computed on the fly.
+    """
+    from zoneinfo import ZoneInfo
+    _IST = ZoneInfo("Asia/Kolkata")
+
+    result = await db.execute(
+        select(Order).where(Order.status == OrderStatus.OPEN)
+    )
+    open_orders = result.scalars().all()
+
+    ltp_cache = getattr(request.app.state, "ltp_cache", None)
+
+    ltp_map: dict = {}
+    for order in open_orders:
+        oid = str(order.id)
+        live_ltp: Optional[float] = None
+        if ltp_cache and order.instrument_token:
+            try:
+                live_ltp = await ltp_cache.get(order.instrument_token)
+            except Exception as e:
+                logger.warning(f"[orders/ltp] ltp_cache.get failed for token {order.instrument_token}: {e}")
+
+        pnl: Optional[float] = None
+        if live_ltp is not None and order.fill_price and order.quantity:
+            if order.direction == "sell":
+                pnl = round((order.fill_price - live_ltp) * order.quantity, 2)
+            else:
+                pnl = round((live_ltp - order.fill_price) * order.quantity, 2)
+
+        ltp_map[oid] = {
+            "order_id":   oid,
+            "symbol":     order.symbol,
+            "ltp":        live_ltp,
+            "pnl":        pnl,
+            "fill_price": order.fill_price,
+        }
+
+    now_ist = datetime.now(_IST).isoformat()
+    return {"ltp": ltp_map, "timestamp": now_ist}
 
 
 @router.get("/{order_id}")

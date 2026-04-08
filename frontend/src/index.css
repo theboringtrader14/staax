@@ -726,3 +726,21 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 .orb-pulse { animation: orbPulse 0.9s ease-in-out infinite; }
 .orb-speak { animation: orbSpeak 0.55s ease-in-out infinite; }
 .orb-spin  { animation: orbSpin 1.8s linear infinite; }
+
+/* ── Mobile responsive (≤768px) ──────────────────────────────────────────── */
+.landing-hamburger { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; background: none; border: none; cursor: pointer; color: var(--ox-radiant, #FF6B00); font-size: 22px; }
+.landing-mobile-menu { display: none; position: absolute; top: 60px; left: 0; right: 0; background: rgba(12,12,14,0.97); border-bottom: 1px solid rgba(255,107,0,0.2); z-index: 100; }
+.landing-mobile-menu.open { display: flex; flex-direction: column; }
+.landing-mobile-menu a { padding: 14px 24px; color: #ccc; font-size: 14px; text-decoration: none; border-bottom: 0.5px solid rgba(255,255,255,0.06); }
+.landing-mobile-menu a:hover { color: #FF6B00; }
+
+@media (max-width: 768px) {
+  .landing-nav-items { display: none !important; }
+  .landing-hamburger { display: flex !important; }
+  .landing-modules-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .landing-hero-title { font-size: clamp(2rem, 8vw, 3.5rem) !important; }
+  .landing-hero-subtitle { font-size: clamp(0.9rem, 3vw, 1.1rem) !important; }
+  .landing-terminal { width: 100% !important; max-width: 100% !important; }
+  .landing-section { padding-left: 16px !important; padding-right: 16px !important; }
+  .landing-module-btn { width: 100% !important; }
+}

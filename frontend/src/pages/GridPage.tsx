@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { algosAPI, gridAPI } from '@/services/api'
+import { api, algosAPI, gridAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 
@@ -127,6 +127,7 @@ export default function GridPage() {
     algo: Algo
     day: string
   } | null>(null)
+  const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -234,6 +235,27 @@ export default function GridPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // ── Fetch latest FAILED log for each active algo ──────────────────────────────
+  useEffect(() => {
+    const activeAlgos = algos.filter(a => !a.arch)
+    if (activeAlgos.length === 0) return
+    Promise.all(
+      activeAlgos.map(algo =>
+        api.get('/api/v1/logs/', { params: { algo_id: algo.id, status: 'FAILED', limit: 1 } })
+          .then((res: any) => {
+            const reason = res.data?.logs?.[0]?.reason
+            return reason ? { id: algo.id, reason: reason as string } : null
+          })
+          .catch(() => null)
+      )
+    ).then(results => {
+      const map: Record<string,string> = {}
+      for (const r of results) {
+        if (r) map[r.id] = r.reason
+      }
+      setAlgoErrors(map)
+    })
+  }, [algos])
 
   // ── Deploy a day (day pill click) ────────────────────────────────────────────
   const deployDay = async (algoId: string, day: string) => {
@@ -588,7 +610,7 @@ export default function GridPage() {
                                   <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
                                     {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
                                   </span>
-                                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                                     {instruments.map(ins => (
                                       <span key={ins} style={{
                                         display:'inline-flex', alignItems:'center', padding:'2px 7px', borderRadius:'100px',
@@ -597,6 +619,17 @@ export default function GridPage() {
                                         border:'0.5px solid rgba(255,107,0,0.28)',
                                       }}>{ins}</span>
                                     ))}
+                                    {algoErrors[algo.id] && (
+                                      <span style={{
+                                        background: 'rgba(255,68,68,0.15)',
+                                        border: '0.5px solid rgba(255,68,68,0.4)',
+                                        borderRadius: 4, padding: '1px 6px',
+                                        fontSize: 10, color: '#FF4444',
+                                        fontFamily: 'var(--font-mono)',
+                                        marginLeft: 6,
+                                        cursor: 'pointer',
+                                      }} title={algoErrors[algo.id]}>⚠ Entry failed</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>

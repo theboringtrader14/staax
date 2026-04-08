@@ -31,6 +31,7 @@ interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
   isLive?: boolean
+  latest_error?: { reason: string; event_type: string; timestamp: string } | null
 }
 interface WaitingAlgo {
   grid_entry_id: string; algo_id: string; algo_name: string
@@ -114,8 +115,8 @@ function isMarketLive(): boolean {
 }
 
 // ── LegRow ───────────────────────────────────────────────────────────────────
-function LegRow({ leg, isChild, liveLtp, onEditExit }: {
-  leg: Leg; isChild: boolean; liveLtp?: number
+function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit }: {
+  leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean
   onEditExit?: (orderId: string, price: number) => void
 }) {
   const st  = STATUS_STYLE[leg.status]
@@ -143,7 +144,14 @@ function LegRow({ leg, isChild, liveLtp, onEditExit }: {
         {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
       </td>
       <td style={{ width: COLS[5], ...C, fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>
-        {ltp != null ? ltp.toFixed(2) : '—'}
+        {ltp != null ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            {hasLivePoll && (
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22DD88', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
+            )}
+            {ltp.toFixed(2)}
+          </span>
+        ) : '—'}
       </td>
       <td style={{ width: COLS[6], fontSize: '11px', ...C }}>
         {(() => {
@@ -327,6 +335,7 @@ export default function OrdersPage() {
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
+  const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -453,6 +462,22 @@ export default function OrdersPage() {
     connect()
     return () => { if (retryTimeout) clearTimeout(retryTimeout); ws?.close() }
   }, [])
+
+  // Live LTP polling every 3 seconds when open orders exist
+  useEffect(() => {
+    const hasOpenOrders = orders.some(g => g.legs.some(l => l.status === 'open'))
+    if (!hasOpenOrders) return
+    const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+    const poll = () => {
+      fetch(`${API_BASE}/api/v1/orders/ltp`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setLtpData(data) })
+        .catch(() => {})
+    }
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => clearInterval(interval)
+  }, [orders])
 
   const safeOrders = Array.isArray(orders) ? orders : []
   const totalMTM   = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
@@ -967,14 +992,24 @@ export default function OrdersPage() {
                               {showSpark && (
                                 <SmoothedSparkline algoId={group.algoId} legs={group.legs} totalPnl={totalPnl} />
                               )}
-                              <span style={{
-                                minWidth: '90px', textAlign: 'right',
-                                fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
-                                color: group.mtm !== 0 ? (group.mtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent',
-                                opacity: group.terminated ? 0.6 : 1,
-                              }}>
-                                {group.mtm !== 0 ? `${group.mtm >= 0 ? '+' : ''}₹${group.mtm.toLocaleString('en-IN')}` : ''}
-                              </span>
+                              {(() => {
+                                const openLegIds = group.legs.filter(l => l.status === 'open').map(l => l.id)
+                                const livePnlEntries = openLegIds.map(id => ltpData[id]).filter(Boolean)
+                                const liveMtm = livePnlEntries.length > 0
+                                  ? livePnlEntries.reduce((s, e) => s + (e?.pnl ?? 0), 0)
+                                  : null
+                                const displayMtm = liveMtm !== null ? liveMtm : group.mtm
+                                return (
+                                  <span style={{
+                                    minWidth: '90px', textAlign: 'right',
+                                    fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
+                                    color: displayMtm !== 0 ? (displayMtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent',
+                                    opacity: group.terminated ? 0.6 : 1,
+                                  }}>
+                                    {displayMtm !== 0 ? `${displayMtm >= 0 ? '+' : ''}₹${displayMtm.toLocaleString('en-IN')}` : ''}
+                                  </span>
+                                )
+                              })()}
                             </div>
                           </div>
 
@@ -1001,6 +1036,20 @@ export default function OrdersPage() {
                           </div>
                         </div>
 
+                        {/* ── Latest error banner ── */}
+                        {group.latest_error && (
+                          <div style={{
+                            background: 'rgba(255,68,68,0.08)',
+                            border: '0.5px solid rgba(255,68,68,0.3)',
+                            borderRadius: 6, padding: '6px 10px',
+                            fontSize: 11, color: '#FF4444',
+                            fontFamily: 'var(--font-mono)',
+                            marginTop: 6
+                          }}>
+                            ⛔ {group.latest_error.timestamp ? new Date(group.latest_error.timestamp).toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}) : ''} — {group.latest_error.reason}
+                          </div>
+                        )}
+
                         {/* ── Legs table ── */}
                         <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
                           <div className="cloud-fill" style={{ borderRadius: '8px', overflow: 'hidden', marginTop: '8px' }}>
@@ -1014,12 +1063,17 @@ export default function OrdersPage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {buildRows(group.legs).map(({ leg, isChild }) => (
-                                  <LegRow key={leg.id} leg={leg} isChild={isChild}
-                                    liveLtp={leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined}
-                                    onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
-                                  />
-                                ))}
+                                {buildRows(group.legs).map(({ leg, isChild }) => {
+                                  const pollEntry = ltpData[leg.id]
+                                  const resolvedLtp = pollEntry?.ltp ?? (leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined)
+                                  return (
+                                    <LegRow key={leg.id} leg={leg} isChild={isChild}
+                                      liveLtp={resolvedLtp}
+                                      hasLivePoll={!!pollEntry}
+                                      onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
+                                    />
+                                  )
+                                })}
                               </tbody>
                             </table>
                           </div>

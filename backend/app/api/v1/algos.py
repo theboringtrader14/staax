@@ -195,6 +195,31 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
+@router.get("/states")
+async def get_algo_states(date: str, db: AsyncSession = Depends(get_db)):
+    """Return AlgoState rows for all algos on a given trading date (YYYY-MM-DD)."""
+    result = await db.execute(
+        select(AlgoState).where(AlgoState.trading_date == date)
+    )
+    rows = result.scalars().all()
+    return {
+        "trading_date": date,
+        "states": [
+            {
+                "algo_id":       str(s.algo_id),
+                "grid_entry_id": str(s.grid_entry_id),
+                "status":        s.status,
+                "is_practix":    s.is_practix,
+                "activated_at":  s.activated_at.isoformat() if s.activated_at else None,
+                "mtm_current":   s.mtm_current,
+                "error_message": s.error_message,
+            }
+            for s in rows
+        ],
+        "total": len(rows),
+    }
+
+
 @router.get("/")
 async def list_algos(
     include_archived: bool = False,

@@ -753,9 +753,17 @@ class AlgoRunner:
         order.filled_at  = _filled_at
         order.latency_ms = _latency_ms
 
-        # SL/TP stored on order for display
+        # SL/TP stored on order for display — sl_actual is the PRICE, not the value
         order.sl_original = leg.sl_value
-        order.sl_actual   = leg.sl_value
+        if leg.sl_value and fill_price:
+            if leg.sl_type == "pts_instrument":
+                order.sl_actual = (fill_price - leg.sl_value) if direction == "buy" else (fill_price + leg.sl_value)
+            elif leg.sl_type == "pct_instrument":
+                order.sl_actual = fill_price * (1 - leg.sl_value / 100) if direction == "buy" else fill_price * (1 + leg.sl_value / 100)
+            else:
+                order.sl_actual = leg.sl_value  # orb/underlying types: store raw value, monitor computes dynamically
+        else:
+            order.sl_actual = leg.sl_value
         order.target      = leg.tp_value
         db.add(order)
         await db.flush()  # get order.id before registering monitors

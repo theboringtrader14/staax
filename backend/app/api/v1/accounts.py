@@ -406,7 +406,8 @@ async def _ao_perform_login(broker, pin: str, nickname: str, db) -> dict:
     account   = db_result.scalar_one_or_none()
     if account:
         account.access_token       = jwt_token
-        account.feed_token         = feed_token
+        if feed_token:  # preserve existing feed_token if AO returns empty (re-login of active session)
+            account.feed_token = feed_token
         account.token_generated_at = datetime.now(timezone.utc)
         account.status             = AccountStatus.ACTIVE
         # Persist client_id if it was missing — enables startup token-load after restart.

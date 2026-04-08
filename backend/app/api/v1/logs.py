@@ -31,6 +31,7 @@ async def list_execution_logs(
     date:       Optional[str] = Query(None),   # YYYY-MM-DD in IST
     event_type: Optional[str] = Query(None),
     is_practix: Optional[bool] = Query(None),
+    status:     Optional[str] = Query(None),
     limit:      int           = Query(50, ge=1, le=500),
 ):
     """
@@ -61,6 +62,9 @@ async def list_execution_logs(
 
     if is_practix is not None:
         conditions.append(ExecutionLog.is_practix == is_practix)
+
+    if status:
+        conditions.append(ExecutionLog.status == status)
 
     stmt = (
         select(ExecutionLog)

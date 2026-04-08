@@ -574,7 +574,8 @@ async def system_health(request: Request):
     # ── SmartStream (LTPConsumer) ─────────────────────────────────────────────
     ltp_consumer = getattr(state, "ltp_consumer", None)
     if ltp_consumer:
-        connected = bool(getattr(ltp_consumer, "_running", False))
+        angel_adapter = getattr(ltp_consumer, "_angel_adapter", None)
+        connected = bool(getattr(angel_adapter, "_connected", False)) if angel_adapter else False
         checks["smartstream"] = {"ok": connected, "connected": connected}
     else:
         checks["smartstream"] = {"ok": False, "connected": False, "error": "not initialised"}

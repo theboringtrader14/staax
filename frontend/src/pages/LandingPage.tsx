@@ -107,6 +107,8 @@ export default function LandingPage() {
     window.scrollTo(0, 0)
   }, [])
 
+  const [menuOpen, setMenuOpen] = useState(false)
+
   const [sysLines, setSysLines] = useState([
     { color: 'rgba(232,232,248,0.35)', text: '⟳ loading system status...' },
   ])
@@ -296,7 +298,7 @@ export default function LandingPage() {
         </div>
 
         {/* Nav actions */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="landing-nav-items" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
             onClick={handleEnter}
             style={{
@@ -308,7 +310,19 @@ export default function LandingPage() {
             className="landing-cta-ghost"
           >Sign In</button>
         </div>
+
+        {/* Hamburger */}
+        <button className="landing-hamburger" onClick={() => setMenuOpen(o => !o)}>☰</button>
       </nav>
+
+      {/* Mobile menu */}
+      <div className={`landing-mobile-menu${menuOpen ? ' open' : ''}`}>
+        <a href="#" onClick={() => setMenuOpen(false)}>Home</a>
+        <a href="#roadmap" onClick={() => setMenuOpen(false)}>Roadmap</a>
+        <a href="https://staax.lifexos.co.in" onClick={() => setMenuOpen(false)}>STAAX</a>
+        <a href="https://invex.lifexos.co.in" onClick={() => setMenuOpen(false)}>INVEX</a>
+        <a href="https://budgex.lifexos.co.in" onClick={() => setMenuOpen(false)}>BUDGEX</a>
+      </div>
 
       {/* Hero */}
       <section className="landing-hero" style={{
@@ -459,7 +473,7 @@ export default function LandingPage() {
       </div>
 
       {/* Module cards */}
-      <section style={{
+      <section className="landing-section" style={{
         position: 'relative', zIndex: 1,
         maxWidth: '1100px', margin: '0 auto',
         padding: '60px 32px',
@@ -480,7 +494,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div className="landing-module-grid" style={{
+        <div className="landing-module-grid landing-modules-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',
@@ -490,16 +504,7 @@ export default function LandingPage() {
               key={mod.id}
               className="landing-module-card"
               data-accent={mod.accentKey}
-              onClick={() => {
-                if (mod.id === 'STAAX') {
-                  navigate(isAuthenticated ? '/dashboard' : '/login')
-                } else if (mod.id === 'BUDGEX') {
-                  const budgexUrl = import.meta.env.VITE_BUDGEX_URL || 'https://budgex.lifexos.co.in'
-                  window.location.href = budgexUrl
-                } else if ('externalUrl' in mod && mod.externalUrl) {
-                  window.location.href = mod.externalUrl
-                }
-              }}
+              onClick={() => mod.externalUrl && (window.location.href = mod.externalUrl)}
               style={{
                 background: `rgba(10,10,26,0.7)`,
                 border: `1px solid ${mod.accent}30`,

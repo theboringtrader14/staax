@@ -341,6 +341,25 @@ async def promote_to_live(algo_id: str, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "algo_id": algo_id, "updated": len(entries)}
 
 
+@router.post("/activate-now")
+async def activate_now(request: Request):
+    """
+    Force-run the 09:15 activate_all job right now.
+    Use after manually creating grid entries past 09:15 to create missing AlgoStates.
+    """
+    import logging as _log
+    logger = _log.getLogger(__name__)
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if not scheduler:
+        return {"status": "error", "detail": "Scheduler not available"}
+    try:
+        await scheduler._job_activate_all()
+        return {"status": "ok", "detail": "activate_all triggered — AlgoStates created and entry jobs scheduled"}
+    except Exception as e:
+        logger.error(f"[GRID/ACTIVATE-NOW] {e}")
+        return {"status": "error", "detail": str(e)}
+
+
 @router.post("/trigger-now")
 async def trigger_now(request: Request, db: AsyncSession = Depends(get_db)):
     """

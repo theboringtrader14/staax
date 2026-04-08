@@ -247,6 +247,14 @@ async def lifespan(app: FastAPI):
     scheduler.add_daily_reset_job(daily_system_reset)
     scheduler.add_mcx_token_refresh_job(bot_runner)
     scheduler.add_bot_daily_data_job(bot_runner)
+    from apscheduler.triggers.cron import CronTrigger as _CT
+    scheduler._scheduler.add_job(
+        _ensure_today_grid_entries,
+        _CT(hour=8, minute=50, day_of_week="mon-fri", timezone="Asia/Kolkata"),
+        id="auto_grid_entries",
+        replace_existing=True,
+    )
+    logger.info("✅ Auto-grid entries job registered (08:50 IST, Mon–Fri)")
     logger.info("✅ OrderReconciler scheduled (every 15s)")
 
     # ── 11b. Re-register exit jobs for any today's algos that survived restart ─
@@ -281,6 +289,9 @@ async def lifespan(app: FastAPI):
 
     # ── 13c. Auto-login AO accounts whose token is stale/missing ─────────────
     await _ao_startup_auto_login(app)
+
+    # ── 13c2. Auto-create grid entries for today's recurring algos ────────────
+    await _ensure_today_grid_entries()
 
     # ── 13d. MCX contract expiry check ───────────────────────────────────────
     try:
@@ -558,6 +569,69 @@ async def _subscribe_open_position_tokens(ltp_consumer) -> None:
             logger.info("[STARTUP MF] No open positions to subscribe")
     except Exception as e:
         logger.warning(f"[STARTUP MF] Open-position token subscription failed (non-fatal): {e}")
+
+
+async def _ensure_today_grid_entries() -> None:
+    """
+    Auto-create GridEntry rows for every active algo whose recurring_days
+    includes today's day of week, if no entry exists yet for today.
+
+    Called at startup (after broker tokens load) and via daily cron at 08:50 IST.
+    Idempotent — skips algos that already have an entry for today.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.algo import Algo
+    from app.models.grid import GridEntry, GridStatus
+    from sqlalchemy import select, and_
+    from datetime import date as _date
+
+    IST = ZoneInfo("Asia/Kolkata")
+    now_ist  = datetime.now(IST)
+    today    = now_ist.date()
+    day_map  = {0: "MON", 1: "TUE", 2: "WED", 3: "THU", 4: "FRI", 5: "SAT", 6: "SUN"}
+    today_day = day_map[now_ist.weekday()]  # e.g. "WED"
+
+    try:
+        async with AsyncSessionLocal() as db:
+            algos_result = await db.execute(
+                select(Algo).where(Algo.is_active == True, Algo.is_archived == False)
+            )
+            algos = algos_result.scalars().all()
+            created = 0
+            for algo in algos:
+                if today_day not in (algo.recurring_days or []):
+                    continue
+                existing = await db.execute(
+                    select(GridEntry).where(
+                        and_(
+                            GridEntry.algo_id == algo.id,
+                            GridEntry.trading_date == today,
+                            GridEntry.is_archived == False,
+                        )
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    continue
+                entry = GridEntry(
+                    algo_id        = algo.id,
+                    account_id     = algo.account_id,
+                    trading_date   = today,
+                    day_of_week    = today_day.lower(),
+                    lot_multiplier = 1,
+                    is_enabled     = True,
+                    is_practix     = True,
+                    is_archived    = False,
+                    status         = GridStatus.NO_TRADE,
+                )
+                db.add(entry)
+                created += 1
+            await db.commit()
+            if created:
+                logger.info(f"[AUTO-GRID] Created {created} grid entries for {today} ({today_day})")
+            else:
+                logger.info(f"[AUTO-GRID] No new entries needed for {today} ({today_day})")
+    except Exception as e:
+        logger.warning(f"[AUTO-GRID] Failed to ensure today grid entries (non-fatal): {e}")
 
 
 async def _ao_startup_auto_login(app: "FastAPI") -> None:
