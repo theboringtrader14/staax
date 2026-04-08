@@ -25,11 +25,22 @@ interface ReplaySummary {
   duration_minutes: number
 }
 
+interface LegData {
+  symbol: string
+  direction: string
+  entry_time: string
+  exit_time: string
+  entry_price: number
+  exit_price: number
+  pnl: number
+}
+
 interface ReplayData {
   algo_name: string
   date: string
   events: ReplayEvent[]
   summary: ReplaySummary
+  legs?: LegData[]
 }
 
 export interface TradeReplayProps {
@@ -152,148 +163,188 @@ function TimelineSVG({ events }: { events: ReplayEvent[] }) {
   )
 }
 
-// ── MTM Area Chart ────────────────────────────────────────────────────────────
+// ── MTM Multi-Leg Chart ───────────────────────────────────────────────────────
 
-function MtmChart({ events }: { events: ReplayEvent[] }) {
+const LEG_COLORS = ['#4488FF', '#FF6B00', '#9B59B6', '#FFD700', '#00C9A7']
+
+function timeToSecs(t: string): number {
+  const parts = t.split(':').map(Number)
+  return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0)
+}
+
+function MultiLegChart({ events, legs }: { events: ReplayEvent[], legs: LegData[] }) {
   const W = 800
-  const H = 120
+  const H = 130
   const PADX = 10
-  const PADY = 12
+  const PADY = 14
   const svgRef = useRef<SVGSVGElement>(null)
+  const [hiddenLegs, setHiddenLegs] = useState<Set<number>>(new Set())
+  const [showCombined, setShowCombined] = useState(true)
   const [hover, setHover] = useState<{ x: number; y: number; time: string; pnl: number } | null>(null)
 
-  if (events.length < 2) return null
+  if (events.length < 2 && legs.length === 0) return null
 
-  const pnls = events.map(e => e.pnl_at_time)
-  const finalPnl = pnls[pnls.length - 1]
-  const minPnl = Math.min(...pnls, 0)
-  const maxPnl = Math.max(...pnls, 0)
-  const range = maxPnl - minPnl || 1
+  // Collect all times and P&L values to build unified axis
+  const allSecs = [
+    ...events.map(e => timeToSecs(e.time)),
+    ...legs.flatMap(l => [timeToSecs(l.entry_time), timeToSecs(l.exit_time)]),
+  ]
+  const allPnls = [
+    0,
+    ...events.map(e => e.pnl_at_time),
+    ...legs.map(l => l.pnl),
+  ]
 
-  const strokeColor = finalPnl >= 0 ? '#22DD88' : '#FF4444'
-  const fillColor   = finalPnl >= 0 ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)'
+  const minT  = Math.min(...allSecs)
+  const maxT  = Math.max(...allSecs)
+  const tRange = maxT - minT || 1
 
-  const toX = (i: number) => PADX + (i / (pnls.length - 1)) * (W - PADX * 2)
-  const toY = (v: number) => PADY + ((maxPnl - v) / range) * (H - PADY * 2)
+  const minPnl = Math.min(...allPnls)
+  const maxPnl = Math.max(...allPnls)
+  const pRange = maxPnl - minPnl || 1
 
-  const coords = pnls.map((v, i) => ({ x: toX(i), y: toY(v) }))
-  const zeroY  = toY(0)
+  const toX = (secs: number)  => PADX + ((secs - minT) / tRange) * (W - PADX * 2)
+  const toY = (v: number)     => PADY + ((maxPnl - v) / pRange) * (H - PADY * 2)
+  const zeroY = toY(0)
 
-  // Smooth cubic bezier path through all data points (midpoint control points)
-  const buildSmooth = (cs: { x: number; y: number }[]) => {
-    let d = `M${cs[0].x.toFixed(1)},${cs[0].y.toFixed(1)}`
-    for (let i = 1; i < cs.length; i++) {
-      const mx = ((cs[i - 1].x + cs[i].x) / 2).toFixed(1)
-      d += ` C${mx},${cs[i-1].y.toFixed(1)} ${mx},${cs[i].y.toFixed(1)} ${cs[i].x.toFixed(1)},${cs[i].y.toFixed(1)}`
-    }
-    return d
-  }
-  const linePath = buildSmooth(coords)
-  // Area: drop to zero baseline, follow the smooth line, close back to baseline
-  const areaPath =
-    `M${coords[0].x.toFixed(1)},${zeroY.toFixed(1)} L${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}` +
-    linePath.substring(linePath.indexOf(' ')) +
-    ` L${coords[coords.length - 1].x.toFixed(1)},${zeroY.toFixed(1)} Z`
+  const finalPnl     = events.length > 0 ? events[events.length - 1].pnl_at_time : 0
+  const combinedStroke = finalPnl >= 0 ? '#22DD88' : '#FF4444'
+  const combinedFill   = finalPnl >= 0 ? 'rgba(34,221,136,0.10)' : 'rgba(255,68,68,0.10)'
 
-  // Pre-build point data for hover interpolation
-  const points = events.map((ev, i) => ({
-    x: coords[i].x,
-    y: coords[i].y,
-    time: ev.time,
-    pnl: ev.pnl_at_time,
+  // Combined polyline coords (straight lines between event data points)
+  const combinedPts = events.map(e => ({ x: toX(timeToSecs(e.time)), y: toY(e.pnl_at_time), time: e.time, pnl: e.pnl_at_time }))
+
+  // Per-leg: entry → exit line
+  const legLines = legs.map((leg, i) => ({
+    color:  LEG_COLORS[i % LEG_COLORS.length],
+    label:  `${leg.symbol} ${leg.direction}`,
+    pnl:    leg.pnl,
+    p0:     { x: toX(timeToSecs(leg.entry_time)), y: toY(0) },
+    p1:     { x: toX(timeToSecs(leg.exit_time)),  y: toY(leg.pnl) },
   }))
 
-  // Binary-search for bezier t parameter at a given x (midpoint bezier: cp1x=cp2x=mx)
-  const bezierTForX = (p0x: number, mx: number, p1x: number, targetX: number): number => {
-    let lo = 0, hi = 1
-    for (let i = 0; i < 20; i++) {
-      const mid = (lo + hi) * 0.5
-      const x = (1-mid)**3*p0x + 3*(1-mid)**2*mid*mx + 3*(1-mid)*mid**2*mx + mid**3*p1x
-      if (x < targetX) lo = mid; else hi = mid
-    }
-    return (lo + hi) * 0.5
-  }
+  const toggleLeg = (i: number) =>
+    setHiddenLegs(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })
 
-  // Evaluate bezier Y at t (midpoint bezier: cp1y=p0y, cp2y=p1y)
-  // y(t) = p0y·(1-t)²(1+2t) + p1y·t²(3-2t)
-  const bezierY = (t: number, p0y: number, p1y: number): number =>
-    p0y * (1-t)**2 * (1+2*t) + p1y * t**2 * (3-2*t)
-
+  // Hover: linear interpolation on combined line
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!svgRef.current || points.length < 2) return
-    const svgRect = svgRef.current.getBoundingClientRect()
-    const mouseXSvg = (e.clientX - svgRect.left) * (W / svgRect.width)
-
-    // Clamp to chart X range
-    const clampedX = Math.max(points[0].x, Math.min(mouseXSvg, points[points.length - 1].x))
-
-    // Find the segment [i, i+1] that contains clampedX
-    let seg = points.length - 2
-    for (let i = 0; i < points.length - 1; i++) {
-      if (clampedX <= points[i + 1].x) { seg = i; break }
+    if (!svgRef.current || combinedPts.length < 2) return
+    const rect = svgRef.current.getBoundingClientRect()
+    const mx   = (e.clientX - rect.left) * (W / rect.width)
+    const clamped = Math.max(combinedPts[0].x, Math.min(mx, combinedPts[combinedPts.length - 1].x))
+    let seg = combinedPts.length - 2
+    for (let i = 0; i < combinedPts.length - 1; i++) {
+      if (clamped <= combinedPts[i + 1].x) { seg = i; break }
     }
-
-    const p0 = points[seg]
-    const p1 = points[seg + 1]
-    const mx = (p0.x + p1.x) / 2
-
-    // Find exact bezier t for this x, then evaluate exact bezier Y
-    const bt = p0.x === p1.x ? 0 : bezierTForX(p0.x, mx, p1.x, clampedX)
-    const interpY   = bezierY(bt, p0.y, p1.y)
-    const interpPnl = bezierY(bt, p0.pnl, p1.pnl)
-    const time = bt < 0.5 ? p0.time : p1.time
-
-    setHover({ x: clampedX, y: interpY, time, pnl: interpPnl })
+    const a = combinedPts[seg], b = combinedPts[seg + 1]
+    const t  = a.x === b.x ? 0 : (clamped - a.x) / (b.x - a.x)
+    const iy = a.y + t * (b.y - a.y)
+    const ip = a.pnl + t * (b.pnl - a.pnl)
+    setHover({ x: clamped, y: iy, time: t < 0.5 ? a.time : b.time, pnl: ip })
   }
 
   const tooltipX = hover ? (hover.x + 128 > W ? hover.x - 128 : hover.x + 8) : 0
   const tooltipY = hover ? Math.max(4, hover.y - 30) : 0
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${W} ${H}`}
-      width="100%"
-      height={H}
-      style={{ display: 'block', cursor: 'crosshair', overflow: 'visible' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHover(null)}
-    >
-      {/* zero line */}
-      <line x1={PADX} y1={zeroY} x2={W - PADX} y2={zeroY} stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeDasharray="4 4" />
-      {/* smooth fill */}
-      <path d={areaPath} fill={fillColor} />
-      {/* smooth line */}
-      <path d={linePath} fill="none" stroke={strokeColor} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-      {/* crosshair — continuous, interpolated */}
-      {hover && (
-        <>
-          <line
-            x1={hover.x} y1={0} x2={hover.x} y2={H}
-            stroke="rgba(255,255,255,0.2)" strokeWidth={1} strokeDasharray="4,4"
+    <div>
+      {/* Toggle buttons */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          onClick={() => setShowCombined(s => !s)}
+          style={{
+            padding: '3px 10px', borderRadius: 4,
+            border: `1px solid ${combinedStroke}`,
+            background: showCombined ? `${combinedStroke}22` : 'transparent',
+            color: showCombined ? combinedStroke : 'rgba(232,232,248,0.35)',
+            fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+          }}
+        >Combined</button>
+        {legLines.map((leg, i) => (
+          <button
+            key={i}
+            onClick={() => toggleLeg(i)}
+            style={{
+              padding: '3px 10px', borderRadius: 4,
+              border: `1px solid ${leg.color}`,
+              background: !hiddenLegs.has(i) ? `${leg.color}22` : 'transparent',
+              color: !hiddenLegs.has(i) ? leg.color : 'rgba(232,232,248,0.35)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+            }}
+          >{leg.label} {leg.pnl >= 0 ? '+' : ''}₹{Math.abs(leg.pnl).toFixed(0)}</button>
+        ))}
+      </div>
+
+      {/* SVG */}
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height={H}
+        style={{ display: 'block', cursor: 'crosshair', overflow: 'visible' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHover(null)}
+      >
+        {/* zero line */}
+        <line x1={PADX} y1={zeroY} x2={W - PADX} y2={zeroY} stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeDasharray="4 4" />
+
+        {/* Combined fill */}
+        {showCombined && combinedPts.length >= 2 && (() => {
+          const first = combinedPts[0], last = combinedPts[combinedPts.length - 1]
+          const areaPath =
+            `M${first.x.toFixed(1)},${zeroY.toFixed(1)} ` +
+            combinedPts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+            ` L${last.x.toFixed(1)},${zeroY.toFixed(1)} Z`
+          return <path d={areaPath} fill={combinedFill} />
+        })()}
+
+        {/* Combined polyline */}
+        {showCombined && combinedPts.length >= 2 && (
+          <polyline
+            points={combinedPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+            fill="none" stroke={combinedStroke} strokeWidth={2}
+            strokeLinecap="round" strokeLinejoin="round"
           />
-          <circle
-            cx={hover.x} cy={hover.y} r={4}
-            fill="#FF6B00" stroke="#fff" strokeWidth={1.5}
-          />
-          <foreignObject x={tooltipX} y={tooltipY} width={120} height={50}>
-            <div style={{
-              background: 'rgba(10,10,11,0.9)',
-              border: '0.5px solid rgba(255,107,0,0.4)',
-              borderRadius: 6,
-              padding: '4px 8px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-            }}>
-              <div style={{ color: 'rgba(232,232,248,0.6)' }}>{hover.time}</div>
-              <div style={{ color: hover.pnl >= 0 ? '#22DD88' : '#FF4444', fontWeight: 700 }}>
-                {hover.pnl >= 0 ? '+' : ''}₹{hover.pnl.toFixed(2)}
+        )}
+
+        {/* Per-leg lines */}
+        {legLines.map((leg, i) => !hiddenLegs.has(i) && (
+          <g key={i}>
+            <line
+              x1={leg.p0.x.toFixed(1)} y1={leg.p0.y.toFixed(1)}
+              x2={leg.p1.x.toFixed(1)} y2={leg.p1.y.toFixed(1)}
+              stroke={leg.color} strokeWidth={1.5} strokeDasharray="5 3" strokeLinecap="round"
+            />
+            {/* entry dot */}
+            <circle cx={leg.p0.x} cy={leg.p0.y} r={3} fill={leg.color} opacity={0.6} />
+            {/* exit dot */}
+            <circle cx={leg.p1.x} cy={leg.p1.y} r={4} fill={leg.color} opacity={0.9} />
+          </g>
+        ))}
+
+        {/* Hover crosshair on combined */}
+        {hover && showCombined && (
+          <>
+            <line x1={hover.x} y1={0} x2={hover.x} y2={H}
+              stroke="rgba(255,255,255,0.20)" strokeWidth={1} strokeDasharray="4,4" />
+            <circle cx={hover.x} cy={hover.y} r={4} fill="#FF6B00" stroke="#fff" strokeWidth={1.5} />
+            <foreignObject x={tooltipX} y={tooltipY} width={120} height={50}>
+              <div style={{
+                background: 'rgba(10,10,11,0.9)',
+                border: '0.5px solid rgba(255,107,0,0.4)',
+                borderRadius: 6, padding: '4px 8px',
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+              }}>
+                <div style={{ color: 'rgba(232,232,248,0.6)' }}>{hover.time}</div>
+                <div style={{ color: hover.pnl >= 0 ? '#22DD88' : '#FF4444', fontWeight: 700 }}>
+                  {hover.pnl >= 0 ? '+' : ''}₹{hover.pnl.toFixed(2)}
+                </div>
               </div>
-            </div>
-          </foreignObject>
-        </>
-      )}
-    </svg>
+            </foreignObject>
+          </>
+        )}
+      </svg>
+    </div>
   )
 }
 
@@ -488,8 +539,8 @@ export function TradeReplay({ algoId, algoName, date, onClose }: TradeReplayProp
                   <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '4px', fontFamily: 'Syne, sans-serif', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                     MTM Curve
                   </div>
-                  <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 8, overflow: 'hidden' }}>
-                    <MtmChart events={events} />
+                  <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '10px 12px 6px' }}>
+                    <MultiLegChart events={events} legs={data.legs ?? []} />
                   </div>
                 </div>
               )}

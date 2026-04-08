@@ -439,11 +439,30 @@ async def get_trade_replay(
         "duration_minutes": duration_minutes,
     }
 
+    # Per-leg data for multi-leg MTM chart: each closed order is one leg
+    legs = []
+    for order in orders_raw:
+        if order.fill_time and order.exit_time and order.pnl is not None:
+            exit_price = float(
+                order.exit_price_manual if order.exit_price_manual is not None
+                else (order.exit_price or 0)
+            )
+            legs.append({
+                "symbol":      order.symbol or "",
+                "direction":   (order.direction or "").upper(),
+                "entry_time":  _fmt_time(order.fill_time),
+                "exit_time":   _fmt_time(order.exit_time),
+                "entry_price": float(order.fill_price or 0),
+                "exit_price":  exit_price,
+                "pnl":         float(order.pnl),
+            })
+
     return {
         "algo_name": algo_name,
         "date":      date,
         "events":    events,
         "summary":   summary,
+        "legs":      legs,
     }
 
 
