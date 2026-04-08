@@ -4021,3 +4021,49 @@ Dashboard | Smart Cards | AlgoPage | Landing | Orders | Reports | Indicators | A
 - EAS Android build
 - SmartStream test (market hours)
 - Three.js avatar (Option B)
+
+## Session Update — 2026-04-08 (Live Trading Day 1)
+
+### First PRACTIX Trade ✅
+NF-STBT NIFTY Straddle:
+CE SELL @372 → Exit @420.10 = -₹48.10
+PE SELL @381.8 → Exit @276.15 = +₹105.65
+NET: +₹57.55 | Auto-sq at 15:00 IST ✅
+
+### Commits This Session
+- 95e8ae0: P0 engine fixes (W&T token, premium selector,
+  BTST exits, ORB recovery, underlying_token migration)
+- 0b9627c: SQ/T/RE/SYNC buttons production-ready,
+  RUN button removed, P1 fixes
+
+### P0 Engine Bugs Fixed (8 total)
+All critical engine bugs resolved — platform ready
+for proper PRACTIX testing tomorrow.
+
+### Button Status
+SQ ✅ | T ✅ | RE ✅ | SYNC ✅ | RUN 🗑️ removed
+
+### Issues Found During Live Session
+- S-STBT not showing WAITING (fixed: auto-grid on startup)
+- SmartStream health chip stale (fixed: _running fallback)
+- LTP not updating (fixed: 1s polling with auth headers)
+- Next Algo card empty (fixed: reads from algos list)
+- Orders page no WAITING cards (fixed: new WAITING section)
+
+### Pending Next Session
+- Karthik AO + Wife AO API keys (regenerate from portal)
+- INVEX Analysis tab real data (Phase 2 Screener.in)
+- BUDGEX audit (not done yet)
+- P2 bug: ExecutionManager.square_off() kwarg mismatch
+  (surfaced during PRACTIX SQ — needs fix for LIVE mode)
+- TSL/TTP testing in PRACTIX
+- W&T testing now that token fix is deployed
+- Premium selector testing (NF-BTST picked wrong strike,
+  fix is deployed — verify tomorrow)
+- ORB algo testing (fix deployed — verify tomorrow)
+
+### Monday April 13 — Next Live Session
+All PRACTIX algos to test:
+NF-STBT ✅ (tested today) | S-STBT | S-WIDE
+NF-INT (W&T fixed) | NF-BTST (premium fixed)
+BNF-BTST | BNF-ORB (ORB fixed)
