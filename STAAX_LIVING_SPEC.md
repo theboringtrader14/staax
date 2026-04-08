@@ -4132,3 +4132,37 @@ NOT ready for LIVE until:
 STAAX: All pages ✅ | All buttons ✅ | Engine P0+P1 fixed ✅
 Critical safety fixes deployed ✅
 PRACTIX tested: NF-STBT +₹57.55 ✅
+
+## Session Update — 2026-04-09 (Final)
+
+### Trade Replay — Complete Enhancement
+- Brownian bridge synthetic MTM (realistic wavy curves)
+- Per-leg toggle buttons with glow
+- Scrubber synced to progress line
+- Timeline deduplication
+- cloud-fill modal background
+- 4-stat cards: Duration, Total P&L, Peak P&L, Max Drawdown
+- Angel One 1-min candle data (precise) with fallback
+
+### FINEX v0.1 — Live
+finex.lifexos.co.in ✅
+finex-api.lifexos.co.in ✅
+DNS: finex + finex-api A records added
+
+### BUDGEX — Complete Revamp
+6 pages: Dashboard, Expenses, Budget (new),
+Analytics, Subscriptions, Accounts
+Budget model + Gemma AI insights
+
+### LIFEX Master Plan
+Saved to ~/STAXX/staax/LIFEX_MASTER_PLAN.md
+7 modules: STAAX, INVEX, BUDGEX, FINEX, NETEX, GOALEX + Mobile
+
+### Pending Next Session
+1. FINEX: wire real data (STAAX + INVEX + BUDGEX APIs)
+2. LIFEX Score computation
+3. Daily Briefing cron at 08:30 IST
+4. NETEX: net worth engine + AURUM data migration
+5. GOALEX: goals & FI planning
+6. EAS Android build
+7. INVEX Analysis Phase 2 (Screener.in)
