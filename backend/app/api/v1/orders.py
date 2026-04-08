@@ -444,13 +444,11 @@ async def get_trade_replay(
     _IST_zone = _dt.timezone(_dt.timedelta(hours=5, minutes=30))
 
     def _to_ist_api_str(utc_dt: _dt.datetime) -> str:
-        """UTC datetime → 'YYYY-MM-DD HH:MM' in IST for Angel One API."""
         if utc_dt.tzinfo is None:
             utc_dt = utc_dt.replace(tzinfo=_dt.timezone.utc)
         return utc_dt.astimezone(_IST_zone).strftime("%Y-%m-%d %H:%M")
 
     def _parse_candle_ts(ts_str: str) -> str:
-        """Angel One candle timestamp → 'HH:MM:SS' in IST."""
         try:
             dt = _dt.datetime.fromisoformat(str(ts_str))
             if dt.tzinfo is None:
@@ -467,12 +465,14 @@ async def get_trade_replay(
             angel_broker = _b
             break
 
-    async def _fetch_candles(order) -> list[dict]:
-        """Return [{time, ltp, pnl}] from 1-min Angel One candles, or [] on failure."""
+    async def _fetch_candles(order) -> tuple[list[dict], str]:
+        """Return (candle_pts, error_reason). error_reason='' means success."""
         if not angel_broker:
-            return []
-        if not order.instrument_token or not order.fill_time or not order.exit_time:
-            return []
+            return [], "no_broker"
+        if not order.instrument_token:
+            return [], "no_instrument_token"
+        if not order.fill_time or not order.exit_time:
+            return [], "no_times"
         try:
             raw = await angel_broker.get_candle_data(
                 symbol       = order.symbol or "",
@@ -483,7 +483,7 @@ async def get_trade_replay(
                 to_dt        = _to_ist_api_str(order.exit_time),
             )
             if not raw:
-                return []
+                return [], "no_data"
             fp  = float(order.fill_price or 0)
             qty = float(order.quantity or 1)
             buy = (order.direction or "buy").lower() == "buy"
@@ -494,13 +494,13 @@ async def get_trade_replay(
                 close = float(c[4])
                 c_pnl = (close - fp) * qty if buy else (fp - close) * qty
                 pts.append({"time": _parse_candle_ts(c[0]), "ltp": close, "pnl": round(c_pnl, 2)})
-            return pts
+            return pts, ""
         except Exception as e:
             logger.warning(f"[REPLAY] Candle fetch failed for order {order.id}: {e}")
-            return []
+            return [], "api_error"
 
-    # Build legs with 1-min candle series
-    legs = []
+    # ── Build legs with candles + SL/TP annotations ───────────────────────────
+    legs: list[dict] = []
     for order in orders_raw:
         if not (order.fill_time and order.exit_time and order.pnl is not None):
             continue
@@ -509,62 +509,148 @@ async def get_trade_replay(
             order.exit_price_manual if order.exit_price_manual is not None
             else (order.exit_price or 0)
         )
-        op_pnl  = float(order.pnl)
-        candles = await _fetch_candles(order)
+        op_pnl     = float(order.pnl)
+        candles, candle_err = await _fetch_candles(order)
 
-        # Always anchor to exact entry (pnl=0) and exit (pnl=final) points
+        # Anchor candles at exact entry (pnl=0) and exit (pnl=final)
         if candles:
-            entry_pt = {"time": _fmt_time(order.fill_time),  "ltp": ep, "pnl": 0.0}
-            exit_pt  = {"time": _fmt_time(order.exit_time),  "ltp": xp, "pnl": round(op_pnl, 2)}
-            # De-dup: drop any candle whose time == entry or exit time, then bookend
-            inner = [c for c in candles if c["time"] not in (entry_pt["time"], exit_pt["time"])]
-            candles = [entry_pt] + inner + [exit_pt]
+            entry_pt = {"time": _fmt_time(order.fill_time), "ltp": ep, "pnl": 0.0}
+            exit_pt  = {"time": _fmt_time(order.exit_time), "ltp": xp, "pnl": round(op_pnl, 2)}
+            inner    = [c for c in candles if c["time"] not in (entry_pt["time"], exit_pt["time"])]
+            candles  = [entry_pt] + inner + [exit_pt]
+
+        # SL/TP P&L levels (pre-computed so frontend only needs toY(sl_pnl))
+        qty = float(getattr(order, "quantity", None) or 1)
+        buy = (order.direction or "buy").lower() == "buy"
+
+        sl_actual = getattr(order, "sl_actual", None)
+        sl_pnl    = None
+        if sl_actual:
+            sl_actual = float(sl_actual)
+            sl_pnl = round((sl_actual - ep) * qty if buy else (ep - sl_actual) * qty, 2)
+
+        ttp_activated = getattr(order, "ttp_activated", False)
+        ttp_current_tp = getattr(order, "ttp_current_tp", None)
+        tp_actual = float(ttp_current_tp) if (ttp_activated and ttp_current_tp) else None
+        tp_pnl    = None
+        if tp_actual:
+            tp_pnl = round((tp_actual - ep) * qty if buy else (ep - tp_actual) * qty, 2)
+
+        exit_reason_raw = getattr(order, "exit_reason", None)
+        exit_reason_str = exit_reason_raw.value if hasattr(exit_reason_raw, "value") else str(exit_reason_raw or "")
 
         legs.append({
-            "symbol":      order.symbol or "",
-            "direction":   (order.direction or "").upper(),
-            "entry_time":  _fmt_time(order.fill_time),
-            "exit_time":   _fmt_time(order.exit_time),
-            "entry_price": ep,
-            "exit_price":  xp,
-            "pnl":         op_pnl,
-            "candles":     candles,
+            "symbol":       order.symbol or "",
+            "direction":    (order.direction or "").upper(),
+            "entry_time":   _fmt_time(order.fill_time),
+            "exit_time":    _fmt_time(order.exit_time),
+            "entry_price":  ep,
+            "exit_price":   xp,
+            "pnl":          op_pnl,
+            "candles":      candles,
+            "candle_error": candle_err,
+            "sl_pnl":       sl_pnl,
+            "sl_level":     sl_actual,
+            "tp_pnl":       tp_pnl,
+            "tp_level":     tp_actual,
+            "sl_hit":       exit_reason_str in ("sl", "tsl"),
+            "tp_hit":       exit_reason_str == "tp",
+            "auto_sq":      exit_reason_str in ("sq", "auto_sq"),
+            "exit_reason":  exit_reason_str,
         })
 
-    # ── Combined MTM curve from per-leg candle data ───────────────────────────
-    # Build a minute-by-minute combined P&L series for the main chart.
-    # Falls back to [] if no candle data was fetched (frontend uses events array).
+    # ── Combined MTM curve ────────────────────────────────────────────────────
     mtm_curve: list[dict] = []
     if any(leg["candles"] for leg in legs):
-        # Collect all unique HH:MM:SS times
         all_times: set[str] = set()
         for leg in legs:
             for c in leg["candles"]:
                 all_times.add(c["time"])
-
         for t in sorted(all_times):
             combined = 0.0
             for leg in legs:
                 et = leg["entry_time"]
                 xt = leg["exit_time"]
                 if t < et:
-                    pass  # not yet entered
+                    pass
                 elif t >= xt:
-                    combined += leg["pnl"]  # fully realised
+                    combined += leg["pnl"]
                 else:
-                    # Open — find nearest candle at or before t
                     before = [c for c in leg["candles"] if c["time"] <= t]
                     if before:
                         combined += before[-1]["pnl"]
             mtm_curve.append({"time": t, "pnl": round(combined, 2)})
 
+    # ── Underlying index candles ──────────────────────────────────────────────
+    def _detect_underlying(symbol: str) -> tuple[str, str, str]:
+        s = (symbol or "").upper()
+        if "BANKNIFTY" in s:
+            return "BANKNIFTY", "99926009", "NSE"
+        if "NIFTY" in s:
+            return "NIFTY", "99926000", "NSE"
+        if "SENSEX" in s:
+            return "SENSEX", "99919000", "BSE"
+        return "", "", ""
+
+    underlying_name: str = ""
+    underlying_candles: list[dict] = []
+
+    if angel_broker and orders_raw and first_fill and last_exit:
+        u_name, u_token, u_exchange = _detect_underlying(orders_raw[0].symbol or "")
+        if u_name:
+            try:
+                u_raw = await angel_broker.get_candle_data(
+                    symbol       = "",
+                    exchange     = u_exchange,
+                    interval     = "ONE_MINUTE",
+                    symbol_token = u_token,
+                    from_dt      = _to_ist_api_str(first_fill),
+                    to_dt        = _to_ist_api_str(last_exit),
+                )
+                if u_raw:
+                    ref_price = float(u_raw[0][4])
+                    underlying_name = u_name
+                    for c in u_raw:
+                        if len(c) < 5:
+                            continue
+                        price = float(c[4])
+                        pct   = round((price - ref_price) / ref_price * 100, 3) if ref_price else 0.0
+                        underlying_candles.append({
+                            "time":       _parse_candle_ts(c[0]),
+                            "price":      price,
+                            "pct_change": pct,
+                        })
+            except Exception as e:
+                logger.warning(f"[REPLAY] Underlying fetch failed: {e}")
+
+    # ── Trade statistics ──────────────────────────────────────────────────────
+    pnl_series  = [p["pnl"] for p in mtm_curve] if mtm_curve else cumulative_pnl_values
+    time_series = [p["time"] for p in mtm_curve] if mtm_curve else []
+
+    stats: dict = {}
+    if pnl_series:
+        max_p = max(pnl_series)
+        min_p = min(pnl_series)
+        stats["max_profit"]       = round(max_p, 2)
+        stats["max_drawdown"]     = round(min_p, 2)
+        stats["avg_mtm"]          = round(sum(pnl_series) / len(pnl_series), 2)
+        stats["duration_minutes"] = duration_minutes
+        stats["time_at_peak"]     = time_series[pnl_series.index(max_p)] if time_series else "—"
+        stats["time_at_trough"]   = time_series[pnl_series.index(min_p)] if time_series else "—"
+        gross_profit = sum(leg["pnl"] for leg in legs if leg["pnl"] > 0)
+        gross_loss   = abs(sum(leg["pnl"] for leg in legs if leg["pnl"] < 0))
+        stats["profit_factor"]    = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
+
     return {
-        "algo_name": algo_name,
-        "date":      date,
-        "events":    events,
-        "summary":   summary,
-        "legs":      legs,
-        "mtm_curve": mtm_curve,
+        "algo_name":           algo_name,
+        "date":                date,
+        "events":              events,
+        "summary":             summary,
+        "legs":                legs,
+        "mtm_curve":           mtm_curve,
+        "underlying_name":     underlying_name,
+        "underlying_candles":  underlying_candles,
+        "stats":               stats if stats else None,
     }
 
 
