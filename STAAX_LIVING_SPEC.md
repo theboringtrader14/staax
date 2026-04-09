@@ -4209,3 +4209,33 @@ All events flow to event_log. FCM integration planned for:
 - Journey trigger (SL only / TP only / any) — currently hardcoded to "any"
 - Strike_value / strike_offset not supported in Journey child legs
 - ExecutionMode brainstorm (support not restrict) — design session pending
+
+
+## 09 Apr 2026 — Session Summary
+
+### Completed
+
+#### Execution philosophy — support not restrict
+- exit_on_margin_error wired in engine (was stored but never read)
+- Platform now has two user-controlled error behaviours per algo:
+  exit_on_margin_error: True = exit all on margin error, False = skip leg and continue
+  exit_on_entry_failure: True = exit all on any entry fail, False = continue other legs
+
+#### Unified button row on Orders page
+- All algo cards now show: RE | SYNC | SQ | T | RETRY ALGO
+- Enable/disable driven by consistent state matrix (not ad-hoc conditions)
+- RETRY ALGO: new amber button, fires full algo re-entry from scratch
+  Enabled: allLegsError, missed, no_trade, waiting-past-entry
+  Disabled: ORB window passed, closed, terminated
+- mapGroup() helper centralises group serialisation — eliminates triple duplication
+
+#### grid_entry_id, entry_type, orb_end_time in orders API response
+- Frontend can now correctly gate RETRY ALGO for ORB algos
+
+### Pending
+- ExecutionMode design session (support not restrict — remaining items)
+- Journey trigger (SL only / TP only) — hardcoded to "any"
+- INVEX Phase 2 SIP Engine
+- AWS deployment + static IP for Wife and Karthik AO accounts
+- Mobile push notifications via FCM (Phase 2)
+- Google AI API key issue in Claude Code (.env path mismatch)

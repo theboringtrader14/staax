@@ -1130,11 +1130,12 @@ export default function OrdersPage() {
 
                     // Action button definitions
                     const BTNS = [
-                      { label: 'RE',         col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: isTerminated || !!loading[`re-${gi}`],        title: undefined, action: () => doRE(gi) },
-                      { label: 'SYNC',       col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: isTerminated,                                 title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',         col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  disabled: isTerminated || isClosed || !hasOpenLegs,     title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
-                      { label: 'T',          col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: isTerminated || isClosed,                    title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: loading[`retry-${gi}`] ? '↻' : '↺ RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', disabled: !canRetry || !!loading[`retry-${gi}`], title: isOrbMissed ? 'ORB window closed' : (allLegsError ? undefined : 'All legs must be in error state'), action: () => doRetry(gi) },
+                      { label: 'RE',         col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  border: undefined, disabled: isTerminated || !!loading[`re-${gi}`],        title: undefined, action: () => doRE(gi) },
+                      { label: 'SYNC',       col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                                 title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SQ',         col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs,     title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'T',          col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                    title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
+                      { label: loading[`retry-${gi}`] ? '↻' : 'RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`], title: isOrbMissed ? 'ORB window closed' : (allLegsError ? undefined : 'All legs must be in error state'), action: () => doRetry(gi) },
+                      { label: 'REPLAY',     col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
                     return (
@@ -1234,7 +1235,7 @@ export default function OrdersPage() {
                                 onClick={btn.action}
                                 style={{
                                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                  gap: 4, padding: '0 14px', background: btn.bg, border: 'none',
+                                  gap: 4, padding: '0 14px', background: btn.bg, border: btn.border ?? 'none',
                                   borderRight: '0.5px solid rgba(255,255,255,0.06)',
                                   cursor: btn.disabled ? 'not-allowed' : 'pointer',
                                   color: btn.col, minWidth: 52, transition: 'all 150ms',

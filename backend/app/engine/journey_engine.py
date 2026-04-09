@@ -82,7 +82,10 @@ class SyntheticLeg:
         self.ttp_y                = c.get("ttp_y")
         self.ttp_unit             = c.get("ttp_unit", "pts")
         self.ttp_enabled          = bool(self.ttp_x and self.ttp_y)
-        self.wt_enabled           = False
+        self.wt_enabled           = bool(c.get("wt_enabled", False))
+        self.wt_direction         = c.get("wt_direction", "up")
+        self.wt_value             = c.get("wt_value") or None
+        self.wt_unit              = c.get("wt_unit", "pts")
         self.reentry_enabled      = False
         self.reentry_mode         = None
         self.reentry_max          = 0
@@ -123,6 +126,12 @@ class JourneyEngine:
         Called from AlgoRunner exit callbacks (SL, TP, TSL, TTP, manual SQ).
         If order has journey_config registered, fires child leg.
         """
+        # MTM, global SL, and kill switch exits are algo-level — no child should fire
+        ALGO_LEVEL_EXITS = {"mtm_sl", "mtm_tp", "global_sl", "auto_sq"}
+        if exit_reason in ALGO_LEVEL_EXITS:
+            logger.info(f"[JOURNEY] Skipping child — algo-level exit: {exit_reason}")
+            return
+
         entry = self._watched.pop(str(order.id), None)
         if not entry:
             return
