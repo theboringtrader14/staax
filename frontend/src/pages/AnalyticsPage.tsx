@@ -297,7 +297,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
       <CumulativePnlChart orders={allOrders} />
 
       {/* Row 2 — chip toggle: P&L heatmap vs Health Scores */}
-      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
+      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px', overflow: 'visible' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {([['heatmap', 'P&L Heatmap'], ['health', 'Health Scores']] as const).map(([v, l]) => (
@@ -383,7 +383,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
           scores.length === 0
             ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No health data available.</div>
             : <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-                <div style={{ flexShrink: 0, paddingTop: '8px' }}>
+                <div style={{ flexShrink: 0, minWidth: 164, paddingTop: '8px', overflow: 'visible' }}>
                   <SegmentedArcGauge score={avgScore} />
                 </div>
                 <div style={{ flex: 1, ...tblWrap }}>

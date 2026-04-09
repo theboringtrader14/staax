@@ -119,6 +119,9 @@ class Algo(Base):
     # ["MON","WED","FRI"] — GridPage auto-creates entries each week for these days.
     # Updated by POST /grid/ (deploy) and DELETE /grid/{id}?remove_recurring=true.
     recurring_days = Column(JSON, nullable=True, default=list)
+    pending_day_removals = Column(JSON, nullable=True, default=list)
+    # Days queued for removal after midnight. Set when user removes an active day.
+    # Processed by scheduler at 00:01 IST and applied to recurring_days.
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

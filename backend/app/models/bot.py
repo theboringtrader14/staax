@@ -1,5 +1,5 @@
 """Bot model — Indicator Systems bots."""
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from app.core.database import Base
@@ -60,8 +60,13 @@ class BotSignal(Base):
     status         = Column(String(20),  nullable=False, server_default='fired')
     bot_order_id   = Column(UUID(as_uuid=True), nullable=True)  # FK to bot_orders if executed
     error_message  = Column(String(200), nullable=True)
-    fired_at       = Column(DateTime(timezone=True), nullable=False)
-    created_at     = Column(DateTime(timezone=True))
+    fired_at         = Column(DateTime(timezone=True), nullable=False)
+    candle_timestamp = Column(DateTime(timezone=True), nullable=True)
+    created_at       = Column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint('bot_id', 'signal_type', 'direction', 'candle_timestamp', name='uq_bot_signal'),
+    )
 
 class BotOrder(Base):
     __tablename__ = "bot_orders"

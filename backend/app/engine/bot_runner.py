@@ -169,6 +169,36 @@ class BotRunner:
         for bot in self._bots:
             self._init_bot(bot)
 
+        # Seed dedup dict from DB so restarts don't replay last session's signals
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.models.bot import BotSignal
+            from sqlalchemy import select as _sel, func as _func
+
+            async with AsyncSessionLocal() as _db:
+                # Latest signal per bot_id
+                sub = (
+                    _sel(
+                        BotSignal.bot_id,
+                        _func.max(BotSignal.created_at).label("max_created"),
+                    )
+                    .group_by(BotSignal.bot_id)
+                    .subquery()
+                )
+                rows_result = await _db.execute(
+                    _sel(BotSignal).join(
+                        sub,
+                        (BotSignal.bot_id == sub.c.bot_id)
+                        & (BotSignal.created_at == sub.c.max_created),
+                    )
+                )
+                rows = rows_result.scalars().all()
+                for row in rows:
+                    self._last_signal[str(row.bot_id)] = f"{row.signal_type}:{row.direction.lower()}"
+                logger.info(f"[BOT] Seeded _last_signal for {len(rows)} bot(s) from DB")
+        except Exception as _e:
+            logger.warning(f"[BOT] Could not seed _last_signal from DB: {_e}")
+
     def _init_bot(self, bot):
         """Create CandleAggregator + strategy instance for one bot."""
         from app.engine.candle_fetcher import CandleAggregator
@@ -295,7 +325,7 @@ class BotRunner:
         # ── Save to bot_signals (only when acted or new unique condition) ─────
         # "fired" = order action taken; "skipped" = condition met but no position
         signal_status = "fired" if acted else "skipped"
-        await self._save_signal(bot, signal, status=signal_status)
+        await self._save_signal(bot, signal, status=signal_status, candle=candle)
 
         # ── Broadcast to frontend via WebSocket (only if acted) ───────────────
         if acted and self._ws_manager:
@@ -308,17 +338,31 @@ class BotRunner:
 
     # ── Signal persistence ────────────────────────────────────────────────────
 
-    async def _save_signal(self, bot, signal, status: str = "fired"):
-        """Persist signal to bot_signals table.
-
-        status: "fired" = order action taken, "skipped" = condition met but no position.
-        """
+    async def _save_signal(self, bot, signal, status: str = "fired", candle=None):
+        """Persist signal to bot_signals table with dedup by (bot_id, signal_type, direction, candle_timestamp)."""
         try:
             from app.core.database import AsyncSessionLocal
             from app.models.bot import BotSignal
+            from sqlalchemy import select as _select
             import uuid as uuid_lib
 
+            candle_ts = getattr(candle, "timestamp", None) or getattr(candle, "close_time", None)
+
             async with AsyncSessionLocal() as db:
+                # DB-level dedup: skip if identical signal for this candle already exists
+                if candle_ts is not None:
+                    existing_result = await db.execute(
+                        _select(BotSignal).where(
+                            BotSignal.bot_id == bot.id,
+                            BotSignal.signal_type == signal.type,
+                            BotSignal.direction == signal.direction.upper(),
+                            BotSignal.candle_timestamp == candle_ts,
+                        ).limit(1)
+                    )
+                    if existing_result.scalar_one_or_none():
+                        logger.debug(f"[BOT] Dedup: signal for candle {candle_ts} already in DB — skipping")
+                        return
+
                 sig = BotSignal(
                     id=uuid_lib.uuid4(),
                     bot_id=bot.id,
@@ -329,6 +373,7 @@ class BotRunner:
                     trigger_price=signal.price,
                     status=status,
                     fired_at=datetime.now(timezone.utc),
+                    candle_timestamp=candle_ts,
                     created_at=datetime.now(timezone.utc),
                 )
                 db.add(sig)

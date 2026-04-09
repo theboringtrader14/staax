@@ -271,11 +271,113 @@ class BotSignalCreate(BaseModel):
     trigger_price: Optional[float] = None
     status:        str = "fired"
 
+
+class TVWebhookBody(BaseModel):
+    bot_id:  str
+    action:  str          # "buy" | "sell" | "exit"
+    symbol:  str
+    price:   float
+    secret:  str
+
+
+@router.post("/webhook/tradingview")
+async def tradingview_webhook(body: TVWebhookBody, db: AsyncSession = Depends(get_db)):
+    """
+    TradingView alert webhook.
+    Validates secret, deduplicates, fires bot_runner entry/exit.
+    """
+    from app.core.config import settings
+    from app.engine.bot_runner import bot_runner as _bot_runner_instance
+    from app.models.bot import BotSignal, Bot
+
+    # 1. Secret validation
+    if not settings.TRADINGVIEW_WEBHOOK_SECRET or body.secret != settings.TRADINGVIEW_WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
+    # 2. Find bot
+    try:
+        bot_uuid = uuid_lib.UUID(body.bot_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid bot_id")
+
+    result = await db.execute(select(Bot).where(Bot.id == bot_uuid))
+    bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    # 3. Map action to signal_type + direction
+    action = body.action.lower()
+    if action == "buy":
+        signal_type, direction = "entry", "BUY"
+    elif action == "sell":
+        signal_type, direction = "entry", "SELL"
+    elif action == "exit":
+        signal_type, direction = "exit", "SELL"
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+
+    # 4. Dedup: check if same signal already fired today
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing_result = await db.execute(
+        select(BotSignal).where(
+            BotSignal.bot_id == bot_uuid,
+            BotSignal.signal_type == signal_type,
+            BotSignal.direction == direction,
+            BotSignal.fired_at >= today_start,
+        ).limit(1)
+    )
+    if existing_result.scalar_one_or_none():
+        return {"status": "duplicate", "skipped": True}
+
+    # 5. Create signal
+    sig = BotSignal(
+        id=uuid_lib.uuid4(),
+        bot_id=bot_uuid,
+        signal_type=signal_type,
+        direction=direction,
+        instrument=bot.instrument,
+        expiry=bot.expiry,
+        trigger_price=body.price,
+        status="fired",
+        fired_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(sig)
+    await db.commit()
+
+    # 6. Fire bot_runner action if runner is available
+    try:
+        if _bot_runner_instance and action in ("buy",):
+            class _FakeSig:
+                type = signal_type; direction_attr = direction.lower()
+                price = body.price; reason = "tradingview"
+                direction = direction.lower()
+            await _bot_runner_instance._enter_trade(bot, body.price, _FakeSig())
+        elif _bot_runner_instance and action in ("sell", "exit"):
+            await _bot_runner_instance._exit_trade(bot, body.price)
+    except Exception as _e:
+        logger.warning(f"[TV-WEBHOOK] bot_runner action failed (signal still saved): {_e}")
+
+    return {"status": "accepted"}
+
+
 @router.post("/{bot_id}/signals")
 async def create_signal(bot_id: str, body: BotSignalCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Bot).where(Bot.id == bot_id))
     bot = result.scalar_one_or_none()
     if not bot: raise HTTPException(404, "Bot not found")
+    # Dedup: check if identical signal already fired today
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    dup_result = await db.execute(
+        select(BotSignal).where(
+            BotSignal.bot_id == uuid_lib.UUID(bot_id),
+            BotSignal.signal_type == body.signal_type,
+            BotSignal.direction == (body.direction or "").upper(),
+            BotSignal.fired_at >= today_start,
+        ).limit(1)
+    )
+    if dup_result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Duplicate signal already fired today for this bot")
     sig = BotSignal(
         id=uuid_lib.uuid4(),
         bot_id=uuid_lib.UUID(bot_id),

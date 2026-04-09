@@ -23,6 +23,7 @@ interface Cell {
   entry:        string
   exit?:        string
   pnl?:         number
+  tradingDate?: string
 }
 interface Algo {
   id:            string
@@ -123,6 +124,9 @@ export default function GridPage() {
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
+  const [showDeferModal, setShowDeferModal] = useState(false)
+  const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
+  const [deferDay,       setDeferDay]       = useState('')
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -202,6 +206,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
           entry:       e.entry_time  || algoMatch?.et || '09:16',
           exit:        e.exit_time   || algoMatch?.xt || '15:10',
           pnl:         e.pnl ?? undefined,
+          tradingDate: e.trading_date || undefined,
         }
       }
       setGrid(newGrid)
@@ -258,45 +263,55 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
   const toggleDay = async (algo: Algo, day: string) => {
     const isActive = algo.recurringDays.includes(day)
 
-    // Guard: block removal if this day's grid entry has active/placed orders
     if (isActive) {
-      const st = grid[algo.id]?.[day]?.status
-      if (st === 'open' || st === 'order_pending' || st === 'algo_closed') {
-        setOpError('Cannot remove — algo has active orders today')
-        setTimeout(() => setOpError(''), 4000)
+      const cell     = grid[algo.id]?.[day]
+      const st       = cell?.status
+      const todayIso = weekDates[todayDay]
+
+      // BLOCK + DEFER: algo is active today — schedule removal for after midnight
+      const shouldDefer =
+        st === 'open' || st === 'order_pending' || st === 'algo_active' || st === 'waiting' ||
+        (st === 'algo_closed' && cell?.tradingDate === todayIso)
+
+      if (shouldDefer) {
+        setDeferAlgo(algo)
+        setDeferDay(day)
+        setShowDeferModal(true)
         return
       }
-      if (st === 'algo_active') {
-        setOpError('Cannot remove — algo is waiting for a trigger')
-        setTimeout(() => setOpError(''), 4000)
-        return
+
+      // ALLOW IMMEDIATELY: past day close, no_trade, error, undefined, future days
+      const newDays = algo.recurringDays.filter(d => d !== day)
+      setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: newDays } : x))
+      try {
+        const res = await algosAPI.updateRecurringDays(algo.id, newDays)
+        if (Array.isArray(res.data?.recurring_days))
+          setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: res.data.recurring_days } : x))
+      } catch {
+        setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: algo.recurringDays } : x))
+        flashError('Day update failed')
       }
-      // 'waiting', 'no_trade', 'error', undefined → allow removal
+      return
     }
 
-    const newDays = isActive
-      ? algo.recurringDays.filter(d => d !== day)
-      : [...algo.recurringDays, day]
-
-    // Optimistic update
+    // ADDING a day — always immediate
+    const newDays = [...algo.recurringDays, day]
     setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: newDays } : x))
-
     try {
-      const res = await algosAPI.update(algo.id, { recurring_days: newDays })
+      const res = await algosAPI.updateRecurringDays(algo.id, newDays)
       if (Array.isArray(res.data?.recurring_days))
         setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: res.data.recurring_days } : x))
 
       // Toast if deploying to today and entry time has already passed
-      if (!isActive && day === todayDay && algo.et) {
+      if (day === todayDay && algo.et) {
         const nowIST = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
         if (nowIST >= algo.et.slice(0, 5)) {
-          const dayLabel = day.charAt(0).toUpperCase() + day.slice(1)
+          const dayLabel = day.charAt(0).toUpperCase() + day.slice(1).toLowerCase()
           setAutoFillToast(`⏰ Entry time passed — ${algo.name} will fire next ${dayLabel}`)
           setTimeout(() => setAutoFillToast(''), 4000)
         }
       }
     } catch {
-      // Roll back on failure
       setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: algo.recurringDays } : x))
       flashError('Day update failed')
     }
@@ -816,6 +831,44 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
           gap: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', pointerEvents: 'none',
         }}>
           <span style={{ color: 'var(--red)', fontSize: '13px', fontWeight: 600 }}>⚠ {opError}</span>
+        </div>
+      )}
+
+      {/* ── Defer removal modal ── */}
+      {showDeferModal && deferAlgo && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#1A1208', border:'1px solid rgba(255,107,0,0.35)', borderRadius:12, padding:'28px 32px', maxWidth:420, width:'90%' }}>
+            <div style={{ fontFamily:'var(--font-display)', fontSize:15, fontWeight:700, color:'rgba(232,232,248,0.9)', marginBottom:10 }}>
+              Remove from recurring schedule?
+            </div>
+            <div style={{ fontSize:13, color:'rgba(200,200,220,0.75)', marginBottom:24, lineHeight:1.5 }}>
+              <strong>{deferAlgo.name}</strong> is active today ({deferDay}). Removing now could disrupt today's session.
+              <br/><br/>
+              Remove from future <strong>{deferDay}</strong>s after tonight?
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button
+                onClick={async () => {
+                  setShowDeferModal(false)
+                  try {
+                    await algosAPI.scheduleRemoval(deferAlgo.id, deferDay)
+                    setAutoFillToast(`🕛 ${deferAlgo.name} will be removed from ${deferDay}s after midnight`)
+                    setTimeout(() => setAutoFillToast(''), 5000)
+                  } catch {
+                    flashError('Schedule removal failed')
+                  }
+                  setDeferAlgo(null); setDeferDay('')
+                }}
+                style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none', background:'rgba(255,107,0,0.15)', color:'var(--ox-glow)', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+                Yes, future only
+              </button>
+              <button
+                onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
+                style={{ flex:1, padding:'10px 0', borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'transparent', color:'rgba(200,200,220,0.6)', fontSize:13, cursor:'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

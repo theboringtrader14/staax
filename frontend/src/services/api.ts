@@ -66,6 +66,10 @@ export const algosAPI = {
   sq:        (id: string, orderIds: string[] = []) =>
     api.post(`/orders/${id}/square-off`, { order_ids: orderIds.length ? orderIds : null, reason: 'manual_sq' }),
   terminate: (id: string) => api.post(`/algos/${id}/terminate`),
+  updateRecurringDays: (id: string, days: string[]) =>
+    api.patch(`/algos/${id}/recurring-days`, { days }),
+  scheduleRemoval: (id: string, day: string) =>
+    api.post(`/algos/${id}/schedule-removal`, { day }),
 }
 
 // ── Grid ──────────────────────────────────────────────────────────────────────

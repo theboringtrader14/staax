@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # Google AI
     GOOGLE_AI_API_KEY: str = ""
 
+    # TradingView
+    TRADINGVIEW_WEBHOOK_SECRET: str = ""
+
     # STAAX Auth
     STAAX_USERNAME: str = "karthik"
     STAAX_PASSWORD_HASH: str = ""

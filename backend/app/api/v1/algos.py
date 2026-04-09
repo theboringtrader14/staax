@@ -662,6 +662,40 @@ async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
+class RecurringDaysUpdate(BaseModel):
+    days: List[str]
+
+@router.patch("/{algo_id}/recurring-days")
+async def update_recurring_days(algo_id: str, body: RecurringDaysUpdate, db: AsyncSession = Depends(get_db)):
+    """Update recurring_days only — does NOT touch legs or any other algo field."""
+    result = await db.execute(select(Algo).where(Algo.id == algo_id).with_for_update())
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    algo.recurring_days = [d.upper() for d in body.days]
+    await db.commit()
+    return {"recurring_days": algo.recurring_days}
+
+
+class ScheduleRemovalRequest(BaseModel):
+    day: str
+
+@router.post("/{algo_id}/schedule-removal")
+async def schedule_day_removal(algo_id: str, body: ScheduleRemovalRequest, db: AsyncSession = Depends(get_db)):
+    """Queue a day for removal from recurring_days after midnight.
+    Used when algo is active on that day — safe to remove tomorrow."""
+    result = await db.execute(select(Algo).where(Algo.id == algo_id).with_for_update())
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    day_upper = body.day.upper()
+    current = list(algo.pending_day_removals or [])
+    if day_upper not in current:
+        algo.pending_day_removals = current + [day_upper]
+    await db.commit()
+    return {"scheduled": True, "day": day_upper}
+
+
 @router.post("/{algo_id}/terminate")
 async def terminate_algo(algo_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """

@@ -247,74 +247,65 @@ async def error_analytics(
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
-    """Historical error/failure analytics per algo."""
-    from app.models.algo import Algo
-    from app.models.order import OrderStatus
+    """Historical error/failure analytics — reads from event_log table.
+
+    Returns row-level events with date, algo_name, error_type (prefix), message,
+    plus by_day and by_type aggregations.
+    """
+    from app.models.event_log import EventLog
+    from sqlalchemy import or_, cast, Date as SADate
+
+    ERROR_PREFIXES = (
+        "[ERROR]", "[MARGIN_ERROR]", "[TOKEN_ERROR]",
+        "[RETRY_FAILED]", "[ENTRY_MISSED]", "[FEED_ERROR]", "[FEED]",
+    )
+
     fy_start, fy_end = _fy_range(fy)
+
     conditions = [
-        Order.status == OrderStatus.ERROR,
-        Order.created_at >= fy_start,
-        Order.created_at <= fy_end,
+        EventLog.ts >= fy_start,
+        EventLog.ts <= fy_end,
+        or_(*[EventLog.msg.like(f"{prefix}%") for prefix in ERROR_PREFIXES]),
     ]
     if account_id:
-        import uuid as _uuid
-        try:
-            conditions.append(Order.account_id == _uuid.UUID(account_id))
-        except ValueError:
-            pass
-    if is_practix is not None:
-        conditions.append(Order.is_practix == is_practix)
+        conditions.append(EventLog.account_id == account_id)
 
-    # Per-algo error counts
-    agg = await db.execute(
-        select(
-            Algo.name,
-            func.count(Order.id).label('errors'),
-            func.max(Order.created_at).label('last_error'),
-        )
-        .join(Algo, Order.algo_id == Algo.id, isouter=True)
+    res = await db.execute(
+        select(EventLog)
         .where(*conditions)
-        .group_by(Algo.name)
-        .order_by(func.count(Order.id).desc())
+        .order_by(EventLog.ts.desc())
     )
-    per_algo = [{"algo": r[0], "errors": r[1], "last_error": r[2].isoformat() if r[2] else None} for r in agg.all()]
+    raw = res.scalars().all()
 
-    # Last 20 error orders
-    recent = await db.execute(
-        select(Order, Algo.name.label('algo_name'))
-        .join(Algo, Order.algo_id == Algo.id, isouter=True)
-        .where(*conditions)
-        .order_by(Order.created_at.desc())
-        .limit(20)
-    )
-    recent_rows = [
-        {
-            "id": str(r.Order.id),
-            "algo": r.algo_name,
-            "symbol": r.Order.symbol,
-            "error_message": r.Order.error_message,
-            "created_at": r.Order.created_at.isoformat() if r.Order.created_at else None,
-        }
-        for r in recent.all()
-    ]
+    def _extract_prefix(msg: str) -> str:
+        for p in ERROR_PREFIXES:
+            if msg.startswith(p):
+                return p
+        return "[ERROR]"
 
-    # Total orders for error rate
-    total_res = await db.execute(
-        select(func.count(Order.id)).where(
-            Order.created_at >= fy_start,
-            Order.created_at <= fy_end,
-            *([] if is_practix is None else [Order.is_practix == is_practix]),
-        )
-    )
-    total = total_res.scalar() or 1
+    rows = []
+    by_day: dict = {}
+    by_type: dict = {}
+
+    for r in raw:
+        date_str = r.ts.date().isoformat() if r.ts else None
+        prefix   = _extract_prefix(r.msg or "")
+        rows.append({
+            "date":       date_str,
+            "algo_name":  r.algo_name or "unknown",
+            "error_type": prefix,
+            "message":    r.msg or "",
+        })
+        if date_str:
+            by_day[date_str] = by_day.get(date_str, 0) + 1
+        by_type[prefix] = by_type.get(prefix, 0) + 1
 
     return {
-        "per_algo": per_algo,
-        "recent": recent_rows,
-        "total_errors": sum(r["errors"] for r in per_algo),
-        "total_orders": total,
-        "error_rate_pct": round(sum(r["errors"] for r in per_algo) / total * 100, 2),
-        "fy": fy,
+        "rows":         rows,
+        "by_day":       [{"date": d, "count": c} for d, c in sorted(by_day.items(), reverse=True)],
+        "by_type":      [{"error_type": t, "count": c} for t, c in sorted(by_type.items(), key=lambda x: -x[1])],
+        "total_errors": len(rows),
+        "fy":           fy,
     }
 
 

@@ -164,6 +164,17 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+        # 00:01 IST — apply pending_day_removals to recurring_days
+        self._scheduler.add_job(
+            self._job_apply_pending_removals,
+            "cron",
+            hour=0,
+            minute=1,
+            timezone=IST,
+            id="job_apply_pending_removals",
+            replace_existing=True,
+        )
+
         logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, eod_cleanup, broker_reconnect")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
@@ -751,6 +762,51 @@ class AlgoScheduler:
             except Exception as e:
                 await db.rollback()
                 logger.error(f"EOD cleanup job failed: {e}")
+
+    async def _job_apply_pending_removals(self):
+        """
+        00:01 IST — apply pending_day_removals to recurring_days.
+        Runs after midnight so algos that were active yesterday are safely removed
+        from their recurring schedule without disrupting the live session.
+        """
+        logger.info("⏰ 00:01 — applying pending day removals")
+        from app.models.algo import Algo
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(Algo).where(
+                        Algo.pending_day_removals.isnot(None),
+                    )
+                )
+                algos = result.scalars().all()
+                applied = 0
+                for algo in algos:
+                    pending = list(algo.pending_day_removals or [])
+                    if not pending:
+                        continue
+                    current = list(algo.recurring_days or [])
+                    new_days = [d for d in current if d not in pending]
+                    algo.recurring_days = new_days
+                    algo.pending_day_removals = []
+                    applied += 1
+                    logger.info(
+                        f"[SCHEDULE] {algo.name} — auto-removed {pending} from recurring_days"
+                    )
+                    try:
+                        from app.engine import event_logger as _ev_s
+                        import asyncio
+                        asyncio.ensure_future(_ev_s.info(
+                            f"[SCHEDULE] {algo.name} — auto-removed {pending} from recurring_days after midnight",
+                            algo_name=algo.name,
+                            algo_id=str(algo.id),
+                            source="scheduler",
+                        ))
+                    except Exception:
+                        pass
+                await db.commit()
+                logger.info(f"✅ Applied pending day removals for {applied} algo(s)")
+            except Exception as e:
+                logger.error(f"[SCHEDULE] pending_day_removals job failed: {e}")
 
     async def recover_today_jobs(self):
         """
