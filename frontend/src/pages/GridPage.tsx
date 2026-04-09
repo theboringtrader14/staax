@@ -254,46 +254,26 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     })
   }, [algos])
 
-  // ── Deploy a day (day pill click) ────────────────────────────────────────────
-  const deployDay = async (algoId: string, day: string) => {
-    if (grid[algoId]?.[day]) return
-    const algo = algos.find(x => x.id === algoId)
-    const mult = cardMults[algoId] || 1
-    setGrid(g => ({ ...g, [algoId]: { ...g[algoId], [day]: { multiplier:mult, status:'algo_active', mode:isPractixMode?'practix':'live', entry:algo?.et||'09:16', exit:algo?.xt||'15:10' } } }))
-    try {
-      const res = await gridAPI.deploy({ algo_id:algoId, trading_date:weekDates[day], lot_multiplier:mult, is_practix:isPractixMode })
-      const gridEntryId = String(res.data?.id||'')
-      setGrid(g => ({ ...g, [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], gridEntryId } } }))
-      if (Array.isArray(res.data?.algo_recurring_days)) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
-    } catch (e:any) {
-      setGrid(g => { const u={...g[algoId]}; delete u[day]; return { ...g, [algoId]:u } })
-      flashError(e?.response?.data?.detail || 'Deploy failed')
-    }
-  }
-
-  // ── Remove cell ──────────────────────────────────────────────────────────────
-  const removeDay = async (algoId: string, day: string, removeRecurring = false) => {
-    const cell = grid[algoId]?.[day]
-    const st = cell?.status
-    if (st==='algo_active'||st==='waiting'||st==='open'||st==='order_pending') { flashError('Cannot remove an active algo from this day'); return }
-    setGrid(g => { const u={...g[algoId]}; delete u[day]; return { ...g, [algoId]:u } })
-    if (removeRecurring) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays: x.recurringDays.filter(d => d !== day) } : x))
-    if (cell?.gridEntryId) {
-      try {
-        const res = await gridAPI.remove(cell.gridEntryId, removeRecurring)
-        if (Array.isArray(res.data?.algo_recurring_days))
-          setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
-      } catch {
-        setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:cell } }))
-        if (removeRecurring) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:[...x.recurringDays, day] } : x))
-        flashError('Remove failed')
-      }
-    }
-  }
-
   // ── Day pill toggle ───────────────────────────────────────────────────────────
   const toggleDay = async (algo: Algo, day: string) => {
     const isActive = algo.recurringDays.includes(day)
+
+    // Guard: block removal if this day's grid entry has active/placed orders
+    if (isActive) {
+      const st = grid[algo.id]?.[day]?.status
+      if (st === 'open' || st === 'order_pending' || st === 'algo_closed') {
+        setOpError('Cannot remove — algo has active orders today')
+        setTimeout(() => setOpError(''), 4000)
+        return
+      }
+      if (st === 'algo_active') {
+        setOpError('Cannot remove — algo is waiting for a trigger')
+        setTimeout(() => setOpError(''), 4000)
+        return
+      }
+      // 'waiting', 'no_trade', 'error', undefined → allow removal
+    }
+
     const newDays = isActive
       ? algo.recurringDays.filter(d => d !== day)
       : [...algo.recurringDays, day]
@@ -305,6 +285,16 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
       const res = await algosAPI.update(algo.id, { recurring_days: newDays })
       if (Array.isArray(res.data?.recurring_days))
         setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: res.data.recurring_days } : x))
+
+      // Toast if deploying to today and entry time has already passed
+      if (!isActive && day === todayDay && algo.et) {
+        const nowIST = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
+        if (nowIST >= algo.et.slice(0, 5)) {
+          const dayLabel = day.charAt(0).toUpperCase() + day.slice(1)
+          setAutoFillToast(`⏰ Entry time passed — ${algo.name} will fire next ${dayLabel}`)
+          setTimeout(() => setAutoFillToast(''), 4000)
+        }
+      }
     } catch {
       // Roll back on failure
       setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: algo.recurringDays } : x))
@@ -440,7 +430,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
             </div>
           </div>
           <div className="page-header-actions">
-            {opError       && <span style={{ fontSize:'11px', color:'var(--red)',        fontWeight:600 }}>⚠ {opError}</span>}
             {autoFillToast && <span style={{ fontSize:'11px', color:'var(--ox-radiant)', fontWeight:600 }}>↻ {autoFillToast}</span>}
 
             {/* Account filter */}
@@ -817,6 +806,18 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
           </div>
         )
       })()}
+
+      {/* ── Bottom toast (errors + info) ──────────────────────────────────── */}
+      {opError && (
+        <div style={{
+          position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: '#1E2022', border: '1px solid var(--bg-border)',
+          borderRadius: '8px', padding: '10px 18px', display: 'flex', alignItems: 'center',
+          gap: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', pointerEvents: 'none',
+        }}>
+          <span style={{ color: 'var(--red)', fontSize: '13px', fontWeight: 600 }}>⚠ {opError}</span>
+        </div>
+      )}
 
     </div>
   )

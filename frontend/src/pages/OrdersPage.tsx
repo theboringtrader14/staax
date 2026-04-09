@@ -33,11 +33,16 @@ interface AlgoGroup {
   isLive?: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
 }
+interface WaitingLeg {
+  leg_number: number; direction: string; instrument: string
+  underlying: string; lots: number; strike_type?: string; wt_enabled?: boolean
+}
 interface WaitingAlgo {
   grid_entry_id: string; algo_id: string; algo_name: string
   account_name: string; entry_time: string | null; exit_time: string | null
   is_practix: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
+  legs?: WaitingLeg[]
 }
 interface OpenPosition {
   algo_id: string; algo_name: string; account: string
@@ -343,7 +348,7 @@ export default function OrdersPage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
   const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
-  const [expandedError, setExpandedError] = useState<string | null>(null)
+  const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -949,7 +954,7 @@ export default function OrdersPage() {
           </div>
         )}
 
-        {/* Waiting algos */}
+        {/* Waiting algos — full algo cards */}
         {localFilteredWaiting.length > 0 && !isHolidayToday && (
           <div style={{ marginBottom: '16px' }}>
             {localFilteredWaiting.map(w => {
@@ -957,55 +962,126 @@ export default function OrdersPage() {
                 const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
                 return now >= w.entry_time.slice(0, 5)
               })()
-              // Derive instrument from algo name
-              const wInstrument = (() => {
-                const n = w.algo_name.toUpperCase()
-                for (const inst of INSTRUMENT_ORDER) {
-                  if (inst !== 'OTHER' && n.includes(inst)) return inst
-                }
-                return ''
-              })()
+              const errType = w.latest_error?.event_type || ''
+              const isFeedErr = errType.includes('FEED') || (w.latest_error?.reason || '').includes('FEED_ERROR')
+              const isEntryMissed = errType.includes('ENTRY_MISSED') || (w.latest_error?.reason || '').includes('ENTRY_MISSED')
+              const isOrbExpired = errType.includes('ORB_EXPIRED') || (w.latest_error?.reason || '').includes('ORB_EXPIRED')
+              const isRetrying = waitingRetryLoading[w.grid_entry_id]
+
+              const doWaitingRE = async () => {
+                setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: true }))
+                try {
+                  await ordersAPI.retryEntry(w.grid_entry_id)
+                  // Refresh orders + waiting list
+                  ordersAPI.waiting(selectedDate, isPractixMode)
+                    .then(res => setWaitingAlgos(res.data?.waiting || []))
+                    .catch(() => {})
+                } catch { /* silent — entry may already be queued */ }
+                finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
+              }
+
               return (
                 <div key={w.grid_entry_id} style={{
+                  background: 'var(--bg-card)',
+                  border: '0.5px solid var(--bg-border)',
                   borderLeft: `3px solid ${isMissed ? 'rgba(255,215,0,0.35)' : '#FFD700'}`,
-                  background: 'rgba(255,215,0,0.05)',
-                  borderRadius: 8, padding: '10px 14px',
-                  marginBottom: 8,
-                  opacity: isMissed ? 0.5 : 1,
+                  borderRadius: 8, marginBottom: 10,
+                  opacity: isMissed ? 0.65 : 1,
+                  overflow: 'hidden',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13 }}>
+                  {/* ── Card header ── */}
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 10 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13 }}>
                       {w.algo_name}
                     </span>
+                    {w.account_name && (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-row)', padding: '1px 6px', borderRadius: 4 }}>
+                        {w.account_name}
+                      </span>
+                    )}
                     <span style={{
-                      background: 'rgba(255,215,0,0.15)',
-                      color: '#FFD700', fontSize: 10,
-                      padding: '2px 8px', borderRadius: 20, letterSpacing: 1,
+                      background: 'rgba(255,215,0,0.15)', color: '#FFD700',
+                      fontSize: 10, padding: '2px 8px', borderRadius: 20, letterSpacing: 1,
                     }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
+                    {w.entry_time && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                        Entry {w.entry_time.slice(0, 5)}
+                      </span>
+                    )}
+                    {/* RE button */}
+                    <button
+                      disabled={isRetrying}
+                      onClick={doWaitingRE}
+                      style={{
+                        fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                        padding: '3px 10px', borderRadius: 4, border: 'none',
+                        background: 'rgba(215,123,18,0.18)', color: '#D77B12',
+                        cursor: isRetrying ? 'not-allowed' : 'pointer', opacity: isRetrying ? 0.5 : 1,
+                      }}
+                    >
+                      {isRetrying ? '↻' : 'RE'}
+                    </button>
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(232,232,248,0.5)', marginTop: 4 }}>
-                    {w.entry_time && <>Entry at {w.entry_time.slice(0, 5)}</>}
-                    {wInstrument && <> · {wInstrument}</>}
-                    {w.account_name && <> · {w.account_name}</>}
-                  </div>
-                  {w.latest_error && (
+
+                  {/* ── Event banners ── */}
+                  {(isFeedErr || isEntryMissed) && (
                     <div style={{
-                      marginTop: 6, padding: '4px 8px',
-                      background: 'rgba(255,68,68,0.1)',
-                      border: '0.5px solid rgba(255,68,68,0.3)',
-                      borderRadius: 4, fontSize: 11, color: '#FF4444',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => setExpandedError(prev => prev === w.algo_id ? null : w.algo_id)}>
-                      ⛔ {w.latest_error.reason?.slice(0, 60)}...
-                      {expandedError === w.algo_id && (
-                        <div style={{ marginTop: 4 }}>
-                          <div style={{ color: 'rgba(255,68,68,0.8)' }}>{w.latest_error.reason}</div>
-                          <div style={{ color: 'rgba(232,232,248,0.4)', fontSize: 10, marginTop: 2 }}>
-                            {w.latest_error.timestamp}
-                          </div>
+                      margin: '0 14px 8px', padding: '5px 10px',
+                      background: 'rgba(215,123,18,0.10)', border: '0.5px solid rgba(215,123,18,0.35)',
+                      borderRadius: 4, fontSize: 11, color: '#D77B12',
+                    }}>
+                      ⏭ {isEntryMissed ? 'Entry missed — server restarted after entry window' : 'Feed not ready — algo deferred to WAITING'}
+                    </div>
+                  )}
+                  {isOrbExpired && (
+                    <div style={{
+                      margin: '0 14px 8px', padding: '5px 10px',
+                      background: 'rgba(215,123,18,0.10)', border: '0.5px solid rgba(215,123,18,0.35)',
+                      borderRadius: 4, fontSize: 11, color: '#D77B12',
+                    }}>
+                      ⏱ ORB window closed — no breakout detected
+                    </div>
+                  )}
+                  {w.latest_error && !isFeedErr && !isEntryMissed && !isOrbExpired && (
+                    <div style={{
+                      margin: '0 14px 8px', padding: '5px 10px',
+                      background: 'rgba(239,68,68,0.06)', borderLeft: '3px solid #EF4444',
+                      borderRadius: 4, fontSize: 11, color: '#EF4444',
+                    }}>
+                      ⛔ {(w.latest_error.reason || '').slice(0, 120)}
+                    </div>
+                  )}
+
+                  {/* ── Leg rows ── */}
+                  {(w.legs || []).length > 0 && (
+                    <div style={{ borderTop: '0.5px solid var(--bg-border)', padding: '6px 14px 10px' }}>
+                      {(w.legs || []).map(leg => (
+                        <div key={leg.leg_number} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '5px 0', borderBottom: '0.5px solid rgba(255,255,255,0.04)',
+                          fontSize: 12,
+                        }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                            background: leg.direction === 'buy' ? 'rgba(34,221,136,0.12)' : 'rgba(255,68,68,0.12)',
+                            color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)',
+                          }}>
+                            {leg.direction?.toUpperCase()}
+                          </span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                            {leg.underlying} {leg.instrument?.toUpperCase()} · {leg.lots} lot{leg.lots !== 1 ? 's' : ''}
+                            {leg.strike_type ? ` · ${leg.strike_type.toUpperCase()}` : ''}
+                            {leg.wt_enabled ? ' · W&T' : ''}
+                          </span>
+                          <span style={{
+                            marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+                            color: '#FFD700', background: 'rgba(255,215,0,0.10)',
+                            padding: '1px 7px', borderRadius: 10, letterSpacing: 0.5,
+                          }}>
+                            WAITING
+                          </span>
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1214,7 +1290,9 @@ export default function OrdersPage() {
                               <tbody>
                                 {buildRows(group.legs).map(({ leg, isChild }) => {
                                   const pollEntry = ltpData[leg.id]
-                                  const resolvedLtp = pollEntry?.ltp ?? (leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined)
+                                  // Coerce instrumentToken to number — JSON may deserialise it as string
+                                  const tokenKey = leg.instrumentToken != null ? Number(leg.instrumentToken) : undefined
+                                  const resolvedLtp = pollEntry?.ltp ?? (tokenKey ? ltpMap[tokenKey] : undefined)
                                   const isLive = pollEntry?.ltp !== null &&
                                                  pollEntry?.ltp !== undefined &&
                                                  typeof pollEntry?.ltp === 'number'

@@ -123,6 +123,8 @@ export const ordersAPI = {
     api.patch(`/orders/${orderId}/exit-price`, { exit_price: price }),
   syncOrder: (algoId: string, data: object) =>
     api.post(`/orders/${algoId}/sync`, data),
+  retryEntry: (gridEntryId: string) =>
+    api.post(`/orders/${gridEntryId}/retry`),
 }
 
 // ── Services (Dashboard panel) ────────────────────────────────────────────────

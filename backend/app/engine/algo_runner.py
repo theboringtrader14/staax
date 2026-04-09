@@ -475,10 +475,24 @@ class AlgoRunner:
                     and getattr(self._ltp_consumer, "_running", False)
                 )
                 if not ltp_running:
+                    # Grace window: wait up to 8s (1s intervals) for feed to connect
+                    for _grace_attempt in range(8):
+                        await asyncio.sleep(1)
+                        ltp_running = (
+                            self._ltp_consumer is not None
+                            and getattr(self._ltp_consumer, "_running", False)
+                        )
+                        if ltp_running:
+                            logger.info(
+                                f"[FEED] SmartStream connected during grace window "
+                                f"(attempt {_grace_attempt + 1}/8) for {algo.name} "
+                                f"leg {leg.leg_number} — proceeding with entry"
+                            )
+                            break
+                if not ltp_running:
                     logger.warning(
-                        f"⚠️ [W&T/ORB] SmartStream not connected for {algo.name} "
-                        f"leg {leg.leg_number} — marking WAITING. "
-                        "Will trigger on tick arrival once stream connects."
+                        f"⚠️ [FEED_ERROR] SmartStream not ready after 8s grace for {algo.name} "
+                        f"leg {leg.leg_number} — leg deferred to WAITING state."
                     )
                     return False, ExecutionErrorCode.FEED_INACTIVE, True   # is_waiting=True
 
@@ -585,14 +599,37 @@ class AlgoRunner:
                 ltp              = original_order.fill_price or 0.0
             else:
                 if self._strike_selector:
-                    instrument = await self._strike_selector.select(
-                        underlying=leg.underlying,
-                        instrument_type=leg.instrument,  # "ce" or "pe"
-                        expiry=leg.expiry or "current_weekly",
-                        strike_type=leg.strike_type or "atm",
-                        strike_value=leg.strike_value,
-                        broker=account_broker,
-                    )
+                    _strike_err: Exception | None = None
+                    for _attempt in range(3):
+                        try:
+                            instrument = await self._strike_selector.select(
+                                underlying=leg.underlying,
+                                instrument_type=leg.instrument,  # "ce" or "pe"
+                                expiry=leg.expiry or "current_weekly",
+                                strike_type=leg.strike_type or "atm",
+                                strike_value=leg.strike_value,
+                                broker=account_broker,
+                            )
+                            _strike_err = None
+                            break  # success
+                        except Exception as _se:
+                            _strike_err = _se
+                            logger.warning(
+                                f"[TOKEN_ERROR] Strike selection attempt {_attempt + 1}/3 "
+                                f"failed for {algo.name} leg {leg.leg_number}: {_se}"
+                            )
+                            if _attempt < 2:
+                                await asyncio.sleep(1.5)
+                    if _strike_err is not None:
+                        _msg = f"[TOKEN_ERROR] Strike selection failed after 3 attempts: {_strike_err}"
+                        logger.error(_msg)
+                        await _ev.error(
+                            _msg,
+                            algo_name=algo.name,
+                            algo_id=str(algo.id),
+                            source="engine",
+                        )
+                        raise ValueError(_msg)
                 if not instrument:
                     _token_ok = not account_broker or account_broker.is_token_set()
                     if not _token_ok:
@@ -1502,8 +1539,10 @@ class AlgoRunner:
         logger.warning(
             f"⚠️ [W&T/ORB] {getattr(algo_state, 'algo_id', '')} set to WAITING: {msg}"
         )
+        is_feed_error = (msg == ExecutionErrorCode.FEED_INACTIVE or str(msg) == "FEED_INACTIVE")
+        prefix = "[FEED_ERROR] " if is_feed_error else ""
         await _ev.warn(
-            f"{getattr(algo_state, 'algo_id', '')} · WAITING: {msg}",
+            f"{prefix}{getattr(algo_state, 'algo_id', '')} · WAITING: {msg}",
             algo_name=str(getattr(algo_state, "algo_id", "")),
             source="engine",
         )

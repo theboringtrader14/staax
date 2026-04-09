@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 from app.engine.execution_manager import execution_manager
 from app.models.order import Order, OrderStatus, ExitReason
 from app.models.grid import GridEntry, GridStatus
-from app.models.algo import Algo
+from app.models.algo import Algo, AlgoLeg
 from app.models.account import Account
 from app.models.algo_state import AlgoState, AlgoRunStatus
 from app.models.execution_log import ExecutionLog
@@ -818,6 +818,27 @@ async def get_waiting_algos(
         except Exception as e:
             logger.warning(f"[waiting] latest_error fetch failed for algo {a.id}: {e}")
 
+        # Fetch legs for this algo
+        legs_data = []
+        try:
+            legs_result = await db.execute(
+                select(AlgoLeg)
+                .where(AlgoLeg.algo_id == a.id)
+                .order_by(AlgoLeg.leg_number)
+            )
+            for leg in legs_result.scalars().all():
+                legs_data.append({
+                    "leg_number":  leg.leg_number,
+                    "direction":   leg.direction,
+                    "instrument":  leg.instrument,
+                    "underlying":  leg.underlying,
+                    "lots":        leg.lots,
+                    "strike_type": leg.strike_type,
+                    "wt_enabled":  leg.wt_enabled,
+                })
+        except Exception as _le:
+            logger.warning(f"[waiting] legs fetch failed for algo {a.id}: {_le}")
+
         waiting.append({
             "grid_entry_id":  str(ge.id),
             "algo_id":        str(a.id),
@@ -830,6 +851,7 @@ async def get_waiting_algos(
             "lot_multiplier": ge.lot_multiplier,
             "phase":          "activated",   # post-09:15, waiting for entry_time
             "latest_error":   latest_error,
+            "legs":           legs_data,
         })
 
     # Sort combined list by entry_time
@@ -1340,6 +1362,80 @@ async def square_off(
         "failed":      failed,
         "algo_state":  algo_state.status.value if algo_state else None,
     }
+
+
+# ── Retry entry (manual re-trigger for WAITING/NO_TRADE algos) ───────────────
+
+@router.post("/{grid_entry_id}/retry")
+async def retry_entry(
+    grid_entry_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Manually re-trigger entry for a WAITING or NO_TRADE grid entry.
+    Resets grid_entry → ALGO_ACTIVE and algo_state → WAITING, then fires algo_runner.enter().
+    Blocked for ORB algos when the ORB window has already closed.
+    """
+    from app.engine import event_logger as _ev_r
+    from datetime import datetime, timezone, timedelta
+    from zoneinfo import ZoneInfo
+
+    IST = ZoneInfo("Asia/Kolkata")
+
+    try:
+        ge_uuid = _uuid.UUID(grid_entry_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid grid_entry_id")
+
+    # Fetch GridEntry + Algo
+    result = await db.execute(
+        select(GridEntry, Algo)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .where(GridEntry.id == ge_uuid)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Grid entry not found")
+    grid_entry, algo = row
+
+    # ORB window check
+    if getattr(algo, "entry_type", None) == "orb":
+        now_ist = datetime.now(IST)
+        orb_end_str = algo.orb_end_time or "11:16"
+        h_end, m_end = map(int, orb_end_str.split(":")[:2])
+        orb_end_dt = now_ist.replace(hour=h_end, minute=m_end, second=0, microsecond=0)
+        if now_ist > orb_end_dt:
+            return {"error": "ORB_WINDOW_PASSED", "message": f"ORB window has closed (ended {orb_end_str})"}
+
+    # Fetch AlgoState
+    state_result = await db.execute(
+        select(AlgoState).where(AlgoState.grid_entry_id == ge_uuid)
+    )
+    algo_state = state_result.scalar_one_or_none()
+
+    # Reset states
+    grid_entry.status = GridStatus.ALGO_ACTIVE
+    if algo_state:
+        algo_state.status = AlgoRunStatus.WAITING
+        algo_state.closed_at = None
+    await db.commit()
+
+    # Log the manual retry
+    await _ev_r.info(
+        f"[RETRY] {algo.name} manually retried by user",
+        algo_name=algo.name,
+        algo_id=str(algo.id),
+        source="orders_api",
+    )
+
+    # Fire algo_runner in background
+    algo_runner = getattr(request.app.state, "algo_runner", None)
+    if algo_runner:
+        import asyncio
+        asyncio.ensure_future(algo_runner.enter(grid_entry_id))
+
+    return {"status": "queued", "algo_name": algo.name, "grid_entry_id": grid_entry_id}
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────

@@ -806,7 +806,7 @@ export default function AlgoPage() {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exit Time</label>
+              <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exit Time{(stratMode === 'stbt' || stratMode === 'btst') ? ' (next day)' : ''}</label>
               <TimeInput value={exitTime} onChange={setExitTime} />
             </div>
             {stratMode === 'positional' && (

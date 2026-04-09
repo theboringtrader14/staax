@@ -621,14 +621,15 @@ class AlgoScheduler:
         async with AsyncSessionLocal() as db:
             try:
                 result = await db.execute(
-                    select(AlgoState, GridEntry)
+                    select(AlgoState, GridEntry, Algo)
                     .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
                     .where(AlgoState.grid_entry_id == grid_entry_id)
                 )
                 row = result.one_or_none()
                 if not row:
                     return
-                algo_state, grid_entry = row
+                algo_state, grid_entry, algo = row
 
                 if algo_state.status == AlgoRunStatus.WAITING:
                     algo_state.status = AlgoRunStatus.NO_TRADE
@@ -636,7 +637,9 @@ class AlgoScheduler:
                     await db.commit()
                     logger.info(f"Entry expired → NO_TRADE: {grid_entry_id}")
                     await _ev.warn(
-                        f"Entry window closed → NO_TRADE: {grid_entry_id}",
+                        f"[ENTRY_EXPIRED] {algo.name} — entry window closed, no order placed",
+                        algo_name=algo.name,
+                        algo_id=str(grid_entry.algo_id),
                         source="scheduler",
                     )
 
@@ -653,22 +656,25 @@ class AlgoScheduler:
         async with AsyncSessionLocal() as db:
             try:
                 result = await db.execute(
-                    select(AlgoState, GridEntry)
+                    select(AlgoState, GridEntry, Algo)
                     .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
                     .where(AlgoState.grid_entry_id == grid_entry_id)
                 )
                 row = result.one_or_none()
                 if not row:
                     return
 
-                algo_state, grid_entry = row
+                algo_state, grid_entry, algo = row
                 if algo_state.status == AlgoRunStatus.WAITING:
                     algo_state.status = AlgoRunStatus.NO_TRADE
                     grid_entry.status = GridStatus.NO_TRADE
                     await db.commit()
                     logger.info(f"ORB no trade: {grid_entry_id}")
-                    await _ev.info(
-                        f"ORB window closed — no breakout → NO_TRADE: {grid_entry_id}",
+                    await _ev.warn(
+                        f"[ORB_EXPIRED] {algo.name} — ORB window closed, no breakout detected",
+                        algo_name=algo.name,
+                        algo_id=str(grid_entry.algo_id),
                         source="scheduler",
                     )
 
@@ -813,7 +819,7 @@ class AlgoScheduler:
                                 f"(entry was {algo.entry_time})"
                             )
                             await _ev.warn(
-                                f"{algo.name} · Entry missed — server restarted after entry window ({algo.entry_time}) → NO_TRADE",
+                                f"[ENTRY_MISSED] {algo.name} — server restarted after entry window ({algo.entry_time}) → NO_TRADE",
                                 algo_name=algo.name,
                                 algo_id=str(algo_state.algo_id),
                                 source="scheduler",
@@ -1029,7 +1035,7 @@ class AlgoScheduler:
                             f"(orb_end was {orb_end_str})"
                         )
                         await _ev.warn(
-                            f"{algo.name} · ORB window expired during restart (orb_end {orb_end_str}) → NO_TRADE",
+                            f"[ORB_MISSED] {algo.name} — ORB window expired during restart recovery (orb_end {orb_end_str}) → NO_TRADE",
                             algo_name=algo.name,
                             algo_id=str(algo_state.algo_id),
                             source="scheduler",
