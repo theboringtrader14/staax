@@ -197,8 +197,12 @@ class AlgoRunner:
             try:
                 await self._enter_with_db(db, grid_entry_id, reentry, original_order)
             except Exception as e:
-                logger.error(f"AlgoRunner.enter failed for {grid_entry_id}: {e}")
-                await self._mark_error(grid_entry_id, str(e))
+                import traceback
+                logger.error(
+                    f"[CRITICAL] AlgoRunner.enter failed for {grid_entry_id}: "
+                    f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+                )
+                await self._mark_error(grid_entry_id, f"{type(e).__name__}: {str(e)[:200]}")
 
     async def _enter_with_db(
         self,

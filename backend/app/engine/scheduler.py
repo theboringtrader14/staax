@@ -766,7 +766,12 @@ class AlgoScheduler:
                     .where(
                         and_(
                             AlgoState.trading_date == str(today),
-                            Algo.strategy_mode == StrategyMode.INTRADAY,
+                            Algo.strategy_mode.in_([
+                                StrategyMode.INTRADAY,
+                                StrategyMode.BTST,
+                                StrategyMode.STBT,
+                                StrategyMode.POSITIONAL,
+                            ]),
                             AlgoState.status.in_([
                                 AlgoRunStatus.WAITING,
                                 AlgoRunStatus.ACTIVE,
