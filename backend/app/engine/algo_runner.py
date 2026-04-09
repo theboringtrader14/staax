@@ -355,6 +355,14 @@ class AlgoRunner:
                         details       = {"leg": leg.leg_number, "error": str(e)},
                     )
 
+                # Write to event_log so leg failure surfaces in System Log / notification bell
+                await _ev.error(
+                    f"{algo.name} · Leg {leg.leg_number} failed: {str(e)[:200]}",
+                    algo_name=algo.name,
+                    algo_id=str(algo.id),
+                    source="engine",
+                )
+
                 if algo.exit_on_entry_failure:
                     logger.warning(
                         f"on_entry_fail=exit_all — squaring off {len(placed_orders)} placed legs"
@@ -1493,6 +1501,11 @@ class AlgoRunner:
         await db.commit()
         logger.warning(
             f"⚠️ [W&T/ORB] {getattr(algo_state, 'algo_id', '')} set to WAITING: {msg}"
+        )
+        await _ev.warn(
+            f"{getattr(algo_state, 'algo_id', '')} · WAITING: {msg}",
+            algo_name=str(getattr(algo_state, "algo_id", "")),
+            source="engine",
         )
         # Defensive: deregister any SL/TP monitors that may be armed for this algo.
         # In the normal W&T/ORB flow this runs before orders are placed (empty loop),

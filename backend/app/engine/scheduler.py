@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.core.database import AsyncSessionLocal
+from app.engine import event_logger as _ev
 from app.engine.broker_reconnect   import broker_reconnect_manager
 from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo, StrategyMode, EntryType
@@ -583,7 +584,6 @@ class AlgoScheduler:
                 # Only fire directly for DIRECT entry type
                 # ORB and W&T are driven entirely by LTP callbacks
                 if algo.entry_type == EntryType.DIRECT:
-                    from app.engine import event_logger as _ev
                     await _ev.info(
                         f"Entry fired: {algo.name}",
                         source="scheduler",
@@ -635,6 +635,10 @@ class AlgoScheduler:
                     grid_entry.status = GridStatus.NO_TRADE
                     await db.commit()
                     logger.info(f"Entry expired → NO_TRADE: {grid_entry_id}")
+                    await _ev.warn(
+                        f"Entry window closed → NO_TRADE: {grid_entry_id}",
+                        source="scheduler",
+                    )
 
             except Exception as e:
                 await db.rollback()
@@ -663,6 +667,10 @@ class AlgoScheduler:
                     grid_entry.status = GridStatus.NO_TRADE
                     await db.commit()
                     logger.info(f"ORB no trade: {grid_entry_id}")
+                    await _ev.info(
+                        f"ORB window closed — no breakout → NO_TRADE: {grid_entry_id}",
+                        source="scheduler",
+                    )
 
             except Exception as e:
                 await db.rollback()
@@ -803,6 +811,12 @@ class AlgoScheduler:
                             logger.info(
                                 f"[RECOVERY] Entry expired → NO_TRADE: {algo.name} "
                                 f"(entry was {algo.entry_time})"
+                            )
+                            await _ev.warn(
+                                f"{algo.name} · Entry missed — server restarted after entry window ({algo.entry_time}) → NO_TRADE",
+                                algo_name=algo.name,
+                                algo_id=str(algo_state.algo_id),
+                                source="scheduler",
                             )
                             continue  # no jobs to register
 
@@ -1013,6 +1027,12 @@ class AlgoScheduler:
                         logger.info(
                             f"[RECOVERY-ORB] ORB window expired → NO_TRADE: {algo.name} "
                             f"(orb_end was {orb_end_str})"
+                        )
+                        await _ev.warn(
+                            f"{algo.name} · ORB window expired during restart (orb_end {orb_end_str}) → NO_TRADE",
+                            algo_name=algo.name,
+                            algo_id=str(algo_state.algo_id),
+                            source="scheduler",
                         )
                     else:
                         # ORB window still open — re-register tracker + orb_end job
