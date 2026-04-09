@@ -243,7 +243,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     if (activeAlgos.length === 0) return
     Promise.all(
       activeAlgos.map(algo =>
-        api.get('/api/v1/logs/', { params: { algo_id: algo.id, status: 'FAILED', limit: 1 } })
+        api.get('/logs/', { params: { algo_id: algo.id, status: 'FAILED', limit: 1 } })
           .then((res: any) => {
             const reason = res.data?.logs?.[0]?.reason
             return reason ? { id: algo.id, reason: reason as string } : null
