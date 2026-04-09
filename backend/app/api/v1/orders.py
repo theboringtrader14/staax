@@ -128,6 +128,7 @@ async def list_orders(
     )
     grid_entries = grid_result.scalars().all()
     grid_entry_ids = [e.id for e in grid_entries]
+    algo_to_ge: dict = {str(ge.algo_id): ge for ge in grid_entries}
 
     # Also include open orders from same day_of_week (BTST/STBT/Positional carry-forwards)
     open_ge_result = await db.execute(
@@ -201,10 +202,12 @@ async def list_orders(
             algo_meta: dict = {}
             for a, acc in algo_result.all():
                 algo_meta[str(a.id)] = {
-                    "algo_name": a.name,
-                    "account":   acc.nickname if acc else "",
-                    "mtm_sl":    a.mtm_sl or 0,
-                    "mtm_tp":    a.mtm_tp or 0,
+                    "algo_name":  a.name,
+                    "account":    acc.nickname if acc else "",
+                    "mtm_sl":     a.mtm_sl or 0,
+                    "mtm_tp":     a.mtm_tp or 0,
+                    "entry_type": a.entry_type.value if a.entry_type else "",
+                    "orb_end_time": a.orb_end_time or None,
                 }
         except Exception as e:
             logger.warning(f"[orders] groups metadata fetch failed: {e}")
@@ -240,15 +243,19 @@ async def list_orders(
             except Exception as e:
                 logger.warning(f"[orders] latest_error fetch failed for algo {aid}: {e}")
 
+            ge = algo_to_ge.get(aid)
             groups.append({
-                "algo_id":      aid,
-                "algo_name":    meta.get("algo_name", ""),
-                "account":      meta.get("account", ""),
-                "mtm":          mtm,
-                "mtm_sl":       meta.get("mtm_sl", 0),
-                "mtm_tp":       meta.get("mtm_tp", 0),
-                "latest_error": latest_error,
-                "orders":       group_orders,
+                "algo_id":        aid,
+                "algo_name":      meta.get("algo_name", ""),
+                "account":        meta.get("account", ""),
+                "mtm":            mtm,
+                "mtm_sl":         meta.get("mtm_sl", 0),
+                "mtm_tp":         meta.get("mtm_tp", 0),
+                "latest_error":   latest_error,
+                "orders":         group_orders,
+                "grid_entry_id":  str(ge.id) if ge else None,
+                "entry_type":     meta.get("entry_type", ""),
+                "orb_end_time":   meta.get("orb_end_time", None),
             })
 
     return {

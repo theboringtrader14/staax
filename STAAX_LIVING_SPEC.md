@@ -4166,3 +4166,46 @@ Saved to ~/STAXX/staax/LIFEX_MASTER_PLAN.md
 5. GOALEX: goals & FI planning
 6. EAS Android build
 7. INVEX Analysis Phase 2 (Screener.in)
+
+
+## 25 Mar 2026 — Session 2 Summary
+
+### Completed
+
+#### Journey fix (critical)
+- journey_config was on Algo model but engine read from AlgoLeg — Journey never fired in production
+- Fixed: journey_config column added to AlgoLeg, migration 0013, _build_leg() now saves it
+- Journey child placement now appears in System Log as [JOURNEY]
+
+#### RE-SL / RE-TP engine wiring
+- reentry_on_sl / reentry_on_tp were stored but never checked in reentry_engine.on_exit()
+- Fixed: SL exit skips re-entry if reentry_on_sl=False; TP exit skips if reentry_on_tp=False
+- Legacy path preserved: if both False, fires on any exit (backward compatible)
+
+#### Strike Selector fixes
+- MCX GOLDM futures: completely broken (wrong multiple, wrong expiry, empty chain) — fixed via _select_mcx_futures() with FUTCOM filter and nearest expiry logic
+- Expiry day trading: algos can now trade on expiry day until 15:20 IST (was blocked all day)
+- Premium strike: now picks closest strike >= target (was picking closest regardless)
+- Straddle premium: search window expanded from ±2 to ±5 strikes
+
+#### DTE Positional
+- dte column was saved but never consumed — dead field
+- Fixed: _resolve_expiry() now resolves DTE to Nth upcoming monthly expiry when strategy_mode=positional
+
+#### System Log completeness
+- [RETRY] / [RETRY_FAILED]: order retry queue attempts now visible
+- [RUN] [SQ] [SYNC] [TERMINATE]: all manual button actions now in System Log
+- [JOURNEY]: child leg placements visible
+- [FEED_ERROR] prefix on SmartStream WAITING events
+
+### Mobile Push Notifications (Phase 2 — after AWS deployment)
+All events flow to event_log. FCM integration planned for:
+- Critical: [ERROR], [RETRY_FAILED], [TERMINATE], [SL_HIT], [FEED_ERROR]
+- Important: [ENTRY], [EXIT], [TP_HIT], [ENTRY_MISSED]
+- Info (toggleable): [RETRY], [SQ], [SYNC], [JOURNEY]
+
+### Known Gaps (deferred)
+- Premium strike sequential LTP calls slow for large chains (optimization later)
+- Journey trigger (SL only / TP only / any) — currently hardcoded to "any"
+- Strike_value / strike_offset not supported in Journey child legs
+- ExecutionMode brainstorm (support not restrict) — design session pending

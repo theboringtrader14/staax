@@ -363,6 +363,38 @@ class AlgoRunner:
                     source="engine",
                 )
 
+                # Margin-error branch — checked before exit_on_entry_failure
+                _err_lower = str(e).lower()
+                _is_margin = any(kw in _err_lower for kw in ("insufficient margin", "insufficient funds", "margin"))
+                if _is_margin:
+                    if getattr(algo, "exit_on_margin_error", True):
+                        logger.warning(
+                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, "
+                            f"exiting all positions (exit_on_margin_error=True)"
+                        )
+                        await _ev.error(
+                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, exiting all positions",
+                            algo_name=algo.name, algo_id=str(algo.id), source="engine",
+                        )
+                        for placed in placed_orders:
+                            await self._close_order(db, placed, placed.ltp or 0.0, "margin_error")
+                        await self._set_error(
+                            db, algo_state, grid_entry,
+                            f"Margin error on leg {leg.leg_number}: {str(e)}"
+                        )
+                        await db.commit()
+                        return
+                    else:
+                        logger.info(
+                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, "
+                            f"continuing other legs (exit_on_margin_error=False)"
+                        )
+                        await _ev.info(
+                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, continuing",
+                            algo_name=algo.name, algo_id=str(algo.id), source="engine",
+                        )
+                        continue
+
                 if algo.exit_on_entry_failure:
                     logger.warning(
                         f"on_entry_fail=exit_all — squaring off {len(placed_orders)} placed legs"

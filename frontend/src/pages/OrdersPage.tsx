@@ -32,6 +32,7 @@ interface AlgoGroup {
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
   isLive?: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
+  gridEntryId?: string; entryType?: string; orbEndTime?: string | null
 }
 interface WaitingLeg {
   leg_number: number; direction: string; instrument: string
@@ -234,6 +235,43 @@ function setInlineStatus(setOrders: React.Dispatch<React.SetStateAction<AlgoGrou
   setTimeout(() => setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
 }
 
+function mapGroup(g: any): AlgoGroup {
+  return {
+    algoId:       g.algo_id,
+    algoName:     g.algo_name || g.algo_id,
+    account:      g.account || '',
+    mtm:          g.mtm ?? 0,
+    mtmSL:        g.mtm_sl ?? 0,
+    mtmTP:        g.mtm_tp ?? 0,
+    latest_error: g.latest_error ?? null,
+    gridEntryId:  g.grid_entry_id || undefined,
+    entryType:    g.entry_type || undefined,
+    orbEndTime:   g.orb_end_time ?? null,
+    legs: (g.orders || []).map((o: any): Leg => ({
+      id:              o.id,
+      journeyLevel:    o.journey_level || '1',
+      status:          (o.status ?? 'pending') as LegStatus,
+      symbol:          o.symbol || '',
+      dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
+      lots:            String(o.lots ?? ''),
+      entryCondition:  o.entry_type || '',
+      instrumentToken: o.instrument_token ?? undefined,
+      errorMessage:    o.error_message ?? undefined,
+      fillPrice:       o.fill_price ?? undefined,
+      fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
+      ltp:             o.ltp ?? undefined,
+      slOrig:          o.sl_original ?? undefined,
+      slActual:        o.sl_actual ?? undefined,
+      tslTrailCount:   o.tsl_trail_count ?? undefined,
+      target:          o.target ?? undefined,
+      exitPrice:       o.exit_price ?? undefined,
+      exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
+      exitReason:      o.exit_reason ?? undefined,
+      pnl:             o.pnl ?? undefined,
+    })),
+  }
+}
+
 const STRATEGY_LABEL: Record<string, { label: string; color: string }> = {
   intraday:   { label: 'Intraday',   color: '#5A5A61' },
   btst:       { label: 'BTST',       color: '#FF6B00' },
@@ -415,36 +453,7 @@ export default function OrdersPage() {
       .then(res => {
         const data = res.data
         const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
-        setOrders(raw.map((g: any): AlgoGroup => ({
-          algoId:   g.algo_id,
-          algoName: g.algo_name || g.algo_id,
-          account:  g.account || '',
-          mtm:      g.mtm ?? 0,
-          mtmSL:    g.mtm_sl ?? 0,
-          mtmTP:    g.mtm_tp ?? 0,
-          legs: (g.orders || []).map((o: any): Leg => ({
-            id:              o.id,
-            journeyLevel:    o.journey_level || '1',
-            status:          (o.status ?? 'pending') as LegStatus,
-            symbol:          o.symbol || '',
-            dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
-            lots:            String(o.lots ?? ''),
-            entryCondition:  o.entry_type || '',
-            instrumentToken: o.instrument_token ?? undefined,
-            errorMessage:    o.error_message ?? undefined,
-            fillPrice:       o.fill_price ?? undefined,
-            fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
-            ltp:             o.ltp ?? undefined,
-            slOrig:          o.sl_original ?? undefined,
-            slActual:        o.sl_actual ?? undefined,
-            tslTrailCount:   o.tsl_trail_count ?? undefined,
-            target:          o.target ?? undefined,
-            exitPrice:       o.exit_price ?? undefined,
-            exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
-            exitReason:      o.exit_reason ?? undefined,
-            pnl:             o.pnl ?? undefined,
-          })),
-        })))
+        setOrders(raw.map(mapGroup))
       })
       .catch(() => {})
 
@@ -534,6 +543,28 @@ export default function OrdersPage() {
     }
   }
 
+  const doRetry = async (idx: number) => {
+    const gridEntryId = orders[idx]?.gridEntryId
+    if (!gridEntryId) return
+    setLoading(l => ({ ...l, [`retry-${idx}`]: true }))
+    setInlineStatus(setOrders, idx, '↻ Retrying algo...', 'var(--accent-amber)')
+    try {
+      await ordersAPI.retryEntry(gridEntryId)
+      setInlineStatus(setOrders, idx, '✅ Algo retry triggered', 'var(--green)')
+      ordersAPI.list(selectedDate, isPractixMode)
+        .then(r => {
+          const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
+          setOrders(raw.map(mapGroup))
+        })
+        .catch(() => {})
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
+      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)')
+    } finally {
+      setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
+    }
+  }
+
   const doSQ = async (idx: number) => {
     const algoId   = orders[idx].algoId
     const selected = Object.keys(sqChecked).filter(k => sqChecked[k])
@@ -550,35 +581,7 @@ export default function OrdersPage() {
       ordersAPI.list(selectedDate, isPractixMode)
         .then(r => {
           const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
-          setOrders(raw.map((g: any): AlgoGroup => ({
-            algoId:   g.algo_id,
-            algoName: g.algo_name || g.algo_id,
-            account:  g.account || '',
-            mtm:      g.mtm ?? 0,
-            mtmSL:    g.mtm_sl ?? 0,
-            mtmTP:    g.mtm_tp ?? 0,
-            legs: (g.orders || []).map((o: any): Leg => ({
-              id:              o.id,
-              journeyLevel:    o.journey_level || '1',
-              status:          (o.status ?? 'pending') as LegStatus,
-              symbol:          o.symbol || '',
-              dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
-              lots:            String(o.lots ?? ''),
-              entryCondition:  o.entry_type || '',
-              instrumentToken: o.instrument_token ?? undefined,
-              errorMessage:    o.error_message ?? undefined,
-              fillPrice:       o.fill_price ?? undefined,
-              fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
-              ltp:             o.ltp ?? undefined,
-              slOrig:          o.sl_original ?? undefined,
-              slActual:        o.sl_actual ?? undefined,
-              target:          o.target ?? undefined,
-              exitPrice:       o.exit_price ?? undefined,
-              exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
-              exitReason:      o.exit_reason ?? undefined,
-              pnl:             o.pnl ?? undefined,
-            })),
-          })))
+          setOrders(raw.map(mapGroup))
         })
         .catch(() => {})
 
@@ -616,35 +619,7 @@ export default function OrdersPage() {
       ordersAPI.list(selectedDate, isPractixMode)
         .then(r => {
           const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
-          setOrders(raw.map((g: any): AlgoGroup => ({
-            algoId:   g.algo_id,
-            algoName: g.algo_name || g.algo_id,
-            account:  g.account || '',
-            mtm:      g.mtm ?? 0,
-            mtmSL:    g.mtm_sl ?? 0,
-            mtmTP:    g.mtm_tp ?? 0,
-            legs: (g.orders || []).map((o: any): Leg => ({
-              id:              o.id,
-              journeyLevel:    o.journey_level || '1',
-              status:          (o.status ?? 'pending') as LegStatus,
-              symbol:          o.symbol || '',
-              dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
-              lots:            String(o.lots ?? ''),
-              entryCondition:  o.entry_type || '',
-              instrumentToken: o.instrument_token ?? undefined,
-              errorMessage:    o.error_message ?? undefined,
-              fillPrice:       o.fill_price ?? undefined,
-              fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
-              ltp:             o.ltp ?? undefined,
-              slOrig:          o.sl_original ?? undefined,
-              slActual:        o.sl_actual ?? undefined,
-              target:          o.target ?? undefined,
-              exitPrice:       o.exit_price ?? undefined,
-              exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
-              exitReason:      o.exit_reason ?? undefined,
-              pnl:             o.pnl ?? undefined,
-            })),
-          })))
+          setOrders(raw.map(mapGroup))
         })
         .catch(() => {})
 
@@ -1141,13 +1116,25 @@ export default function OrdersPage() {
                     const totalPnl = closedL.reduce((s, l) => s + (l.pnl ?? 0), 0)
                     const showSpark = closedL.length > 0 && !group.legs.some(l => l.status === 'open' || l.status === 'pending')
 
+                    // Action button helper booleans
+                    const hasOpenLegs  = openLegs(gi).length > 0
+                    const allLegsError = group.legs.length > 0 && group.legs.every(l => l.status === 'error')
+                    const isTerminated = !!group.terminated
+                    const isOrbAlgo    = group.entryType === 'orb'
+                    const isOrbMissed  = isOrbAlgo && !!group.orbEndTime && (() => {
+                      const [hh, mm] = (group.orbEndTime || '').split(':').map(Number)
+                      const istNow   = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+                      return istNow.getHours() > hh || (istNow.getHours() === hh && istNow.getMinutes() >= mm)
+                    })()
+                    const canRetry     = !!group.gridEntryId && allLegsError && !isTerminated && !isClosed && !isOrbMissed
+
                     // Action button definitions
                     const BTNS = [
-                      { label: 'RE',     col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: !!group.terminated || !!loading[`re-${gi}`],               action: () => doRE(gi) },
-                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: !!group.terminated,                                         action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  disabled: !!group.terminated || isClosed || openLegs(gi).length === 0, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
-                      { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: !!group.terminated || isClosed,                             action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: 'REPLAY', col: '#A78BFA', bg: 'rgba(167,139,250,0.05)', hBg: 'rgba(167,139,250,0.14)', disabled: !isClosed,                                                 action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
+                      { label: 'RE',         col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  disabled: isTerminated || !!loading[`re-${gi}`],        title: undefined, action: () => doRE(gi) },
+                      { label: 'SYNC',       col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    disabled: isTerminated,                                 title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SQ',         col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  disabled: isTerminated || isClosed || !hasOpenLegs,     title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'T',          col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   disabled: isTerminated || isClosed,                    title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
+                      { label: loading[`retry-${gi}`] ? '↻' : '↺ RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', disabled: !canRetry || !!loading[`retry-${gi}`], title: isOrbMissed ? 'ORB window closed' : (allLegsError ? undefined : 'All legs must be in error state'), action: () => doRetry(gi) },
                     ]
 
                     return (
@@ -1242,7 +1229,8 @@ export default function OrdersPage() {
                           <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
                             {BTNS.map(btn => (
                               <button key={btn.label}
-                                disabled={btn.disabled || !!loading[`${btn.label.toLowerCase()}-${gi}`]}
+                                disabled={btn.disabled}
+                                title={btn.title}
                                 onClick={btn.action}
                                 style={{
                                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
