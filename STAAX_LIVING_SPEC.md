@@ -4239,3 +4239,66 @@ All events flow to event_log. FCM integration planned for:
 - AWS deployment + static IP for Wife and Karthik AO accounts
 - Mobile push notifications via FCM (Phase 2)
 - Google AI API key issue in Claude Code (.env path mismatch)
+
+
+## 09 Apr 2026 — Session 3 Summary
+
+### Completed
+
+#### Grid Day Pill — Smart Removal Logic
+- BLOCK + DEFER: active/open/waiting/algo_closed-today shows confirmation modal
+- "Remove future weeks" → POST /algos/{id}/schedule-removal queues day
+- Scheduler job at 00:01 IST auto-removes pending_day_removals from recurring_days
+- ALLOW immediately: algo_closed on past days, no_trade, error, future days
+- PATCH /algos/{id}/recurring-days — safe endpoint, no destructive leg recreation
+
+#### Indicator Bots — Dedup + TradingView Webhook
+- BotSignal unique constraint on (bot_id, signal_type, direction, candle_timestamp)
+- bot_runner seeds _last_signal from DB on startup — dedup survives restarts
+- POST /bots/webhook/tradingview — webhook with TRADINGVIEW_WEBHOOK_SECRET validation
+- Manual signal API now returns 409 on duplicate
+
+#### Analytics Failures Tab
+- /reports/errors rewritten to query event_log (system_events) not orders table
+- Filters by: [ERROR] [MARGIN_ERROR] [TOKEN_ERROR] [RETRY_FAILED] [ENTRY_MISSED] [FEED_ERROR]
+- Analytics gauge truncation fixed (overflow: visible)
+
+#### Journey Engine
+- SyntheticLeg now reads wt_enabled/direction/value/unit from child config
+- Algo-level exits (mtm_sl, mtm_tp, global_sl, auto_sq) skip child firing
+- REPLAY button restored — 6-button row: RE | SYNC | SQ | T | RETRY | REPLAY
+
+### Pending
+- BUDGEX living spec review (~/STAXX/budgex/BUDGEX_LIVING_SPEC.md)
+- LIFEX_MASTER_PLAN.md review
+- INVEX Phase 2 SIP backend wiring
+- Angel One API keys for INVEX (expired)
+- Wife + Karthik AO static IP registration
+- Mobile push notifications via FCM (Phase 2)
+- FINEX data wiring (STAAX + INVEX + BUDGEX APIs)
+
+## 09 Apr 2026 — Session 4 Updates
+
+### Fixed This Session
+- Grid day pill PATCH endpoint 404 — backend restart required for new route to register. Now working ✅
+- Logs double /api/v1/ prefix — GridPage.tsx line 246 fixed: '/api/v1/logs/' → '/logs/'
+- INVEX zerodha_loader reads token from staax_db not invex_db (separate connection, same host)
+- Analytics Failures tab — /reports/errors now queries event_log (system_events) not orders table
+- Analytics gauge truncation — overflow: visible fix on Health Scores card
+- exit_on_margin_error wired in engine
+- Orders unified 6-button row: RE | SYNC | SQ | T | RETRY | REPLAY
+- Journey SyntheticLeg W&T fields wired from child config
+- Journey algo-level exits (mtm_sl, mtm_tp, global_sl, auto_sq) skip child firing
+- Grid day pill smart removal: BLOCK+DEFER modal for active days, ALLOW immediately for safe days
+- Bots dedup: DB-level unique constraint + startup seed from DB
+- TradingView webhook endpoint added: POST /bots/webhook/tradingview
+- Migrations 0024 (pending_day_removals) + 0025 (bot_signal dedup) applied
+
+### Known Issues
+- Karthik AO + Wife AO: Invalid API Key — need new SmartAPI apps with server IP 13.202.164.243
+- INVEX Angel One API keys expired — need portal regeneration
+- SmartStream _on_open — verify tomorrow morning after Mom auto-login
+
+### Commits
+- 5e807bb: Grid day pill, bots dedup, analytics errors, journey fixes
+- Plus logs fix + INVEX zerodha fix (commit these now)
