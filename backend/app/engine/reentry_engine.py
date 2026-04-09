@@ -84,6 +84,16 @@ class ReentryEngine:
         if not leg or not leg.reentry_enabled or leg.reentry_max == 0:
             return
 
+        # Selective SL/TP filter — only applies when at least one flag is explicitly set
+        if leg.reentry_on_sl or leg.reentry_on_tp:
+            if exit_reason == "sl" and not leg.reentry_on_sl:
+                logger.info(f"Re-entry skipped — reentry_on_sl=False for leg {leg.id}")
+                return
+            if exit_reason == "tp" and not leg.reentry_on_tp:
+                logger.info(f"Re-entry skipped — reentry_on_tp=False for leg {leg.id}")
+                return
+        # Both False → legacy: fire on any exit (pre-flag behavior)
+
         # Load algo state
         state_result = await db.execute(
             select(AlgoState).where(

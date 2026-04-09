@@ -154,6 +154,14 @@ async def place(
                 f"[RETRY QUEUE] ✅ Placed on attempt {attempt}. "
                 f"broker_order_id={broker_order_id}"
             )
+            if attempt > 1:
+                # Only log to System Log on actual retries (attempt 1 is initial place)
+                from app.engine import event_logger as _ev
+                import asyncio
+                asyncio.ensure_future(_ev.info(
+                    f"[RETRY] {algo_tag} — attempt {attempt} of {MAX_ATTEMPTS}: placed broker_order={broker_order_id}",
+                    algo_name=algo_tag, source="retry_queue",
+                ))
             return broker_order_id
 
         except Exception as e:
@@ -175,6 +183,12 @@ async def place(
                     f"final_error={last_error}"
                 )
 
+    from app.engine import event_logger as _ev
+    import asyncio
+    asyncio.ensure_future(_ev.error(
+        f"[RETRY_FAILED] {algo_tag} — all {MAX_ATTEMPTS} attempts exhausted: {last_error}",
+        algo_name=algo_tag, source="retry_queue",
+    ))
     logger.error(
         f"[RETRY QUEUE] Order failed after {MAX_ATTEMPTS} attempts. "
         f"symbol={symbol} last_error={last_error}"

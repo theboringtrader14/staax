@@ -1095,6 +1095,19 @@ async def sync_order(
     await db.commit()
     await db.refresh(unlinked)
 
+    # Log to System Log
+    try:
+        from app.engine import event_logger as _ev_r
+        _sync_algo_result = await db.execute(select(Algo).where(Algo.id == algo_id))
+        _sync_algo = _sync_algo_result.scalar_one_or_none()
+        _sync_name = _sync_algo.name if _sync_algo else algo_id
+        await _ev_r.info(
+            f"[SYNC] {_sync_name} — orders synced with broker",
+            algo_name=_sync_name, source="orders_api",
+        )
+    except Exception as e:
+        logger.warning(f"[SYNC] Event log failed: {e}")
+
     # 6. Subscribe LTP for the synced order so live price feed starts
     try:
         ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
@@ -1346,6 +1359,19 @@ async def square_off(
             await db.commit()
     except Exception as e:
         logger.warning(f"[SQ] AlgoState update failed for algo {algo_id}: {e}")
+
+    # Log to System Log
+    try:
+        from app.engine import event_logger as _ev_r
+        algo_result = await db.execute(select(Algo).where(Algo.id == algo_id))
+        _sq_algo = algo_result.scalar_one_or_none()
+        _sq_name = _sq_algo.name if _sq_algo else algo_id
+        await _ev_r.info(
+            f"[SQ] {_sq_name} — manually squared off",
+            algo_name=_sq_name, source="orders_api",
+        )
+    except Exception as e:
+        logger.warning(f"[SQ] Event log failed: {e}")
 
     # Trigger immediate reconciliation after square-off
     try:

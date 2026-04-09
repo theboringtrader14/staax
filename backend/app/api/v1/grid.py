@@ -385,11 +385,17 @@ async def trigger_now(request: Request, db: AsyncSession = Depends(get_db)):
             )
             rows = result.all()
             triggered = []
+            from app.engine import event_logger as _ev_grid
             for algo_state, grid_entry, algo in rows:
                 try:
                     scheduler.schedule_algo_jobs(str(grid_entry.id), algo, today)
                     triggered.append(algo.name)
                     logger.info(f"[GRID/TRIGGER-NOW] Re-scheduled: {algo.name}")
+                    import asyncio as _asyncio
+                    _asyncio.ensure_future(_ev_grid.info(
+                        f"[RUN] {algo.name} — entry manually triggered by user",
+                        algo_name=algo.name, source="grid_api",
+                    ))
                 except Exception as e:
                     logger.warning(f"[GRID/TRIGGER-NOW] Failed for {algo.name}: {e}")
             return {"status": "triggered", "detail": f"Re-scheduled {len(triggered)} waiting algos", "algos": triggered}

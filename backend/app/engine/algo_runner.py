@@ -609,6 +609,7 @@ class AlgoRunner:
                                 strike_type=leg.strike_type or "atm",
                                 strike_value=leg.strike_value,
                                 broker=account_broker,
+                                dte=getattr(algo, "dte", None),
                             )
                             _strike_err = None
                             break  # success
@@ -1174,6 +1175,10 @@ class AlgoRunner:
                     # Journey: fire child leg before commit
                     if self._journey_engine and order:
                         await self._journey_engine.on_exit(db, order, "sl", self)
+                        await _ev.info(
+                            f"[JOURNEY] {order.algo_name or ''} — child leg fired after sl on {order.symbol}",
+                            algo_name=order.algo_name or "", source="engine",
+                        )
 
                     await db.commit()
 
@@ -1227,6 +1232,10 @@ class AlgoRunner:
                     # Journey: fire child leg before commit
                     if self._journey_engine and order:
                         await self._journey_engine.on_exit(db, order, "tp", self)
+                        await _ev.info(
+                            f"[JOURNEY] {order.algo_name or ''} — child leg fired after tp on {order.symbol}",
+                            algo_name=order.algo_name or "", source="engine",
+                        )
 
                     await db.commit()
 

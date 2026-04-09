@@ -182,6 +182,9 @@ class AlgoLeg(Base):
     reentry_mode    = Column(Enum(ReentryMode, values_callable=lambda x: [e.value for e in x]), nullable=True)
     reentry_max     = Column(Integer, default=0)   # 0–5
 
+    # ── Journey config (child leg to fire on exit — Phase 1E) ─────────────────
+    journey_config = Column(JSON, nullable=True)
+
     # ── Runtime strike resolution (set by algo_runner after strike selection) ──
     # Stored so LTP tracking and position monitors can access it via leg reference.
     instrument_token  = Column(Integer, nullable=True)

@@ -61,6 +61,9 @@ class LegCreate(BaseModel):
     reentry_enabled: bool           = False
     reentry_mode:    Optional[str]  = None
     reentry_max:     int            = 0
+    reentry_on_sl:   bool           = False
+    reentry_on_tp:   bool           = False
+    journey_config:  Optional[dict] = None
 
 
 class AlgoCreateRequest(BaseModel):
@@ -129,10 +132,11 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "wt_value":        leg.wt_value,
         "wt_unit":         leg.wt_unit,
         "reentry_enabled": leg.reentry_enabled,
-            "reentry_on_sl": leg.reentry_on_sl or False,
-            "reentry_on_tp": leg.reentry_on_tp or False,
+        "reentry_on_sl":   leg.reentry_on_sl or False,
+        "reentry_on_tp":   leg.reentry_on_tp or False,
         "reentry_mode":    leg.reentry_mode.value if leg.reentry_mode else None,
         "reentry_max":     leg.reentry_max,
+        "journey_config":  leg.journey_config,
     }
 
 
@@ -201,8 +205,11 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         wt_value=leg_data.wt_value,
         wt_unit=leg_data.wt_unit,
         reentry_enabled=leg_data.reentry_enabled,
+        reentry_on_sl=leg_data.reentry_on_sl,
+        reentry_on_tp=leg_data.reentry_on_tp,
         reentry_mode=ReentryMode(leg_data.reentry_mode) if leg_data.reentry_mode else None,
         reentry_max=leg_data.reentry_max,
+        journey_config=leg_data.journey_config,
         underlying_token=UNDERLYING_TOKENS.get((leg_data.underlying or "").upper(), 0),
     )
 
@@ -634,6 +641,19 @@ async def retry_entry(algo_id: str, db: AsyncSession = Depends(get_db)):
         f"skipped_duplicate={skipped_count} max_retries_reached={maxed_count}"
     )
 
+    if retried_count > 0:
+        try:
+            from app.engine import event_logger as _ev_re
+            _re_algo_result = await db.execute(select(Algo).where(Algo.id == algo_id))
+            _re_algo = _re_algo_result.scalar_one_or_none()
+            _re_name = _re_algo.name if _re_algo else algo_id
+            await _ev_re.info(
+                f"[RETRY] {_re_name} — entry manually retried by user",
+                algo_name=_re_name, source="algos_api",
+            )
+        except Exception as _ev_err:
+            logger.warning(f"[RE] Event log failed: {_ev_err}")
+
     return {
         "status":              "ok",
         "retried":             retried_count,
@@ -780,6 +800,15 @@ async def terminate_algo(algo_id: str, request: Request, db: AsyncSession = Depe
     logger.info(
         f"[TERMINATE] algo={algo_id} squared_off={len(squared_off)} failed={len(failed)}"
     )
+
+    try:
+        from app.engine import event_logger as _ev_algo
+        await _ev_algo.info(
+            f"[TERMINATE] {algo.name} — all positions squared off, pending orders cancelled, algo terminated by user",
+            algo_name=algo.name, source="algos_api",
+        )
+    except Exception as _ev_err:
+        logger.warning(f"[TERMINATE] Event log failed: {_ev_err}")
 
     return {
         "status":      "terminated",
