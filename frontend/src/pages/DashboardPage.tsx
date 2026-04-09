@@ -282,6 +282,15 @@ export default function DashboardPage() {
     return day >= 1 && day <= 5 && mins >= (9*60+15) && mins <= (15*60+30)
   })()
 
+  const isPreMarket: boolean = (() => {
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000
+    const nowIST = new Date(Date.now() + IST_OFFSET - new Date().getTimezoneOffset() * 60000)
+    const day = nowIST.getUTCDay()
+    const h = nowIST.getUTCHours(), m = nowIST.getUTCMinutes()
+    const mins = h * 60 + m
+    return day >= 1 && day <= 5 && mins >= (8*60+45) && mins < (9*60+15)
+  })()
+
   // ── overallState for health card container ──
   const ssConnected = (health?.checks?.smartstream?.connected || health?.checks?.smartstream?.ok) ?? false
 
@@ -725,45 +734,36 @@ export default function DashboardPage() {
             }} />
             <span className="card-label" style={{ marginBottom: 0 }}>Next Algo</span>
           </div>
-          {!isMarketHours ? (
+          {!isMarketHours && !isPreMarket ? (
             <div style={{ fontSize: '13px', color: '#FF4444', fontStyle: 'italic', opacity: 0.8 }}>Market Closed</div>
+          ) : isPreMarket ? (
+            <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>Market opening soon</div>
           ) : scheduledAlgos.length === 0 ? (
             <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No algos scheduled today</div>
           ) : !nextAlgo ? (
             <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No more algos today</div>
           ) : (
-            <>
-              <div style={{ position: 'relative', marginBottom: '10px' }}>
-                {scrollPos > 10 && (
-                  <button onClick={() => scrollAlgos('left')} style={{ position: 'absolute', left: '-4px', top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
-                )}
-                <div ref={algoScrollRef} onScroll={e => setScrollPos((e.target as HTMLDivElement).scrollLeft)}
-                  style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px' }}>
-                  {scheduledAlgos.map((a: any, i: number) => {
-                    const isNext = nextAlgo && a.name === nextAlgo.name && a.time === nextAlgo.time
-                    return (
-                      <div key={i} style={{ flexShrink: 0, padding: '7px 11px', borderRadius: '8px', background: isNext ? 'rgba(255,107,0,0.12)' : 'rgba(255,107,0,0.04)', border: '0.5px solid ' + (isNext ? 'rgba(255,107,0,0.40)' : 'rgba(255,107,0,0.14)'), minWidth: '98px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: isNext ? 'var(--ox-glow)' : 'var(--ox-ultra)', marginBottom: '3px', fontFamily: 'var(--font-display)' }}>{a.name}</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)' }}>{a.time}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
+            <div style={{ position: 'relative', marginBottom: '2px' }}>
+              {scrollPos > 10 && (
+                <button onClick={() => scrollAlgos('left')} style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
+              )}
+              <div ref={algoScrollRef} onScroll={e => setScrollPos((e.target as HTMLDivElement).scrollLeft)}
+                style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px', paddingLeft: scrollPos > 10 ? '30px' : '0', paddingRight: '30px' }}>
+                {scheduledAlgos.map((a: any, i: number) => {
+                  const isNext = nextAlgo && a.name === nextAlgo.name && a.time === nextAlgo.time
+                  const remaining = getTimeRemaining(a.time)
+                  const isFuture = a.secs > nowSecs
+                  return (
+                    <div key={i} style={{ flexShrink: 0, padding: '7px 11px', borderRadius: '8px', background: isNext ? 'rgba(255,107,0,0.12)' : 'rgba(255,107,0,0.04)', border: '0.5px solid ' + (isNext ? 'rgba(255,107,0,0.40)' : 'rgba(255,107,0,0.14)'), minWidth: '98px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: isNext ? 'var(--ox-glow)' : 'var(--ox-ultra)', marginBottom: '3px', fontFamily: 'var(--font-display)' }}>{a.name}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)' }}>{a.time}</div>
+                      {isFuture && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)', opacity: isNext ? 1 : 0.7, marginTop: '3px' }}>{remaining}</div>}
+                    </div>
+                  )
+                })}
               </div>
-              <div style={{ fontSize: 'clamp(15px,1.6vw,20px)', fontWeight: 800, color: 'var(--ox-glow)', fontFamily: 'var(--font-display)', letterSpacing: '-0.5px', marginBottom: '4px' }}>{nextAlgo.name}</div>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--sem-warn)' }}>{nextAlgo.time}</span>
-                {nextAlgo.instrument && <span style={{ fontSize: '11px', color: 'var(--gs-muted)' }}>{nextAlgo.instrument}</span>}
-                {(nextAlgo.account_nickname || nextAlgo.account_name || nextAlgo.broker) && (
-                  <span style={{ fontSize: '11px', color: 'var(--gs-muted)', opacity: 0.7 }}>{nextAlgo.account_nickname || nextAlgo.account_name || nextAlgo.broker}</span>
-                )}
-              </div>
-              <div style={{ fontSize: 'clamp(18px,2vw,26px)', fontWeight: 800, color: 'var(--sem-warn)', fontFamily: 'var(--font-mono)', textShadow: '0 0 18px rgba(255,215,0,0.5)', letterSpacing: '-1px' }}>
-                {getTimeRemaining(nextAlgo.time)}
-              </div>
-              <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>until {nextAlgo.name} at {nextAlgo.time}</div>
-            </>
+              <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
+            </div>
           )}
         </div>
           )

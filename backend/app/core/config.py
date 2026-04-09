@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # INVEX integration
     INVEX_API_URL: str = "http://localhost:8001"
 
+    # BUDGEX integration
+    BUDGEX_API_KEY: str = ""
+
     # JWT
     JWT_SECRET_KEY: str = "dev-jwt-secret"
     JWT_ALGORITHM: str = "HS256"

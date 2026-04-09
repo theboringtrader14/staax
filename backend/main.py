@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import auth, accounts, algos, grid, orders, reports, services
+from app.api.v1 import auth, accounts, algos, grid, orders, reports, services, notifications as notif_api, mobile, system as system_api
 from app.ws.routes import router as ws_router
 from app.engine.scheduler import AlgoScheduler
 
@@ -85,7 +85,10 @@ app.include_router(algos.router,    prefix="/api/v1/algos",    tags=["Algos"])
 app.include_router(grid.router,     prefix="/api/v1/grid",     tags=["Grid"])
 app.include_router(orders.router,   prefix="/api/v1/orders",   tags=["Orders"])
 app.include_router(reports.router,  prefix="/api/v1/reports",  tags=["Reports"])
-app.include_router(services.router, prefix="/api/v1/services", tags=["Services"])
+app.include_router(services.router,      prefix="/api/v1/services",      tags=["Services"])
+app.include_router(notif_api.router,    prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(mobile.router,       prefix="/api/v1/mobile",        tags=["Mobile"])
+app.include_router(system_api.router,   prefix="/api/v1/system",        tags=["System"])
 
 # ── WebSocket routes (/ws/...) ────────────────────────────────────────────────
 app.include_router(ws_router)
