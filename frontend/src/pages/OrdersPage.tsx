@@ -147,8 +147,10 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
       <td style={{ width: COLS[5], ...C, fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>
         {ltp != null ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            {hasLivePoll && (
+            {hasLivePoll ? (
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22DD88', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
+            ) : (
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', border: '1px solid #666', flexShrink: 0 }} />
             )}
             {ltp.toFixed(2)}
           </span>
@@ -1213,10 +1215,13 @@ export default function OrdersPage() {
                                 {buildRows(group.legs).map(({ leg, isChild }) => {
                                   const pollEntry = ltpData[leg.id]
                                   const resolvedLtp = pollEntry?.ltp ?? (leg.instrumentToken ? ltpMap[leg.instrumentToken] : undefined)
+                                  const isLive = pollEntry?.ltp !== null &&
+                                                 pollEntry?.ltp !== undefined &&
+                                                 typeof pollEntry?.ltp === 'number'
                                   return (
                                     <LegRow key={leg.id} leg={leg} isChild={isChild}
                                       liveLtp={resolvedLtp}
-                                      hasLivePoll={!!pollEntry}
+                                      hasLivePoll={isLive}
                                       livePnl={leg.status === 'open' ? pollEntry?.pnl : undefined}
                                       onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
                                     />
