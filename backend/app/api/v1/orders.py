@@ -841,6 +841,46 @@ async def get_waiting_algos(
     }
 
 
+async def _get_ltp_with_fallback(
+    token: int,
+    exchange: str,
+    symbol: str,
+    ltp_cache,
+    angel_broker,
+) -> tuple:
+    """
+    Returns (ltp: float | None, source: str) for a given instrument token.
+
+    Priority:
+      1. Redis (SmartStream tick — real-time, sub-second)
+      2. Angel One REST ltpData (fallback for illiquid tokens with no tick stream)
+      3. None / "unavailable" if both miss
+    """
+    # 1. Redis cache (populated by SmartStream)
+    if ltp_cache and token:
+        try:
+            redis_val = await ltp_cache.get(token)
+            if redis_val is not None:
+                return float(redis_val), "live"
+        except Exception as e:
+            logger.warning(f"[orders/ltp] Redis get failed for token {token}: {e}")
+
+    # 2. Angel One REST API fallback
+    if angel_broker and angel_broker.is_token_set() and token:
+        try:
+            ltp_val = await angel_broker.get_ltp_by_token(
+                exchange or "NFO",
+                symbol or "",
+                str(token),
+            )
+            if ltp_val:
+                return float(ltp_val), "rest"
+        except Exception as e:
+            logger.warning(f"[orders/ltp] REST LTP fallback failed for {symbol} (token={token}): {e}")
+
+    return None, "unavailable"
+
+
 @router.get("/ltp")
 async def get_orders_ltp(
     request: Request,
@@ -848,7 +888,9 @@ async def get_orders_ltp(
 ):
     """
     Returns live LTP and unrealised P&L for all OPEN orders.
-    LTP is read from ltp_cache (Redis). P&L is computed on the fly.
+    LTP is read from ltp_cache (Redis) first; falls back to Angel One REST
+    ltpData for illiquid tokens (e.g. far OTM options) that receive no ticks.
+    Response includes a `source` field: "live" | "rest" | "unavailable".
     """
     from zoneinfo import ZoneInfo
     _IST = ZoneInfo("Asia/Kolkata")
@@ -860,15 +902,25 @@ async def get_orders_ltp(
 
     ltp_cache = getattr(request.app.state, "ltp_cache", None)
 
+    # Resolve any logged-in Angel One broker instance from app state
+    angel_broker = None
+    for _key in ("angelone_karthik", "angelone_wife", "angelone_mom"):
+        _b = getattr(request.app.state, _key, None)
+        if _b and _b.is_token_set():
+            angel_broker = _b
+            break
+
     ltp_map: dict = {}
     for order in open_orders:
         oid = str(order.id)
-        live_ltp: Optional[float] = None
-        if ltp_cache and order.instrument_token:
-            try:
-                live_ltp = await ltp_cache.get(order.instrument_token)
-            except Exception as e:
-                logger.warning(f"[orders/ltp] ltp_cache.get failed for token {order.instrument_token}: {e}")
+
+        live_ltp, source = await _get_ltp_with_fallback(
+            token=order.instrument_token,
+            exchange=order.exchange,
+            symbol=order.symbol,
+            ltp_cache=ltp_cache,
+            angel_broker=angel_broker,
+        )
 
         pnl: Optional[float] = None
         if live_ltp is not None and order.fill_price and order.quantity:
@@ -883,6 +935,7 @@ async def get_orders_ltp(
             "ltp":        live_ltp,
             "pnl":        pnl,
             "fill_price": order.fill_price,
+            "source":     source,
         }
 
     now_ist = datetime.now(_IST).isoformat()
