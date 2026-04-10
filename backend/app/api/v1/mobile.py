@@ -1,6 +1,9 @@
 """Mobile dashboard API — single-call endpoint for LIFEX mobile app home screen."""
+import json
+import os
 import httpx
-from fastapi import APIRouter, Depends
+from pathlib import Path
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, date, timezone, timedelta
@@ -198,12 +201,48 @@ async def mobile_dashboard(
     }
 
 
+_TOKEN_FILE = Path(__file__).parent.parent.parent.parent / "push_tokens.json"
+
+
+@router.get("/session/status")
+async def session_status(request: Request):
+    """Returns SmartStream connection state and broker_mom_ao token validity."""
+    state = request.app.state
+    # SmartStream
+    ltp_consumer = getattr(state, "ltp_consumer", None)
+    adapter = getattr(ltp_consumer, "_angel_adapter", None) if ltp_consumer else None
+    smartstream = bool(getattr(adapter, "_connected", False))
+    # broker_mom_ao
+    broker_mom = getattr(state, "angelone_mom", None)
+    token_valid = False
+    if broker_mom:
+        try:
+            token_valid = bool(broker_mom.is_token_set())
+        except Exception:
+            token_valid = False
+    return {"smartstream": smartstream, "token_valid": token_valid}
+
+
+@router.post("/register-push")
+async def register_push_token(payload: dict):
+    """Store Expo push token from mobile app."""
+    token = payload.get("token", "")
+    platform = payload.get("platform", "unknown")
+    try:
+        tokens = json.loads(_TOKEN_FILE.read_text()) if _TOKEN_FILE.exists() else {}
+        tokens[platform] = token
+        _TOKEN_FILE.write_text(json.dumps(tokens))
+    except Exception:
+        pass  # non-critical
+    return {"registered": True, "platform": platform}
+
+
 @router.get("/notifications")
 async def get_notifications(
-    limit: int = 20,
+    limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
-    """Mobile notifications endpoint — maps EventLog entries to structured notification objects."""
+    """Mobile notifications endpoint — maps EventLog entries to notification objects."""
     from app.models.event_log import EventLog
     from sqlalchemy import desc as _desc
 
@@ -212,39 +251,34 @@ async def get_notifications(
     )
     events = result.scalars().all()
 
-    def _type(e: EventLog) -> str:
-        msg_l = (e.msg or "").lower()
-        src_l = (e.source or "").lower()
-        if "sl_hit" in src_l or "stop" in msg_l:
-            return "SL_HIT"
-        if e.level == "ERROR":
-            return "TRADE_ERROR"
-        if "entry" in src_l or "entry" in msg_l:
-            return "TRADE_ENTRY"
-        if "exit" in src_l or "exit" in msg_l or "sq" in src_l:
-            return "TRADE_EXIT"
-        return "SYSTEM"
-
-    def _title(e: EventLog, t: str) -> str:
-        name = e.algo_name or "Algo"
-        if t == "TRADE_ENTRY":  return f"{name} entry fired"
-        if t == "TRADE_EXIT":   return f"{name} exited"
-        if t == "TRADE_ERROR":  return f"{name} entry failed"
-        if t == "SL_HIT":       return f"SL hit on {name}"
-        return (e.msg or "System event")[:60]
+    def _map(msg: str):
+        m = (msg or "").strip()
+        if m.startswith("[SL]") or "sl_hit" in m.lower():
+            return "sl_hit", "Stop Loss Hit"
+        if m.startswith("[TP]") or "tp_hit" in m.lower():
+            return "tp_hit", "Take Profit Hit"
+        if m.startswith("[ENTRY]"):
+            return "algo_fired", "Algo Order Fired"
+        if m.startswith("[ERROR]") or m.startswith("[MARGIN_ERROR]") or m.startswith("[TOKEN_ERROR]"):
+            return "algo_error", "Algo Error"
+        if m.startswith("[FEED_ERROR]") or m.startswith("[FEED]"):
+            return "backend_down", "System Event"
+        if m.startswith("[RETRY_FAILED]"):
+            return "algo_error", "Retry Failed"
+        if m.startswith("[ENTRY_MISSED]"):
+            return "algo_error", "Entry Missed"
+        return "system_ready", "System"
 
     notifications = []
     for e in events:
-        t = _type(e)
+        ntype, title = _map(e.msg or "")
         notifications.append({
-            "id":        str(e.id),
-            "type":      t,
-            "title":     _title(e, t),
-            "subtitle":  e.source or (e.msg or "")[:80],
-            "timestamp": e.ts.isoformat() if e.ts else None,
-            "read":      False,
-            "algo_id":   e.algo_id,
-            "algo_name": e.algo_name,
+            "id":         str(e.id),
+            "title":      title,
+            "body":       e.msg or "",
+            "type":       ntype,
+            "created_at": e.ts.isoformat() if e.ts else None,
+            "read":       False,
         })
 
-    return {"notifications": notifications, "unread_count": len(notifications)}
+    return {"notifications": notifications}

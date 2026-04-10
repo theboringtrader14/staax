@@ -55,6 +55,7 @@ from app.engine.reentry_engine import ReentryEngine
 from app.engine.execution_errors import ExecutionErrorCode
 from app.engine.ltp_consumer import LTPConsumer
 from app.engine import event_logger as _ev
+from app.engine import push_sender as _push
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
@@ -432,6 +433,10 @@ class AlgoRunner:
                 f"{algo.name} · {sign} {order.symbol} OPEN @ {order.fill_price or 0:.2f}",
                 algo_name=algo.name, source="engine",
             )
+            asyncio.create_task(_push.send_push(
+                "⚡ Entry",
+                f"{algo.name} {sign} {order.symbol} @ {order.fill_price or 0:.2f}",
+            ))
         logger.info(
             f"✅ Entry complete: {algo.name} | {len(placed_orders)} orders placed"
         )
@@ -1221,6 +1226,10 @@ class AlgoRunner:
                         f"{order.algo_name or ''} · SL {order.symbol} @ {ltp} · P&L {_sign}₹{_pnl:,.0f}",
                         algo_name=order.algo_name or "", source="engine",
                     )
+                    asyncio.create_task(_push.send_push(
+                        "🔴 SL Hit",
+                        f"{order.algo_name or 'Algo'} — SL triggered on {order.symbol}",
+                    ))
                     # Re-entry check
                     if self._reentry_engine:
                         await self._reentry_engine.on_exit(
@@ -1276,6 +1285,10 @@ class AlgoRunner:
                         f"{order.algo_name or ''} · TP {order.symbol} @ {ltp} · P&L +₹{_pnl_tp:,.0f}",
                         algo_name=order.algo_name or "", source="engine",
                     )
+                    asyncio.create_task(_push.send_push(
+                        "✅ TP Hit",
+                        f"{order.algo_name or 'Algo'} — Target reached on {order.symbol}!",
+                    ))
 
                     if self._reentry_engine:
                         await self._reentry_engine.on_exit(
@@ -1560,6 +1573,13 @@ class AlgoRunner:
         algo_state.exit_reason = reason
         grid_entry.status  = GridStatus.NO_TRADE
         await db.commit()
+        try:
+            asyncio.create_task(_push.send_push(
+                "⏰ Missed",
+                f"{getattr(algo_state, 'algo_id', 'Algo')} — Entry window passed",
+            ))
+        except Exception:
+            pass
 
     async def _set_error(self, db, algo_state, grid_entry, msg):
         algo_state.status        = AlgoRunStatus.ERROR
@@ -1570,6 +1590,13 @@ class AlgoRunner:
             f"{getattr(algo_state, 'algo_id', '')} · {msg}",
             algo_name=str(getattr(algo_state, "algo_id", "")), source="engine",
         )
+        try:
+            asyncio.create_task(_push.send_push(
+                "❌ Error",
+                f"{getattr(algo_state, 'algo_id', 'Algo')} — {str(msg)[:80]}",
+            ))
+        except Exception:
+            pass
 
     async def _set_waiting(self, db, algo_state, grid_entry, msg):
         """Mark algo as WAITING (not ERROR) — used when SmartStream is down for W&T/ORB.
