@@ -182,15 +182,14 @@ export default function LandingPage() {
   const handleEnter = () => navigate(isAuthenticated ? '/dashboard' : '/login')
 
   const handleModuleClick = (moduleId: string) => {
-    const isProd = window.location.hostname !== 'localhost'
-    const routes: Record<string, { prod: string; local: string }> = {
-      STAAX:  { prod: 'https://staax.lifexos.co.in',  local: 'http://localhost:3000/dashboard' },
-      INVEX:  { prod: 'https://invex.lifexos.co.in',  local: 'http://localhost:3001/portfolio' },
-      BUDGEX: { prod: 'https://budgex.lifexos.co.in', local: 'http://localhost:3002/dashboard' },
-      FINEX:  { prod: 'https://finex.lifexos.co.in',  local: 'http://localhost:3003/dashboard' },
+    const urls: Record<string, string> = {
+      STAAX:  'https://staax.lifexos.co.in/dashboard',
+      INVEX:  'https://invex.lifexos.co.in',
+      BUDGEX: 'https://budgex.lifexos.co.in',
+      FINEX:  'https://finex.lifexos.co.in',
     }
-    const r = routes[moduleId]
-    if (r) window.location.href = isProd ? r.prod : r.local
+    const url = urls[moduleId]
+    if (url) window.open(url, '_self')
   }
 
   return (
