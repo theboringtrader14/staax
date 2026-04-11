@@ -608,33 +608,38 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                 </div>
                               </div>
 
-                              {/* ── Entry / Exit time ── */}
-                              <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'80px', flexShrink:0, marginRight:'16px' }}>
-                                <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                                  <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
-                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
-                                </div>
-                                <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                                  <span style={{ color:'var(--text-muted)', fontSize:'10px' }}>⏹</span>
-                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-muted)' }}>{algo.xt}</span>
-                                </div>
-                              </div>
+                              {/* ── Entry / Exit time + Lot multiplier — grouped for mobile layout ── */}
+                              <div className="algo-card-times-lots" style={{ display:'flex', flexDirection:'row', gap:16, alignItems:'center' }}>
 
-                              {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center', alignSelf:'center' }}
-                                onClick={e => e.stopPropagation()}>
-                                <button onClick={() => changeCardMult(algo.id, mult - 1)}
-                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
-                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>−</button>
-                                <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'#F0F0FF', minWidth:28, textAlign:'center', fontWeight:700 }}>
-                                  {mult}×
-                                </span>
-                                <button onClick={() => changeCardMult(algo.id, mult + 1)}
-                                  style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
-                                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>+</button>
-                              </div>
+                                {/* Entry / Exit time */}
+                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'80px', flexShrink:0, marginRight:'16px' }}>
+                                  <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                                    <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
+                                    <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
+                                  </div>
+                                  <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                                    <span style={{ color:'var(--text-muted)', fontSize:'10px' }}>⏹</span>
+                                    <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-muted)' }}>{algo.xt}</span>
+                                  </div>
+                                </div>
+
+                                {/* Lot multiplier stepper */}
+                                <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center', alignSelf:'center' }}
+                                  onClick={e => e.stopPropagation()}>
+                                  <button onClick={() => changeCardMult(algo.id, mult - 1)}
+                                    style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
+                                    onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
+                                    onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>−</button>
+                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'#F0F0FF', minWidth:28, textAlign:'center', fontWeight:700 }}>
+                                    {mult}×
+                                  </span>
+                                  <button onClick={() => changeCardMult(algo.id, mult + 1)}
+                                    style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
+                                    onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
+                                    onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>+</button>
+                                </div>
+
+                              </div>{/* end algo-card-times-lots */}
 
                               {/* ── Day pills M T W T F S S ── */}
                               <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', flexShrink:0, justifyContent:'center' }}>
