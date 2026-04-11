@@ -4302,3 +4302,47 @@ All events flow to event_log. FCM integration planned for:
 ### Commits
 - 5e807bb: Grid day pill, bots dedup, analytics errors, journey fixes
 - Plus logs fix + INVEX zerodha fix (commit these now)
+
+
+## 10 Apr 2026 — Session Summary
+
+### Completed
+
+#### Mobile Responsive — STAAX Web
+- Bottom navigation bar added (Layout.tsx) — fixed at bottom on mobile, hidden on desktop
+  6 tabs: Dashboard, Smart Grid, Orders, Reports, Bots, Accounts
+  Orange accent on active tab, safe-area-inset padding for iOS
+- Smart Cards page: horizontal swipe carousel on mobile
+  algo-cards-container → flex-direction: row, overflow-x: auto, scroll-snap
+  Each card: 300px wide, vertical stack inside, scrollable day pills, wrapped action buttons
+- Orders page: horizontal scroll table (overflow:hidden parents changed to overflow:visible)
+  table.staax-table min-width: 900px, scrolls inside orders-table-wrapper
+  All 11 columns retained — no hidden columns
+- Topbar: IST clock hidden on mobile (.topbar-clock display:none at ≤768px)
+- LandingPage module cards: now clickable, navigate to correct module URLs
+- nginx: staax.lifexos.co.in now has dedicated server block (separate from lifexos.co.in)
+  Routes to /home/ubuntu/staax/frontend/dist with SPA fallback
+
+#### Push Notifications (Mobile)
+- iOS push token registered: ExponentPushToken[ED0WidAQwUYvC94-ohZiUq]
+- Backend push_sender.py wired to algo_runner.py on SL/TP/entry/error/missed events
+- Android: needs new EAS build (prod URL config fix not in current APK)
+
+#### Start Session Button (Mobile)
+- STAAX tab in LIFEX mobile app has START button
+- Taps auto-login Mom AO + starts market feed
+- Shows STARTING... → ACTIVE states
+
+### Commits
+- 697e138: Mobile responsive v1 (initial)
+- 84864c3: Horizontal carousel, orders scroll, bottom nav, topbar compact
+- 080c842: LandingPage module cards clickable
+- nginx: staax.lifexos.co.in dedicated block (server-side change)
+
+### Pending
+- Android EAS build with production URLs
+- Android push token registration
+- Apple Developer account for iOS standalone build
+- INVEX SIP backend wiring
+- INVEX Angel One API keys regeneration
+- FINEX data wiring
