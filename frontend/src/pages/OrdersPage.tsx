@@ -1265,8 +1265,8 @@ export default function OrdersPage() {
                         )}
 
                         {/* ── Legs table ── */}
-                        <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
-                          <div className="cloud-fill" style={{ borderRadius: '8px', overflow: 'hidden', marginTop: '8px' }}>
+                        <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'visible', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
+                          <div className="cloud-fill" style={{ borderRadius: '8px', overflow: 'visible', marginTop: '8px' }}>
                             <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
                             <table className="staax-table">
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>

@@ -747,51 +747,78 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   .landing-cta { width: 100% !important; }
 }
 
+/* Mobile bottom nav — hidden by default on desktop */
+.mobile-bottom-nav { display: none; }
+
 /* ── Mobile Responsive (≤768px) ── */
 @media (max-width: 768px) {
 
-  /* SMART CARDS — stack card content vertically */
-  .algo-card > div[style] {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
-    padding: 12px 14px !important;
+  /* ── SMART CARDS — horizontal swipe carousel ── */
+  .algo-cards-container {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-snap-type: x mandatory !important;
+    gap: 12px !important;
+    padding: 0 16px 12px 16px !important;
+    scrollbar-width: none !important;
   }
 
-  /* Info block — full width, no fixed width */
-  .algo-card [style*="width: 290px"],
-  .algo-card [style*="width:290px"] {
+  .algo-cards-container::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Each algo card — fixed width card in carousel */
+  .algo-cards-container > div {
+    min-width: 300px !important;
+    max-width: 300px !important;
+    flex-shrink: 0 !important;
+    scroll-snap-align: start !important;
+  }
+
+  /* Inside each card — vertical stack */
+  .algo-cards-container .algo-card > div {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 14px !important;
+    gap: 10px !important;
+  }
+
+  /* Info block — full width inside card */
+  .algo-cards-container .algo-card [style*="width: 290px"],
+  .algo-cards-container .algo-card [style*="width:290px"] {
     width: 100% !important;
     min-width: unset !important;
   }
 
-  /* Entry/exit time block — inline with lot stepper */
-  .algo-card [style*="width: 80px"],
-  .algo-card [style*="width:80px"] {
+  /* Time + lot stepper row — side by side */
+  .algo-card-times-lots {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 16px !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .algo-card-times-lots > * {
     width: auto !important;
     min-width: unset !important;
     flex-shrink: 1 !important;
   }
 
-  /* Time + lot row — side by side */
-  .algo-card-times-lots {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 16px !important;
-    width: 100% !important;
-  }
-
-  /* Days row — scrollable horizontally */
-  .algo-card-days {
+  /* Days row — scrollable */
+  .algo-cards-container .algo-card-days {
     width: 100% !important;
     min-width: unset !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
-    flex-shrink: 1 !important;
+    flex-shrink: 0 !important;
   }
 
-  /* Actions — full width, wrap buttons */
-  .algo-card-actions {
+  /* Actions row — wrap buttons */
+  .algo-cards-container .algo-card-actions {
     width: 100% !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
@@ -802,38 +829,22 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
     gap: 6px !important;
   }
 
-  /* Action buttons — flex grow to fill row */
-  .algo-card-actions button {
+  .algo-cards-container .algo-card-actions button {
     flex: 1 !important;
-    min-width: 52px !important;
-    min-height: 40px !important;
-    font-size: 10px !important;
+    min-width: 44px !important;
+    min-height: 36px !important;
+    font-size: 9px !important;
   }
 
-  /* ORDERS TABLE — horizontal scroll */
-  .orders-table-wrapper,
-  div[style*="overflowX: auto"] {
+  /* ── ORDERS TABLE — horizontal scroll, all columns visible ── */
+  .orders-table-wrapper {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     width: 100% !important;
   }
 
-  /* Orders table — keep fixed widths but allow scroll */
-  table {
-    min-width: 700px !important;
-  }
-
-  /* Hide low-priority columns on mobile */
-  table colgroup col:nth-child(6),  /* LTP */
-  table colgroup col:nth-child(9),  /* Exit */
-  table colgroup col:nth-child(10), /* Reason */
-  table thead tr th:nth-child(6),
-  table thead tr th:nth-child(9),
-  table thead tr th:nth-child(10),
-  table tbody tr td:nth-child(6),
-  table tbody tr td:nth-child(9),
-  table tbody tr td:nth-child(10) {
-    display: none !important;
+  table.staax-table {
+    min-width: 900px !important;
   }
 
   /* Orders page button row — wrap */
@@ -842,8 +853,12 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
     gap: 6px !important;
   }
 
-  /* Topbar — hide welcome text */
+  /* ── TOPBAR — hide non-essential items ── */
   .topbar-welcome {
+    display: none !important;
+  }
+
+  .topbar-clock {
     display: none !important;
   }
 
@@ -856,24 +871,55 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   .stat-grid {
     grid-template-columns: 1fr 1fr !important;
   }
+
+  /* Add bottom padding so content isn't hidden behind bottom nav */
+  main {
+    padding-bottom: 72px !important;
+  }
+
+  /* ── MOBILE BOTTOM NAV ── */
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #1A1C1E;
+    border-top: 1px solid rgba(255,107,0,0.2);
+    z-index: 1000;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: rgba(255,255,255,0.4);
+    text-decoration: none;
+    font-size: 9px;
+    font-family: var(--font-display);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+
+  .mobile-nav-item.active {
+    color: #FF6B00;
+  }
+
+  .mobile-nav-item svg {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 @media (max-width: 480px) {
   /* Stat grid — 1 column on very small screens */
   .stat-grid {
     grid-template-columns: 1fr !important;
-  }
-
-  /* Orders table min-width tighter */
-  table {
-    min-width: 600px !important;
-  }
-
-  /* Hide additional columns on very small screens */
-  table thead tr th:nth-child(7),  /* SL */
-  table thead tr th:nth-child(8),  /* Target */
-  table tbody tr td:nth-child(7),
-  table tbody tr td:nth-child(8) {
-    display: none !important;
   }
 }

@@ -535,7 +535,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                 {/* ── Group cards ── */}
                 {!isCollapsed && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'4px' }}>
+                  <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'4px' }}>
                     {groupAlgos.map(algo => {
                       const st          = worstStatus(grid[algo.id])
                       const bar         = STATUS_BAR[st]

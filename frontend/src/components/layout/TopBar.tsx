@@ -49,7 +49,7 @@ export default function TopBar() {
           Welcome, <span style={{ color:'#F0EDE8', fontWeight:600 }}>Karthikeyan</span>
         </span>
         <span style={{ width:'1px', height:'16px', background:'rgba(255,107,0,0.20)' }} />
-        <span style={{ fontSize:'12px', fontFamily:'var(--font-mono)', color:'var(--ox-radiant)', letterSpacing:'0.04em' }}>
+        <span className="topbar-clock" style={{ fontSize:'12px', fontFamily:'var(--font-mono)', color:'var(--ox-radiant)', letterSpacing:'0.04em' }}>
           IST {timeStr}
         </span>
       </div>
