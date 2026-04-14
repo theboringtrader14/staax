@@ -1030,7 +1030,39 @@ export default function OrdersPage() {
                   {/* ── Leg rows ── */}
                   {(w.legs || []).length > 0 && (
                     <div style={{ borderTop: '0.5px solid var(--bg-border)', padding: '6px 14px 10px' }}>
-                      {(w.legs || []).map(leg => (
+                      {isMissed ? (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr>
+                              {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
+                                <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(232,232,248,0.4)', fontWeight: 600, padding: '3px 6px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(w.legs || []).map(leg => (
+                              <tr key={leg.leg_number}>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.leg_number}</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}>MISSED</span>
+                                </td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', fontSize: 11 }}>
+                                  <div>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
+                                  <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
+                                </td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.lots}</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (w.legs || []).map(leg => (
                         <div key={leg.leg_number} style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           padding: '5px 0', borderBottom: '0.5px solid rgba(255,255,255,0.04)',

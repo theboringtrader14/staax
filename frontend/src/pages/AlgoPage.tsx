@@ -517,8 +517,8 @@ export default function AlgoPage() {
               tp:  !!(l.tp_type  && l.tp_value != null),
               tsl: !!(l.tsl_x   && l.tsl_y),
               ttp: !!(l.ttp_x   && l.ttp_y),
-              resl: !!(l.reentry_enabled && l.reentry_on_sl),
-              retp: !!(l.reentry_enabled && l.reentry_on_tp),
+              resl: !!l.reentry_on_sl,
+              retp: !!l.reentry_on_tp,
             },
             vals: {
               wt:  { direction: l.wt_direction || 'up', value: l.wt_value != null ? String(l.wt_value) : '', unit: l.wt_unit || 'pts' },
@@ -526,8 +526,8 @@ export default function AlgoPage() {
               tp:  { type: l.tp_type || 'pts_instrument', value: l.tp_value != null ? String(l.tp_value) : '' },
               tsl: { x: l.tsl_x != null ? String(l.tsl_x) : '', y: l.tsl_y != null ? String(l.tsl_y) : '', unit: l.tsl_unit || 'pts' },
               ttp: { x: l.ttp_x != null ? String(l.ttp_x) : '', y: l.ttp_y != null ? String(l.ttp_y) : '', unit: l.ttp_unit || 'pts' },
-              resl: { mode: l.reentry_mode || 'at_entry_price', count: l.reentry_max ? String(l.reentry_max) : '1' },
-              retp: { mode: l.reentry_mode || 'at_entry_price', count: l.reentry_max ? String(l.reentry_max) : '1' },
+              resl: { count: l.reentry_max ? String(l.reentry_max) : '1' },
+              retp: { count: l.reentry_max ? String(l.reentry_max) : '1' },
             },
             journey: mkJourneyChild(),
           }
@@ -640,7 +640,7 @@ export default function AlgoPage() {
       tp_type:  l.active.tp ? l.vals.tp.type : undefined,  tp_value: l.active.tp ? parseFloat(l.vals.tp.value) : undefined,
       tsl_enabled: l.active.tsl, tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
       ttp_enabled: l.active.ttp, ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
-      reentry_enabled: !!(l.active.resl || l.active.retp), reentry_on_sl: !!l.active.resl, reentry_on_tp: !!l.active.retp, reentry_mode: l.active.resl ? l.vals.resl.mode : (l.active.retp ? l.vals.retp.mode : 'at_entry_price'), reentry_max: parseInt(l.active.resl ? l.vals.resl.count : l.vals.retp.count) || 0,
+      reentry_on_sl: !!l.active.resl, reentry_on_tp: !!l.active.retp, reentry_max: parseInt(l.active.resl ? l.vals.resl.count : l.vals.retp.count) || 0,
       journey_config: buildJourneyConfig(l.journey),
     })),
   })
@@ -660,7 +660,7 @@ export default function AlgoPage() {
         tp_type: j.tp_enabled ? j.tp_type : undefined, tp_value: j.tp_enabled ? parseFloat(j.tp_value) || undefined : undefined,
         tsl_enabled: j.tsl_enabled, tsl_x: parseFloat(j.tsl_x) || undefined, tsl_y: parseFloat(j.tsl_y) || undefined, tsl_unit: j.tsl_unit,
         ttp_enabled: j.ttp_enabled, ttp_x: parseFloat(j.ttp_x) || undefined, ttp_y: parseFloat(j.ttp_y) || undefined, ttp_unit: j.ttp_unit,
-        reentry_enabled: !!(j.re_sl_enabled || j.re_tp_enabled), reentry_on_sl: !!j.re_sl_enabled, reentry_on_tp: !!j.re_tp_enabled, reentry_mode: j.re_sl_enabled ? j.re_mode : (j.re_tp_enabled ? j.re_mode : 'at_entry_price'), reentry_max: parseInt(j.re_count) || 0,
+        reentry_on_sl: !!j.re_sl_enabled, reentry_on_tp: !!j.re_tp_enabled, reentry_max: parseInt(j.re_count) || 0,
         journey_config: buildJourneyConfig(j.child, depth + 1),
       }
     }

@@ -26,7 +26,7 @@ function CosmicCanvas() {
     let stars: Star[] = []
     const buildStars = () => {
       stars = []
-      for (let i = 0; i < 180; i++) {
+      for (let i = 0; i < 90; i++) {
         const y = Math.random() * H * 0.55
         const roll = Math.random()
         const r = roll<0.52 ? 0.28+Math.random()*0.38 : roll<0.80 ? 0.62+Math.random()*0.58 : roll<0.93 ? 1.08+Math.random()*0.80 : 1.80+Math.random()*1.05

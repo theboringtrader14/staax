@@ -157,7 +157,7 @@ function SegmentedArcGauge({ score }: { score: number }) {
   const arcPath = 'M 12 90 A 68 68 0 1 0 148 90'
   return (
     <div style={{ textAlign: 'center' }}>
-      <svg width="160" height="96" viewBox="0 0 160 96" style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}>
+      <svg width="160" height="104" viewBox="0 0 160 104" style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}>
         {/* Track segments: red zone 0-40, amber 40-70, green 70-100 */}
         <path d={arcPath} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="12" strokeLinecap="round" />
         {/* Score fill */}
@@ -383,7 +383,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
           scores.length === 0
             ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No health data available.</div>
             : <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-                <div style={{ flexShrink: 0, minWidth: 164, paddingTop: '8px', overflow: 'visible' }}>
+                <div style={{ flexShrink: 0, minWidth: 164, paddingTop: '8px', paddingBottom: '10px', overflow: 'visible' }}>
                   <SegmentedArcGauge score={avgScore} />
                 </div>
                 <div style={{ flex: 1, ...tblWrap }}>
@@ -531,21 +531,26 @@ interface ErrorsData {
 }
 
 function FailuresTab({ data }: { data: ErrorsData | null }) {
-  if (!data) return <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px' }}>No error data available.</div>
-  const mostFailed = data.per_algo[0]?.algo || '—'
+  if (!data) return <div className="card" style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '48px' }}>No failure data available.</div>
+  const perAlgo = data.per_algo ?? []
+  const recent = data.recent ?? []
+  const totalErrors = data.total_errors ?? 0
+  const totalOrders = data.total_orders ?? 0
+  const errorRatePct = data.error_rate_pct ?? 0
+  const mostFailed = perAlgo[0]?.algo || '—'
 
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
-        <SummaryCard label="Total Errors" value={data.total_errors.toString()} valueColor="var(--red)" />
-        <SummaryCard label="Error Rate %" value={`${data.error_rate_pct.toFixed(1)}%`} sub={`of ${data.total_orders} orders (FY)`} />
+        <SummaryCard label="Total Errors" value={totalErrors.toString()} valueColor="var(--red)" />
+        <SummaryCard label="Error Rate %" value={`${errorRatePct.toFixed(1)}%`} sub={`of ${totalOrders} orders (FY)`} />
         <SummaryCard label="Most Failed Algo" value={mostFailed} valueColor="var(--indigo)" />
-        <SummaryCard label="Algos with Errors" value={data.per_algo.length.toString()} />
+        <SummaryCard label="Algos with Errors" value={perAlgo.length.toString()} />
       </div>
 
       <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
         <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Errors per Algo</div>
-        {data.per_algo.length === 0 ? (
+        {perAlgo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No errors on record</div>
         ) : (
         <div style={tblWrap}>
@@ -558,7 +563,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
               </tr>
             </thead>
             <tbody>
-              {data.per_algo.map(row => (
+              {perAlgo.map(row => (
                 <tr key={row.algo}>
                   <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{row.algo}</td>
                   <td style={{ textAlign: 'center', ...numStyle, color: '#FF4444', fontWeight: 700, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{row.errors}</td>
@@ -573,7 +578,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
 
       <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
         <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Recent Error Orders (last 20)</div>
-        {data.recent.length === 0 ? (
+        {recent.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(232,232,248,0.35)', fontSize: '13px' }}>No recent errors</div>
         ) : (
         <div style={{ ...tblWrap, overflowX: 'auto' }}>
@@ -587,7 +592,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
               </tr>
             </thead>
             <tbody>
-              {data.recent.map(o => {
+              {recent.map(o => {
                 const msg = o.error_message || '—'
                 const short = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
                 return (

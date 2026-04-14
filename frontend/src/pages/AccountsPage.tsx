@@ -365,7 +365,7 @@ export default function AccountsPage() {
                   <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.5)', marginBottom: '5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-display)' }}>
                     FY Margin / Brokerage
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                     <input className="staax-input" type="number" defaultValue={acc.margin || ''}
                       placeholder="₹ Margin"
                       onChange={e => setEditMargin(m => ({ ...m, [acc.id]: e.target.value }))}

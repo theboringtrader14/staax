@@ -167,8 +167,8 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
           tslY:         l.tsl_y ?? undefined,
           ttpX:         l.ttp_x ?? undefined,
           ttpY:         l.ttp_y ?? undefined,
-          reSlEnabled:  !!(l.reentry_enabled && l.reentry_on_sl),
-          reTpEnabled:  !!(l.reentry_enabled && l.reentry_on_tp),
+          reSlEnabled:  !!l.reentry_on_sl,
+          reTpEnabled:  !!l.reentry_on_tp,
         })),
         et:           a.entry_time  || '09:16',
         xt:           a.exit_time   || '15:10',
@@ -593,7 +593,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                         border:'0.5px solid rgba(255,107,0,0.28)',
                                       }}>{ins}</span>
                                     ))}
-                                    {algoErrors[algo.id] && (
+                                    {isExpanded && algoErrors[algo.id] && (
                                       <span style={{
                                         background: 'rgba(255,68,68,0.15)',
                                         border: '0.5px solid rgba(255,68,68,0.4)',
