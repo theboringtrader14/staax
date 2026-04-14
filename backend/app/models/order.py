@@ -76,6 +76,8 @@ class Order(Base):
     sl_original   = Column(Float, nullable=True)
     sl_actual     = Column(Float, nullable=True)   # current level after TSL trails
     tsl_trail_count = Column(Integer, default=0)
+    reentry_count      = Column(Integer, default=0)         # how many times this leg was re-entered
+    reentry_type_used  = Column(String(20), nullable=True)  # "re_entry" | "re_execute" — recorded at re-entry time
     target        = Column(Float, nullable=True)
 
     # ── TSL runtime tracking ───────────────────────────────────────────────────

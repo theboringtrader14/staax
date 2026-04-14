@@ -155,7 +155,7 @@ function SegmentedArcGauge({ score }: { score: number }) {
   // Arc center at (80,88) — bottom of a 90px SVG.
   // r=72 → endpoints at (8,88) and (152,88), top of arc at y=16.
   // Entire arc body is in the upper 88px; round linecap tails clip only below y=88 (invisible).
-  const arcPath = 'M 8 88 A 72 72 0 0 0 152 88'
+  const arcPath = 'M 8 88 A 72 72 0 1 0 152 88'
   return (
     <div style={{ textAlign: 'center' }}>
       <svg width="160" height="90" viewBox="0 0 160 90" style={{ display: 'block', margin: '0 auto' }}>
@@ -807,6 +807,14 @@ export default function AnalyticsPage() {
   const [latencyData, setLatencyData] = useState<LatencyData | null>(null)
   const [loading, setLoading]         = useState(true)
   const [fy, setFy]                   = useState(getCurrentFY())
+  const [advMetrics, setAdvMetrics]   = useState<{
+    sharpe_ratio: number | null;
+    max_drawdown: number;
+    days_to_recovery: number | null;
+    max_win_streak: number;
+    max_loss_streak: number;
+    total_trading_days: number;
+  } | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -863,6 +871,11 @@ export default function AnalyticsPage() {
         setLatencyData(latRes.value.data || null)
       }
     }).finally(() => setLoading(false))
+
+    fetch('/api/v1/analytics/advanced-metrics')
+      .then(r => r.json())
+      .then(d => setAdvMetrics(d))
+      .catch(console.error)
   }, [isPractixMode, fy])
 
   return (
@@ -910,6 +923,26 @@ export default function AnalyticsPage() {
           {activeTab === 'Latency'     && <LatencyTab data={latencyData} />}
         </>
       )}
+
+      {/* Advanced Metrics */}
+      <div style={{ background: 'var(--glass-bg)', border: '0.5px solid rgba(255,107,0,0.22)', borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16 }}>Advanced Metrics</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {[
+            { label: 'Sharpe Ratio', value: advMetrics?.sharpe_ratio != null ? advMetrics.sharpe_ratio.toFixed(3) : '—' },
+            { label: 'Max Drawdown', value: advMetrics ? `₹${Math.abs(advMetrics.max_drawdown).toLocaleString('en-IN')}` : '—' },
+            { label: 'Days to Recovery', value: advMetrics?.days_to_recovery != null ? `${advMetrics.days_to_recovery}d` : advMetrics ? 'Ongoing' : '—' },
+            { label: 'Max Win Streak', value: advMetrics ? `${advMetrics.max_win_streak}d` : '—' },
+            { label: 'Max Loss Streak', value: advMetrics ? `${advMetrics.max_loss_streak}d` : '—' },
+            { label: 'Trading Days', value: advMetrics ? `${advMetrics.total_trading_days}` : '—' },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text-primary)', fontWeight: 600 }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

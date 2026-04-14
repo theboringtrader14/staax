@@ -16,23 +16,27 @@ const MONTHLY_ONLY_CODES = new Set(['BN', 'FN', 'MN'])
 const MONTHLY_ONLY_EXPIRY = EXPIRY_OPTIONS.filter(o => o.value.includes('monthly'))
 const STRIKE_OPTIONS = [...Array.from({ length: 10 }, (_, i) => `ITM${10 - i}`), 'ATM', ...Array.from({ length: 10 }, (_, i) => `OTM${i + 1}`)]
 
-type FeatureKey = 'wt' | 'sl' | 're' | 'resl' | 'retp' | 'tp' | 'tsl' | 'ttp'
+type FeatureKey = 'wt' | 'sl' | 're' | 'reentry' | 'tp' | 'tsl' | 'ttp'
 const FEATURES: { key: FeatureKey; label: string; color: string }[] = [
-  { key: 'wt',   label: 'W&T',   color: '#9CA3AF' },
-  { key: 'sl',   label: 'SL',    color: '#FF4444' },
-  { key: 'tsl',  label: 'TSL',   color: '#FF6B00' },
-  { key: 'resl', label: 'RE-SL', color: '#F59E0B' },
-  { key: 'tp',   label: 'TP',    color: '#22DD88' },
-  { key: 'ttp',  label: 'TTP',   color: '#CC4400' },
-  { key: 'retp', label: 'RE-TP', color: '#F59E0B' },
+  { key: 'wt',      label: 'W&T',      color: '#9CA3AF' },
+  { key: 'sl',      label: 'SL',       color: '#FF4444' },
+  { key: 'tsl',     label: 'TSL',      color: '#FF6B00' },
+  { key: 'reentry', label: 'Re-entry', color: '#F59E0B' },
+  { key: 'tp',      label: 'TP',       color: '#22DD88' },
+  { key: 'ttp',     label: 'TTP',      color: '#CC4400' },
 ]
 
 interface LegVals {
   wt:  { direction: string; value: string; unit: string }
   sl:  { type: string; value: string }
   re:  { mode: string; trigger: string; count: string }
-  resl: { mode: string; count: string }
-  retp: { mode: string; count: string }
+  reentry: {
+    type: string;      // "re_entry" | "re_execute"
+    ltpMode: string;   // "ltp" | "candle_close"
+    onSl: boolean;
+    onTp: boolean;
+    max: string;       // string so input works, parsed to int on submit
+  };
   tp:  { type: string; value: string }
   tsl: { x: string; y: string; unit: string }
   ttp: { x: string; y: string; unit: string }
@@ -71,12 +75,12 @@ const mkLeg = (n: number): Leg => ({
   id: `leg-${Date.now()}-${n}`, no: n,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
-  active: { wt: false, sl: false, re: false, resl: false, retp: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(),
+  active: { wt: false, sl: false, re: false, reentry: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(),
   vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
-    resl: { mode: 'at_entry_price', count: '1' },
-    retp: { mode: 'at_entry_price', count: '1' }, tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' } },
+    reentry: { type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, max: '1' },
+    tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' } },
 })
-const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, resl: { ...l.vals.resl }, retp: { ...l.vals.retp }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
+const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, reentry: { ...l.vals.reentry }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
 
 function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void; entryType: string }) {
   const active = FEATURES.filter(f => leg.active[f.key])
@@ -100,8 +104,33 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
             return <>{sel('sl', 'type', slOpts, '88px')} {!isOrbSL && inp('sl', 'value', 'val')}</>
           })()}
           {f.key === 're'  && <>{sel('re',  'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']], '80px')} {sel('re',  'trigger', [['sl','SL'],['tp','TP'],['any','Any']], '60px')} {sel('re', 'count', [['1','1×'],['2','2×'],['3','3×'],['4','4×'],['5','5×']], '56px')}</>}
-          {f.key === 'resl' && <>{sel('resl', 'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']], '80px')} {sel('resl', 'count', [['1','1×'],['2','2×'],['3','3×']], '56px')}</>}
-          {f.key === 'retp' && <>{sel('retp', 'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']], '80px')} {sel('retp', 'count', [['1','1×'],['2','2×'],['3','3×']], '56px')}</>}
+          {f.key === 'reentry' && (() => {
+            const rv = leg.vals.reentry
+            const uRe = (sub: keyof typeof rv, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, reentry: { ...rv, [sub]: val } } })
+            return <>
+              {(['re_entry', 're_execute'] as const).map(t => (
+                <button key={t} type="button" onClick={() => uRe('type', t)}
+                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 4, cursor: 'pointer', background: rv.type === t ? 'rgba(255,107,0,0.25)' : 'rgba(255,255,255,0.05)', color: rv.type === t ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${rv.type === t ? 'rgba(255,107,0,0.4)' : 'rgba(255,255,255,0.1)'}` }}>
+                  {t === 're_entry' ? 'Re-Entry' : 'Re-Execute'}
+                </button>
+              ))}
+              {rv.type === 're_entry' && (['ltp', 'candle_close'] as const).map(m => (
+                <button key={m} type="button" onClick={() => uRe('ltpMode', m)}
+                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 4, cursor: 'pointer', background: rv.ltpMode === m ? 'rgba(255,107,0,0.25)' : 'rgba(255,255,255,0.05)', color: rv.ltpMode === m ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${rv.ltpMode === m ? 'rgba(255,107,0,0.4)' : 'rgba(255,255,255,0.1)'}` }}>
+                  {m === 'ltp' ? 'LTP' : 'Candle'}
+                </button>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-muted)' }}>
+                <input type="checkbox" checked={rv.onSl} onChange={e => uRe('onSl', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> SL
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-muted)' }}>
+                <input type="checkbox" checked={rv.onTp} onChange={e => uRe('onTp', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> TP
+              </label>
+              <input type="number" min={1} max={5} value={rv.max}
+                onChange={e => uRe('max', e.target.value)}
+                style={{ width: 40, background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 5px', fontSize: 11 }} />
+            </>
+          })()}
           {f.key === 'tp'  && <>{sel('tp',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('tp',  'value', 'val')}</>}
           {f.key === 'tsl' && <>{inp('tsl', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('tsl', 'y', 'Y')} {sel('tsl', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
         {f.key === 'ttp' && <>{inp('ttp', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('ttp', 'y', 'Y')} {sel('ttp', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
@@ -304,10 +333,10 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         {FEATURES.map(f => {
           const slHasValue = !!(leg.vals.sl as any)?.value
           const tpHasValue = !!(leg.vals.tp as any)?.value
-          const blocked = (f.key === 'tsl' && (!leg.active['sl'] || !slHasValue)) || (f.key === 'resl' && (!leg.active['sl'] || !slHasValue)) || (f.key === 'ttp' && (!leg.active['tp'] || !tpHasValue)) || (f.key === 'retp' && (!leg.active['tp'] || !tpHasValue))
+          const blocked = (f.key === 'tsl' && (!leg.active['sl'] || !slHasValue)) || (f.key === 'ttp' && (!leg.active['tp'] || !tpHasValue))
           return (
             <button key={f.key} onClick={() => {
-              if (blocked) { onBlockedClick(f.key === 'tsl' || f.key === 'resl' ? 'Enable SL and set a value before ' + f.key.toUpperCase() : 'Enable TP and set a value before ' + f.key.toUpperCase()); return }
+              if (blocked) { onBlockedClick(f.key === 'tsl' ? 'Enable SL and set a value before ' + f.key.toUpperCase() : 'Enable TP and set a value before ' + f.key.toUpperCase()); return }
               const newActive = { ...leg.active, [f.key]: !leg.active[f.key] }
               if (f.key === 'sl' && leg.active['sl']) newActive['tsl'] = false
               if (f.key === 'tp' && leg.active['tp']) newActive['ttp'] = false
@@ -512,13 +541,13 @@ export default function AlgoPage() {
             lots:       String(l.lots || 1),
             expiry:     l.expiry || 'current_weekly',
             active: {
-              wt:  !!l.wt_enabled,
-              sl:  !!(l.sl_type  && l.sl_value != null),
-              tp:  !!(l.tp_type  && l.tp_value != null),
-              tsl: !!(l.tsl_x   && l.tsl_y),
-              ttp: !!(l.ttp_x   && l.ttp_y),
-              resl: !!l.reentry_on_sl,
-              retp: !!l.reentry_on_tp,
+              wt:      !!l.wt_enabled,
+              sl:      !!(l.sl_type  && l.sl_value != null),
+              tp:      !!(l.tp_type  && l.tp_value != null),
+              tsl:     !!(l.tsl_x   && l.tsl_y),
+              ttp:     !!(l.ttp_x   && l.ttp_y),
+              reentry: !!(l.reentry_on_sl || l.reentry_on_tp),
+              re:      false,
             },
             vals: {
               wt:  { direction: l.wt_direction || 'up', value: l.wt_value != null ? String(l.wt_value) : '', unit: l.wt_unit || 'pts' },
@@ -526,8 +555,14 @@ export default function AlgoPage() {
               tp:  { type: l.tp_type || 'pts_instrument', value: l.tp_value != null ? String(l.tp_value) : '' },
               tsl: { x: l.tsl_x != null ? String(l.tsl_x) : '', y: l.tsl_y != null ? String(l.tsl_y) : '', unit: l.tsl_unit || 'pts' },
               ttp: { x: l.ttp_x != null ? String(l.ttp_x) : '', y: l.ttp_y != null ? String(l.ttp_y) : '', unit: l.ttp_unit || 'pts' },
-              resl: { count: l.reentry_max ? String(l.reentry_max) : '1' },
-              retp: { count: l.reentry_max ? String(l.reentry_max) : '1' },
+              reentry: {
+                type:    l.reentry_type || 're_entry',
+                ltpMode: l.reentry_ltp_mode || 'ltp',
+                onSl:    l.reentry_on_sl ?? false,
+                onTp:    l.reentry_on_tp ?? false,
+                max:     String(l.reentry_max || 1),
+              },
+              re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
             },
             journey: mkJourneyChild(),
           }
@@ -640,7 +675,11 @@ export default function AlgoPage() {
       tp_type:  l.active.tp ? l.vals.tp.type : undefined,  tp_value: l.active.tp ? parseFloat(l.vals.tp.value) : undefined,
       tsl_enabled: l.active.tsl, tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
       ttp_enabled: l.active.ttp, ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
-      reentry_on_sl: !!l.active.resl, reentry_on_tp: !!l.active.retp, reentry_max: parseInt(l.active.resl ? l.vals.resl.count : l.vals.retp.count) || 0,
+      reentry_on_sl:    l.active.reentry ? l.vals.reentry.onSl : false,
+      reentry_on_tp:    l.active.reentry ? l.vals.reentry.onTp : false,
+      reentry_max:      l.active.reentry ? parseInt(l.vals.reentry.max) || 0 : 0,
+      reentry_type:     l.active.reentry ? l.vals.reentry.type : null,
+      reentry_ltp_mode: l.active.reentry ? l.vals.reentry.ltpMode : null,
       journey_config: buildJourneyConfig(l.journey),
     })),
   })

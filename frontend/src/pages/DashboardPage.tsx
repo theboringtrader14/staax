@@ -79,6 +79,34 @@ function isPast9am() {
   return ist.getHours() > 9 || (ist.getHours() === 9 && ist.getMinutes() >= 15)
 }
 
+function dedupeLog(lines: string[]): string[] {
+  const result: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    const cur = lines[i]
+    if (cur.startsWith('──')) { result.push(cur); i++; continue }
+    const tsMatch = cur.match(/^\[(\d{2}:\d{2}:\d{2})\]\s*/)
+    const curMsg = tsMatch ? cur.slice(tsMatch[0].length) : cur
+    const curTsSecs = tsMatch ? (() => { const [h,m,s] = tsMatch[1].split(':').map(Number); return h*3600+m*60+s })() : null
+    let count = 1
+    while (i + count < lines.length) {
+      const next = lines[i + count]
+      if (next.startsWith('──')) break
+      const nextTsMatch = next.match(/^\[(\d{2}:\d{2}:\d{2})\]\s*/)
+      const nextMsg = nextTsMatch ? next.slice(nextTsMatch[0].length) : next
+      if (nextMsg !== curMsg) break
+      if (curTsSecs !== null && nextTsMatch) {
+        const [nh,nm,ns] = nextTsMatch[1].split(':').map(Number)
+        if (Math.abs(nh*3600+nm*60+ns - curTsSecs) > 30) break
+      }
+      count++
+    }
+    result.push(count > 1 ? cur + ` ×${count}` : cur)
+    i += count
+  }
+  return result
+}
+
 
 export default function DashboardPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
@@ -102,7 +130,7 @@ export default function DashboardPage() {
   const [now, setNow]                    = useState(new Date())
   const [_todayGrid, _setTodayGrid]      = useState<any[]>([])
   const [health, setHealth]              = useState<any>(null)
-  const [healthCollapsed, setHCollapsed] = useState(false)
+  const [_healthCollapsed, setHCollapsed] = useState(false)
   const algoScrollRef                    = useRef<HTMLDivElement>(null)
   const [scrollPos, setScrollPos]        = useState(0)
   const [equityCurveData, setEquityCurveData] = useState<{month: string; cumulative: number}[]>([])
@@ -305,20 +333,16 @@ export default function DashboardPage() {
   const overallState: 'green' | 'amber' | 'red' =
     criticalRed ? 'red' : smartstreamAmber ? 'amber' : 'green'
 
-  const containerColor = {
-    green: { bg: 'rgba(34,221,136,0.06)',  border: 'rgba(34,221,136,0.35)', glow: 'rgba(34,221,136,0.08)' },
-    amber: { bg: 'rgba(255,215,0,0.06)',   border: 'rgba(255,215,0,0.35)',  glow: 'rgba(255,215,0,0.08)'  },
-    red:   { bg: 'rgba(255,68,68,0.06)',   border: 'rgba(255,68,68,0.35)',  glow: 'rgba(255,68,68,0.08)'  },
-  }[overallState]
 
   const overallStateColor = overallState === 'green' ? '#22DD88' : overallState === 'amber' ? '#FFD700' : '#FF4444'
 
   const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
-    { id: '1', nickname: 'Karthik',    broker: 'zerodha',  token_valid_today: false },
-    { id: '2', nickname: 'Mom',         broker: 'angelone', token_valid_today: false },
-    { id: '3', nickname: 'Wife',        broker: 'angelone', token_valid_today: false },
-    { id: '4', nickname: 'Karthik AO', broker: 'angelone', token_valid_today: false },
+    { id: '1', nickname: 'Karthik', broker: 'zerodha',  token_valid_today: false },
+    { id: '2', nickname: 'Mom',     broker: 'angelone', token_valid_today: false },
+    { id: '3', nickname: 'Wife',    broker: 'angelone', token_valid_today: false },
   ]
+  // Exclude "Karthik AO" from dashboard account status panel (it's in DB/Accounts page)
+  const dashboardAccounts = displayAccounts.filter((a: any) => a.nickname !== 'Karthik AO')
 
   return (
     <div style={{ animation: 'fadeUp var(--dur-slow) var(--ease-out) both' }}>
@@ -337,6 +361,7 @@ export default function DashboardPage() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
             {killActivated && killedIds.length >= accounts.length ? 'Kill Switch Activated' : killedIds.length > 0 ? 'Kill (' + (accounts.length - killedIds.length) + ' left)' : 'Kill Switch'}
           </button>
+          <span style={{ width: '1px', height: '22px', background: 'rgba(255,255,255,0.10)', margin: '0 2px', flexShrink: 0 }} />
           <button className="btn btn-steel" onClick={stopAll} disabled={allStopped}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop All</button>
           <button className="btn btn-primary" onClick={startAll} disabled={allRunning}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Session</button>
         </div>
@@ -384,7 +409,6 @@ export default function DashboardPage() {
       {health && (() => {
         const reason = health.ready_reason || ''
         const criticalDown = reason === 'DB_DOWN' || reason === 'REDIS_DOWN' || reason === 'NO_BROKER_TOKENS'
-        const isReady = health.ready === true
         const feedInactive = !health.is_market_hours && health.checks?.smartstream?.ok === false
         const statusLabel = criticalDown ? 'System Not Ready' : feedInactive ? 'Feed Inactive' : 'System Ready'
 
@@ -397,176 +421,108 @@ export default function DashboardPage() {
         })
 
         return (
-          <div style={{ marginBottom: '12px', padding: 0, background: containerColor.bg, border: `0.5px solid ${containerColor.border}`, boxShadow: `0 0 24px ${containerColor.glow}`, backdropFilter: 'blur(12px)', borderRadius: 14 }}>
-            <div onClick={() => setHCollapsed(p => !p)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '9px 16px', border: '0.5px solid rgba(255,107,0,0.30)' }}>
+            {/* ── Single row: status dot · label · divider · chips · refresh ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+
+              {/* Status dot + label */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, paddingRight: 16 }}>
                 <div style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  flexShrink: 0,
+                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                   background: overallStateColor,
-                  boxShadow: overallState === 'green' ? '0 0 8px rgba(34,221,136,0.7)' : 'none',
+                  boxShadow: overallState === 'green' ? '0 0 8px rgba(34,221,136,0.7)' : overallState === 'amber' ? '0 0 8px rgba(255,215,0,0.6)' : '0 0 8px rgba(255,68,68,0.6)',
                   animation: overallState === 'green' ? 'pulse 2s infinite' : 'none',
                 }} />
-                <span style={{ fontWeight: 700, fontSize: '12px', color: overallStateColor }}>{statusLabel}</span>
-                {feedInactive && !criticalDown && (
-                  <span style={{ fontSize: '10px', color: 'var(--sem-warn)', fontFamily: 'var(--font-mono)', opacity: 0.7 }}>Market Closed</span>
-                )}
+                <span style={{ fontSize: 12, fontWeight: 700, color: overallStateColor, fontFamily: 'Syne, sans-serif', whiteSpace: 'nowrap' as const }}>{statusLabel}</span>
               </div>
-              <button onClick={e => { e.stopPropagation(); refetchHealth() }} className="btn btn-steel" style={{ fontSize: '11px', padding: '0 12px', height: '26px' }}>Refresh</button>
-            </div>
-            {!(healthCollapsed && isReady && !feedInactive) && (
-              <div style={{ padding: '2px 16px 12px' }}>
 
-                {/* ── SECTION 1: 5 infrastructure chips ── */}
-                {(() => {
-                  // isMarketHours is computed at component scope — reuse it here
-                  const ssData = health?.checks?.smartstream
-                  const smartstreamConnected = (ssData?.connected || ssData?.ok) ?? false
-
-                  const chips = [
-                    {
-                      label: 'Database',
-                      ok: health?.checks?.database?.ok ?? false,
-                      state: (health?.checks?.database?.ok ?? false) ? 'green' : 'red'
-                    },
-                    {
-                      label: 'Redis',
-                      ok: health?.checks?.redis?.ok ?? false,
-                      state: (health?.checks?.redis?.ok ?? false) ? 'green' : 'red'
-                    },
-                    {
-                      label: 'Backend',
-                      ok: true,
-                      state: 'green' as const
-                    },
-                    {
-                      label: 'Scheduler',
-                      ok: health?.checks?.scheduler?.ok ?? false,
-                      state: (health?.checks?.scheduler?.ok ?? false) ? 'green' : 'red'
-                    },
-                    {
-                      label: isMarketHours ? 'SmartStream' : 'SmartStream (closed)',
-                      ok: smartstreamConnected,
-                      state: smartstreamConnected ? 'green' : isMarketHours ? 'red' : 'amber'
-                    },
-                  ] as const
-
-                  return (
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(5, 1fr)',
-                      gap: 0,
-                      borderTop: '0.5px solid rgba(255,255,255,0.06)',
-                      marginTop: 4
-                    }}>
-                      {chips.map((chip, i) => (
-                        <div key={chip.label} style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          padding: '10px 8px',
-                          borderRight: i < chips.length - 1 ? '0.5px solid rgba(255,255,255,0.06)' : 'none',
-                          gap: 4
-                        }}>
-                          <span style={{
-                            fontSize: 10,
-                            fontFamily: 'Syne',
-                            fontWeight: 600,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.8px',
-                            color: 'rgba(232,232,248,0.35)'
-                          }}>{chip.label}</span>
-                          <div style={{display:'flex', alignItems:'center', gap:5}}>
-                            <div style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: '50%',
-                              background: chip.state === 'green' ? '#22DD88'
-                                        : chip.state === 'red'   ? '#FF4444'
-                                        :                          '#FFD700',
-                              boxShadow: chip.state === 'green' ? '0 0 6px rgba(34,221,136,0.6)'
-                                       : chip.state === 'red'   ? '0 0 6px rgba(255,68,68,0.6)'
-                                       :                          '0 0 6px rgba(255,215,0,0.5)',
-                              flexShrink: 0
-                            }} />
-                            <span style={{
-                              fontSize: 12,
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 600,
-                              color: chip.state === 'green' ? '#22DD88'
-                                   : chip.state === 'red'   ? '#FF4444'
-                                   :                          '#FFD700'
-                            }}>
-                              {chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })()}
-
-                {/* ── SECTION 2: Account Login buttons (only for accounts needing login) ── */}
-                {needsLogin.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {needsLogin.map((acc: any) => {
-                      const isZerodha = acc.broker === 'zerodha'
-                      const succeeded = loginSucceeded[acc.id] ?? false
+              {/* Service chips */}
+              {(() => {
+                const ssData = health?.checks?.smartstream
+                const smartstreamConnected = (ssData?.connected || ssData?.ok) ?? false
+                const chips = [
+                  { label: 'Database',  ok: health?.checks?.database?.ok ?? false,  state: (health?.checks?.database?.ok  ?? false) ? 'green' : 'red'   },
+                  { label: 'Redis',     ok: health?.checks?.redis?.ok    ?? false,  state: (health?.checks?.redis?.ok     ?? false) ? 'green' : 'red'   },
+                  { label: 'Backend',   ok: true,                                    state: 'green' as const                                              },
+                  { label: 'Scheduler', ok: health?.checks?.scheduler?.ok ?? false, state: (health?.checks?.scheduler?.ok ?? false) ? 'green' : 'red'   },
+                  { label: 'SmartStream',
+                    ok: smartstreamConnected,
+                    state: smartstreamConnected ? 'green' : isMarketHours ? 'red' : 'amber' },
+                ] as const
+                return (
+                  <div style={{ display: 'flex', flex: 1, alignItems: 'center' }}>
+                    {chips.map((chip) => {
+                      const dotColor   = chip.state === 'green' ? '#22DD88' : chip.state === 'red' ? '#FF4444' : '#FFD700'
+                      const dotGlow    = chip.state === 'green' ? '0 0 6px rgba(34,221,136,0.55)' : chip.state === 'red' ? '0 0 6px rgba(255,68,68,0.55)' : '0 0 6px rgba(255,215,0,0.45)'
+                      const statusText = chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'
                       return (
-                        <div key={acc.id} style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '8px 12px', borderRadius: 8,
-                          background: 'rgba(18,18,22,0.75)',
-                          border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,255,255,0.06)',
-                          borderLeft: succeeded ? '3px solid rgba(34,221,136,0.4)' : '3px solid rgba(255,107,0,0.2)',
+                        <div key={chip.label} style={{
+                          display: 'flex', alignItems: 'center', gap: 7,
+                          padding: '0 16px',
+                          borderLeft: '0.5px solid rgba(255,255,255,0.08)',
                         }}>
+                          <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor, boxShadow: dotGlow, flexShrink: 0 }} />
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Syne', color: 'rgba(232,232,248,0.9)' }}>{acc.nickname || acc.name}</div>
-                            <div style={{ fontSize: 10, color: 'var(--gs-muted)', marginTop: 1 }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
+                            <div style={{ fontSize: 9, fontFamily: 'Syne, sans-serif', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.6px', color: 'rgba(232,232,248,0.28)', lineHeight: 1.2 }}>{chip.label}</div>
+                            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 600, color: dotColor, lineHeight: 1.3 }}>{statusText}</div>
                           </div>
-                          {isZerodha ? (
-                            <button
-                              onClick={e => {
-                                e.stopPropagation()
-                                const _API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-                                const w = 520, h = 640
-                                const left = window.screenX + (window.outerWidth - w) / 2
-                                const top = window.screenY + (window.outerHeight - h) / 2
-                                window.open(
-                                  `${_API_BASE}/api/v1/zerodha/login`,
-                                  'zerodha_oauth',
-                                  `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`
-                                )
-                              }}
-                              style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne', fontWeight: 600, background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)', color: 'var(--ox-radiant)', cursor: 'pointer' }}
-                            >Refresh Token</button>
-                          ) : (
-                            <button
-                              onClick={async e => {
-                                e.stopPropagation()
-                                try {
-                                  await fetch(`/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
-                                  setLoginSucceeded(p => ({ ...p, [acc.id]: true }))
-                                  refetchHealth()
-                                } catch {}
-                              }}
-                              style={{
-                                padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne', fontWeight: 600,
-                                background: 'transparent',
-                                border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)',
-                                color: succeeded ? 'rgba(34,221,136,0.6)' : 'var(--ox-radiant)',
-                                cursor: 'pointer'
-                              }}
-                            >{succeeded ? 'Re-Login' : 'Login'}</button>
-                          )}
                         </div>
                       )
                     })}
                   </div>
-                )}
+                )
+              })()}
 
+              {/* Refresh */}
+              <button onClick={e => { e.stopPropagation(); refetchHealth() }} className="btn btn-ghost" style={{ fontSize: '11px', padding: '0 12px', height: '26px', flexShrink: 0, marginLeft: 12 }}>Refresh</button>
+            </div>
+
+            {/* ── Account login alerts — shown below if any accounts need login ── */}
+            {needsLogin.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10, borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
+                {needsLogin.map((acc: any) => {
+                  const isZerodha = acc.broker === 'zerodha'
+                  const succeeded = loginSucceeded[acc.id] ?? false
+                  return (
+                    <div key={acc.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', borderRadius: 8,
+                      background: 'rgba(18,18,22,0.75)',
+                      border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,255,255,0.06)',
+                      borderLeft: succeeded ? '3px solid rgba(34,221,136,0.4)' : '3px solid rgba(255,107,0,0.2)',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Syne', color: 'rgba(232,232,248,0.9)' }}>{acc.nickname || acc.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--gs-muted)', marginTop: 1 }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
+                      </div>
+                      {isZerodha ? (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            const _API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+                            const w = 520, h = 640
+                            const left = window.screenX + (window.outerWidth - w) / 2
+                            const top  = window.screenY + (window.outerHeight - h) / 2
+                            window.open(`${_API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
+                          }}
+                          style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne', fontWeight: 600, background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)', color: 'var(--ox-radiant)', cursor: 'pointer' }}
+                        >Refresh Token</button>
+                      ) : (
+                        <button
+                          onClick={async e => {
+                            e.stopPropagation()
+                            try {
+                              await fetch(`/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
+                              setLoginSucceeded(p => ({ ...p, [acc.id]: true }))
+                              refetchHealth()
+                            } catch {}
+                          }}
+                          style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne', fontWeight: 600, background: 'transparent', border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)', color: succeeded ? 'rgba(34,221,136,0.6)' : 'var(--ox-radiant)', cursor: 'pointer' }}
+                        >{succeeded ? 'Re-Login' : 'Login'}</button>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -576,8 +532,8 @@ export default function DashboardPage() {
       {/* ── ACCOUNT STATUS ── */}
       <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '14px 16px' }}>
         <div className="card-label">Account Status</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
-          {displayAccounts.map((acc: any) => {
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' }}>
+          {dashboardAccounts.map((acc: any) => {
             const isZerodha = acc.broker === 'zerodha'
             // Derive live status: prefer health checks, fall back to token_valid_today
             const brokerKey = isZerodha ? 'zerodha' : 'angelone'
@@ -616,8 +572,8 @@ export default function DashboardPage() {
                       background: 'rgba(34,221,136,0.12)', border: '0.5px solid rgba(34,221,136,0.25)', color: '#22DD88'
                     }}>• Live</span>
                   )}
-                  {/* Zerodha: show Login (not connected) or Re-Login (connected) */}
-                  {isZerodha ? (
+                  {/* Login button: only shown when token is missing/expired (not live) */}
+                  {isZerodha && !zerodhaOk && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -632,50 +588,24 @@ export default function DashboardPage() {
                       }}
                       style={{
                         padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne',
-                        background: 'transparent',
-                        border: zerodhaOk
-                          ? '0.5px solid rgba(34,221,136,0.4)'
-                          : '0.5px solid rgba(255,107,0,0.5)',
-                        color: zerodhaOk ? '#22DD88' : 'var(--ox-radiant)',
-                        cursor: 'pointer'
+                        background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)',
+                        color: 'var(--ox-radiant)', cursor: 'pointer'
                       }}
-                    >
-                      {zerodhaOk ? 'Re-Login' : '🔑 Login'}
-                    </button>
-                  ) : isLive ? (
-                    /* Angel One live: show Re-Login (muted green) */
+                    >🔑 Login</button>
+                  )}
+                  {!isZerodha && !isLive && (
+                    /* Angel One not live: show Login → Re-Login after success */
                     <button
                       onClick={async (e) => {
                         e.stopPropagation()
                         const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
-                        if (res.ok) {
-                          setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
-                        }
-                      }}
-                      style={{
-                        padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne',
-                        background: 'transparent',
-                        border: '0.5px solid rgba(34,221,136,0.4)',
-                        color: '#22DD88',
-                        cursor: 'pointer'
-                      }}
-                    >Re-Login</button>
-                  ) : (
-                    /* Angel One dead: show Login → Re-Login after success */
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
-                        if (res.ok) {
-                          setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
-                        }
+                        if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
                       }}
                       style={{
                         padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne',
                         background: 'transparent',
                         border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)',
-                        color: succeeded ? '#22DD88' : 'var(--ox-radiant)',
-                        cursor: 'pointer'
+                        color: succeeded ? '#22DD88' : 'var(--ox-radiant)', cursor: 'pointer'
                       }}
                     >{succeeded ? 'Re-Login' : '🔑 Login'}</button>
                   )}
@@ -687,7 +617,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── STAT CARDS ── */}
-      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: '0.7fr 0.7fr 1.3fr 1.3fr', gap: '12px', marginBottom: '12px' }}>
+      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
         <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
           <div className="card-label">Active Algos</div>
           <div style={{ fontSize: '38px', fontWeight: 800, color: 'var(--ox-radiant)', fontFamily: 'var(--font-mono)', letterSpacing: '-2px', lineHeight: 1 }}>{stats['active_algos'] ?? 0}</div>
@@ -702,97 +632,93 @@ export default function DashboardPage() {
         <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} sparkId="fy" equityCurve={equityCurveData} roi={fyRoi} />
       </div>
 
-      {/* ── NEXT ALGO + HOLIDAYS — FIX #1: no separator lines ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+      {/* ── MARKET CONTEXT (Next Algo + Holidays merged) ── */}
+      {(() => {
+        const hasScheduledAlgo = nextAlgo != null
+        const nextAlgoDotColor = !isMarketHours ? '#FF4444' : hasScheduledAlgo ? '#22DD88' : '#FFB347'
+        const nextAlgoPulse = isMarketHours && hasScheduledAlgo
+        return (
+          <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '14px 16px', border: '0.5px solid rgba(255,107,0,0.30)' }}>
+            {/* Header */}
+            <div className="card-label" style={{ marginBottom: '12px' }}>Market Context</div>
 
-        {/* FIX #4: inset box-shadow draws the left orange bar without borderLeft conflict */}
-        {(() => {
-          const hasScheduledAlgo = nextAlgo != null
-          const nextAlgoDotColor = !isMarketHours
-            ? '#FF4444'
-            : hasScheduledAlgo
-              ? '#22DD88'
-              : '#FFB347'
-          const nextAlgoPulse = isMarketHours && hasScheduledAlgo
-          const nextAlgoBorder = !isMarketHours
-            ? '0.5px solid rgba(255,68,68,0.2)'
-            : hasScheduledAlgo
-              ? '0.5px solid rgba(34,221,136,0.3)'
-              : '0.5px solid rgba(255,179,71,0.2)'
-          const nextAlgoShadow = hasScheduledAlgo && isMarketHours
-            ? 'inset 3px 0 0 var(--ox-radiant), 0 0 16px rgba(34,221,136,0.06), 0 4px 24px rgba(0,0,0,0.55)'
-            : 'inset 3px 0 0 var(--ox-radiant), 0 4px 24px rgba(0,0,0,0.55)'
-          return (
-        <div className="card cloud-fill" style={{ padding: '14px 16px', border: nextAlgoBorder, boxShadow: nextAlgoShadow }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px' }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: nextAlgoDotColor,
-              boxShadow: nextAlgoPulse ? `0 0 8px ${nextAlgoDotColor}` : 'none',
-              animation: nextAlgoPulse ? 'pulse 2s infinite' : 'none',
-              flexShrink: 0
-            }} />
-            <span className="card-label" style={{ marginBottom: 0 }}>Next Algo</span>
-          </div>
-          {!isMarketHours && !isPreMarket ? (
-            <div style={{ fontSize: '13px', color: '#FF4444', fontStyle: 'italic', opacity: 0.8 }}>Market Closed</div>
-          ) : isPreMarket ? (
-            <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>Market opening soon</div>
-          ) : scheduledAlgos.length === 0 ? (
-            <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No algos scheduled today</div>
-          ) : !nextAlgo ? (
-            <div style={{ fontSize: '13px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No more algos today</div>
-          ) : (
-            <div style={{ position: 'relative', marginBottom: '2px' }}>
-              {scrollPos > 10 && (
-                <button onClick={() => scrollAlgos('left')} style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
-              )}
-              <div ref={algoScrollRef} onScroll={e => setScrollPos((e.target as HTMLDivElement).scrollLeft)}
-                style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px', paddingLeft: scrollPos > 10 ? '30px' : '0', paddingRight: '30px' }}>
-                {scheduledAlgos.map((a: any, i: number) => {
-                  const isNext = nextAlgo && a.name === nextAlgo.name && a.time === nextAlgo.time
-                  const remaining = getTimeRemaining(a.time)
-                  const isFuture = a.secs > nowSecs
-                  return (
-                    <div key={i} style={{ flexShrink: 0, padding: '7px 11px', borderRadius: '8px', background: isNext ? 'rgba(255,107,0,0.12)' : 'rgba(255,107,0,0.04)', border: '0.5px solid ' + (isNext ? 'rgba(255,107,0,0.40)' : 'rgba(255,107,0,0.14)'), minWidth: '98px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: isNext ? 'var(--ox-glow)' : 'var(--ox-ultra)', marginBottom: '3px', fontFamily: 'var(--font-display)' }}>{a.name}</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)' }}>{a.time}</div>
-                      {isFuture && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)', opacity: isNext ? 1 : 0.7, marginTop: '3px' }}>{remaining}</div>}
+            {/* Two-column inner layout */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 0 }}>
+
+              {/* Left — Next Algo */}
+              <div style={{ paddingRight: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                    background: nextAlgoDotColor,
+                    boxShadow: nextAlgoPulse ? `0 0 6px ${nextAlgoDotColor}` : 'none',
+                    animation: nextAlgoPulse ? 'pulse 2s infinite' : 'none',
+                  }} />
+                  <span style={{ fontSize: '10px', fontFamily: 'Syne, sans-serif', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.8px', color: 'rgba(232,232,248,0.35)' }}>Next Algo</span>
+                </div>
+                {!isMarketHours && !isPreMarket ? (
+                  <div style={{ fontSize: '12px', color: '#FF4444', fontStyle: 'italic', opacity: 0.8 }}>Market Closed</div>
+                ) : isPreMarket ? (
+                  <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>Market opening soon</div>
+                ) : scheduledAlgos.length === 0 ? (
+                  <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No algos scheduled today</div>
+                ) : !nextAlgo ? (
+                  <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No more algos today</div>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    {scrollPos > 10 && (
+                      <button onClick={() => scrollAlgos('left')} style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '14px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
+                    )}
+                    <div ref={algoScrollRef} onScroll={e => setScrollPos((e.target as HTMLDivElement).scrollLeft)}
+                      style={{ display: 'flex', gap: '7px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px', paddingLeft: scrollPos > 10 ? '28px' : '0', paddingRight: '28px' }}>
+                      {scheduledAlgos.map((a: any, i: number) => {
+                        const isNext = nextAlgo && a.name === nextAlgo.name && a.time === nextAlgo.time
+                        const remaining = getTimeRemaining(a.time)
+                        const isFuture = a.secs > nowSecs
+                        return (
+                          <div key={i} style={{ flexShrink: 0, padding: '6px 10px', borderRadius: '7px', background: isNext ? 'rgba(255,107,0,0.12)' : 'rgba(255,107,0,0.04)', border: '0.5px solid ' + (isNext ? 'rgba(255,107,0,0.40)' : 'rgba(255,107,0,0.14)'), minWidth: '90px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: isNext ? 'var(--ox-glow)' : 'var(--ox-ultra)', marginBottom: '2px', fontFamily: 'var(--font-display)' }}>{a.name}</div>
+                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)' }}>{a.time}</div>
+                            {isFuture && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)', opacity: isNext ? 1 : 0.7, marginTop: '2px' }}>{remaining}</div>}
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                    <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '14px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
+                  </div>
+                )}
               </div>
-              <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '15px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
-            </div>
-          )}
-        </div>
-          )
-        })()}
 
-        {/* FIX #2: cloud-fill on Holidays, FIX #1: no separator line */}
-        <div className="card cloud-fill" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span className="card-label" style={{ marginBottom: 0 }}>Upcoming Holidays (F&O)</span>
-            <button className="btn btn-ghost" style={{ fontSize: '10px', padding: '0 10px', height: '26px' }} onClick={handleSyncHolidays} disabled={syncingHolidays}>{syncingHolidays ? 'Syncing…' : 'Sync NSE'}</button>
+              {/* Divider */}
+              <div style={{ background: 'rgba(255,255,255,0.07)', margin: '0 16px' }} />
+
+              {/* Right — Holidays */}
+              <div style={{ paddingLeft: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '10px', fontFamily: 'Syne, sans-serif', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.8px', color: 'rgba(232,232,248,0.35)' }}>Upcoming Holidays (F&O)</span>
+                  <button className="btn btn-ghost" style={{ fontSize: '9px', padding: '0 8px', height: '22px' }} onClick={handleSyncHolidays} disabled={syncingHolidays}>{syncingHolidays ? 'Syncing…' : 'Sync NSE'}</button>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+                  {holidays.length === 0
+                    ? <div style={{ fontSize: '11px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>No F&O holidays in next 30 days — sync to load.</div>
+                    : holidays.map((h: any) => {
+                        const d = new Date(h.date)
+                        return (
+                          <div key={h.id} style={{ padding: '5px 10px', borderRadius: '7px', background: 'rgba(255,215,0,0.06)', border: '0.5px solid rgba(255,215,0,0.20)', minWidth: '100px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--sem-warn)', marginBottom: '1px' }}>
+                              {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} · {d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })}
+                            </div>
+                            <div style={{ fontSize: '9px', color: 'var(--gs-muted)' }}>{h.description}</div>
+                          </div>
+                        )
+                      })
+                  }
+                </div>
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {holidays.length === 0
-              ? <div style={{ fontSize: '12px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>No F&O holidays in next 30 days — sync to load.</div>
-              : holidays.map((h: any) => {
-                  const d = new Date(h.date)
-                  return (
-                    <div key={h.id} style={{ padding: '7px 12px', borderRadius: '8px', background: 'rgba(255,215,0,0.06)', border: '0.5px solid rgba(255,215,0,0.20)', minWidth: '110px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--sem-warn)', marginBottom: '2px' }}>
-                        {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} · {d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })}
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--gs-muted)' }}>{h.description}</div>
-                    </div>
-                  )
-                })
-            }
-          </div>
-        </div>
-      </div>
+        )
+      })()}
 
       {/* ── SERVICES + SYSTEM LOG ── */}
       {/* FIX #3: cloud-fill on BOTH Services and System Log outer cards */}
@@ -830,7 +756,7 @@ export default function DashboardPage() {
           {/* FIX #4: inner dark terminal — container within container */}
           <div style={{ borderRadius: '8px', overflow: 'hidden', background: 'rgba(5,4,2,0.92)', border: '0.5px solid rgba(255,107,0,0.14)' }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', padding: '10px 12px', height: '290px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-              {log.map((line, i) => {
+              {dedupeLog(log).map((line, i) => {
                 const isSep = line.startsWith('──')
                 if (isSep) return (
                   <div key={i} style={{ color: 'rgba(255,107,0,0.25)', textAlign: 'center' as const, fontSize: '10px', letterSpacing: '0.06em', padding: '4px 0', margin: '3px 0', borderTop: '0.5px solid rgba(255,107,0,0.08)', borderBottom: '0.5px solid rgba(255,107,0,0.08)' }}>

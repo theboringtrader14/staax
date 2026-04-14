@@ -26,6 +26,8 @@ interface Leg {
   refPrice?: number; fillPrice?: number; fillTime?: string; ltp?: number
   slOrig?: number; slActual?: number; tslTrailCount?: number; target?: number
   exitPrice?: number; exitTime?: string; exitReason?: string; pnl?: number
+  reentryCount?: number;
+  reentryTypeUsed?: string;   // "re_entry" | "re_execute"
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
@@ -134,6 +136,24 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
     <tr style={{ background: isChild ? 'rgba(255,107,0,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #FF4444' : undefined }}>
       <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
+        {(leg.reentryCount ?? 0) > 0 && (
+          <span style={{
+            display: 'inline-block',
+            padding: '1px 6px',
+            borderRadius: 3,
+            fontSize: 9,
+            fontFamily: 'var(--font-mono)',
+            background: 'rgba(255,165,0,0.15)',
+            color: '#ffaa00',
+            border: '1px solid rgba(255,165,0,0.3)',
+            marginLeft: 4,
+            verticalAlign: 'middle',
+          }}>
+            {leg.reentryTypeUsed === 're_execute'
+              ? `RE-EXECUTE ×${leg.reentryCount}`
+              : `RE-ENTRY ×${leg.reentryCount}`}
+          </span>
+        )}
       </td>
       <td style={{ width: COLS[1], ...C }}>
         <span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span>
@@ -268,6 +288,8 @@ function mapGroup(g: any): AlgoGroup {
       exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
       exitReason:      o.exit_reason ?? undefined,
       pnl:             o.pnl ?? undefined,
+      reentryCount:    o.reentry_count ?? 0,
+      reentryTypeUsed: o.reentry_type_used ?? undefined,
     })),
   }
 }

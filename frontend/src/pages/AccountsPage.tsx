@@ -8,6 +8,7 @@ interface AccountLocal {
   margin: number; pnl: number; token: string; color: string
   globalSL: number | null; globalTP: number | null; fyBrokerage: number | null
   client_id?: string; api_key?: string
+  scope?: string; is_active?: boolean
 }
 
 interface EditCredsState {
@@ -27,9 +28,10 @@ interface AddAccountForm {
   api_key: string
   api_secret: string   // Zerodha: API secret | Angel One: PIN / Password
   totp_secret: string
+  scope: string
 }
 
-const EMPTY_FORM: AddAccountForm = { broker: '', nickname: '', client_id: '', api_key: '', api_secret: '', totp_secret: '' }
+const EMPTY_FORM: AddAccountForm = { broker: '', nickname: '', client_id: '', api_key: '', api_secret: '', totp_secret: '', scope: 'fo' }
 
 export default function AccountsPage() {
   const storeAccounts = useStore(s => s.accounts)
@@ -55,9 +57,32 @@ export default function AccountsPage() {
   const [addError,   setAddError]   = useState('')
   const [addToast,   setAddToast]   = useState('')
 
+  const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'reactivate'; accountId: string; nickname: string } | null>(null)
+
   const openAddModal = () => { setAddModal(true); setAddStep(1); setAddForm(EMPTY_FORM); setAddError('') }
   const closeAddModal = () => { setAddModal(false); setAddError('') }
   const patchForm = (p: Partial<AddAccountForm>) => setAddForm(f => ({ ...f, ...p }))
+
+  const handleDeactivate = (accountId: string) => {
+    const acc = accounts.find(a => a.id === accountId)
+    if (acc) setConfirmAction({ type: 'deactivate', accountId, nickname: acc.name })
+  }
+
+  const handleReactivate = (accountId: string) => {
+    const acc = accounts.find(a => a.id === accountId)
+    if (acc) setConfirmAction({ type: 'reactivate', accountId, nickname: acc.name })
+  }
+
+  const executeConfirmedAction = async () => {
+    if (!confirmAction) return
+    try {
+      await fetch(`/api/v1/accounts/${confirmAction.accountId}/${confirmAction.type}`, { method: 'PATCH' })
+      setConfirmAction(null)
+      fetchAccounts()
+    } catch (err) {
+      console.error('Action failed:', err)
+    }
+  }
 
   const submitAdd = async () => {
     if (!addForm.nickname.trim() || !addForm.client_id.trim()) { setAddError('Nickname and Client ID are required'); return }
@@ -70,6 +95,7 @@ export default function AccountsPage() {
         api_key:     addForm.api_key.trim() || undefined,
         api_secret:  addForm.api_secret.trim() || undefined,
         totp_secret: addForm.totp_secret.trim() || undefined,
+        scope:       addForm.scope || 'fo',
       })
       closeAddModal()
       accountsAPI.list().then(res => {
@@ -83,6 +109,7 @@ export default function AccountsPage() {
           margin: api.fy_margin ?? 0, pnl: 0, token: '', color: '',
           type: api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
           client_id: api.client_id ?? '', api_key: api.api_key ?? '',
+          scope: api.scope ?? 'fo', is_active: api.is_active ?? true,
         })))
       }).catch(() => {})
       setAddToast('✅ Account added')
@@ -115,11 +142,32 @@ export default function AccountsPage() {
             type:        api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
             client_id:   api.client_id ?? '',
             api_key:     api.api_key ?? '',
+            scope:       api.scope ?? 'fo',
+            is_active:   api.is_active ?? true,
           })))
         }
       })
       .catch(() => {})
   }, [])
+
+  const fetchAccounts = () => {
+    accountsAPI.list()
+      .then(res => {
+        const data: any[] = res.data || []
+        if (data.length > 0) setAccounts(data.map((api: any) => ({
+          id: api.id, name: api.nickname,
+          broker: api.broker === 'zerodha' ? 'Zerodha' : 'Angel One',
+          status: api.status === 'active' ? 'active' : 'pending',
+          globalSL: api.global_sl ?? null, globalTP: api.global_tp ?? null,
+          fyBrokerage: api.fy_brokerage ?? null,
+          margin: api.fy_margin ?? 0, pnl: 0, token: '', color: '',
+          type: api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
+          client_id: api.client_id ?? '', api_key: api.api_key ?? '',
+          scope: api.scope ?? 'fo', is_active: api.is_active ?? true,
+        })))
+      })
+      .catch(() => {})
+  }
 
   // Check token status for all accounts on mount
   useEffect(() => {
@@ -158,6 +206,8 @@ export default function AccountsPage() {
         type:        api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
         client_id:   api.client_id ?? '',
         api_key:     api.api_key ?? '',
+        scope:       api.scope ?? 'fo',
+        is_active:   api.is_active ?? true,
       })))
     }
   }, [storeAccounts])
@@ -342,8 +392,8 @@ export default function AccountsPage() {
                 </span>
               </div>
 
-              {/* Edit API Keys button */}
-              <div style={{ marginBottom: '10px' }}>
+              {/* Edit API Keys button + Deactivate/Reactivate */}
+              <div style={{ marginBottom: '10px', display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button onClick={() => setEditingCreds({
                   id: acc.id,
                   nickname: acc.name,
@@ -356,6 +406,21 @@ export default function AccountsPage() {
                   background: 'transparent', border: '0.5px solid rgba(255,255,255,0.15)',
                   color: 'rgba(232,232,248,0.5)', cursor: 'pointer'
                 }}>Edit API Keys</button>
+                {acc.is_active !== false ? (
+                  <button
+                    onClick={() => handleDeactivate(acc.id)}
+                    style={{ padding: '4px 10px', background: 'rgba(255,50,50,0.15)', color: '#ff6b6b', border: '1px solid rgba(255,100,100,0.3)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                  >
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleReactivate(acc.id)}
+                    style={{ padding: '4px 10px', background: 'rgba(50,255,100,0.15)', color: '#6bff8b', border: '1px solid rgba(100,255,100,0.3)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                  >
+                    Reactivate
+                  </button>
+                )}
               </div>
 
               {/* Edit controls — active accounts only */}
@@ -495,6 +560,17 @@ export default function AccountsPage() {
                       />
                     </div>
                   ))}
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>Scope</label>
+                    <select
+                      value={addForm.scope || 'fo'}
+                      onChange={e => patchForm({ scope: e.target.value })}
+                      style={{ width: '100%', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '8px 10px' }}
+                    >
+                      <option value="fo">F&amp;O (Futures &amp; Options)</option>
+                      <option value="mcx">MCX (Commodities)</option>
+                    </select>
+                  </div>
                 </div>
                 {addError && (
                   <div style={{ fontSize: '12px', color: 'var(--red)', background: 'rgba(239,68,68,0.1)', padding: '8px 12px', borderRadius: '6px', marginBottom: '12px' }}>
@@ -509,6 +585,33 @@ export default function AccountsPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Deactivate / Reactivate Confirmation Modal */}
+      {confirmAction && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,107,0,0.3)', borderRadius: 12, padding: 24, maxWidth: 380, width: '90%' }}>
+            <h3 style={{ margin: '0 0 12px', color: 'var(--text-primary)', fontSize: 16 }}>
+              {confirmAction.type === 'deactivate' ? 'Deactivate Account' : 'Reactivate Account'}
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 20px' }}>
+              {confirmAction.type === 'deactivate'
+                ? `Are you sure you want to deactivate "${confirmAction.nickname}"? All active algos on this account will stop.`
+                : `Reactivate "${confirmAction.nickname}"?`}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmAction(null)} style={{ padding: '7px 16px', background: 'transparent', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                onClick={executeConfirmedAction}
+                style={{ padding: '7px 16px', background: confirmAction.type === 'deactivate' ? 'rgba(255,50,50,0.3)' : 'rgba(50,200,100,0.3)', color: confirmAction.type === 'deactivate' ? '#ff6b6b' : '#6bff8b', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+              >
+                {confirmAction.type === 'deactivate' ? 'Deactivate' : 'Reactivate'}
+              </button>
+            </div>
           </div>
         </div>
       )}

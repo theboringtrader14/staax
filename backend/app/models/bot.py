@@ -1,5 +1,5 @@
 """Bot model — Indicator Systems bots."""
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from app.core.database import Base
@@ -39,6 +39,7 @@ class Bot(Base):
     status         = Column(String(20), nullable=False, server_default='active')
     is_archived    = Column(Boolean, default=False)
     is_practix     = Column(Boolean, default=True, nullable=False)
+    pinescript_code = Column(Text, nullable=True)   # user's PineScript indicator code
     created_at     = Column(DateTime(timezone=True))
     updated_at     = Column(DateTime(timezone=True))
 

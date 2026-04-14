@@ -172,6 +172,8 @@ class AlgoLeg(Base):
     reentry_on_sl   = Column(Boolean, default=False)   # re-enter after SL hit
     reentry_on_tp   = Column(Boolean, default=False)   # re-enter after TP hit
     reentry_max     = Column(Integer, default=0)   # 0–5
+    reentry_type      = Column(String(20), nullable=True)   # "re_entry" | "re_execute"
+    reentry_ltp_mode  = Column(String(15), nullable=True)   # "ltp" | "candle_close"
 
     # ── Journey config (child leg to fire on exit — Phase 1E) ─────────────────
     journey_config = Column(JSON, nullable=True)

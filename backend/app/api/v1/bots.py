@@ -46,6 +46,7 @@ def _bot_dict(b: Bot) -> dict:
         "status": b.status or "active",
         "is_archived":    b.is_archived,
         "is_practix":     b.is_practix if b.is_practix is not None else True,
+        "pinescript_code": b.pinescript_code,
         "created_at":     b.created_at.isoformat() if b.created_at else None,
     }
 
@@ -401,6 +402,18 @@ async def list_bot_signals(bot_id: str, limit: int = Query(50), db: AsyncSession
         select(BotSignal).where(BotSignal.bot_id == bot_id).order_by(desc(BotSignal.fired_at)).limit(limit)
     )
     return [_signal_dict(s) for s in result.scalars().all()]
+
+
+@router.patch("/{bot_id}/pinescript")
+async def update_bot_pinescript(bot_id: str, payload: dict, db: AsyncSession = Depends(get_db)):
+    """Save or update the PineScript code for a bot."""
+    result = await db.execute(select(Bot).where(Bot.id == bot_id))
+    bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+    bot.pinescript_code = payload.get("pinescript_code", "")
+    await db.commit()
+    return {"message": "PineScript saved", "bot_id": bot_id}
 
 @router.get("/signals/today")
 async def list_signals_today(db: AsyncSession = Depends(get_db)):

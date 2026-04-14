@@ -9,14 +9,17 @@ import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 const DAY_NAMES=['Mon','Tue','Wed','Thu','Fri']
 
 const METRIC_ROWS=[
-  {key:'total_pnl',  label:'Overall P&L', isLoss:false},
-  {key:'wins',       label:'Wins',        isLoss:false},
-  {key:'losses',     label:'Losses',      isLoss:true},
-  {key:'win_pct',    label:'Win %',       isLoss:false},
-  {key:'loss_pct',   label:'Loss %',      isLoss:true},
-  {key:'max_profit', label:'Max Profit',  isLoss:false},
-  {key:'max_loss',   label:'Max Loss',    isLoss:true},
-  {key:'trades',     label:'Trades',      isLoss:false},
+  {key:'total_pnl',    label:'Overall P&L', isLoss:false},
+  {key:'wins',         label:'Wins',        isLoss:false},
+  {key:'losses',       label:'Losses',      isLoss:true},
+  {key:'win_pct',      label:'Win %',       isLoss:false},
+  {key:'loss_pct',     label:'Loss %',      isLoss:true},
+  {key:'max_profit',   label:'Max Profit',  isLoss:false},
+  {key:'max_loss',     label:'Max Loss',    isLoss:true},
+  {key:'trades',       label:'Trades',      isLoss:false},
+  {key:'avg_day_pnl',  label:'Avg Day P&L', isLoss:false},
+  {key:'max_drawdown', label:'Max Drawdown',isLoss:true},
+  {key:'roi',          label:'ROI %',       isLoss:false},
 ]
 
 function fyMonths(fy:string){

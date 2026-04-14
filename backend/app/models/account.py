@@ -41,5 +41,6 @@ class Account(Base):
     fy_margin   = Column(Float, nullable=True)                     # FY trading margin ₹ (for ROI calculation)
     global_tp   = Column(Float, nullable=True)                     # account-level TP ₹
     is_active   = Column(Boolean, default=True)
+    scope       = Column(String(10), nullable=True, default='fo')   # 'fo' (F&O) or 'mcx'
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())

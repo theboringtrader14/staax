@@ -104,26 +104,56 @@ async def algo_metrics(
     for order, algo in rows:
         aid = str(order.algo_id)
         if aid not in by_algo:
-            by_algo[aid] = {"name": algo.name if algo else aid, "pnls": []}
+            by_algo[aid] = {"name": algo.name if algo else aid, "pnls": [], "orders": []}
         by_algo[aid]["pnls"].append(order.pnl or 0.0)
+        by_algo[aid]["orders"].append(order)
 
     metrics = []
     for aid, data in by_algo.items():
         pnls = data["pnls"]
+        algo_orders = data["orders"]
         wins   = [p for p in pnls if p > 0]
         losses = [p for p in pnls if p <= 0]
         total  = round(sum(pnls), 2)
+
+        # avg_day_pnl
+        trading_days = set()
+        for o in algo_orders:
+            if o.fill_time:
+                trading_days.add(o.fill_time.astimezone(IST).date())
+        avg_day_pnl = round(total / len(trading_days), 2) if trading_days else 0.0
+
+        # max_drawdown
+        cumulative = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        for o in sorted(algo_orders, key=lambda x: x.fill_time or datetime.min):
+            cumulative += (o.pnl or 0)
+            if cumulative > peak:
+                peak = cumulative
+            dd = peak - cumulative
+            if dd > max_dd:
+                max_dd = dd
+        max_drawdown = round(-max_dd, 2)  # negative = drawdown
+
+        # roi — total_pnl relative to capital deployed (fill_price * lots as proxy)
+        total_capital = sum((o.fill_price or 0) * (o.lots or 0) for o in algo_orders)
+        roi = round((total / total_capital * 100), 2) if total_capital > 0 else None
+
         metrics.append({
-            "algo_id":    aid,
-            "name":       data["name"],
-            "trades":     len(pnls),
-            "total_pnl":  total,
-            "wins":       len(wins),
-            "losses":     len(losses),
-            "win_pct":    round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
-            "loss_pct":   round(len(losses) / len(pnls) * 100, 1) if pnls else 0,
-            "max_profit": round(max(pnls), 2) if pnls else 0,
-            "max_loss":   round(min(pnls), 2) if pnls else 0,
+            "algo_id":      aid,
+            "name":         data["name"],
+            "trades":       len(pnls),
+            "total_pnl":    total,
+            "wins":         len(wins),
+            "losses":       len(losses),
+            "win_pct":      round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
+            "loss_pct":     round(len(losses) / len(pnls) * 100, 1) if pnls else 0,
+            "max_profit":   round(max(pnls), 2) if pnls else 0,
+            "max_loss":     round(min(pnls), 2) if pnls else 0,
+            "avg_day_pnl":  avg_day_pnl,
+            "max_drawdown": max_drawdown,
+            "roi":          roi,
         })
     metrics.sort(key=lambda x: x["total_pnl"], reverse=True)
 

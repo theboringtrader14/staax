@@ -61,6 +61,8 @@ class LegCreate(BaseModel):
     reentry_max:     int            = 0
     reentry_on_sl:   bool           = False
     reentry_on_tp:   bool           = False
+    reentry_type:     Optional[str]  = None   # "re_entry" | "re_execute"
+    reentry_ltp_mode: Optional[str]  = None   # "ltp" | "candle_close"
     journey_config:  Optional[dict] = None
 
 
@@ -132,6 +134,8 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "reentry_on_sl":   leg.reentry_on_sl or False,
         "reentry_on_tp":   leg.reentry_on_tp or False,
         "reentry_max":     leg.reentry_max,
+        "reentry_type":     leg.reentry_type,
+        "reentry_ltp_mode": leg.reentry_ltp_mode,
         "journey_config":  leg.journey_config,
     }
 
@@ -203,6 +207,8 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         reentry_on_sl=leg_data.reentry_on_sl,
         reentry_on_tp=leg_data.reentry_on_tp,
         reentry_max=leg_data.reentry_max,
+        reentry_type=leg_data.reentry_type,
+        reentry_ltp_mode=leg_data.reentry_ltp_mode,
         journey_config=leg_data.journey_config,
         underlying_token=UNDERLYING_TOKENS.get((leg_data.underlying or "").upper(), 0),
     )

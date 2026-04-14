@@ -38,6 +38,7 @@ class AccountCreate(BaseModel):
     api_secret:  Optional[str] = None   # Zerodha: API secret | AO: PIN (password)
     totp_secret: Optional[str] = None   # AO only — TOTP secret for auto-login
     is_primary:  bool = False
+    scope:       Optional[str] = 'fo'   # 'fo' or 'mcx'
 
 class CredentialsUpdate(BaseModel):
     api_key:     Optional[str] = None
@@ -59,6 +60,7 @@ def _account_to_dict(acc: Account) -> dict:
         "fy_brokerage": acc.fy_brokerage,
         "fy_margin":    acc.fy_margin,
         "is_active":    acc.is_active,
+        "scope":        acc.scope,
         "token_generated_at": acc.token_generated_at.isoformat() if acc.token_generated_at else None,
         "token_valid_today": (
             acc.token_generated_at is not None and
@@ -106,6 +108,7 @@ async def create_account(body: AccountCreate, db: AsyncSession = Depends(get_db)
         status=AccountStatus.DISCONNECTED,
         is_active=True,
     )
+    account.scope = body.scope
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -231,6 +234,40 @@ async def update_credentials(
 
     await db.commit()
     return {"status": "ok", "message": "Credentials updated"}
+
+
+@router.patch("/{account_id}/deactivate")
+async def deactivate_account(
+    account_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark account as inactive. Does not delete data."""
+    result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if not account.is_active:
+        raise HTTPException(status_code=400, detail="Account is already inactive")
+    account.is_active = False
+    await db.commit()
+    return {"message": "Account deactivated", "account_id": account_id}
+
+
+@router.patch("/{account_id}/reactivate")
+async def reactivate_account(
+    account_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reactivate a previously deactivated account."""
+    result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.is_active:
+        raise HTTPException(status_code=400, detail="Account is already active")
+    account.is_active = True
+    await db.commit()
+    return {"message": "Account reactivated", "account_id": account_id}
 
 
 @router.get("/{account_id}")

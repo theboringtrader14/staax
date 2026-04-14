@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.7 | **Last Updated:** 14 March 2026 — SVG icons, Promote to LIVE bots, account dropdown fixed — readability improved, daily kill switch reset at 08:00 IST, logout/theme buttons fixed | **PRD Reference:** v1.2
+**Version:** 7.8 | **Last Updated:** 14 April 2026 — Dashboard 8 fixes, re-entry engine rewrite, account scope/deactivate, advanced analytics metrics, bot PineScript, reports metrics | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -4346,3 +4346,77 @@ All events flow to event_log. FCM integration planned for:
 - INVEX SIP backend wiring
 - INVEX Angel One API keys regeneration
 - FINEX data wiring
+
+
+## Batch 21-22 — 14 April 2026
+
+### Batch 21 — Completed
+
+- Recurring grid entries: migration 0025, `recurring_days` JSON on Algo, auto-create weekly entries
+- Soft delete on algos: `is_archived` flag, algos hidden from UI but data retained
+- SmartStream confirmed working — `_on_open` log was normal, not a bug
+- Notifications use algo name not UUID — display now human-readable
+- NSE holiday guard in scheduler — skips auto-entry on exchange holidays
+- RESL/RETP columns added: `reentry_on_sl`, `reentry_on_tp`, `reentry_max` on AlgoLeg
+- `reentry_enabled` / `reentry_mode` dropped — migration 0026
+- Dashboard stars 50% opacity fix
+- Analytics Failures tab fix — queries event_log not orders table
+- Health Score gauge fix — overflow: visible
+- Grid error badge hidden when collapsed
+- Missed algo full card restored
+- Accounts padding fix
+
+### Batch 22 — Completed
+
+**Dashboard 8 fixes:**
+1. Karthik AO removed from dashboard (was showing despite no live session)
+2. Re-Login button logic fixed — only shown when token expired, hidden when already live
+3. Stat cards equal width — CSS grid repeat(4, 1fr)
+4. Market Context merged card — combined Market/VIX/Session into single glass card
+5. System Log dedup — `dedupeLog()` function prevents duplicate entries
+6. Kill Switch separator added — visual divider in control panel
+7. Label consistency pass across cards
+8. (Subsumed in fix 4)
+
+**Backend additions:**
+- Migration 0027: `reentry_type`, `reentry_ltp_mode` on AlgoLeg; `reentry_count`, `reentry_type_used` on Order
+- Migration 0028: `scope` (fo/mcx) on Account
+- Migration 0029: `pinescript_code` (Text) on Bot
+- `reentry_engine.py` full rewrite: RE-ENTRY (price-watcher, same strike, LTP/candle-close mode, TSL two-step interaction) + RE-EXECUTE (immediate, fresh strike); gates: count < max, time < exit_time, no kill switch
+- Account deactivate/reactivate endpoints: `PATCH /accounts/{id}/deactivate` + `/reactivate`
+- `/metrics` endpoint: added `avg_day_pnl`, `max_drawdown`, `roi` per algo
+- New `analytics.py`: `GET /api/v1/analytics/advanced-metrics` (Sharpe Ratio, Max Drawdown, Days to Recovery, Max/Min Win/Loss Streak, Total Trading Days)
+- Bot `PATCH /bots/{id}/pinescript` endpoint for saving PineScript code per bot
+
+**Frontend additions:**
+- `AccountsPage.tsx`: scope dropdown (F&O / MCX) in Add Account modal; Deactivate/Reactivate buttons with confirmation modal
+- `AnalyticsPage.tsx`: Advanced Metrics glass card (6-metric grid: Sharpe, MDD, Recovery, Win/Loss Streak, Trading Days)
+- `IndicatorsPage.tsx`: per-bot PineScript textarea + save button; `BotSignalLog` collapsible per-bot
+- `ReportsPage.tsx`: METRIC_ROWS extended with avg_day_pnl, max_drawdown, roi
+- `OrdersPage.tsx`: amber RE-ENTRY ×N / RE-EXECUTE ×N pill tags in LegRow
+- `AlgoPage.tsx`: unified re-entry sub-row replacing separate resl/retp toggles (Type: Re-Entry / Re-Execute, Watch Mode: LTP / Candle Close, On SL, On TP, Max)
+
+### Infrastructure Notes
+
+**Active live account:** Mom Angel One only. Karthik AO + Wife AO API keys expired — need new SmartAPI apps registered with server IP `13.202.164.243`.
+
+**Pending migrations (created, not yet run):** 0027 → 0028 → 0029 (chain from 0026).
+
+### Re-entry Engine Spec (Finalised)
+
+| Mode | Trigger | Strike | Price Watch |
+|------|---------|--------|-------------|
+| RE-ENTRY | SL or TP hit | Same as original | Watches LTP or candle_close until price retraces to fill_price (± W&T offset). TSL two-step: if TSL was trailing, first wait for LTP to touch `sl_original` before watching trigger. |
+| RE-EXECUTE | SL or TP hit | Fresh strike selection | Immediate — no price watch. Fires `enter()` with `reentry=False`. |
+
+Gates (both modes): `reentry_count < reentry_max`, `current_time < exit_time`, kill switch inactive.
+
+### Backlog
+
+- Groups A–E follow-up: deeper account management, reports drill-down, analytics filters, bot management
+- n8n automation integration
+- Backtesting module (Phase 2)
+- Position reconciliation chip in Orders
+- Android EAS build with production URLs
+- INVEX SIP backend wiring + Angel One API key regeneration
+- FINEX data wiring (STAAX + INVEX + BUDGEX APIs)
