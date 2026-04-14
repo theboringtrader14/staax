@@ -115,7 +115,6 @@ export default function GridPage() {
   const [grid,          setGrid]         = useState<Record<string,Record<string,Cell>>>({})
   const [loading,       setLoading]      = useState(true)
   const [showArch,      setShowArch]     = useState(() => localStorage.getItem('showArch') === 'true')
-  const [del,           setDel]          = useState<string|null>(null)
   const [archConfirm,   setArchConfirm]  = useState<string|null>(null)
   const [opError,       setOpError]      = useState('')
   const [autoFillToast, setAutoFillToast] = useState('')
@@ -379,13 +378,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:false } : x))
     try { await algosAPI.unarchive(algoId) } catch { setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x)); flashError('Reactivate failed') }
   }
-  const delAlgo = async (algoId: string) => {
-    setAlgos(a => a.filter(x => x.id!==algoId))
-    setGrid(g => { const n={...g}; delete n[algoId]; return n })
-    setDel(null)
-    try { await algosAPI.delete(algoId) } catch { loadData(); flashError('Delete failed') }
-  }
-
   // ── SVG Icons ─────────────────────────────────────────────────────────────────
   const TrashIcon = () => (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -714,7 +706,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                               {/* Delete (soft-archive) */}
                               <button
-                                onClick={() => setDel(algo.id)}
+                                onClick={() => setArchConfirm(algo.id)}
                                 title="Algo will be archived. All historical data preserved."
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
@@ -796,31 +788,10 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
           <div className="modal-overlay">
             <div className="modal-box" style={{ maxWidth:'360px' }}>
               <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Archive {a?.name}?</div>
-              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>Moves this algo to the archive. It won't appear in the grid but can be restored anytime.</div>
+              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>This will hide the algo from the grid. All historical trade data will be preserved.</div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button className="btn btn-ghost" onClick={() => setArchConfirm(null)}>Cancel</button>
-                <button className="btn btn-warn" onClick={() => { archAlgo(archConfirm); setArchConfirm(null) }}>📦 Archive</button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* ── Delete modal ──────────────────────────────────────────────────── */}
-      {del && (() => {
-        const a = algos.find(x => x.id===del)
-        return (
-          <div className="modal-overlay">
-            <div className="modal-box" style={{ maxWidth:'380px' }}>
-              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Remove {a?.name} from Smart Cards?</div>
-              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>
-                This algo will be archived and hidden from the grid.<br/>
-                <span style={{ color:'#22DD88', fontSize:'12px' }}>All historical orders and P&L data are preserved.</span>
-              </div>
-              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
-                <button className="btn btn-ghost" onClick={() => setDel(null)}>Cancel</button>
-                <button className="btn btn-warn" onClick={() => { archAlgo(del); setDel(null) }}>📦 Archive Instead</button>
-                <button className="btn btn-danger" onClick={() => delAlgo(del)}>Remove from Smart Cards</button>
+                <button className="btn btn-warn" onClick={() => { archAlgo(archConfirm); setArchConfirm(null) }}>Archive</button>
               </div>
             </div>
           </div>

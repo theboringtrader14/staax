@@ -152,26 +152,27 @@ function SegmentedArcGauge({ score }: { score: number }) {
   const s = Math.max(0, Math.min(100, score))
   const color = s >= 70 ? '#22DD88' : s >= 40 ? '#f59e0b' : '#FF4444'
   const grade = s >= 70 ? 'A' : s >= 40 ? 'B' : s < 20 ? 'D' : 'C'
-  // SVG 160×96: arc center (80,90), r=68
-  // M 12 90 A 68 68 0 1 0 148 90 = left→right through top (counterclockwise, large arc)
-  const arcPath = 'M 12 90 A 68 68 0 1 0 148 90'
+  // Arc center at (80,88) — bottom of a 90px SVG.
+  // r=72 → endpoints at (8,88) and (152,88), top of arc at y=16.
+  // Entire arc body is in the upper 88px; round linecap tails clip only below y=88 (invisible).
+  const arcPath = 'M 8 88 A 72 72 0 0 0 152 88'
   return (
     <div style={{ textAlign: 'center' }}>
-      <svg width="160" height="104" viewBox="0 0 160 104" style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}>
-        {/* Track segments: red zone 0-40, amber 40-70, green 70-100 */}
-        <path d={arcPath} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="12" strokeLinecap="round" />
+      <svg width="160" height="90" viewBox="0 0 160 90" style={{ display: 'block', margin: '0 auto' }}>
+        {/* Track */}
+        <path d={arcPath} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="11" strokeLinecap="round" />
         {/* Score fill */}
-        <path d={arcPath} fill="none" stroke={color} strokeWidth="12"
+        <path d={arcPath} fill="none" stroke={color} strokeWidth="11"
           pathLength="100" strokeDasharray={`${s} 100`}
           strokeLinecap="round"
           style={{ filter: `drop-shadow(0 0 6px ${color}80)`, transition: 'stroke-dasharray 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
-        {/* Center labels: score number, then AVG HEALTH label, then grade */}
+        {/* Score number */}
         <text x="80" y="60" textAnchor="middle" dominantBaseline="middle"
-          style={{ fontSize: '28px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
+          style={{ fontSize: '26px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
           {s}
         </text>
-        {/* Grade badge */}
-        <text x="80" y="91" textAnchor="middle"
+        {/* Grade */}
+        <text x="80" y="78" textAnchor="middle"
           style={{ fontSize: '11px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
           {grade}
         </text>
@@ -383,10 +384,10 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
           scores.length === 0
             ? <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '32px' }}>No health data available.</div>
             : <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-                <div style={{ flexShrink: 0, minWidth: 164, paddingTop: '8px', paddingBottom: '10px', overflow: 'visible' }}>
+                <div style={{ flexShrink: 0, minWidth: 164, paddingTop: '4px', paddingBottom: '0px' }}>
                   <SegmentedArcGauge score={avgScore} />
                 </div>
-                <div style={{ flex: 1, ...tblWrap }}>
+                <div style={{ flex: 1, borderRadius: '7px', overflow: 'visible' }}>
                 <table className="staax-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>

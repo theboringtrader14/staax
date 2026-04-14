@@ -30,11 +30,6 @@ interface CandlePoint {
   pnl: number
 }
 
-interface UnderlyingCandle {
-  time: string
-  pct_change: number
-}
-
 interface TradeStats {
   max_profit: number
   max_drawdown: number
@@ -77,8 +72,6 @@ interface ReplayData {
   summary: ReplaySummary
   legs?: LegData[]
   mtm_curve?: MtmPoint[]
-  underlying_name?: string
-  underlying_candles?: UnderlyingCandle[]
   stats?: TradeStats | null
 }
 
@@ -457,21 +450,16 @@ function MultiLegChart({
   events,
   legs,
   mtmCurve,
-  underlyingCandles,
-  underlyingName,
 }: {
   events: ReplayEvent[]
   legs: LegData[]
   mtmCurve: MtmPoint[]
-  underlyingCandles?: UnderlyingCandle[]
-  underlyingName?: string
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [hiddenLegs, setHiddenLegs] = useState<Set<number>>(new Set())
   const [showCombined, setShowCombined] = useState(true)
-  const [showUnderlying, setShowUnderlying] = useState(true)
   const [hover, setHover] = useState<{ x: number; y: number; time: string; pnl: number } | null>(null)
   const [playProgress, setPlayProgress] = useState(0)
   const [isPlaying, setIsPlaying]       = useState(false)
@@ -512,8 +500,6 @@ function MultiLegChart({
     return events.map(e => ({ time: e.time, pnl: e.pnl_at_time }))
   })()
 
-  const hasUnderlying = !!underlyingCandles && underlyingCandles.length >= 2
-
   // ── Axis computation ──────────────────────────────────────────────────────
   const allSecs = [
     ...combinedSrc.map(p => timeToSecs(p.time)),
@@ -525,7 +511,6 @@ function MultiLegChart({
         ? candles.map(c => timeToSecs(c.time))
         : [timeToSecs(l.entry_time), timeToSecs(l.exit_time)]
     }),
-    ...(hasUnderlying ? underlyingCandles!.map(u => timeToSecs(u.time)) : []),
   ].filter(s => s > 0)
 
   const allPnls = [
@@ -562,20 +547,6 @@ function MultiLegChart({
 
   // Progress vertical line — maps 0-100% to toX(minT)..toX(maxT) = PADX..PADX+DRAW_W
   const progressX = SVG_PADX + (playProgress / 100) * SVG_DRAW_W
-
-  // ── Underlying ────────────────────────────────────────────────────────────
-  let underlyingPts: { x: number; y: number; pct: number }[] = []
-  if (hasUnderlying) {
-    const pcts = underlyingCandles!.map(u => u.pct_change)
-    const uMin = Math.min(...pcts) - 0.1
-    const uMax = Math.max(...pcts) + 0.1
-    const uRange = uMax - uMin || 1
-    underlyingPts = underlyingCandles!.map(u => ({
-      x:   toX(timeToSecs(u.time)),
-      y:   SVG_PADY + ((uMax - u.pct_change) / uRange) * (SVG_H - SVG_PADY * 2),
-      pct: u.pct_change,
-    }))
-  }
 
   // ── Combined curve ────────────────────────────────────────────────────────
   const finalPnl       = combinedSrc.length > 0 ? combinedSrc[combinedSrc.length - 1].pnl : 0
@@ -681,12 +652,6 @@ function MultiLegChart({
             {leg.pnl >= 0 ? '+' : ''}₹{Math.abs(leg.pnl).toFixed(0)}
           </button>
         ))}
-        {hasUnderlying && (
-          <button onClick={() => setShowUnderlying(s => !s)}
-            style={toggleBtnStyle(showUnderlying, '#4EAEFF')}>
-            {underlyingName || 'Index'} %
-          </button>
-        )}
       </div>
 
       {/* Precision badge */}
@@ -791,23 +756,6 @@ function MultiLegChart({
             </g>
           )
         })}
-
-        {/* Underlying % overlay */}
-        {hasUnderlying && showUnderlying && underlyingPts.length >= 2 && (
-          <g>
-            <polyline
-              points={underlyingPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
-              fill="none" stroke="#4EAEFF" strokeWidth={1.2} strokeDasharray="5 3"
-              strokeLinecap="round" opacity={0.6}
-            />
-            {[underlyingPts[0], underlyingPts[underlyingPts.length - 1]].map((pt, i) => (
-              <text key={i} x={SVG_W - SVG_PADX_RIGHT + 4} y={pt.y + 4}
-                fill="#4EAEFF" fontSize={8} fontFamily="monospace" opacity={0.7}>
-                {pt.pct >= 0 ? '+' : ''}{pt.pct.toFixed(2)}%
-              </text>
-            ))}
-          </g>
-        )}
 
         {/* Play progress line — aligned with scrubber */}
         {playProgress > 0 && playProgress < 100 && (
@@ -1106,8 +1054,6 @@ export function TradeReplay({ algoId, algoName, date, onClose }: TradeReplayProp
                       events={events}
                       legs={effectiveLegs}
                       mtmCurve={data.mtm_curve ?? []}
-                      underlyingCandles={data.underlying_candles}
-                      underlyingName={data.underlying_name}
                     />
                   </div>
                 </div>

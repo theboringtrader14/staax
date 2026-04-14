@@ -955,140 +955,134 @@ export default function OrdersPage() {
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
               }
 
+              const missedBtns = [
+                { label: 'RE',     col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: true,      action: undefined },
+                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true,      action: undefined },
+                { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true,      action: undefined },
+                { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true,      action: undefined },
+                { label: isRetrying ? '↻' : 'RETRY', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: isRetrying, action: doWaitingRE },
+                { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, action: undefined },
+              ]
+
+              const legStatusChip = isMissed
+                ? { label: 'MISSED',  color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' }
+                : { label: 'WAITING', color: '#FFD700',               bg: 'rgba(255,215,0,0.10)'   }
+
               return (
-                <div key={w.grid_entry_id} style={{
-                  background: 'var(--bg-card)',
-                  border: '0.5px solid var(--bg-border)',
-                  borderLeft: `3px solid ${isMissed ? 'rgba(255,215,0,0.35)' : '#FFD700'}`,
-                  borderRadius: 8, marginBottom: 10,
-                  opacity: isMissed ? 0.65 : 1,
-                  overflow: 'hidden',
-                }}>
+                <div key={w.grid_entry_id}
+                  onMouseEnter={() => setHoveredCard(w.grid_entry_id)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  style={{
+                    borderRadius: '10px', overflow: 'hidden', marginBottom: 10,
+                    border: `0.5px solid ${hoveredCard === w.grid_entry_id ? 'rgba(255,215,0,0.45)' : 'rgba(255,215,0,0.20)'}`,
+                  }}>
+
                   {/* ── Card header ── */}
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 10 }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13 }}>
-                      {w.algo_name}
-                    </span>
-                    {w.account_name && (
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-row)', padding: '1px 6px', borderRadius: 4 }}>
-                        {w.account_name}
+                  <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'stretch' }}>
+
+                    {/* Left status strip */}
+                    <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: isMissed ? 'rgba(255,215,0,0.35)' : '#FFE600', boxShadow: '0 0 8px rgba(255,215,0,0.5), 0 0 20px rgba(255,215,0,0.3)' }}/>
+
+                    {/* Info row */}
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap' as const, minWidth: 0 }}>
+
+                      {/* Algo name */}
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: 'rgba(232,232,248,0.85)', whiteSpace: 'nowrap' as const }}>
+                        {w.algo_name}
                       </span>
-                    )}
-                    <span style={{
-                      background: 'rgba(255,215,0,0.15)', color: '#FFD700',
-                      fontSize: 10, padding: '2px 8px', borderRadius: 20, letterSpacing: 1,
-                    }}>{isMissed ? 'MISSED' : 'WAITING'}</span>
-                    {w.entry_time && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                        Entry {w.entry_time.slice(0, 5)}
+
+                      {/* Account pill */}
+                      {w.account_name && (
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'rgba(255,107,0,0.10)', color: 'var(--ox-glow)', border: '0.5px solid rgba(255,107,0,0.28)', whiteSpace: 'nowrap' as const }}>
+                          {w.account_name}
+                        </span>
+                      )}
+
+                      {/* MISSED / WAITING chip */}
+                      <span className="tag" style={{ color: '#FFD700', background: 'rgba(255,215,0,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>
+                        {isMissed ? 'MISSED' : 'WAITING'}
                       </span>
-                    )}
-                    {/* RE button */}
-                    <button
-                      disabled={isRetrying}
-                      onClick={doWaitingRE}
-                      style={{
-                        fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-                        padding: '3px 10px', borderRadius: 4, border: 'none',
-                        background: 'rgba(215,123,18,0.18)', color: '#D77B12',
-                        cursor: isRetrying ? 'not-allowed' : 'pointer', opacity: isRetrying ? 0.5 : 1,
-                      }}
-                    >
-                      {isRetrying ? '↻' : 'RE'}
-                    </button>
+
+                      {/* Inline event note */}
+                      {(isFeedErr || isEntryMissed) && (
+                        <span style={{ fontSize: '11px', color: '#D77B12' }}>
+                          ⏭ {isEntryMissed ? 'Entry missed — server restarted after window' : 'Feed not ready'}
+                        </span>
+                      )}
+                      {isOrbExpired && (
+                        <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
+                      )}
+                      {w.latest_error && !isFeedErr && !isEntryMissed && !isOrbExpired && (
+                        <span style={{ fontSize: '11px', color: '#EF4444' }}>
+                          ⛔ {(w.latest_error.reason || '').slice(0, 60)}
+                        </span>
+                      )}
+
+                      {/* Entry time — right side */}
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+                        {w.entry_time && (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            Entry {w.entry_time.slice(0, 5)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── Tall action buttons ── */}
+                    <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
+                      {missedBtns.map(btn => (
+                        <button key={btn.label}
+                          disabled={btn.disabled}
+                          onClick={btn.action}
+                          style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                            gap: 4, padding: '0 14px', background: btn.bg, border: btn.border ?? 'none',
+                            borderRight: '0.5px solid rgba(255,255,255,0.06)',
+                            cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                            color: btn.col, minWidth: 52, transition: 'all 150ms',
+                            opacity: btn.disabled ? 0.3 : 1,
+                            pointerEvents: btn.disabled ? 'none' : 'auto',
+                          }}
+                          onMouseEnter={e => { if (!btn.disabled) e.currentTarget.style.background = btn.hBg }}
+                          onMouseLeave={e => { e.currentTarget.style.background = btn.bg }}>
+                          <span style={{ fontSize: 9, letterSpacing: '0.5px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{btn.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* ── Event banners ── */}
-                  {(isFeedErr || isEntryMissed) && (
-                    <div style={{
-                      margin: '0 14px 8px', padding: '5px 10px',
-                      background: 'rgba(215,123,18,0.10)', border: '0.5px solid rgba(215,123,18,0.35)',
-                      borderRadius: 4, fontSize: 11, color: '#D77B12',
-                    }}>
-                      ⏭ {isEntryMissed ? 'Entry missed — server restarted after entry window' : 'Feed not ready — algo deferred to WAITING'}
-                    </div>
-                  )}
-                  {isOrbExpired && (
-                    <div style={{
-                      margin: '0 14px 8px', padding: '5px 10px',
-                      background: 'rgba(215,123,18,0.10)', border: '0.5px solid rgba(215,123,18,0.35)',
-                      borderRadius: 4, fontSize: 11, color: '#D77B12',
-                    }}>
-                      ⏱ ORB window closed — no breakout detected
-                    </div>
-                  )}
-                  {w.latest_error && !isFeedErr && !isEntryMissed && !isOrbExpired && (
-                    <div style={{
-                      margin: '0 14px 8px', padding: '5px 10px',
-                      background: 'rgba(239,68,68,0.06)', borderLeft: '3px solid #EF4444',
-                      borderRadius: 4, fontSize: 11, color: '#EF4444',
-                    }}>
-                      ⛔ {(w.latest_error.reason || '').slice(0, 120)}
-                    </div>
-                  )}
-
-                  {/* ── Leg rows ── */}
+                  {/* ── Leg table ── */}
                   {(w.legs || []).length > 0 && (
-                    <div style={{ borderTop: '0.5px solid var(--bg-border)', padding: '6px 14px 10px' }}>
-                      {isMissed ? (
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                          <thead>
-                            <tr>
-                              {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
-                                <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(232,232,248,0.4)', fontWeight: 600, padding: '3px 6px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{h}</th>
+                    <div style={{ borderTop: '0.5px solid var(--bg-border)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
+                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(232,232,248,0.4)', fontWeight: 600, padding: '5px 6px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(w.legs || []).map(leg => (
+                            <tr key={leg.leg_number}>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.leg_number}</td>
+                              <td style={{ textAlign: 'center', padding: '6px 6px' }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3, color: legStatusChip.color, background: legStatusChip.bg, letterSpacing: 0.5 }}>
+                                  {legStatusChip.label}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', fontSize: 11 }}>
+                                <div style={{ color: 'rgba(232,232,248,0.75)' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
+                                <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
+                              </td>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.lots}</td>
+                              {['Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(col => (
+                                <td key={col} style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
                               ))}
                             </tr>
-                          </thead>
-                          <tbody>
-                            {(w.legs || []).map(leg => (
-                              <tr key={leg.leg_number}>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.leg_number}</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px' }}>
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)' }}>MISSED</span>
-                                </td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', fontSize: 11 }}>
-                                  <div>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
-                                  <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
-                                </td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.lots}</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                                <td style={{ textAlign: 'center', padding: '5px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      ) : (w.legs || []).map(leg => (
-                        <div key={leg.leg_number} style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '5px 0', borderBottom: '0.5px solid rgba(255,255,255,0.04)',
-                          fontSize: 12,
-                        }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
-                            background: leg.direction === 'buy' ? 'rgba(34,221,136,0.12)' : 'rgba(255,68,68,0.12)',
-                            color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)',
-                          }}>
-                            {leg.direction?.toUpperCase()}
-                          </span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                            {leg.underlying} {leg.instrument?.toUpperCase()} · {leg.lots} lot{leg.lots !== 1 ? 's' : ''}
-                            {leg.strike_type ? ` · ${leg.strike_type.toUpperCase()}` : ''}
-                            {leg.wt_enabled ? ' · W&T' : ''}
-                          </span>
-                          <span style={{
-                            marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                            color: '#FFD700', background: 'rgba(255,215,0,0.10)',
-                            padding: '1px 7px', borderRadius: 10, letterSpacing: 0.5,
-                          }}>
-                            WAITING
-                          </span>
-                        </div>
-                      ))}
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
