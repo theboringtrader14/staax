@@ -33,7 +33,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.algo import AlgoLeg, ReentryMode
+from app.models.algo import AlgoLeg
 from app.models.algo_state import AlgoState, AlgoRunStatus
 from app.models.order import Order, OrderStatus
 
@@ -81,11 +81,11 @@ class ReentryEngine:
             select(AlgoLeg).where(AlgoLeg.id == order.leg_id)
         )
         leg = result.scalar_one_or_none()
-        if not leg or not leg.reentry_enabled or leg.reentry_max == 0:
+        if not leg or not (leg.reentry_on_sl or leg.reentry_on_tp) or leg.reentry_max == 0:
             return
 
-        # Selective SL/TP filter — only applies when at least one flag is explicitly set
-        if leg.reentry_on_sl or leg.reentry_on_tp:
+        # SL/TP filter — check which exit reasons should trigger re-entry
+        if True:  # always evaluate per flag
             if exit_reason == "sl" and not leg.reentry_on_sl:
                 logger.info(f"Re-entry skipped — reentry_on_sl=False for leg {leg.id}")
                 return
@@ -111,35 +111,8 @@ class ReentryEngine:
             )
             return
 
-        # Check mode applies
-        if leg.reentry_mode == ReentryMode.AT_COST and not tsl_trailed:
-            logger.info(f"AT_COST re-entry skipped — TSL has not trailed for {leg.id}")
-            return
-
-        # IMMEDIATE — fire right now
-        if leg.reentry_mode == ReentryMode.IMMEDIATE:
-            await self._trigger_reentry(db, order, algo_state, leg, "immediate")
-            return
-
-        # AT_ENTRY_PRICE or AT_COST — register a price watcher
-        if order.fill_price:
-            entry_id = str(order.grid_entry_id)
-            if entry_id not in self._watchers:
-                self._watchers[entry_id] = []
-
-            self._watchers[entry_id].append({
-                "leg_id":        str(leg.id),
-                "order_id":      str(order.id),
-                "mode":          leg.reentry_mode,
-                "entry_price":   order.fill_price,
-                "symbol":        order.symbol,
-                "tsl_trailed":   tsl_trailed,
-                "algo_state_id": str(algo_state.id),
-            })
-            logger.info(
-                f"Re-entry watcher registered: {leg.reentry_mode} "
-                f"@ {order.fill_price} for {order.symbol}"
-            )
+        # Fire immediately
+        await self._trigger_reentry(db, order, algo_state, leg, "immediate")
 
     # ── Called by LTPConsumer on every 1-min candle close ─────────────────────
 
@@ -165,15 +138,9 @@ class ReentryEngine:
             entry_price = watcher["entry_price"]
             should_fire = False
 
-            if watcher["mode"] == ReentryMode.AT_ENTRY_PRICE:
-                # Fire when candle closes within 0.5% of original entry price
-                if abs(close_price - entry_price) / entry_price <= 0.005:
-                    should_fire = True
-
-            elif watcher["mode"] == ReentryMode.AT_COST:
-                # Same condition — TSL trail already validated at registration
-                if abs(close_price - entry_price) / entry_price <= 0.005:
-                    should_fire = True
+            # Fire when candle closes within 0.5% of original entry price
+            if abs(close_price - entry_price) / entry_price <= 0.005:
+                should_fire = True
 
             if should_fire:
                 triggered.append(watcher)
@@ -184,7 +151,7 @@ class ReentryEngine:
 
         for watcher in triggered:
             logger.info(
-                f"Re-entry triggered: {watcher['mode']} for {watcher['symbol']} "
+                f"Re-entry triggered for {watcher['symbol']} "
                 f"@ close {close_price} (entry was {watcher['entry_price']})"
             )
             try:

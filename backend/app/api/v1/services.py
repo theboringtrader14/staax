@@ -24,6 +24,7 @@ from enum import Enum
 import asyncio
 import logging
 from app.models.account import Account, BrokerType
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -254,8 +255,8 @@ async def start_all(request: Request):
             logger.warning("[SVC] Market Feed: no active broker token found")
 
     except Exception as e:
-        _service_states["ws"] = ServiceStatus.ERROR
-        logger.error(f"[SVC] Market Feed start failed: {e}")
+        _service_states["ws"] = ServiceStatus.STOPPED
+        logger.warning(f"[SVC] Market Feed start failed (no token available): {e}")
 
     return {
         "message": "Session started",
@@ -314,7 +315,7 @@ async def start_service(service_id: str, request: Request):
     elif service_id == "redis":
         try:
             import redis.asyncio as aioredis
-            r = aioredis.from_url("redis://localhost:6379")
+            r = aioredis.from_url(settings.REDIS_URL)
             await r.ping()
             await r.aclose()
             _service_states[service_id] = ServiceStatus.RUNNING

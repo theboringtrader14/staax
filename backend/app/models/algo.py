@@ -11,7 +11,7 @@ CHANGES vs previous version:
 - ADDED:   dte                                  — Days To Expiry for Positional strategy (1–30)
 - ADDED:   wt_direction on AlgoLeg             — "up" or "down"
 - ADDED:   wt_value, wt_unit on AlgoLeg        — W&T per leg
-- ADDED:   reentry_mode, reentry_max on AlgoLeg — re-entry config per leg
+- ADDED:   reentry_on_sl, reentry_on_tp, reentry_max on AlgoLeg — re-entry config per leg
 """
 from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, JSON, Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -49,16 +49,6 @@ class OrderType(str, enum.Enum):
     MARKET = "market"
     LIMIT  = "limit"
 
-
-class ReentryMode(str, enum.Enum):
-    """
-    AT_ENTRY_PRICE : watch 1-min candle close returning to original fill price
-    IMMEDIATE      : re-run entry logic immediately after exit
-    AT_COST        : watch LTP return to original entry price (only valid when TSL has trailed)
-    """
-    AT_ENTRY_PRICE = "at_entry_price"
-    IMMEDIATE      = "immediate"
-    AT_COST        = "at_cost"
 
 
 class Algo(Base):
@@ -179,10 +169,8 @@ class AlgoLeg(Base):
 
     # ── Per-leg Re-entry ──────────────────────────────────────────────────────
     # reentry_max: 0 = disabled, 1–5 = max re-entries per day
-    reentry_enabled = Column(Boolean, default=False)
     reentry_on_sl   = Column(Boolean, default=False)   # re-enter after SL hit
     reentry_on_tp   = Column(Boolean, default=False)   # re-enter after TP hit
-    reentry_mode    = Column(Enum(ReentryMode, values_callable=lambda x: [e.value for e in x]), nullable=True)
     reentry_max     = Column(Integer, default=0)   # 0–5
 
     # ── Journey config (child leg to fire on exit — Phase 1E) ─────────────────

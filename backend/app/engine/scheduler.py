@@ -191,6 +191,10 @@ class AlgoScheduler:
         Schedule entry, exit, and ORB-end jobs for one algo for today.
         Called during _job_activate_all for each active GridEntry.
         """
+        if trading_date in NSE_HOLIDAYS_2026_27:
+            logger.info(f"[SCHEDULER] Skipping {algo.name} — NSE holiday on {trading_date}")
+            return []
+
         jobs = []
 
         # Entry time job (Direct algos only — ORB/W&T have their own triggers)

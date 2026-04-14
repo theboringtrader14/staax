@@ -988,7 +988,7 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     market_feed_started = True
                 except Exception as _ao_ex:
                     import traceback as _tb
-                    logger.error(f"[AO-CONNECT FAILED] {_ao_ex}\n{_tb.format_exc()}")
+                    logger.error(f"[AO-CONNECT FAILED] {type(_ao_ex).__name__}: {_ao_ex}\n{_tb.format_exc()}")
 
         if not market_feed_started:
             logger.info("[STARTUP MF] No valid Angel One token found — Market Feed will start after manual login")

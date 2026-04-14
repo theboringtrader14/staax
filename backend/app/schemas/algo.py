@@ -8,7 +8,7 @@ CHANGES vs previous version:
 - REMOVED: reentry_config from AlgoCreate (now per-leg on AlgoLegCreate)
 - ADDED:   dte to AlgoCreate
 - ADDED:   wt_enabled, wt_direction, wt_value, wt_unit to AlgoLegCreate
-- ADDED:   reentry_enabled, reentry_mode, reentry_max to AlgoLegCreate
+- ADDED:   reentry_on_sl, reentry_on_tp, reentry_max to AlgoLegCreate
 - EntryType now only "direct" | "orb"
 """
 from pydantic import BaseModel, field_validator
@@ -50,8 +50,8 @@ class AlgoLegCreate(BaseModel):
     wt_unit:      Optional[str]  = None   # "pts" or "pct"
 
     # Re-entry (per-leg)
-    reentry_enabled: bool          = False
-    reentry_mode:    Optional[str] = None  # "at_entry_price" | "immediate" | "at_cost"
+    reentry_on_sl:   bool          = False
+    reentry_on_tp:   bool          = False
     reentry_max:     int           = 0     # 0 = disabled, 1–5
 
 
@@ -144,9 +144,9 @@ class AlgoLegResponse(BaseModel):
     wt_direction:  Optional[str]
     wt_value:      Optional[float]
     wt_unit:       Optional[str]
-    reentry_enabled: bool
-    reentry_mode:  Optional[str]
-    reentry_max:   int
+    reentry_on_sl:   bool
+    reentry_on_tp:   bool
+    reentry_max:     int
 
     class Config:
         from_attributes = True

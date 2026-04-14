@@ -260,8 +260,8 @@ class AlgoRunner:
         legs: List[AlgoLeg] = legs_result.scalars().all()
 
         if not legs:
-            logger.error(f"No legs for algo {algo.id}")
-            await self._set_no_trade(db, algo_state, grid_entry, "no_legs")
+            logger.error(f"No legs for algo {algo.name} ({algo.id})")
+            await self._set_no_trade(db, algo_state, grid_entry, "no_legs", algo_name=algo.name)
             return
 
         # ── 3b. Pre-execution validation ───────────────────────────────────────
@@ -289,7 +289,7 @@ class AlgoRunner:
                 if is_waiting:
                     await self._set_waiting(db, algo_state, grid_entry, reason)
                 else:
-                    await self._set_error(db, algo_state, grid_entry, reason)
+                    await self._set_error(db, algo_state, grid_entry, reason, algo_name=algo.name)
                 return
 
         # ── 4. Transition AlgoState to ACTIVE ─────────────────────────────────
@@ -381,7 +381,8 @@ class AlgoRunner:
                             await self._close_order(db, placed, placed.ltp or 0.0, "margin_error")
                         await self._set_error(
                             db, algo_state, grid_entry,
-                            f"Margin error on leg {leg.leg_number}: {str(e)}"
+                            f"Margin error on leg {leg.leg_number}: {str(e)}",
+                            algo_name=algo.name,
                         )
                         await db.commit()
                         return
@@ -403,7 +404,8 @@ class AlgoRunner:
                     for placed in placed_orders:
                         await self._close_order(db, placed, placed.ltp or 0.0, "entry_fail")
                     await self._set_error(
-                        db, algo_state, grid_entry, f"Leg {leg.leg_number} failed: {str(e)}"
+                        db, algo_state, grid_entry, f"Leg {leg.leg_number} failed: {str(e)}",
+                        algo_name=algo.name,
                     )
                     await db.commit()
                     return
@@ -629,7 +631,7 @@ class AlgoRunner:
             ltp           = 0.0
         else:
             # Options
-            if reentry and original_order and leg.reentry_mode in ("at_entry_price", "at_cost"):
+            if reentry and original_order:
                 # Same strike/expiry as original for these modes
                 symbol           = original_order.symbol
                 instrument_token = getattr(original_order, "instrument_token", None) or 0
@@ -1384,7 +1386,7 @@ class AlgoRunner:
             _legs = _legs_res.scalars().all()
 
         if not _legs:
-            logger.error(f"[ORB] Cannot register — no legs for algo {algo.id}")
+            logger.error(f"[ORB] Cannot register — no legs for algo {algo.name} ({algo.id})")
             return
 
         underlying = _legs[0].underlying.upper()
@@ -1568,20 +1570,21 @@ class AlgoRunner:
         else:
             return (order.fill_price - exit_price) * qty
 
-    async def _set_no_trade(self, db, algo_state, grid_entry, reason):
+    async def _set_no_trade(self, db, algo_state, grid_entry, reason, algo_name: str = ""):
         algo_state.status  = AlgoRunStatus.NO_TRADE
         algo_state.exit_reason = reason
         grid_entry.status  = GridStatus.NO_TRADE
         await db.commit()
         try:
+            name = algo_name or str(getattr(algo_state, 'algo_id', 'Algo'))
             asyncio.create_task(_push.send_push(
                 "⏰ Missed",
-                f"{getattr(algo_state, 'algo_id', 'Algo')} — Entry window passed",
+                f"{name} — Entry window passed",
             ))
         except Exception:
             pass
 
-    async def _set_error(self, db, algo_state, grid_entry, msg):
+    async def _set_error(self, db, algo_state, grid_entry, msg, algo_name: str = ""):
         algo_state.status        = AlgoRunStatus.ERROR
         algo_state.error_message = msg
         grid_entry.status        = GridStatus.ERROR
@@ -1591,9 +1594,10 @@ class AlgoRunner:
             algo_name=str(getattr(algo_state, "algo_id", "")), source="engine",
         )
         try:
+            name = algo_name or str(getattr(algo_state, 'algo_id', 'Algo'))
             asyncio.create_task(_push.send_push(
                 "❌ Error",
-                f"{getattr(algo_state, 'algo_id', 'Algo')} — {str(msg)[:80]}",
+                f"{name} — {str(msg)[:80]}",
             ))
         except Exception:
             pass
