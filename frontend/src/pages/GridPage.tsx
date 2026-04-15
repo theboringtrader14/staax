@@ -301,14 +301,9 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
       if (Array.isArray(res.data?.recurring_days))
         setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: res.data.recurring_days } : x))
 
-      // Toast if deploying to today and entry time has already passed
-      if (day === todayDay && algo.et) {
-        const nowIST = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
-        if (nowIST >= algo.et.slice(0, 5)) {
-          const dayLabel = day.charAt(0).toUpperCase() + day.slice(1).toLowerCase()
-          setAutoFillToast(`⏰ Entry time passed — ${algo.name} will fire next ${dayLabel}`)
-          setTimeout(() => setAutoFillToast(''), 4000)
-        }
+      // If adding today — immediately activate so Orders page shows WAITING
+      if (day === todayDay) {
+        gridAPI.activateNow().catch(() => {})
       }
     } catch {
       setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: algo.recurringDays } : x))
@@ -352,6 +347,8 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     const missing = DAYS.filter(d => !grid[algoId]?.[d])
     if (!missing.length) return
     const mult = cardMults[algoId] || 1
+    const todayIso = weekDates[todayDay]
+    let deployedToday = false
     setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], ...Object.fromEntries(missing.map(d => [d, { multiplier:mult, status:'algo_active' as CS, mode:isPractixMode?'practix':'live' as CM, entry:algo?.et||'09:16', exit:algo?.xt||'15:10' }])) } }))
     await Promise.all(missing.map(async day => {
       try {
@@ -359,11 +356,14 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
         const gridEntryId = String(res.data?.id||'')
         setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:{ ...g[algoId][day], gridEntryId } } }))
         if (Array.isArray(res.data?.algo_recurring_days)) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
+        if (weekDates[day] === todayIso) deployedToday = true
       } catch (e:any) {
         setGrid(g => { const u={...g[algoId]}; delete u[day]; return { ...g, [algoId]:u } })
         flashError(e?.response?.data?.detail || `Deploy failed for ${day}`)
       }
     }))
+    // Mid-day deploy: activate today's entries immediately so Orders page shows WAITING
+    if (deployedToday) gridAPI.activateNow().catch(() => {})
   }
 
   // ── Archive / Delete ──────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
-import { useState, useEffect, useRef } from 'react'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI, algosAPI } from '@/services/api'
+import { useState, useEffect } from 'react'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI, algosAPI, ordersAPI } from '@/services/api'
 import { getCurrentFY } from '@/utils/fy'
 
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
@@ -115,6 +115,7 @@ export default function DashboardPage() {
   const setAccounts   = useStore(s => s.setAccounts)
   const [services, setServices]          = useState<Service[]>(INIT_SERVICES)
   const [stats, setStats]                = useState<Record<string,number>>({})
+  const [liveMtm, setLiveMtm]            = useState<number>(0)
   const [log, setLog]                    = useState<string[]>(['STAAX Dashboard ready.'])
   const [_zerodhaConnected, setZerodha]   = useState(false)
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
@@ -131,8 +132,7 @@ export default function DashboardPage() {
   const [_todayGrid, _setTodayGrid]      = useState<any[]>([])
   const [health, setHealth]              = useState<any>(null)
   const [_healthCollapsed, setHCollapsed] = useState(false)
-  const algoScrollRef                    = useRef<HTMLDivElement>(null)
-  const [scrollPos, setScrollPos]        = useState(0)
+  const [nextAlgoIdx, setNextAlgoIdx]    = useState(0)
   const [equityCurveData, setEquityCurveData] = useState<{month: string; cumulative: number}[]>([])
   const [algoList, setAlgoList]              = useState<any[]>([])
 
@@ -143,6 +143,13 @@ export default function DashboardPage() {
       setAlgoList(Array.isArray(data) ? data : (data?.algos || data?.items || []))
     }).catch(() => {})
   }, [])
+  // Auto-select the first upcoming (future) algo when the list loads
+  useEffect(() => {
+    if (scheduledAlgos.length > 0) {
+      const firstFutureIdx = scheduledAlgos.findIndex((a: any) => a.secs > nowSecs)
+      setNextAlgoIdx(firstFutureIdx >= 0 ? firstFutureIdx : 0)
+    }
+  }, [algoList.length]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     const run = () => gridAPI.list({ week_start: today, week_end: today, is_practix: isPractixMode })
@@ -157,6 +164,19 @@ export default function DashboardPage() {
     }).catch(() => {})
   }, [])
   useEffect(() => { systemAPI.stats(isPractixMode).then(r => setStats(r.data)).catch(() => {}) }, [isPractixMode])
+
+  // Live MTM for Today P&L — poll /orders/ltp every 2s when open positions exist
+  useEffect(() => {
+    const compute = (ltpMap: Record<string, any>) => {
+      const total = Object.values(ltpMap).reduce((s: number, e: any) => s + (e?.pnl ?? 0), 0)
+      setLiveMtm(total)
+    }
+    ordersAPI.ltp().then(r => { if (r.data?.ltp) compute(r.data.ltp) }).catch(() => {})
+    const iv = setInterval(() => {
+      ordersAPI.ltp().then(r => { if (r.data?.ltp) compute(r.data.ltp) }).catch(() => {})
+    }, 2000)
+    return () => clearInterval(iv)
+  }, [])
   useEffect(() => {
     reportsAPI.equityCurve({ fy: getCurrentFY(), is_practix: isPractixMode })
       .then((r: any) => setEquityCurveData(r.data?.data || []))
@@ -288,13 +308,8 @@ export default function DashboardPage() {
   }
 
   const nextAlgo = scheduledAlgos.find((a: any) => a.secs > nowSecs) || null
-  const scrollAlgos = (dir: 'left' | 'right') => {
-    const el = algoScrollRef.current; if (!el) return
-    el.scrollBy({ left: dir === 'right' ? 130 : -130, behavior: 'smooth' })
-    setTimeout(() => setScrollPos(el.scrollLeft), 360)
-  }
 
-  const todayPnl  = stats['today_pnl'] ?? 0
+  const todayPnl  = (stats['today_pnl'] ?? 0) + liveMtm
   const fyPnl     = stats['fy_pnl']    ?? 0
   const fyPnlReal = equityCurveData.length > 0 ? (equityCurveData[equityCurveData.length - 1]?.cumulative ?? fyPnl) : fyPnl
   const fyMargin  = (accounts as any[]).reduce((sum, a) => sum + (a.margin ?? a.fy_margin ?? 0), 0)
@@ -529,91 +544,143 @@ export default function DashboardPage() {
         )
       })()}
 
-      {/* ── ACCOUNT STATUS ── */}
-      <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '14px 16px' }}>
-        <div className="card-label">Account Status</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' }}>
-          {dashboardAccounts.map((acc: any) => {
-            const isZerodha = acc.broker === 'zerodha'
-            // Derive live status: prefer health checks, fall back to token_valid_today
-            const brokerKey = isZerodha ? 'zerodha' : 'angelone'
-            const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
-            // For Angel One: check health by account id key, fall back to token_valid_today
-            const angeloneOk: boolean = isZerodha
-              ? false
-              : (health?.checks?.['broker_angelone_' + acc.id]?.token_valid
-                  ?? health?.checks?.['broker_' + brokerKey]?.token_valid
-                  ?? acc.token_valid_today
-                  ?? false)
-            const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
+      {/* ── UNIFIED STATUS STRIP: Accounts · Next Algo · Next Holiday ── */}
+      <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '16px 20px', display: 'flex', alignItems: 'stretch', gap: '0' }}>
 
-            const succeeded = loginSucceeded[acc.id] ?? false
-            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-            return (
-              <div key={acc.id} style={{
-                display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '9px',
-                background: isLive ? 'rgba(34,221,136,0.05)' : 'rgba(18,18,22,0.75)',
-                border: '0.5px solid ' + (isLive ? 'rgba(34,221,136,0.25)' : 'rgba(255,255,255,0.08)'),
-                transition: 'border-color var(--dur-mid), transform var(--dur-fast) var(--ease-spring)'
-              }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--ox-border)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = isLive ? 'rgba(34,221,136,0.25)' : 'rgba(255,255,255,0.08)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)' }}>
-                <span className={isLive ? 'pulse-live-lg' : 'pulse-warn-lg'} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 600, color: 'var(--ox-glow)' }}>{acc.nickname || acc.name}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '1px' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
+        {/* ── Accounts ~50% ── */}
+        <div style={{ flex: '0 0 50%', minWidth: 0, paddingRight: '20px' }}>
+          <div className="card-label" style={{ marginBottom: '12px' }}>Account Status</div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, gap: '4px' }}>
+            {dashboardAccounts.map((acc: any, idx: number) => {
+              const isZerodha = acc.broker === 'zerodha'
+              const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
+              const angeloneOk: boolean = isZerodha
+                ? false
+                : (health?.checks?.['broker_angelone_' + acc.id]?.token_valid
+                    ?? health?.checks?.['broker_angelone']?.token_valid
+                    ?? acc.token_valid_today
+                    ?? false)
+              const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
+              const succeeded = loginSucceeded[acc.id] ?? false
+              const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+              return (
+                <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 20px', borderLeft: idx > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                  <span className={isLive ? 'pulse-live-lg' : 'pulse-warn-lg'} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 600, color: 'var(--ox-glow)', whiteSpace: 'nowrap' as const }}>{acc.nickname || acc.name}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--gs-muted)', marginTop: '1px' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                    {isLive && (
+                      <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontFamily: 'Syne', fontWeight: 600, background: 'rgba(34,221,136,0.12)', border: '0.5px solid rgba(34,221,136,0.25)', color: '#22DD88' }}>• Live</span>
+                    )}
+                    {isZerodha && !zerodhaOk && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const w = 520, h = 640
+                          const left = window.screenX + (window.outerWidth - w) / 2
+                          const top = window.screenY + (window.outerHeight - h) / 2
+                          window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
+                        }}
+                        style={{ padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne', background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)', color: 'var(--ox-radiant)', cursor: 'pointer' }}
+                      >🔑 Login</button>
+                    )}
+                    {!isZerodha && !isLive && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
+                          if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
+                        }}
+                        style={{ padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne', background: 'transparent', border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)', color: succeeded ? '#22DD88' : 'var(--ox-radiant)', cursor: 'pointer' }}
+                      >{succeeded ? 'Re-Login' : '🔑 Login'}</button>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
-                  {/* Live chip — shown when account is live */}
-                  {isLive && (
-                    <span style={{
-                      padding: '2px 8px', borderRadius: 10, fontSize: 10, fontFamily: 'Syne', fontWeight: 600,
-                      background: 'rgba(34,221,136,0.12)', border: '0.5px solid rgba(34,221,136,0.25)', color: '#22DD88'
-                    }}>• Live</span>
-                  )}
-                  {/* Login button: only shown when token is missing/expired (not live) */}
-                  {isZerodha && !zerodhaOk && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const w = 520, h = 640
-                        const left = window.screenX + (window.outerWidth - w) / 2
-                        const top = window.screenY + (window.outerHeight - h) / 2
-                        window.open(
-                          `${API_BASE}/api/v1/zerodha/login`,
-                          'zerodha_oauth',
-                          `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`
-                        )
-                      }}
-                      style={{
-                        padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne',
-                        background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)',
-                        color: 'var(--ox-radiant)', cursor: 'pointer'
-                      }}
-                    >🔑 Login</button>
-                  )}
-                  {!isZerodha && !isLive && (
-                    /* Angel One not live: show Login → Re-Login after success */
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
-                        if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
-                      }}
-                      style={{
-                        padding: '4px 12px', borderRadius: 12, fontSize: 11, fontFamily: 'Syne',
-                        background: 'transparent',
-                        border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)',
-                        color: succeeded ? '#22DD88' : 'var(--ox-radiant)', cursor: 'pointer'
-                      }}
-                    >{succeeded ? 'Re-Login' : '🔑 Login'}</button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
+
+        {/* Divider */}
+        <div style={{ width: '1px', flexShrink: 0, alignSelf: 'stretch', background: 'rgba(255,255,255,0.08)' }} />
+
+        {/* ── Next Algo ~25% ── */}
+        {(() => {
+          const hasScheduledAlgo = nextAlgo != null
+          const nextAlgoDotColor = !isMarketHours ? '#FF4444' : hasScheduledAlgo ? '#22DD88' : '#FFB347'
+          const nextAlgoPulse = isMarketHours && hasScheduledAlgo
+          return (
+            <div style={{ flex: '0 0 25%', minWidth: 0, padding: '0 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: nextAlgoDotColor, boxShadow: nextAlgoPulse ? `0 0 6px ${nextAlgoDotColor}` : 'none', animation: nextAlgoPulse ? 'pulse 2s infinite' : 'none' }} />
+                <span className="card-label" style={{ marginBottom: 0 }}>Next Algo</span>
+              </div>
+              {!isMarketHours && !isPreMarket ? (
+                <div style={{ fontSize: '12px', color: '#FF4444', fontStyle: 'italic', opacity: 0.8 }}>Market Closed</div>
+              ) : isPreMarket ? (
+                <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>Market opening soon</div>
+              ) : scheduledAlgos.length === 0 ? (
+                <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No algos scheduled</div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {scheduledAlgos.length > 1 && (
+                    <button onClick={() => setNextAlgoIdx(i => Math.max(0, i - 1))} disabled={nextAlgoIdx === 0}
+                      style={{ width: '20px', height: '20px', flexShrink: 0, borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: nextAlgoIdx === 0 ? 'rgba(255,107,0,0.3)' : 'var(--ox-radiant)', fontSize: '14px', cursor: nextAlgoIdx === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
+                  )}
+                  {(() => {
+                    const viewIdx = Math.min(nextAlgoIdx, scheduledAlgos.length - 1)
+                    const a = scheduledAlgos[viewIdx]
+                    if (!a) return null
+                    const isFuture = a.secs > nowSecs
+                    return (
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ox-glow)', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--sem-warn)' }}>
+                          {a.time}{isFuture ? ` · ${getTimeRemaining(a.time)}` : ' · past'}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  {scheduledAlgos.length > 1 && (
+                    <>
+                      <button onClick={() => setNextAlgoIdx(i => Math.min(scheduledAlgos.length - 1, i + 1))} disabled={nextAlgoIdx >= scheduledAlgos.length - 1}
+                        style={{ width: '20px', height: '20px', flexShrink: 0, borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: nextAlgoIdx >= scheduledAlgos.length - 1 ? 'rgba(255,107,0,0.3)' : 'var(--ox-radiant)', fontSize: '14px', cursor: nextAlgoIdx >= scheduledAlgos.length - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
+                      <span style={{ fontSize: '10px', color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{nextAlgoIdx + 1}/{scheduledAlgos.length}</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* Divider */}
+        <div style={{ width: '1px', flexShrink: 0, alignSelf: 'stretch', background: 'rgba(255,255,255,0.08)' }} />
+
+        {/* ── Next Holiday ~20% ── */}
+        <div style={{ flex: 1, minWidth: 0, paddingLeft: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span className="card-label" style={{ marginBottom: 0 }}>Next Holiday</span>
+            <button className="btn btn-ghost" style={{ fontSize: '9px', padding: '0 8px', height: '22px' }} onClick={handleSyncHolidays} disabled={syncingHolidays}>{syncingHolidays ? 'Syncing…' : 'Sync NSE'}</button>
+          </div>
+          {holidays.length === 0
+            ? <div style={{ fontSize: '11px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>None in next 30 days</div>
+            : holidays.slice(0, 1).map((h: any) => {
+                const d = new Date(h.date)
+                return (
+                  <div key={h.id} style={{ padding: '5px 10px', borderRadius: '7px', background: 'rgba(255,215,0,0.06)', border: '0.5px solid rgba(255,215,0,0.20)', display: 'inline-block' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--sem-warn)', marginBottom: '1px' }}>
+                      {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} · {d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })}
+                    </div>
+                    <div style={{ fontSize: '9px', color: 'var(--gs-muted)' }}>{h.description}</div>
+                  </div>
+                )
+              })
+          }
+        </div>
+
       </div>
 
       {/* ── STAT CARDS ── */}
@@ -631,94 +698,6 @@ export default function DashboardPage() {
         <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} sparkId="today" />
         <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} sparkId="fy" equityCurve={equityCurveData} roi={fyRoi} />
       </div>
-
-      {/* ── MARKET CONTEXT (Next Algo + Holidays merged) ── */}
-      {(() => {
-        const hasScheduledAlgo = nextAlgo != null
-        const nextAlgoDotColor = !isMarketHours ? '#FF4444' : hasScheduledAlgo ? '#22DD88' : '#FFB347'
-        const nextAlgoPulse = isMarketHours && hasScheduledAlgo
-        return (
-          <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '14px 16px', border: '0.5px solid rgba(255,107,0,0.30)' }}>
-            {/* Header */}
-            <div className="card-label" style={{ marginBottom: '12px' }}>Market Context</div>
-
-            {/* Two-column inner layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 0 }}>
-
-              {/* Left — Next Algo */}
-              <div style={{ paddingRight: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                  <div style={{
-                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: nextAlgoDotColor,
-                    boxShadow: nextAlgoPulse ? `0 0 6px ${nextAlgoDotColor}` : 'none',
-                    animation: nextAlgoPulse ? 'pulse 2s infinite' : 'none',
-                  }} />
-                  <span style={{ fontSize: '10px', fontFamily: 'Syne, sans-serif', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.8px', color: 'rgba(232,232,248,0.35)' }}>Next Algo</span>
-                </div>
-                {!isMarketHours && !isPreMarket ? (
-                  <div style={{ fontSize: '12px', color: '#FF4444', fontStyle: 'italic', opacity: 0.8 }}>Market Closed</div>
-                ) : isPreMarket ? (
-                  <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>Market opening soon</div>
-                ) : scheduledAlgos.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No algos scheduled today</div>
-                ) : !nextAlgo ? (
-                  <div style={{ fontSize: '12px', color: '#FFB347', fontStyle: 'italic', opacity: 0.85 }}>No more algos today</div>
-                ) : (
-                  <div style={{ position: 'relative' }}>
-                    {scrollPos > 10 && (
-                      <button onClick={() => scrollAlgos('left')} style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '14px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
-                    )}
-                    <div ref={algoScrollRef} onScroll={e => setScrollPos((e.target as HTMLDivElement).scrollLeft)}
-                      style={{ display: 'flex', gap: '7px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px', paddingLeft: scrollPos > 10 ? '28px' : '0', paddingRight: '28px' }}>
-                      {scheduledAlgos.map((a: any, i: number) => {
-                        const isNext = nextAlgo && a.name === nextAlgo.name && a.time === nextAlgo.time
-                        const remaining = getTimeRemaining(a.time)
-                        const isFuture = a.secs > nowSecs
-                        return (
-                          <div key={i} style={{ flexShrink: 0, padding: '6px 10px', borderRadius: '7px', background: isNext ? 'rgba(255,107,0,0.12)' : 'rgba(255,107,0,0.04)', border: '0.5px solid ' + (isNext ? 'rgba(255,107,0,0.40)' : 'rgba(255,107,0,0.14)'), minWidth: '90px' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: isNext ? 'var(--ox-glow)' : 'var(--ox-ultra)', marginBottom: '2px', fontFamily: 'var(--font-display)' }}>{a.name}</div>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)' }}>{a.time}</div>
-                            {isFuture && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: isNext ? 'var(--sem-warn)' : 'var(--gs-muted)', opacity: isNext ? 1 : 0.7, marginTop: '2px' }}>{remaining}</div>}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <button onClick={() => scrollAlgos('right')} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '0.5px solid rgba(255,107,0,0.4)', color: 'var(--ox-radiant)', fontSize: '14px', cursor: 'pointer', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
-                  </div>
-                )}
-              </div>
-
-              {/* Divider */}
-              <div style={{ background: 'rgba(255,255,255,0.07)', margin: '0 16px' }} />
-
-              {/* Right — Holidays */}
-              <div style={{ paddingLeft: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '10px', fontFamily: 'Syne, sans-serif', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.8px', color: 'rgba(232,232,248,0.35)' }}>Upcoming Holidays (F&O)</span>
-                  <button className="btn btn-ghost" style={{ fontSize: '9px', padding: '0 8px', height: '22px' }} onClick={handleSyncHolidays} disabled={syncingHolidays}>{syncingHolidays ? 'Syncing…' : 'Sync NSE'}</button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
-                  {holidays.length === 0
-                    ? <div style={{ fontSize: '11px', color: 'var(--gs-muted)', fontStyle: 'italic' }}>No F&O holidays in next 30 days — sync to load.</div>
-                    : holidays.map((h: any) => {
-                        const d = new Date(h.date)
-                        return (
-                          <div key={h.id} style={{ padding: '5px 10px', borderRadius: '7px', background: 'rgba(255,215,0,0.06)', border: '0.5px solid rgba(255,215,0,0.20)', minWidth: '100px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--sem-warn)', marginBottom: '1px' }}>
-                              {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} · {d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' })}
-                            </div>
-                            <div style={{ fontSize: '9px', color: 'var(--gs-muted)' }}>{h.description}</div>
-                          </div>
-                        )
-                      })
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
 
       {/* ── SERVICES + SYSTEM LOG ── */}
       {/* FIX #3: cloud-fill on BOTH Services and System Log outer cards */}

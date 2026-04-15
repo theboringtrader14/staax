@@ -109,6 +109,9 @@ export const gridAPI = {
     api.post(`/grid/${algoId}/promote-live`),
 
   triggerNow: (algoId: string, date: string) => api.post('/grid/trigger-now', { algo_id: algoId, trading_date: date }),
+
+  // Force mid-day activation — creates AlgoState(WAITING) for any today entries missing one
+  activateNow: () => api.post('/grid/activate-now'),
 }
 
 // ── Orders ────────────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ const fmtIST = (iso: string | null | undefined): string => {
   })
 }
 
-type LegStatus  = 'open' | 'closed' | 'error' | 'pending'
+type LegStatus  = 'open' | 'closed' | 'error' | 'pending' | 'waiting'
 type AlgoStatus = 'open' | 'closed' | 'error' | 'pending' | 'waiting' | 'no_trade'
 
 interface Leg {
@@ -24,10 +24,11 @@ interface Leg {
   instrumentToken?: number
   errorMessage?: string
   refPrice?: number; fillPrice?: number; fillTime?: string; ltp?: number
-  slOrig?: number; slActual?: number; tslTrailCount?: number; target?: number
+  slOrig?: number; slActual?: number; slType?: string; tslTrailCount?: number; target?: number
   exitPrice?: number; exitTime?: string; exitReason?: string; pnl?: number
   reentryCount?: number;
   reentryTypeUsed?: string;   // "re_entry" | "re_execute"
+  wtEnabled?: boolean; wtValue?: number; wtUnit?: string; wtDirection?: string; entryReference?: number
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
@@ -59,6 +60,7 @@ const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
   closed:  { color: 'rgba(34,221,136,0.5)', bg: 'rgba(34,221,136,0.07)' },
   error:   { color: '#FF4444',              bg: 'rgba(255,68,68,0.12)'   },
   pending: { color: '#FF8C00',              bg: 'rgba(255,140,0,0.12)'   },
+  waiting: { color: '#F59E0B',              bg: 'rgba(245,158,11,0.12)'  },
 }
 
 // ── Algo-level status chip ──────────────────────────────────────────────────
@@ -123,13 +125,38 @@ function isMarketLive(): boolean {
   return t >= 9 * 60 + 15 && t <= 15 * 60 + 30
 }
 
+// ── SL format helper ─────────────────────────────────────────────────────────
+function formatSL(sl_value: number | null, sl_type?: string): string {
+  if (sl_value == null) return '—'
+  const v = sl_value.toFixed(0)
+  switch (sl_type) {
+    case 'pct_instrument': return `I-${v}%`
+    case 'pts_instrument': return `I-${v}pts`
+    case 'pct_underlying': return `U-${v}%`
+    case 'pts_underlying': return `U-${v}pts`
+    default: return v
+  }
+}
+
 // ── LegRow ───────────────────────────────────────────────────────────────────
 function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
   leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
   onEditExit?: (orderId: string, price: number) => void
 }) {
-  const st  = STATUS_STYLE[leg.status]
+  const st  = STATUS_STYLE[leg.status] ?? STATUS_STYLE['pending']
   const ltp = liveLtp ?? leg.ltp
+
+  // W&T trigger calculation
+  const isWtWaiting = !!(leg.wtEnabled && leg.status === 'waiting')
+  const wtTrigger: number | null = (() => {
+    if (!isWtWaiting || leg.entryReference == null || leg.wtValue == null) return null
+    const ref = leg.entryReference, v = leg.wtValue
+    if (leg.wtDirection === 'down') return leg.wtUnit === 'pct' ? ref * (1 - v / 100) : ref - v
+    return leg.wtUnit === 'pct' ? ref * (1 + v / 100) : ref + v
+  })()
+  const wtTriggered = wtTrigger != null && ltp != null
+    ? (leg.wtDirection === 'down' ? ltp <= wtTrigger : ltp >= wtTrigger)
+    : false
   const C: React.CSSProperties = { textAlign: 'center' }
   return (
     <>
@@ -156,7 +183,10 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
         )}
       </td>
       <td style={{ width: COLS[1], ...C }}>
-        <span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span>
+        {isWtWaiting
+          ? <span className="tag" style={{ color: '#F59E0B', background: 'rgba(245,158,11,0.12)', fontSize: '10px' }}>W&amp;T</span>
+          : <span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span>
+        }
       </td>
       <td style={{ width: COLS[2] }}>
         <div style={{ fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leg.symbol}</div>
@@ -164,13 +194,25 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
       </td>
       <td style={{ width: COLS[3], ...C, color: 'var(--text-muted)', fontSize: '11px' }}>{leg.lots}</td>
       <td style={{ width: COLS[4], fontSize: '11px', ...C }}>
-        {leg.fillPrice != null
-          ? <div style={{ fontWeight: 600 }}>Fill: {leg.fillPrice}{leg.fillTime && <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '5px', fontSize: '10px' }}>{leg.fillTime}</span>}</div>
-          : <div style={{ color: 'var(--text-dim)' }}>Fill: —</div>}
-        {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice} · {leg.entryCondition}</div>}
-        {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
+        {isWtWaiting && wtTrigger != null && leg.entryReference != null ? (
+          <div style={{ fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-muted)' }}>REF {leg.entryReference}</span>
+            <span style={{ color: 'var(--text-dim)' }}>→</span>
+            <span style={{ color: '#F59E0B', fontWeight: 600 }}>TRIG {wtTrigger.toFixed(0)}</span>
+          </div>
+        ) : (
+          <>
+            {leg.fillPrice != null
+              ? <div style={{ fontWeight: 600 }}>Fill: {leg.fillPrice}{leg.fillTime && <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '5px', fontSize: '10px' }}>{leg.fillTime}</span>}</div>
+              : <div style={{ color: 'var(--text-dim)' }}>Fill: —</div>}
+            {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice} · {leg.entryCondition}</div>}
+            {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
+          </>
+        )}
       </td>
-      <td style={{ width: COLS[5], ...C, fontWeight: 600, color: ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)' }}>
+      <td style={{ width: COLS[5], ...C, fontWeight: 600, color: isWtWaiting
+        ? (wtTrigger != null && ltp != null ? (wtTriggered ? '#22DD88' : '#06B6D4') : 'var(--text-muted)')
+        : (ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)') }}>
         {ltp != null ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
             {hasLivePoll ? (
@@ -191,10 +233,10 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
           const hasTSL  = leg.tslTrailCount != null && leg.tslTrailCount > 0
           if (hasTSL && slPrice != null) {
             // TSL has trailed: show original anchor → current level
-            const origLevel = leg.slOrig != null ? `O:${leg.slOrig}` : ''
-            return <div style={{ color: 'var(--text-muted)' }}>{origLevel} A:<span style={{ color: 'var(--amber)' }}>{slPrice.toFixed(0)}</span></div>
+            const origLevel = leg.slOrig != null ? `O:${formatSL(leg.slOrig, leg.slType)}` : ''
+            return <div style={{ color: 'var(--text-muted)' }}>{origLevel} A:<span style={{ color: 'var(--amber)' }}>{formatSL(slPrice, leg.slType)}</span></div>
           }
-          if (slPrice != null) return <div style={{ color: 'var(--text-muted)' }}>{slPrice.toFixed(0)}</div>
+          if (slPrice != null) return <div style={{ color: 'var(--text-muted)' }}>{formatSL(slPrice, leg.slType)}</div>
           return <>—</>
         })()}
       </td>
@@ -250,9 +292,11 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, children, onCon
   )
 }
 
-function setInlineStatus(setOrders: React.Dispatch<React.SetStateAction<AlgoGroup[]>>, idx: number, msg: string, color: string, ms = 3000) {
+function setInlineStatus(setOrders: React.Dispatch<React.SetStateAction<AlgoGroup[]>>, idx: number, msg: string, color: string, ms = 3000, persistent = false) {
   setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: msg, inlineColor: color } : g))
-  setTimeout(() => setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
+  if (!persistent) {
+    setTimeout(() => setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
+  }
 }
 
 function mapGroup(g: any): AlgoGroup {
@@ -282,6 +326,7 @@ function mapGroup(g: any): AlgoGroup {
       ltp:             o.ltp ?? undefined,
       slOrig:          o.sl_original ?? undefined,
       slActual:        o.sl_actual ?? undefined,
+      slType:          o.sl_type ?? undefined,
       tslTrailCount:   o.tsl_trail_count ?? undefined,
       target:          o.target ?? undefined,
       exitPrice:       o.exit_price ?? undefined,
@@ -290,6 +335,11 @@ function mapGroup(g: any): AlgoGroup {
       pnl:             o.pnl ?? undefined,
       reentryCount:    o.reentry_count ?? 0,
       reentryTypeUsed: o.reentry_type_used ?? undefined,
+      wtEnabled:       o.wt_enabled ?? undefined,
+      wtValue:         o.wt_value ?? undefined,
+      wtUnit:          o.wt_unit ?? undefined,
+      wtDirection:     o.wt_direction ?? undefined,
+      entryReference:  o.entry_reference ?? undefined,
     })),
   }
 }
@@ -383,7 +433,14 @@ export default function OrdersPage() {
   const today     = todayDay()
   const todayDate = weekDates[today] || new Date().toISOString().slice(0, 10)
 
-  const [selectedDate, setSelectedDate] = useState<string>(todayDate)
+  const LS_DAY_KEY = 'staax_orders_day'
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('staax_orders_day')
+      if (stored && Object.values(weekDates).includes(stored)) return stored
+    } catch {}
+    return todayDate
+  })
   const [orders, setOrders]             = useState<AlgoGroup[]>([])
   const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
   const [ltpMap, setLtpMap]             = useState<Record<number, number>>({})
@@ -408,7 +465,10 @@ export default function OrdersPage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
   const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
+  const [ordersLoaded, setOrdersLoaded] = useState(false)
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
+  const [retryModal, setRetryModal] = useState<{ algoIdx: number; legs: Leg[] } | null>(null)
+  const [retryChecked, setRetryChecked] = useState<Record<string, boolean>>({})
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -454,10 +514,9 @@ export default function OrdersPage() {
       ordersAPI.list(weekDates[day], isPractixMode)
         .then((res: any) => {
           const groups: any[] = res.data?.groups || []
-          const pnl = groups.flatMap((g: any) => g.orders || [])
-            .filter((o: any) => o.status === 'closed' && o.pnl != null)
-            .reduce((s: number, o: any) => s + (o.pnl || 0), 0)
-          return { day, pnl: groups.length > 0 ? pnl : null }
+          const hasOrders = groups.some((g: any) => (g.orders || []).length > 0)
+          const pnl = groups.reduce((s: number, g: any) => s + (g.mtm ?? 0), 0)
+          return { day, pnl: hasOrders ? pnl : null }
         })
         .catch(() => ({ day, pnl: null as null }))
     )).then(results => {
@@ -470,12 +529,21 @@ export default function OrdersPage() {
   // Load orders + waiting algos for selectedDate
   useEffect(() => {
     setOrders([])
+    setOrdersLoaded(false)
     setWaitingAlgos([])
     ordersAPI.list(selectedDate, isPractixMode)
       .then(res => {
         const data = res.data
         const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
         setOrders(raw.map(mapGroup))
+        setOrdersLoaded(true)
+        // Seed weekPnl for this day from loaded data (updated again once ltpData arrives)
+        const dayKey = Object.entries(weekDates).find(([, d]) => d === selectedDate)?.[0]
+        if (dayKey) {
+          const hasOrders = raw.some((g: any) => (g.orders || []).length > 0)
+          const pnl = raw.reduce((s: number, g: any) => s + (g.mtm ?? 0), 0)
+          setWeekPnl(prev => ({ ...prev, [dayKey]: hasOrders ? pnl : null }))
+        }
       })
       .catch(() => {})
 
@@ -522,6 +590,18 @@ export default function OrdersPage() {
     return () => clearInterval(interval)
   }, [orders])
 
+  // Seed LTP data immediately on mount — prevents ₹0 flash before first poll fires
+  useEffect(() => {
+    ordersAPI.ltp()
+      .then(res => { if (res.data?.ltp) setLtpData(res.data.ltp) })
+      .catch(() => {})
+  }, [])
+
+  // Persist selected day tab across page refreshes
+  useEffect(() => {
+    try { localStorage.setItem(LS_DAY_KEY, selectedDate) } catch {}
+  }, [selectedDate])
+
   const safeOrders = Array.isArray(orders) ? orders : []
   const totalMTM   = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
 
@@ -531,6 +611,23 @@ export default function OrdersPage() {
   const liveTotalMtm   = hasLiveData
     ? ltpDataEntries.reduce((sum, e) => sum + (e?.pnl ?? 0), 0)
     : 0
+
+  // Keep selected day's weekPnl current as live ltpData arrives
+  useEffect(() => {
+    if (!ordersLoaded) return
+    const dayKey = Object.entries(weekDates).find(([, d]) => d === selectedDate)?.[0]
+    if (!dayKey) return
+    const closedPnl = safeOrders.reduce((s, g) => {
+      const closed = g.legs.filter(l => l.status === 'closed' && l.pnl != null)
+      return s + closed.reduce((cs, l) => cs + (l.pnl ?? 0), 0)
+    }, 0)
+    const openPnl = hasLiveData ? liveTotalMtm : safeOrders.reduce((s, g) => {
+      const open = g.legs.filter(l => l.status === 'open')
+      return s + (open.length > 0 ? g.mtm : 0)
+    }, 0)
+    const hasOrders = safeOrders.some(g => g.legs.length > 0)
+    setWeekPnl(prev => ({ ...prev, [dayKey]: hasOrders ? closedPnl + openPnl : null }))
+  }, [ltpData, ordersLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
@@ -559,7 +656,7 @@ export default function OrdersPage() {
         setInlineStatus(setOrders, idx, `↻ Retrying ${data.retried} leg${data.retried !== 1 ? 's' : ''}`, 'var(--green)')
       }
     } catch {
-      setInlineStatus(setOrders, idx, '⚠️ Retry failed', 'var(--red)')
+      setInlineStatus(setOrders, idx, '⚠️ Retry failed', 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`re-${idx}`]: false }))
     }
@@ -569,19 +666,24 @@ export default function OrdersPage() {
     const gridEntryId = orders[idx]?.gridEntryId
     if (!gridEntryId) return
     setLoading(l => ({ ...l, [`retry-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '↻ Retrying algo...', 'var(--accent-amber)')
+    setInlineStatus(setOrders, idx, '↻ Running...', 'var(--accent-amber)', 30000)
     try {
       await ordersAPI.retryEntry(gridEntryId)
-      setInlineStatus(setOrders, idx, '✅ Algo retry triggered', 'var(--green)')
+      // Wait for backend to process before refreshing
+      await new Promise(r => setTimeout(r, 800))
+      setInlineStatus(setOrders, idx, '✅ Done', 'var(--green)', 3000)
       ordersAPI.list(selectedDate, isPractixMode)
         .then(r => {
           const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
           setOrders(raw.map(mapGroup))
         })
         .catch(() => {})
+      ordersAPI.waiting(selectedDate, isPractixMode)
+        .then(res => setWaitingAlgos(res.data?.waiting || []))
+        .catch(() => {})
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
-      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)')
+      const msg = err?.response?.data?.detail || err?.message || 'RE-RUN failed'
+      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
     }
@@ -592,6 +694,7 @@ export default function OrdersPage() {
     const selected = Object.keys(sqChecked).filter(k => sqChecked[k])
     if (selected.length === 0) { setModal(null); return }
     setLoading(l => ({ ...l, [`sq-${idx}`]: true }))
+    setInlineStatus(setOrders, idx, '↻ Running...', 'var(--accent-amber)', 30000)
     setSqResults(null)
     setSqError(null)
     try {
@@ -620,7 +723,7 @@ export default function OrdersPage() {
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'SQ failed'
       setSqError(msg)
-      setInlineStatus(setOrders, idx, '⚠️ SQ failed', 'var(--red)')
+      setInlineStatus(setOrders, idx, '⚠️ SQ failed', 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`sq-${idx}`]: false }))
     }
@@ -629,6 +732,7 @@ export default function OrdersPage() {
   const doTerminate = async (idx: number) => {
     const algoId = orders[idx].algoId
     setLoading(l => ({ ...l, [`t-${idx}`]: true }))
+    setInlineStatus(setOrders, idx, '↻ Running...', 'var(--accent-amber)', 30000)
     try {
       const res = await algosAPI.terminate(algoId)
       const data = res.data as {
@@ -655,7 +759,7 @@ export default function OrdersPage() {
     } catch (err: any) {
       // Backend error — do NOT mark algo as terminated locally
       const msg = err?.response?.data?.detail || err?.message || 'Terminate failed'
-      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)')
+      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`t-${idx}`]: false }))
     }
@@ -813,8 +917,8 @@ export default function OrdersPage() {
                 >›</button>
               </div>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                MTM: <b style={{ color: (hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '#22DD88' : '#FF4444' }}>
-                  {(hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '+' : ''}₹{(hasLiveData ? liveTotalMtm : totalMTM).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                MTM: <b style={{ color: (!ordersLoaded && !hasLiveData) ? 'var(--text-muted)' : (hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '#22DD88' : '#FF4444' }}>
+                  {(!ordersLoaded && !hasLiveData) ? '—' : `${(hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '+' : ''}₹${(hasLiveData ? liveTotalMtm : totalMTM).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}
                 </b>
                 {hasLiveData && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22DD88', display: 'inline-block', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />}
               </span>
@@ -978,11 +1082,11 @@ export default function OrdersPage() {
               }
 
               const missedBtns = [
-                { label: 'RE',     col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: true,      action: undefined },
+                { label: isRetrying ? '↻' : 'RE-RUN', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !isMissed || isRetrying, action: isMissed ? doWaitingRE : undefined },
                 { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true,      action: undefined },
                 { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true,      action: undefined },
                 { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true,      action: undefined },
-                { label: isRetrying ? '↻' : 'RETRY', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: isRetrying, action: doWaitingRE },
+                { label: isRetrying ? '↻' : 'RETRY', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !w.latest_error || isRetrying, action: w.latest_error ? doWaitingRE : undefined },
                 { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, action: undefined },
               ]
 
@@ -1052,8 +1156,8 @@ export default function OrdersPage() {
 
                     {/* ── Tall action buttons ── */}
                     <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
-                      {missedBtns.map(btn => (
-                        <button key={btn.label}
+                      {missedBtns.map((btn, bi) => (
+                        <button key={bi}
                           disabled={btn.disabled}
                           onClick={btn.action}
                           style={{
@@ -1077,29 +1181,30 @@ export default function OrdersPage() {
                   {(w.legs || []).length > 0 && (
                     <div style={{ borderTop: '0.5px solid var(--bg-border)' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
                           <tr>
                             {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
-                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(232,232,248,0.4)', fontWeight: 600, padding: '5px 6px', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{h}</th>
+                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(232,232,248,0.4)', fontWeight: 600, padding: '5px 6px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', verticalAlign: 'middle' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {(w.legs || []).map(leg => (
                             <tr key={leg.leg_number}>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.leg_number}</td>
-                              <td style={{ textAlign: 'center', padding: '6px 6px' }}>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', verticalAlign: 'middle' }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3, color: legStatusChip.color, background: legStatusChip.bg, letterSpacing: 0.5 }}>
                                   {legStatusChip.label}
                                 </span>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', fontSize: 11 }}>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', fontSize: 11, verticalAlign: 'middle' }}>
                                 <div style={{ color: 'rgba(232,232,248,0.75)' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
                                 <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11 }}>{leg.lots}</td>
+                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.lots}</td>
                               {['Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(col => (
-                                <td key={col} style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-dim)', fontSize: 11 }}>—</td>
+                                <td key={col} style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
                               ))}
                             </tr>
                           ))}
@@ -1174,16 +1279,17 @@ export default function OrdersPage() {
                       const istNow   = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
                       return istNow.getHours() > hh || (istNow.getHours() === hh && istNow.getMinutes() >= mm)
                     })()
-                    const canRetry     = !!group.gridEntryId && allLegsError && !isTerminated && !isClosed && !isOrbMissed
+                    const canRetry = !!group.gridEntryId && allLegsError && !isTerminated && !isClosed && !isOrbMissed
+                    const canReRun = algoSt === 'no_trade' && !isTerminated && !!group.gridEntryId
 
                     // Action button definitions
                     const BTNS = [
-                      { label: 'RE',         col: '#F59E0B', bg: 'rgba(245,158,11,0.05)',  hBg: 'rgba(245,158,11,0.14)',  border: undefined, disabled: isTerminated || !!loading[`re-${gi}`],        title: undefined, action: () => doRE(gi) },
-                      { label: 'SYNC',       col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                                 title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',         col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs,     title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
-                      { label: 'T',          col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                    title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: loading[`retry-${gi}`] ? '↻' : 'RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`], title: isOrbMissed ? 'ORB window closed' : (allLegsError ? undefined : 'All legs must be in error state'), action: () => doRetry(gi) },
-                      { label: 'REPLAY',     col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
+                      { label: loading[`retry-${gi}`] ? '↻' : 'RE-RUN', col: canReRun ? '#F59E0B' : '#6B6B6B', bg: canReRun ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canReRun || !!loading[`retry-${gi}`], title: canReRun ? undefined : 'Available only when algo missed entry (no_trade)', action: () => doRetry(gi) },
+                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs, title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
+                      { label: loading[`re-${gi}`] ? '↻' : 'RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`re-${gi}`], title: isOrbMissed ? 'ORB window closed' : (allLegsError ? undefined : 'All legs must be in error state'), action: () => { const errLegs = group.legs.filter(l => l.status === 'error'); setRetryChecked(Object.fromEntries(errLegs.map(l => [l.id, true] as [string, boolean]))); setRetryModal({ algoIdx: gi, legs: errLegs }) } },
+                      { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
                     return (
@@ -1219,6 +1325,12 @@ export default function OrdersPage() {
                             <span className="tag" style={{ color: chip.color, background: chip.bg, fontSize: '10px', whiteSpace: 'nowrap' }}>
                               {chip.label}
                             </span>
+                            {/* ORB capture indicator */}
+                            {isOrbAlgo && !isOrbMissed && algoSt === 'waiting' && (
+                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.10)', border: '0.5px solid rgba(245,158,11,0.30)', padding: '1px 8px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 600 }}>
+                                📡 Capturing ORB
+                              </span>
+                            )}
 
                             {/* MTM SL/TP */}
                             {!group.terminated && !!(group.mtmSL || group.mtmTP) && (
@@ -1241,15 +1353,21 @@ export default function OrdersPage() {
                               )
                             })()}
 
-                            {/* Inline status feedback */}
-                            {group.inlineStatus && (
-                              <span style={{ fontSize: '11px', fontWeight: 600, color: group.inlineColor, animation: 'fadeIn 0.2s ease' }}>
-                                {group.inlineStatus}
-                              </span>
-                            )}
-
-                            {/* Sparkline + MTM P&L (right side) */}
-                            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {/* Inline status pill + Sparkline + MTM P&L (right side) */}
+                            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {/* Inline status pill — before sparkline */}
+                              {group.inlineStatus && (
+                                <span style={{
+                                  fontSize: '10px', fontWeight: 600, color: group.inlineColor,
+                                  padding: '2px 8px', borderRadius: '100px',
+                                  background: `${group.inlineColor}18`,
+                                  border: `0.5px solid ${group.inlineColor}44`,
+                                  whiteSpace: 'nowrap' as const,
+                                  animation: 'fadeIn 0.15s ease',
+                                }}>
+                                  {group.inlineStatus}
+                                </span>
+                              )}
                               {showSpark && (
                                 <SmoothedSparkline algoId={group.algoId} legs={group.legs} totalPnl={totalPnl} />
                               )}
@@ -1276,8 +1394,8 @@ export default function OrdersPage() {
 
                           {/* ── Tall action buttons ── */}
                           <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
-                            {BTNS.map(btn => (
-                              <button key={btn.label}
+                            {BTNS.map((btn, bi) => (
+                              <button key={bi}
                                 disabled={btn.disabled}
                                 title={btn.title}
                                 onClick={btn.action}
@@ -1445,6 +1563,35 @@ export default function OrdersPage() {
               <button className="btn btn-ghost" onClick={() => setEditExit(null)}>Cancel</button>
               <button className="btn btn-primary" disabled={exitSaving} onClick={doCorrectExit}>
                 {exitSaving ? 'Saving...' : '✅ Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RETRY leg-selection modal ── */}
+      {retryModal && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: '420px' }}>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>↻ Retry Failed Legs — {orders[retryModal.algoIdx]?.algoName}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Select which failed legs to retry at broker level.
+            </div>
+            {retryModal.legs.map(l => (
+              <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', marginBottom: 4, background: 'rgba(255,68,68,0.08)', border: '0.5px solid rgba(255,68,68,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+                <input type="checkbox" checked={!!retryChecked[l.id]} onChange={e => setRetryChecked(prev => ({ ...prev, [l.id]: e.target.checked }))} />
+                <span style={{ color: '#FF4444', fontWeight: 600, minWidth: 28 }}>{l.journeyLevel}</span>
+                <span style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{l.symbol}</span>
+                <span style={{ color: l.dir === 'BUY' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{l.dir}</span>
+                {l.errorMessage && <span style={{ color: 'var(--text-muted)', fontSize: 10, marginLeft: 'auto' }}>{l.errorMessage.slice(0, 40)}</span>}
+              </label>
+            ))}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button className="btn btn-ghost" onClick={() => setRetryModal(null)}>Cancel</button>
+              <button className="btn btn-primary"
+                disabled={!Object.values(retryChecked).some(Boolean) || !!loading[`re-${retryModal.algoIdx}`]}
+                onClick={() => { doRE(retryModal.algoIdx); setRetryModal(null) }}>
+                {loading[`re-${retryModal.algoIdx}`] ? '↻ Retrying...' : '↻ Retry Selected'}
               </button>
             </div>
           </div>
