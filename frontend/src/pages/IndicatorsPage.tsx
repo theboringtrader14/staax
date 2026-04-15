@@ -815,7 +815,7 @@ export default function IndicatorsPage() {
             <table className="staax-table">
               <thead>
                 <tr>
-                  <th>Bot</th><th>Signal</th><th>Instrument</th><th>Dir</th><th>Trigger ₹</th><th>Reason</th><th>Fired At</th><th>Status</th>
+                  <th>Fired At</th><th>Bot</th><th style={{ width:'60px' }}>Signal</th><th>Instrument</th><th style={{ width:'50px' }}>Dir</th><th>Trigger ₹</th><th>Reason</th><th style={{ width:'70px' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -828,6 +828,9 @@ export default function IndicatorsPage() {
                   const dirColor = isExit ? '#FFB300' : s.direction === 'BUY' ? '#22DD88' : s.direction === 'SELL' ? '#FF4444' : 'var(--text-muted)'
                   return (
                     <tr key={s.id}>
+                      <td style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                        {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(',', '') : '—'}
+                      </td>
                       <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)' }}>{s.bot_name || '—'}</td>
                       <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px' }}>{s.signal_type}</td>
                       <td style={{ fontSize: '11px' }}>{s.instrument} · {s.expiry}</td>
@@ -841,9 +844,6 @@ export default function IndicatorsPage() {
                         {s.reason
                           ? <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>{s.reason}</span>
                           : <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
-                      </td>
-                      <td style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}
                       </td>
                       <td>
                         <span style={{
