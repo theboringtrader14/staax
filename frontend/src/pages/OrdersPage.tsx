@@ -469,6 +469,7 @@ export default function OrdersPage() {
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
   const [retryModal, setRetryModal] = useState<{ algoIdx: number; legs: Leg[] } | null>(null)
   const [retryChecked, setRetryChecked] = useState<Record<string, boolean>>({})
+  const [positionCheck, setPositionCheck] = useState<{ total_open: number; reconciled: boolean } | null>(null)
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -505,6 +506,13 @@ export default function OrdersPage() {
       const dates = new Set<string>((res.data || []).map((h: any) => h.date as string))
       setHolidayDates(dates)
     }).catch(() => {})
+  }, [isPractixMode])
+
+  // Fetch position reconciliation check on mount
+  useEffect(() => {
+    ordersAPI.positionCheck(isPractixMode)
+      .then(res => setPositionCheck(res.data))
+      .catch(() => {})
   }, [isPractixMode])
 
   // Pre-fetch all week P&L on mount
@@ -898,6 +906,18 @@ export default function OrdersPage() {
                 <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>
                   {isPractixMode ? 'PRACTIX' : 'LIVE'}
                 </span>
+                {positionCheck !== null && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
+                    fontFamily: 'var(--font-mono)', fontWeight: 600, lineHeight: 1.4,
+                    color:      positionCheck.reconciled ? '#22DD88' : '#F59E0B',
+                    background: positionCheck.reconciled ? 'rgba(34,221,136,0.12)' : 'rgba(245,158,11,0.12)',
+                    border:     `1px solid ${positionCheck.reconciled ? 'rgba(34,221,136,0.25)' : 'rgba(245,158,11,0.25)'}`,
+                  }}>
+                    {positionCheck.reconciled ? '✓ Synced' : `⚠ ${positionCheck.total_open} open`}
+                  </span>
+                )}
               </div>
               {/* Week navigation */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>

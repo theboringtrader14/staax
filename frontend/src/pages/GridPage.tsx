@@ -170,7 +170,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
           reTpEnabled:  !!l.reentry_on_tp,
         })),
         et:           a.entry_time  || '09:16',
-        xt:           a.exit_time   || '15:10',
+        xt:           (['stbt','btst'].includes(a.strategy_mode) ? a.next_day_exit_time : a.exit_time) || '15:10',
         arch:         a.is_archived || false,
         recurringDays:Array.isArray(a.recurring_days) ? a.recurring_days : [],
         is_live:      a.is_live || false,
@@ -612,6 +612,9 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                   <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                                     <span style={{ color:'var(--text-muted)', fontSize:'10px' }}>⏹</span>
                                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-muted)' }}>{algo.xt}</span>
+                                    {(['stbt','btst'].includes(algo.strategy_mode||'')) && (
+                                      <span title="Next-day exit time" style={{ fontSize:'9px', color:'var(--accent-amber)', cursor:'help' }}>⚠</span>
+                                    )}
                                   </div>
                                 </div>
 

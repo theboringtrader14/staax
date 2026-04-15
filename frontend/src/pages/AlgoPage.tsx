@@ -69,6 +69,7 @@ interface Leg {
   id: string; no: number; instType: string; instCode: string; direction: string; optType: string
   strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
   active: Record<FeatureKey, boolean>; vals: LegVals; journey?: JourneyChild
+  backendId?: string  // backend UUID — sent back on PUT to enable in-place update
 }
 
 const mkLeg = (n: number): Leg => ({
@@ -431,7 +432,8 @@ export default function AlgoPage() {
   const [lotMult, setLotMult]       = useState('1')
   const [entryTime, setEntryTime]   = useState('09:15:00')
   const [orbEnd, setOrbEnd]         = useState('11:15:00')
-  const [exitTime, setExitTime]     = useState('15:10:00')
+  const [exitTime, setExitTime]           = useState('15:10:00')
+  const [nextDayExitTime, setNextDayExitTime] = useState('09:15:00')
   const [dte, setDte]               = useState('0')
   const [account, setAccount]       = useState('')
   const [mtmUnit, setMtmUnit]       = useState('amt')
@@ -518,6 +520,7 @@ export default function AlgoPage() {
         setMtmSL(a.mtm_sl != null ? String(a.mtm_sl) : '')
         setMtmTP(a.mtm_tp != null ? String(a.mtm_tp) : '')
         setRecurringDays(Array.isArray(a.recurring_days) ? a.recurring_days : [])
+        setNextDayExitTime(a.next_day_exit_time || '09:15:00')
         if (a.exit_on_margin_error  != null) setErrorMargin(!!a.exit_on_margin_error)
         if (a.exit_on_entry_failure != null) setErrorEntry(!!a.exit_on_entry_failure)
         // Load delay settings — infer scope from buy/sell values
@@ -539,6 +542,7 @@ export default function AlgoPage() {
             : l.strike_type === 'straddle_premium' ? 'straddle' : 'leg'
           return {
             id:         `leg-edit-${l.id || i}`,
+            backendId:  l.id,
             no:         l.leg_number || i + 1,
             instType:   isFu ? 'FU' : 'OP',
             instCode:   revCode[l.underlying] || 'NF',
@@ -604,42 +608,43 @@ export default function AlgoPage() {
   }
 
   const validate = (): string => {
+    const fail = (msg: string) => { console.error('[validate] FAIL:', msg, { algoName, account, stratMode, entryType, entryTime, exitTime, orbEnd, dte, legs }); return msg }
     // ── Algo-level fields ─────────────────────────────────────────────────────
-    if (!algoName.trim())            return '❌ Algo name is required'
-    if (!account)                    return '❌ Account is required — select a broker account'
-    if (!lotMult || parseInt(lotMult) < 1) return '❌ Lot multiplier must be at least 1'
-    if (!entryTime)                  return '❌ Entry time is required'
-    if (!exitTime)                   return '❌ Exit time is required'
-    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return `❌ Entry time must be between 09:15 and 15:30 (got ${entryTime})`
-    if (exitTime  < TIME_MIN || exitTime  > TIME_MAX) return `❌ Exit time must be between 09:15 and 15:30 (got ${exitTime})`
-    if (stratMode === 'intraday' && exitTime <= entryTime) return '❌ Exit time must be after entry time for Intraday'
-    if (entryType === 'orb' && !orbEnd) return '❌ ORB End time is required when entry type is ORB'
-    if (entryType === 'orb' && orbEnd <= entryTime) return '❌ ORB end time must be after ORB start (entry) time'
-    if (stratMode === 'positional' && !dte) return '❌ DTE is required for Positional strategy'
-    if (legs.length === 0) return '❌ At least one leg is required'
+    if (!algoName.trim())            return fail('❌ Algo name is required')
+    if (!account)                    return fail('❌ Account is required — select a broker account')
+    if (!lotMult || parseInt(lotMult) < 1) return fail('❌ Lot multiplier must be at least 1')
+    if (!entryTime)                  return fail('❌ Entry time is required')
+    if (!exitTime)                   return fail('❌ Exit time is required')
+    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return fail(`❌ Entry time must be between 09:15 and 15:30 (got ${entryTime})`)
+    if (!['stbt','btst'].includes(stratMode) && (exitTime < TIME_MIN || exitTime > TIME_MAX)) return fail(`❌ Exit time must be between 09:15 and 15:30 (got ${exitTime})`)
+    if (stratMode === 'intraday' && exitTime <= entryTime) return fail('❌ Exit time must be after entry time for Intraday')
+    if (entryType === 'orb' && !orbEnd) return fail('❌ ORB End time is required when entry type is ORB')
+    if (entryType === 'orb' && orbEnd <= entryTime) return fail('❌ ORB end time must be after ORB start (entry) time')
+    if (stratMode === 'positional' && !dte) return fail('❌ DTE is required for Positional strategy')
+    if (legs.length === 0) return fail('❌ At least one leg is required')
     // ── Leg-level fields ──────────────────────────────────────────────────────
     for (const leg of legs) {
       const L = `Leg ${leg.no}`
-      if (!leg.lots || parseInt(leg.lots) < 1) return `❌ ${L}: Lots is required — enter number of lots`
+      if (!leg.lots || parseInt(leg.lots) < 1) return fail(`❌ ${L}: Lots is required — enter number of lots`)
       if (leg.instType === 'OP') {
-        if (!leg.expiry)    return `❌ ${L}: Expiry is required`
-        if (!leg.strikeMode) return `❌ ${L}: Strike mode is required`
-        if (leg.strikeMode === 'premium' && !leg.premiumVal) return `❌ ${L}: Premium value is required when mode is Premium`
-        if (leg.strikeMode === 'straddle' && !leg.premiumVal) return `❌ ${L}: Straddle % is required when mode is Straddle`
+        if (!leg.expiry)    return fail(`❌ ${L}: Expiry is required`)
+        if (!leg.strikeMode) return fail(`❌ ${L}: Strike mode is required`)
+        if (leg.strikeMode === 'premium' && !leg.premiumVal) return fail(`❌ ${L}: Premium value is required when mode is Premium`)
+        if (leg.strikeMode === 'straddle' && !leg.premiumVal) return fail(`❌ ${L}: Straddle % is required when mode is Straddle`)
       }
       for (const feat of FEATURES) {
         if (leg.active[feat.key]) {
           const vals = leg.vals[feat.key] as any
           const hasValue = Object.values(vals).some((v: any) => v !== '' && v !== undefined)
-          if (!hasValue) return `❌ ${L}: ${feat.label} is enabled but values are missing`
+          if (!hasValue) return fail(`❌ ${L}: ${feat.label} is enabled but values are missing`)
         }
       }
       const slType = (leg.vals.sl as any).type || ''
-      if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return `❌ ${L}: SL value is required when SL is enabled`
-      if (leg.active['tp'] && !(leg.vals.tp as any).value) return `❌ ${L}: TP value is required when TP is enabled`
-      if (leg.active['wt'] && !(leg.vals.wt as any).value) return `❌ ${L}: W&T value is required when W&T is enabled`
-      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return `❌ ${L}: TSL requires SL to be enabled with a value`
-      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return `❌ ${L}: TTP requires TP to be enabled with a value`
+      if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return fail(`❌ ${L}: SL value is required when SL is enabled`)
+      if (leg.active['tp'] && !(leg.vals.tp as any).value) return fail(`❌ ${L}: TP value is required when TP is enabled`)
+      if (leg.active['wt'] && !(leg.vals.wt as any).value) return fail(`❌ ${L}: W&T value is required when W&T is enabled`)
+      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return fail(`❌ ${L}: TSL requires SL to be enabled with a value`)
+      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return fail(`❌ ${L}: TTP requires TP to be enabled with a value`)
     }
     return ''
   }
@@ -654,6 +659,7 @@ export default function AlgoPage() {
     entry_time:          entryTime,
     exit_time:           exitTime,
     orb_end_time:        entryType === 'orb' ? orbEnd : undefined,
+    next_day_exit_time:  ['stbt','btst'].includes(stratMode) ? nextDayExitTime : undefined,
     dte:                 stratMode === 'positional' ? parseInt(dte) : undefined,
     mtm_sl:              mtmSL ? parseFloat(mtmSL) : undefined,
     mtm_tp:              mtmTP ? parseFloat(mtmTP) : undefined,
@@ -667,6 +673,7 @@ export default function AlgoPage() {
     is_live:             !isPractixMode,
     recurring_days:      recurringDays,
     legs: legs.map(l => ({
+      id:              l.backendId,
       leg_number:      l.no,
       direction:       l.direction.toLowerCase(),
       instrument:      l.instType === 'FU' ? 'fu' : l.optType.toLowerCase(),
@@ -692,7 +699,6 @@ export default function AlgoPage() {
       journey_config: buildJourneyConfig(l.journey),
     })),
   })
-    console.log('[AlgoPage] payload →', JSON.stringify(payload, null, 2))
     return payload
   }
 
@@ -740,17 +746,22 @@ export default function AlgoPage() {
       setIsDirty(false)
       setTimeout(() => { setSaved(false); navigate('/grid') }, 1200)
     } catch (e: any) {
-      const detail = e?.response?.data?.detail
-      console.error('[AlgoPage] save error', e?.response?.status, detail)
-      let msg = 'Save failed. Please try again.'
+      const status  = e?.response?.status
+      const data    = e?.response?.data
+      const detail  = data?.detail
+      console.error('[AlgoPage] save error', status, detail ?? data ?? e?.message)
+      let msg = `Save failed (${status ?? 'network error'}). Check console for details.`
       if (Array.isArray(detail)) {
-        // Pydantic validation errors — show each field + message
         msg = detail.map((d: any) => {
           const loc = Array.isArray(d.loc) ? d.loc.filter((s: any) => s !== 'body').join(' → ') : ''
           return loc ? `${loc}: ${d.msg}` : d.msg
-        }).join('\n')
+        }).join(' | ')
       } else if (typeof detail === 'string') {
         msg = detail
+      } else if (typeof data === 'string' && data.length < 200) {
+        msg = data
+      } else if (e?.message) {
+        msg = e.message
       }
       setSaveError(msg)
     } finally {
@@ -846,64 +857,71 @@ export default function AlgoPage() {
           </div>
         </div>
 
-        {/* Entry Type & Timing */}
-        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)' }}>
-          <SubSection title="Entry Type & Timing — Algo Level" />
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Type</label>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={() => setEntryType('direct')} className={`chip ${entryType === 'direct' ? 'chip-active' : 'chip-inactive'}`}>Direct</button>
-                <button onClick={() => setEntryType('orb')}    className={`chip ${entryType === 'orb'    ? 'chip-active' : 'chip-inactive'}`}>ORB</button>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Time</label>
-              <TimeInput value={entryTime} onChange={setEntryTime} />
-            </div>
-            {entryType === 'orb' && (
+        {/* Entry Type & Timing + MTM Controls — combined single row */}
+        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)', display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0' }}>
+          {/* Entry Type & Timing */}
+          <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+            <SubSection title="Entry Type & Timing — Algo Level" />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ORB End</label>
-                <TimeInput value={orbEnd} onChange={setOrbEnd} />
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exit Time{(stratMode === 'stbt' || stratMode === 'btst') ? ' (next day)' : ''}</label>
-              <TimeInput value={exitTime} onChange={setExitTime} />
-            </div>
-            {stratMode === 'positional' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DTE</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <StaaxSelect value={dte} onChange={setDte} options={Array.from({ length: 31 }, (_, n) => ({ value: String(n), label: String(n) }))} width="72px" />
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', maxWidth: '120px', lineHeight: 1.3 }}>
-                    {dte === '0' ? 'Exit on expiry day' : `${dte} day${Number(dte) !== 1 ? 's' : ''} before expiry`}
-                  </span>
+                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Type</label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button onClick={() => setEntryType('direct')} className={`chip ${entryType === 'direct' ? 'chip-active' : 'chip-inactive'}`} style={{ height: '32px', padding: '0 14px', cursor: 'pointer' }}>Direct</button>
+                  <button onClick={() => setEntryType('orb')}    className={`chip ${entryType === 'orb'    ? 'chip-active' : 'chip-inactive'}`} style={{ height: '32px', padding: '0 14px', cursor: 'pointer' }}>ORB</button>
                 </div>
               </div>
-            )}
-            {(stratMode === 'btst' || stratMode === 'stbt') && (
-              <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>
-                <span style={{ fontSize: '10px', color: 'var(--accent-amber)', background: 'rgba(215,123,18,0.1)', padding: '5px 8px', borderRadius: '4px', border: '1px solid rgba(215,123,18,0.2)', lineHeight: 1.4 }}>
-                  ⚠ Next day SL check auto-handled
-                </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Time</label>
+                <TimeInput value={entryTime} onChange={setEntryTime} />
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* MTM */}
-        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)' }}>
-          <SubSection title="MTM Controls — Algo Level" />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <StaaxSelect value={mtmUnit} onChange={setMtmUnit} options={[{ value: 'amt', label: '₹ Amount' }, { value: 'pct', label: '% Premium' }]} width="96px" />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>MTM SL:</span>
-              <input value={mtmSL} onChange={e => setMtmSL(e.target.value)} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+              {entryType === 'orb' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ORB End</label>
+                  <TimeInput value={orbEnd} onChange={setOrbEnd} />
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Exit Time{' '}
+                  {(stratMode === 'stbt' || stratMode === 'btst') && (
+                    <span title="Next-day exit: entries on day 1, exits on day 2 at this time. SL check auto-handled." style={{ cursor: 'help', color: 'var(--accent-amber)', fontSize: '10px' }}>⚠</span>
+                  )}
+                </label>
+                <TimeInput value={['stbt','btst'].includes(stratMode) ? nextDayExitTime : exitTime} onChange={['stbt','btst'].includes(stratMode) ? setNextDayExitTime : setExitTime} />
+              </div>
+              {stratMode === 'positional' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DTE</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <StaaxSelect value={dte} onChange={setDte} options={Array.from({ length: 31 }, (_, n) => ({ value: String(n), label: String(n) }))} width="72px" />
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', maxWidth: '120px', lineHeight: 1.3 }}>
+                      {dte === '0' ? 'Exit on expiry day' : `${dte} day${Number(dte) !== 1 ? 's' : ''} before expiry`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>MTM TP:</span>
-              <input value={mtmTP} onChange={e => setMtmTP(e.target.value)} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+          </div>
+
+          {/* Vertical separator */}
+          <div style={{ width: '1px', background: 'rgba(255,107,0,0.15)', alignSelf: 'stretch', margin: '0 28px', minHeight: '60px' }} />
+
+          {/* MTM Controls */}
+          <div style={{ flex: '0 0 auto' }}>
+            <SubSection title="MTM Controls — Algo Level" />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unit</label>
+                <StaaxSelect value={mtmUnit} onChange={setMtmUnit} options={[{ value: 'amt', label: '₹ Amount' }, { value: 'pct', label: '% Premium' }]} width="96px" />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM SL</label>
+                <input value={mtmSL} onChange={e => setMtmSL(e.target.value)} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM TP</label>
+                <input value={mtmTP} onChange={e => setMtmTP(e.target.value)} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+              </div>
             </div>
           </div>
         </div>

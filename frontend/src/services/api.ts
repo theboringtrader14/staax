@@ -132,6 +132,8 @@ export const ordersAPI = {
     api.post(`/orders/${algoId}/sync`, data),
   retryEntry: (gridEntryId: string) =>
     api.post(`/orders/${gridEntryId}/retry`),
+  positionCheck: (isPractix?: boolean) =>
+    api.get('/orders/position-check', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
 }
 
 // ── Services (Dashboard panel) ────────────────────────────────────────────────
