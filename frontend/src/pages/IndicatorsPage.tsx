@@ -409,7 +409,7 @@ function BotSignalLog({ botId }: { botId: string }) {
                   background: `${dirColor}22`, color: dirColor }}>{dirLabel}</span>
                 <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.signal_type}</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                  {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                  {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
                 </span>
                 <span style={{ fontSize: 9, fontWeight: 600, color: statusColor }}>{s.status?.toUpperCase()}</span>
               </div>
@@ -843,7 +843,7 @@ export default function IndicatorsPage() {
                           : <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
                       </td>
                       <td style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}
+                        {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}
                       </td>
                       <td>
                         <span style={{
