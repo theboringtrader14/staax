@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 8.0 | **Last Updated:** 15 April 2026 — Batch 25/26: ORB Phase 2 (range source, entry_at, orb_sl_type/tp_type, buffer, instrument pre-selection), re-entry max split (reentry_max_sl/tp + sl_reentry_count/tp_reentry_count), migration 0032, STAAX core fixes (system stats 0-counts, position reconciliation chip), INVEX watchlist live prices (NSE API), BUDGEX endpoint audit + Gemma 4 analytics, FINEX scaffold (port 8003/3003, LIFEX Score, net worth), mobile error banners, n8n workflow fix (PATCH not PUT) | **PRD Reference:** v1.2
+**Version:** 8.1 | **Last Updated:** 15 April 2026 — Batch 27: TT Bands strategy (fractal bands, crossover signals), LIVE bot order placement (MCX/AngelOne), BotSignal reason column (migration 0033), POST /algos/{id}/duplicate, IndicatorsPage prod URL fix, signal log UI (direction chips, reason tag, status pills), COPY button on algo card | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -4576,6 +4576,56 @@ tp_reentry_count   Integer     default 0
 ### Commits
 - Backend Batch 26: `f17b224` — feat: Batch 26 — ORB Phase 2 (range source, entry_at, ORB SL/TP), re-entry max split
 - Frontend Batch 26: `89e93a7` — feat: Batch 26 — ORB UI config section, re-entry separate max counts
+
+---
+
+## Session Update — 2026-04-15 (Batch 27) — TT Bands, LIVE Bot Orders, Signal Reason, Algo Duplicate
+
+### New Files
+- `backend/app/engine/indicators/tt_bands_strategy.py` — fractal HIGH/LOW detection (bar[-3] with 5-bar window), rolling mean of last `lookback` fractals → highline/lowline; crossover above highline → BUY (`TT_CROSS_HIGH`), crossunder below lowline → EXIT/SELL (`TT_CROSS_LOW`); `lookback` default 5; `long_only=True` default
+
+### Backend Changes
+
+**bot_runner.py**
+- `_init_bot()`: new `elif bot.indicator == IndicatorType.TT_BANDS` branch → `TTBandsStrategy(timeframe_mins, lookback=bot.tt_lookback or 5, long_only=True)`
+- `_enter_trade()`: LIVE mode (when `not bot.is_practix` and `_order_placer` wired) calls `order_placer.place()` with `exchange=MCX`, `broker_type=angelone`, `symbol_token` from MCX_TOKENS; saves `broker_order_id` to BotOrder
+- `_exit_trade()`: same LIVE mode branch for closing order (direction=SELL)
+- `_save_signal()`: persists `signal.reason` to BotSignal.reason column
+
+**models/bot.py**
+- `BotSignal`: added `reason = Column(String(50), nullable=True)` — stores strategy reason string (e.g. `CHANNEL_LONG`, `TT_CROSS_HIGH`)
+
+**bots.py (API)**
+- `_signal_dict()`: includes `"reason": s.reason` in response
+
+**algos.py**
+- `POST /algos/{algo_id}/duplicate` — deep-copies Algo + all non-archived AlgoLeg rows; `name = f"{name} (Copy)"`, `recurring_days = []`, `is_live = False`; returns full `_algo_to_dict()` response
+
+**migration 0033** — `reason` column on `bot_signals` (down_revision=0032)
+- Chain: 0029 → 0030 → 0032 → 0033
+- Applied locally: `Running upgrade 0032 -> 0033`
+
+### Frontend Changes
+
+**IndicatorsPage.tsx**
+- **Prod URL bug fixed** (line 7): `'https://api.lifexos.co.in'` → `'http://localhost:8000'` — all bot API calls now hit localhost in dev
+- `PerBotSignal` interface: added `reason: string | null`
+- `BotSignalLog` signal row: direction chip with colour coding (BUY=#22DD88, SELL=#FF4444, EXIT=#FFB300), `signal_type` label, `reason` mono tag, status pill with full colour set (filled/failed/skipped/fired), error message on next line indented
+
+**api.ts**
+- `algosAPI.duplicate(id)` → `POST /algos/{id}/duplicate`
+
+**GridPage.tsx**
+- `duplicateAlgo()` handler: calls `algosAPI.duplicate()` then `loadData()`
+- COPY button added to algo card action bar (orange, copy icon, between Archive and Remove)
+
+### Migrations Run
+- `alembic upgrade head` applied 0033 locally ✅
+- `npm run build` zero TypeScript errors ✅
+
+### Commits
+- Backend Batch 27: `da56f31` — feat: Batch 27 — TT Bands strategy, LIVE bot orders, signal reason, algo duplicate (backend)
+- Frontend Batch 27: `d2ebb1b` — feat: Batch 27 — prod URL fix, signal log UI, algo duplicate button (frontend)
 
 ---
 
