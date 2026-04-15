@@ -967,9 +967,9 @@ export default function AlgoPage() {
         </div>
 
         {/* Entry Type & Timing + MTM Controls — combined single row */}
-        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)', display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: '0' }}>
+        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)', display: 'grid', gridTemplateColumns: '1fr 1px auto', columnGap: '28px', alignItems: 'start' }}>
           {/* Entry Type & Timing */}
-          <div style={{ flex: '1 1 auto', minWidth: 0, height: '100%' }}>
+          <div>
             <SubSection title="Entry Type & Timing — Algo Level" />
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1027,10 +1027,10 @@ export default function AlgoPage() {
           </div>
 
           {/* Vertical separator */}
-          <div style={{ width: '1px', background: 'rgba(255,107,0,0.15)', alignSelf: 'stretch', margin: '0 28px', minHeight: '60px' }} />
+          <div style={{ width: '1px', background: 'rgba(255,107,0,0.15)', alignSelf: 'stretch', minHeight: '60px' }} />
 
           {/* MTM Controls */}
-          <div style={{ flex: '0 0 auto', height: '100%' }}>
+          <div>
             <SubSection title="MTM Controls — Algo Level" />
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

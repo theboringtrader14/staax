@@ -182,6 +182,7 @@ class BotRunner:
                         BotSignal.bot_id,
                         _func.max(BotSignal.created_at).label("max_created"),
                     )
+                    .where(BotSignal.status == "fired")
                     .group_by(BotSignal.bot_id)
                     .subquery()
                 )

@@ -741,6 +741,8 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     await db.refresh(new_algo)
+    for leg in new_legs:
+        await db.refresh(leg)
     logger.info(f"[ALGO] Duplicated {src.name} → {new_algo.name} (id={new_id})")
     return _algo_to_dict(new_algo, new_legs)
 

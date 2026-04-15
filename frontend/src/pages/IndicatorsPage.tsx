@@ -372,99 +372,6 @@ function BotConfigurator({ accounts, onSave, onClose }: {
   )
 }
 
-// ── Per-Bot Signal Log ─────────────────────────────────────────────────────────
-interface PerBotSignal {
-  id: string;
-  signal_type: string;
-  direction: string;
-  instrument: string;
-  trigger_price: number | null;
-  reason: string | null;
-  status: string;
-  error_message: string | null;
-  fired_at: string | null;
-}
-
-function BotSignalLog({ botId }: { botId: string }) {
-  const [signals, setSignals] = useState<PerBotSignal[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-
-  const loadSignals = async () => {
-    setLoading(true);
-    try {
-      const r = await apiGet(`/bots/${botId}/signals?limit=20`);
-      const data = r.data;
-      setSignals(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 12 }}>
-      <button
-        onClick={() => { setExpanded(e => !e); if (!expanded) loadSignals(); }}
-        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', padding: 0 }}
-      >
-        {expanded ? '▾' : '▸'} Signal Log
-      </button>
-      {expanded && (
-        <div style={{ marginTop: 8 }}>
-          {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading...</div>}
-          {!loading && signals.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No signals yet.</div>}
-          {signals.map(s => {
-            const dirColor = s.signal_type === 'exit'
-              ? '#FFB300'
-              : s.direction?.toLowerCase() === 'buy' ? '#22DD88' : '#FF4444'
-            const dirLabel = s.signal_type === 'exit' ? 'EXIT' : s.direction?.toUpperCase()
-            const statusBg =
-              s.status === 'filled' ? 'rgba(34,221,136,0.12)' :
-              s.status === 'failed' ? 'rgba(255,68,68,0.12)' :
-              s.status === 'skipped' ? 'rgba(255,255,255,0.06)' :
-              'rgba(255,179,0,0.12)'
-            const statusColor =
-              s.status === 'filled' ? '#22DD88' :
-              s.status === 'failed' ? '#FF4444' :
-              s.status === 'skipped' ? '#888' :
-              '#FFB300'
-            return (
-              <div key={s.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 11, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, minWidth: 128 }}>
-                  {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '—'}
-                </span>
-                {/* Direction chip */}
-                <span style={{ padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', background: `${dirColor}22`, color: dirColor }}>
-                  {dirLabel}
-                </span>
-                {/* Signal type label */}
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.signal_type}</span>
-                <span style={{ color: 'var(--text-primary)' }}>{s.instrument}</span>
-                {s.trigger_price != null && (
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 10 }}>@ {s.trigger_price}</span>
-                )}
-                {/* Reason tag */}
-                {s.reason && (
-                  <span style={{ padding: '1px 6px', borderRadius: 3, fontSize: 9, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {s.reason}
-                  </span>
-                )}
-                {/* Status pill */}
-                <span style={{ padding: '1px 7px', borderRadius: 10, fontSize: 9, fontWeight: 600, background: statusBg, color: statusColor, marginLeft: 'auto' }}>
-                  {s.status}
-                </span>
-                {s.error_message && <span style={{ color: '#FF4444', fontSize: 10, width: '100%', paddingLeft: 134 }}>{s.error_message}</span>}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Bot Card ──────────────────────────────────────────────────────────────────
 function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: {
   bot: Bot; accounts: any[]
@@ -728,8 +635,6 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
           </div>
         </div>
 
-        {/* Signal Log */}
-        <BotSignalLog botId={bot.id} />
       </div>
 
       {showEdit && (
