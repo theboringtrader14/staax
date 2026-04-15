@@ -178,7 +178,7 @@ export const botsAPI = {
   delete:        (id: string) => api.delete(`/bots/${id}`),
   botOrders:     (id: string) => api.get(`/bots/${id}/orders`),
   signals:       (id: string) => api.get(`/bots/${id}/signals`),
-  signalsToday:  () => api.get('/bots/signals/today'),
+  signalsToday:  (days = 7) => api.get('/bots/signals/today', { params: { days } }),
   createSignal:  (id: string, data: object) => api.post(`/bots/${id}/signals`, data),
 }
 

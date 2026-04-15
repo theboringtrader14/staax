@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from zoneinfo import ZoneInfo
 from app.core.database import get_db
 from app.models.bot import Bot, BotOrder, BotSignal, IndicatorType
@@ -444,12 +444,12 @@ async def update_bot_pinescript(bot_id: str, payload: dict, db: AsyncSession = D
     return {"message": "PineScript saved", "bot_id": bot_id}
 
 @router.get("/signals/today")
-async def list_signals_today(db: AsyncSession = Depends(get_db)):
-    today_start = datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
+async def list_signals_today(days: int = 7, db: AsyncSession = Depends(get_db)):
+    since = datetime.combine(date.today() - timedelta(days=days - 1), datetime.min.time()).replace(tzinfo=timezone.utc)
     result = await db.execute(
         select(BotSignal, Bot.name.label("bot_name"))
         .outerjoin(Bot, Bot.id == BotSignal.bot_id)
-        .where(BotSignal.fired_at >= today_start)
+        .where(BotSignal.fired_at >= since)
         .order_by(desc(BotSignal.fired_at))
     )
     rows = result.all()

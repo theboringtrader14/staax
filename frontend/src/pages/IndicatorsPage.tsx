@@ -791,7 +791,7 @@ export default function IndicatorsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
             <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Today's Signals · {signals.length} total
+              Last 7 Days · {signals.length} signals
             </span>
             <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
           </div>
@@ -805,7 +805,7 @@ export default function IndicatorsPage() {
               <tbody>
                 {signals.length === 0 ? (
                   <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>
-                    No signals today
+                    No signals in the last 7 days
                   </td></tr>
                 ) : signals.map(s => {
                   const isExit = s.signal_type === 'exit'
@@ -827,7 +827,7 @@ export default function IndicatorsPage() {
                           : <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
                       </td>
                       <td style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        {s.fired_at ? new Date(s.fired_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}
+                        {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}
                       </td>
                       <td>
                         <span style={{
