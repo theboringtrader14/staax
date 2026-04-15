@@ -818,10 +818,10 @@ export default function IndicatorsPage() {
                   <th>Fired At</th>
                   <th style={{ paddingLeft:'20px' }}>Bot</th>
                   <th style={{ paddingLeft:'20px', width:'70px' }}>Signal</th>
-                  <th style={{ paddingLeft:'20px' }}>Instrument</th>
-                  <th style={{ paddingLeft:'20px', width:'60px' }}>Dir</th>
-                  <th style={{ paddingLeft:'20px' }}>Trigger ₹</th>
-                  <th style={{ paddingLeft:'20px' }}>Reason</th>
+                  <th style={{ paddingLeft:'32px' }}>Instrument</th>
+                  <th style={{ paddingLeft:'10px', width:'60px' }}>Dir</th>
+                  <th style={{ paddingLeft:'32px' }}>Trigger ₹</th>
+                  <th style={{ paddingLeft:'10px' }}>Reason</th>
                   <th style={{ paddingLeft:'20px', width:'80px' }}>Status</th>
                 </tr>
               </thead>
@@ -840,14 +840,14 @@ export default function IndicatorsPage() {
                       </td>
                       <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)', paddingLeft:'20px' }}>{s.bot_name || '—'}</td>
                       <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px', paddingLeft:'20px' }}>{s.signal_type}</td>
-                      <td style={{ fontSize: '11px', paddingLeft:'20px' }}>{s.instrument} · {s.expiry}</td>
-                      <td style={{ paddingLeft:'20px' }}>
+                      <td style={{ fontSize: '11px', paddingLeft:'32px' }}>{s.instrument} · {s.expiry}</td>
+                      <td style={{ paddingLeft:'10px' }}>
                         <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', background: `${dirColor}22`, color: dirColor }}>
                           {isExit ? 'EXIT' : (s.direction || '—')}
                         </span>
                       </td>
-                      <td style={{ fontSize: '11px', paddingLeft:'20px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
-                      <td style={{ paddingLeft:'20px' }}>
+                      <td style={{ fontSize: '11px', paddingLeft:'32px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
+                      <td style={{ paddingLeft:'10px' }}>
                         {s.reason
                           ? <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>{s.reason}</span>
                           : <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
