@@ -5,9 +5,12 @@ from sqlalchemy import select, delete
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from app.core.database import get_db
 from app.models.market_holiday import MarketHoliday
 import uuid as uuid_lib
+
+IST = ZoneInfo("Asia/Kolkata")
 
 router = APIRouter()
 
@@ -35,6 +38,27 @@ def _holiday_dict(h: MarketHoliday) -> dict:
         "segment":     h.segment,
         "description": h.description or "",
         "created_at":  h.created_at.isoformat() if h.created_at else None,
+    }
+
+
+@router.get("/today-is-holiday")
+async def today_is_holiday(db: AsyncSession = Depends(get_db)):
+    """
+    Returns whether today (IST date) is a market holiday.
+    Checks the 'fo' segment (F&O). Used by n8n workflows to skip automation on holidays.
+    Response: {"is_holiday": bool, "name": str | null}
+    """
+    today_ist = datetime.now(IST).date()
+    result = await db.execute(
+        select(MarketHoliday).where(
+            MarketHoliday.date == today_ist,
+            MarketHoliday.segment == "fo",
+        ).limit(1)
+    )
+    holiday = result.scalar_one_or_none()
+    return {
+        "is_holiday": holiday is not None,
+        "name": holiday.description if holiday else None,
     }
 
 

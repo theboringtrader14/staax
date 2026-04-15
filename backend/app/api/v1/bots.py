@@ -146,6 +146,33 @@ async def archive_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "archived"}
 
+@router.get("/orders")
+async def list_all_bot_orders(db: AsyncSession = Depends(get_db)):
+    """List all bot orders across all bots, newest first. Joins Bot for name + is_practix."""
+    result = await db.execute(
+        select(BotOrder, Bot.name.label("bot_name"), Bot.is_practix.label("is_practix"))
+        .outerjoin(Bot, Bot.id == BotOrder.bot_id)
+        .order_by(desc(BotOrder.entry_time))
+    )
+    rows = result.all()
+    return [{
+        "id":           str(o.id),
+        "bot_name":     bot_name or "—",
+        "is_practix":   is_practix if is_practix is not None else True,
+        "instrument":   o.instrument,
+        "direction":    o.direction,
+        "lots":         o.lots,
+        "entry_price":  o.entry_price,
+        "exit_price":   o.exit_price,
+        "entry_time":   o.entry_time.isoformat() if o.entry_time else None,
+        "exit_time":    o.exit_time.isoformat() if o.exit_time else None,
+        "pnl":          o.pnl,
+        "status":       o.status or "open",
+        "signal_type":  o.signal_type,
+        "expiry":       o.expiry,
+    } for o, bot_name, is_practix in rows]
+
+
 @router.get("/{bot_id}/orders")
 async def list_bot_orders(bot_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -161,7 +188,7 @@ async def list_bot_orders(bot_id: str, db: AsyncSession = Depends(get_db)):
         "entry_time":   o.entry_time.isoformat() if o.entry_time else None,
         "exit_time":    o.exit_time.isoformat() if o.exit_time else None,
         "pnl":          o.pnl,
-        "status":       o.status.value if o.status else "open",
+        "status":       o.status or "open",
         "signal_type":  o.signal_type,
         "expiry":       o.expiry,
     } for o in orders]
