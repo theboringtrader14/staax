@@ -53,8 +53,9 @@ class BotRunner:
         self._angel_brokers: List = []   # injected for daily OHLC fetch
 
         # Per-bot state
-        self._aggregators: Dict[str, Any] = {}   # bot_id → CandleAggregator
-        self._strategies:  Dict[str, Any] = {}   # bot_id → DTRStrategy | ChannelStrategy
+        self._aggregators:         Dict[str, Any] = {}   # bot_id → CandleAggregator (entry TF)
+        self._channel_aggregators: Dict[str, Any] = {}   # bot_id → CandleAggregator (channel TF, if different)
+        self._strategies:  Dict[str, Any] = {}           # bot_id → DTRStrategy | ChannelStrategy
         self._positions:   Dict[str, Optional[dict]] = {}  # bot_id → open position
         self._last_signal: Dict[str, str] = {}             # bot_id → last signal type+dir acted on
         self._in_session:  bool = False                     # tracks MCX session ON/OFF for transition detection
@@ -198,6 +199,13 @@ class BotRunner:
                 for row in rows:
                     self._last_signal[str(row.bot_id)] = f"{row.signal_type}:{row.direction.lower()}"
                 logger.info(f"[BOT] Seeded _last_signal for {len(rows)} bot(s) from DB")
+
+                # FIX: if a bot has an open position, force _last_signal to "entry:buy"
+                # so subsequent exit signals are never deduped against a prior exit
+                for bot_id, pos in self._positions.items():
+                    if pos is not None and self._last_signal.get(bot_id) == "exit:sell":
+                        self._last_signal[bot_id] = "entry:buy"
+                        logger.info(f"[BOT] Corrected _last_signal for bot {bot_id}: open position but last signal was exit:sell → reset to entry:buy")
         except Exception as _e:
             logger.warning(f"[BOT] Could not seed _last_signal from DB: {_e}")
 
@@ -211,7 +219,7 @@ class BotRunner:
 
         bot_id = str(bot.id)
 
-        # Candle aggregator for this bot's timeframe
+        # Candle aggregator for this bot's entry timeframe
         self._aggregators[bot_id] = CandleAggregator(bot.timeframe_mins)
 
         # Strategy instance
@@ -224,6 +232,17 @@ class BotRunner:
                 num_candles=num,
                 long_only=True,
             )
+            # Separate channel aggregator when channel_tf differs from entry timeframe
+            try:
+                channel_tf_mins = int(bot.channel_tf) if bot.channel_tf else None
+            except (ValueError, TypeError):
+                channel_tf_mins = None
+            if channel_tf_mins and channel_tf_mins != bot.timeframe_mins:
+                self._channel_aggregators[bot_id] = CandleAggregator(channel_tf_mins)
+                logger.info(
+                    f"[BOT] Channel aggregator: entry={bot.timeframe_mins}m "
+                    f"channel={channel_tf_mins}m × {num} candles for {bot.name}"
+                )
         elif bot.indicator == IndicatorType.TT_BANDS:
             lookback = bot.tt_lookback or 5
             self._strategies[bot_id] = TTBandsStrategy(
@@ -274,7 +293,14 @@ class BotRunner:
         if now_in_session and not self._in_session:
             logger.info("[BOT] MCX session started — resetting candle aggregators to discard stale data")
             for bot in self._bots:
-                self._aggregators[str(bot.id)] = CandleAggregator(bot.timeframe_mins)
+                bid = str(bot.id)
+                self._aggregators[bid] = CandleAggregator(bot.timeframe_mins)
+                if bid in self._channel_aggregators:
+                    try:
+                        channel_tf_mins = int(bot.channel_tf) if bot.channel_tf else bot.timeframe_mins
+                    except (ValueError, TypeError):
+                        channel_tf_mins = bot.timeframe_mins
+                    self._channel_aggregators[bid] = CandleAggregator(channel_tf_mins)
 
         self._in_session = now_in_session
 
@@ -293,6 +319,11 @@ class BotRunner:
             if agg is None:
                 continue
 
+            # Also feed tick to channel aggregator (if separate channel TF)
+            ch_agg = self._channel_aggregators.get(bot_id)
+            if ch_agg is not None:
+                ch_agg.on_tick(price, ts)
+
             completed = agg.on_tick(price, ts)
             if completed:
                 await self._on_candle_complete(bot, completed, price)
@@ -304,7 +335,10 @@ class BotRunner:
         if strategy is None:
             return
 
-        signal = strategy.on_candle(candle)
+        # Pass channel candles from higher-TF aggregator if available
+        ch_agg   = self._channel_aggregators.get(bot_id)
+        ch_candles = ch_agg.candles if ch_agg is not None else None
+        signal = strategy.on_candle(candle, channel_candles=ch_candles)
         if signal is None:
             return
 

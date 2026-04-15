@@ -57,19 +57,31 @@ class ChannelStrategy:
 
     # ── Signal generation ─────────────────────────────────────────────────────
 
-    def on_candle(self, candle: Candle) -> Optional[Signal]:
+    def on_candle(self, candle: Candle, channel_candles=None) -> Optional[Signal]:
         """
         Process a completed candle. Channel is computed BEFORE appending the
         current candle (Pinescript: uses previous bars, excluding current).
+
+        channel_candles: optional list of Candle from a separate (higher-TF)
+        aggregator. When provided, upper/lower are computed from those candles
+        instead of the internal buffer — allows e.g. 15-min entry timing with
+        a 60-min channel.
+
         Returns a Signal on breakout, None otherwise.
         """
-        upper = self.upper_channel
-        lower = self.lower_channel
+        # Compute channel from external candles if provided, else internal buffer
+        if channel_candles is not None and len(channel_candles) >= self._num:
+            recent = list(channel_candles)[-self._num:]
+            upper  = max(c.high for c in recent)
+            lower  = min(c.low  for c in recent)
+        else:
+            upper = self.upper_channel
+            lower = self.lower_channel
 
-        curr  = candle.close
-        prev  = self._prev_close
+        curr = candle.close
+        prev = self._prev_close
 
-        # Append current candle to completed window AFTER reading channel
+        # Always append to internal buffer (for _prev_close and fallback channel)
         self._completed.append(candle)
         self._prev_close = curr
 
