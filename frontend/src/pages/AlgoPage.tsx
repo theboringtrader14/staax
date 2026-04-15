@@ -378,8 +378,8 @@ function SubSection({ title }: { title: string }) {
 }
 
 
-const TIME_MIN = '09:15:00'
-const TIME_MAX = '15:30:00'
+const TIME_MIN = '09:15'
+const TIME_MAX = '15:30'
 function TimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const clamp = (v: string) => {
     if (!v) return v
