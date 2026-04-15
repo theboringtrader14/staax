@@ -565,7 +565,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                             <div style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'16px 20px' }}>
 
                               {/* ── Name + account ── */}
-                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'100px', flexShrink:0 }}>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'120px', flexShrink:0 }}>
                                 <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
                                   style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
                                     cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
