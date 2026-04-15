@@ -28,6 +28,9 @@ class ORBWindow:
     instrument_token: int
     wt_value:         float = 0.0
     wt_unit:          str   = "pts"  # "pts" or "pct"
+    # "underlying" = track underlying index spot LTP (default)
+    # "instrument" = track pre-selected option/futures LTP
+    orb_range_source: str   = "underlying"
     # Runtime
     range_high:       float = 0.0
     range_low:        float = float("inf")

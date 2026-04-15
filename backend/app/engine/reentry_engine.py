@@ -39,6 +39,10 @@ from app.engine import global_kill_switch
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
+# Re-entry exit reason classification
+_SL_EXIT_REASONS = frozenset({"sl", "tsl", "overnight_sl"})
+_TP_EXIT_REASONS = frozenset({"tp", "tsl_tp", "mtm_tp"})
+
 
 def _ist_now() -> dtime:
     return datetime.now(IST).time().replace(second=0, microsecond=0)
@@ -128,14 +132,30 @@ class ReentryEngine:
         if not algo_state:
             return
 
-        # Gate 2: count < max
-        current_count = algo_state.reentry_count or 0
-        if current_count >= (leg.reentry_max or 0):
+        # Gate 2: count < max (split by exit reason — SL and TP have separate counters)
+        if exit_reason in _SL_EXIT_REASONS:
+            current_count = algo_state.sl_reentry_count or 0
+            max_allowed   = getattr(leg, 'reentry_max_sl', None) or 0
+        elif exit_reason in _TP_EXIT_REASONS:
+            current_count = algo_state.tp_reentry_count or 0
+            max_allowed   = getattr(leg, 'reentry_max_tp', None) or 0
+        else:
+            # Unknown exit reason — use combined reentry_max as fallback (backward compat)
+            current_count = algo_state.reentry_count or 0
+            max_allowed   = max(
+                getattr(leg, 'reentry_max_sl', None) or 0,
+                getattr(leg, 'reentry_max_tp', None) or 0,
+            ) or (leg.reentry_max or 0)
+
+        if current_count >= max_allowed:
             logger.info(
-                "reentry_engine: gate — count %d >= max %d (order %s)",
-                current_count, leg.reentry_max, order.id,
+                "reentry_engine: gate — %s count %d >= max %d (order %s, exit_reason=%s)",
+                "SL" if exit_reason in _SL_EXIT_REASONS else "TP",
+                current_count, max_allowed, order.id, exit_reason,
             )
             return
+
+        new_count = current_count + 1
 
         # Gate 3: time < exit_time
         exit_time = _parse_time(algo.exit_time)
@@ -148,10 +168,8 @@ class ReentryEngine:
             logger.info("reentry_engine: gate — kill switch active (order %s)", order.id)
             return
 
-        new_count = current_count + 1
-
         if leg.reentry_type == "re_execute":
-            await self._do_re_execute(db, order, leg, algo, algo_state, new_count)
+            await self._do_re_execute(db, order, leg, algo, algo_state, new_count, exit_reason)
             await db.flush()
             return
 
@@ -202,6 +220,7 @@ class ReentryEngine:
                     new_count=new_count,
                     tsl_two_step=tsl_two_step,
                     sl_original=sl_original,
+                    exit_reason=exit_reason,
                 )
             )
             key = str(order.grid_entry_id)
@@ -218,6 +237,7 @@ class ReentryEngine:
         algo: Algo,
         algo_state: AlgoState,
         new_count: int,
+        exit_reason: str = "",
     ) -> None:
         """RE-EXECUTE: immediate, fresh strike — like a brand new entry."""
         logger.info(
@@ -225,8 +245,12 @@ class ReentryEngine:
             order.id, new_count, leg.reentry_max,
         )
 
-        # Increment AlgoState.reentry_count
-        algo_state.reentry_count = new_count
+        # Update split counts + keep combined count in sync
+        if exit_reason in _SL_EXIT_REASONS:
+            algo_state.sl_reentry_count = new_count
+        elif exit_reason in _TP_EXIT_REASONS:
+            algo_state.tp_reentry_count = new_count
+        algo_state.reentry_count = (algo_state.sl_reentry_count or 0) + (algo_state.tp_reentry_count or 0)
         # Record on original order
         order.reentry_count = new_count
         order.reentry_type_used = "re_execute"
@@ -257,6 +281,7 @@ class ReentryEngine:
         new_count: int,
         tsl_two_step: bool,
         sl_original: Optional[float],
+        exit_reason: str = "",
     ) -> None:
         """
         Background task: watches LTP and fires re-entry when trigger_price is crossed.
@@ -380,8 +405,12 @@ class ReentryEngine:
                         "(ltp=%.2f, trigger=%.2f, order %s) — firing enter()",
                         ltp, trigger_price, order_id,
                     )
-                    # Increment AlgoState.reentry_count
-                    algo_state.reentry_count = new_count
+                    # Update split counts + keep combined count in sync
+                    if exit_reason in _SL_EXIT_REASONS:
+                        algo_state.sl_reentry_count = new_count
+                    elif exit_reason in _TP_EXIT_REASONS:
+                        algo_state.tp_reentry_count = new_count
+                    algo_state.reentry_count = (algo_state.sl_reentry_count or 0) + (algo_state.tp_reentry_count or 0)
                     # Record on original order
                     order.reentry_count = new_count
                     order.reentry_type_used = "re_entry"

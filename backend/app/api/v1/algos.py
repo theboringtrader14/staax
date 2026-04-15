@@ -59,11 +59,21 @@ class LegCreate(BaseModel):
     wt_direction:    Optional[str]  = None
     wt_value:        Optional[float] = None
     wt_unit:         Optional[str]  = None
+    # ORB Phase 2 per-leg fields
+    orb_range_source:  Optional[str]   = None
+    orb_entry_at:      Optional[str]   = None
+    orb_sl_type:       Optional[str]   = None
+    orb_tp_type:       Optional[str]   = None
+    orb_buffer_value:  Optional[float] = None
+    orb_buffer_unit:   Optional[str]   = None
     reentry_max:     int            = 0
     reentry_on_sl:   bool           = False
     reentry_on_tp:   bool           = False
     reentry_type:     Optional[str]  = None   # "re_entry" | "re_execute"
     reentry_ltp_mode: Optional[str]  = None   # "ltp" | "candle_close"
+    # Re-entry max split (reentry_max is deprecated but preserved)
+    reentry_max_sl:    Optional[int]   = 0
+    reentry_max_tp:    Optional[int]   = 0
     journey_config:  Optional[dict] = None
 
 
@@ -162,9 +172,17 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "wt_direction":    leg.wt_direction,
         "wt_value":        leg.wt_value,
         "wt_unit":         leg.wt_unit,
+        "orb_range_source":  leg.orb_range_source,
+        "orb_entry_at":      leg.orb_entry_at,
+        "orb_sl_type":       leg.orb_sl_type,
+        "orb_tp_type":       leg.orb_tp_type,
+        "orb_buffer_value":  leg.orb_buffer_value,
+        "orb_buffer_unit":   leg.orb_buffer_unit,
         "reentry_on_sl":   leg.reentry_on_sl or False,
         "reentry_on_tp":   leg.reentry_on_tp or False,
         "reentry_max":     leg.reentry_max,
+        "reentry_max_sl":    leg.reentry_max_sl,
+        "reentry_max_tp":    leg.reentry_max_tp,
         "reentry_type":     leg.reentry_type,
         "reentry_ltp_mode": leg.reentry_ltp_mode,
         "journey_config":  leg.journey_config,
@@ -236,9 +254,17 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         wt_direction=leg_data.wt_direction,
         wt_value=leg_data.wt_value,
         wt_unit=leg_data.wt_unit,
+        orb_range_source  = leg_data.orb_range_source,
+        orb_entry_at      = leg_data.orb_entry_at,
+        orb_sl_type       = leg_data.orb_sl_type,
+        orb_tp_type       = leg_data.orb_tp_type,
+        orb_buffer_value  = leg_data.orb_buffer_value,
+        orb_buffer_unit   = leg_data.orb_buffer_unit,
         reentry_on_sl=leg_data.reentry_on_sl,
         reentry_on_tp=leg_data.reentry_on_tp,
         reentry_max=leg_data.reentry_max,
+        reentry_max_sl    = leg_data.reentry_max_sl or 0,
+        reentry_max_tp    = leg_data.reentry_max_tp or 0,
         reentry_type=leg_data.reentry_type,
         reentry_ltp_mode=leg_data.reentry_ltp_mode,
         journey_config=leg_data.journey_config,
@@ -271,9 +297,17 @@ def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     leg.wt_direction    = data.wt_direction
     leg.wt_value        = data.wt_value
     leg.wt_unit         = data.wt_unit
+    leg.orb_range_source  = data.orb_range_source
+    leg.orb_entry_at      = data.orb_entry_at
+    leg.orb_sl_type       = data.orb_sl_type
+    leg.orb_tp_type       = data.orb_tp_type
+    leg.orb_buffer_value  = data.orb_buffer_value
+    leg.orb_buffer_unit   = data.orb_buffer_unit
     leg.reentry_on_sl   = data.reentry_on_sl
     leg.reentry_on_tp   = data.reentry_on_tp
     leg.reentry_max     = data.reentry_max
+    leg.reentry_max_sl    = data.reentry_max_sl or 0
+    leg.reentry_max_tp    = data.reentry_max_tp or 0
     leg.reentry_type    = data.reentry_type
     leg.reentry_ltp_mode = data.reentry_ltp_mode
     leg.journey_config  = data.journey_config

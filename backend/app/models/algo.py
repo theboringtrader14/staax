@@ -167,11 +167,34 @@ class AlgoLeg(Base):
     wt_value     = Column(Float, nullable=True)
     wt_unit      = Column(String(5), nullable=True)   # "pts" or "pct"
 
+    # ── Per-leg ORB Phase 2 fields ─────────────────────────────────────────────
+    # orb_range_source: which price to track during ORB window
+    #   "underlying" = track underlying index spot LTP (default, existing behavior)
+    #   "instrument" = track pre-selected option/futures LTP during window
+    orb_range_source  = Column(String(15), nullable=True)
+    # orb_entry_at: which breakout direction triggers entry
+    #   "high" = enter BUY when LTP crosses ORB High
+    #   "low"  = enter SELL when LTP crosses ORB Low
+    orb_entry_at      = Column(String(5),  nullable=True)
+    # orb_sl_type / orb_tp_type: SL/TP calculation method for ORB legs
+    # Replaces sl_type/tp_type when algo.entry_type == "orb"
+    # Values: "orb_high" | "orb_low" | "orb_range" | "orb_range_plus_pts" | "orb_range_minus_pts"
+    #         | "pts_instrument" | "pct_instrument" | "pts_underlying" | "pct_underlying"
+    orb_sl_type       = Column(String(30), nullable=True)
+    orb_tp_type       = Column(String(30), nullable=True)
+    # orb_buffer_value / orb_buffer_unit: ± buffer for orb_range_plus/minus_pts types
+    orb_buffer_value  = Column(Float,      nullable=True)
+    orb_buffer_unit   = Column(String(5),  nullable=True)   # "pts" | "pct"
+
     # ── Per-leg Re-entry ──────────────────────────────────────────────────────
     # reentry_max: 0 = disabled, 1–5 = max re-entries per day
     reentry_on_sl   = Column(Boolean, default=False)   # re-enter after SL hit
     reentry_on_tp   = Column(Boolean, default=False)   # re-enter after TP hit
     reentry_max     = Column(Integer, default=0)   # 0–5
+    # Separate max re-entry counts for SL and TP exits (splits reentry_max)
+    # reentry_max is deprecated but NOT dropped — existing data preserved
+    reentry_max_sl    = Column(Integer, default=0)   # max re-entries after SL hit (0 = disabled)
+    reentry_max_tp    = Column(Integer, default=0)   # max re-entries after TP hit (0 = disabled)
     reentry_type      = Column(String(20), nullable=True)   # "re_entry" | "re_execute"
     reentry_ltp_mode  = Column(String(15), nullable=True)   # "ltp" | "candle_close"
 

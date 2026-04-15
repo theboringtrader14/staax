@@ -875,7 +875,32 @@ class AlgoRunner:
 
         # SL/TP stored on order for display — sl_actual is the PRICE, not the value
         order.sl_original = leg.sl_value
-        if leg.sl_value and fill_price:
+        # ── ORB SL/TP calculation ─────────────────────────────────────────────────
+        # When entry_type == "orb" and orb_sl_type is set, compute actual SL price
+        # from orb range levels rather than using leg.sl_value.
+        _effective_sl_type = None
+        _effective_tp_type = None
+        if getattr(algo, 'entry_type', None) == 'orb':
+            _effective_sl_type = getattr(leg, 'orb_sl_type', None) or leg.sl_type
+            _effective_tp_type = getattr(leg, 'orb_tp_type', None) or leg.tp_type
+
+        if _effective_sl_type and _effective_sl_type.startswith('orb_'):
+            _orb_h, _orb_l = self._orb_levels.get(str(grid_entry.id), (0.0, 0.0))
+            _orb_range = (_orb_h - _orb_l) if _orb_h and _orb_l else 0.0
+            _buf = getattr(leg, 'orb_buffer_value', None) or 0.0
+            if _effective_sl_type == 'orb_high':
+                order.sl_actual = _orb_h
+            elif _effective_sl_type == 'orb_low':
+                order.sl_actual = _orb_l
+            elif _effective_sl_type == 'orb_range':
+                order.sl_actual = (fill_price - _orb_range) if direction == 'buy' else (fill_price + _orb_range)
+            elif _effective_sl_type == 'orb_range_plus_pts':
+                order.sl_actual = (fill_price - (_orb_range + _buf)) if direction == 'buy' else (fill_price + (_orb_range + _buf))
+            elif _effective_sl_type == 'orb_range_minus_pts':
+                order.sl_actual = (fill_price - (_orb_range - _buf)) if direction == 'buy' else (fill_price + (_orb_range - _buf))
+            else:
+                order.sl_actual = _orb_h if direction == 'sell' else _orb_l
+        elif leg.sl_value and fill_price:
             if leg.sl_type == "pts_instrument":
                 order.sl_actual = (fill_price - leg.sl_value) if direction == "buy" else (fill_price + leg.sl_value)
             elif leg.sl_type == "pct_instrument":
@@ -884,7 +909,26 @@ class AlgoRunner:
                 order.sl_actual = leg.sl_value  # orb/underlying types: store raw value, monitor computes dynamically
         else:
             order.sl_actual = leg.sl_value
-        order.target      = leg.tp_value
+
+        # ── ORB TP calculation ─────────────────────────────────────────────────────
+        if _effective_tp_type and _effective_tp_type.startswith('orb_'):
+            _orb_h, _orb_l = self._orb_levels.get(str(grid_entry.id), (0.0, 0.0))
+            _orb_range = (_orb_h - _orb_l) if _orb_h and _orb_l else 0.0
+            _buf = getattr(leg, 'orb_buffer_value', None) or 0.0
+            if _effective_tp_type == 'orb_high':
+                order.target = _orb_h
+            elif _effective_tp_type == 'orb_low':
+                order.target = _orb_l
+            elif _effective_tp_type == 'orb_range':
+                order.target = (fill_price + _orb_range) if direction == 'buy' else (fill_price - _orb_range)
+            elif _effective_tp_type == 'orb_range_plus_pts':
+                order.target = (fill_price + (_orb_range + _buf)) if direction == 'buy' else (fill_price - (_orb_range + _buf))
+            elif _effective_tp_type == 'orb_range_minus_pts':
+                order.target = (fill_price + (_orb_range - _buf)) if direction == 'buy' else (fill_price - (_orb_range - _buf))
+            else:
+                order.target = leg.tp_value
+        else:
+            order.target = leg.tp_value
         db.add(order)
         await db.flush()  # get order.id before registering monitors
 
@@ -1389,6 +1433,22 @@ class AlgoRunner:
         async def on_orb_entry(eid: str, entry_price: float, orb_high: float, orb_low: float):
             logger.info(f"ORB triggered for {eid} @ {entry_price} | H={orb_high} L={orb_low}")
             self._orb_levels[eid] = (orb_high, orb_low)
+            # Persist to AlgoState so Orders page can display ORB levels after entry
+            try:
+                async with AsyncSessionLocal() as _db:
+                    from app.models.algo_state import AlgoState
+                    from sqlalchemy import select as _select
+                    import uuid as _uuid
+                    _st_res = await _db.execute(
+                        _select(AlgoState).where(AlgoState.grid_entry_id == _uuid.UUID(eid))
+                    )
+                    _st = _st_res.scalar_one_or_none()
+                    if _st:
+                        _st.orb_high = orb_high
+                        _st.orb_low  = orb_low
+                        await _db.commit()
+            except Exception as _orb_persist_err:
+                logger.warning(f"[ORB] Failed to persist orb_high/orb_low to AlgoState: {_orb_persist_err}")
             await self.enter(eid, reentry=False)
 
         return on_orb_entry
@@ -1471,8 +1531,65 @@ class AlgoRunner:
             )
             return
 
-        # Direction from first leg (algo has no default_direction field)
-        direction = _legs[0].direction or "buy"
+        # Determine entry direction from orb_entry_at (Phase 2) or leg direction (fallback)
+        _entry_at = getattr(_legs[0], 'orb_entry_at', None)
+        if _entry_at == "high":
+            direction = "buy"
+        elif _entry_at == "low":
+            direction = "sell"
+        else:
+            direction = _legs[0].direction or "buy"  # backward compat
+
+        # ── ORB Phase 2: instrument range tracking ─────────────────────────────────
+        # When orb_range_source == "instrument", pre-select the ATM option at window
+        # registration time and track the option LTP during the window instead of
+        # the underlying spot. Falls back to underlying if pre-selection fails.
+        _orb_range_source = getattr(_legs[0], 'orb_range_source', None) or "underlying"
+        _tracking_token = underlying_token  # default: track underlying index
+
+        if _orb_range_source == "instrument" and self._strike_selector:
+            try:
+                # Pre-select strike now so we can subscribe and track its LTP
+                _pre_instrument = await self._strike_selector.select(
+                    underlying=_legs[0].underlying,
+                    instrument_type=_legs[0].instrument or "ce",
+                    expiry=_legs[0].expiry or "current_weekly",
+                    strike_type=_legs[0].strike_type or "atm",
+                    strike_value=_legs[0].strike_value,
+                    dte=getattr(algo, "dte", None),
+                )
+                if _pre_instrument:
+                    _pre_token = _pre_instrument.get("instrument_token", 0)
+                    _pre_symbol = _pre_instrument.get("tradingsymbol", "")
+                    if _pre_token and _pre_token > 0:
+                        _tracking_token = _pre_token
+                        if self._ltp_consumer:
+                            self._ltp_consumer.subscribe([_pre_token])
+                        logger.info(
+                            f"[ORB] Instrument pre-selection succeeded: "
+                            f"{_pre_symbol} token={_pre_token} (tracking option LTP for range)"
+                        )
+                    else:
+                        logger.warning(
+                            f"[ORB] Instrument pre-selection failed — falling back to underlying. "
+                            f"algo={algo.name}"
+                        )
+                else:
+                    logger.warning(
+                        f"[ORB] Instrument pre-selection failed — falling back to underlying. "
+                        f"algo={algo.name}"
+                    )
+            except Exception as _orb_pre_err:
+                logger.warning(
+                    f"[ORB] Instrument pre-selection failed — falling back to underlying. "
+                    f"algo={algo.name} error={_orb_pre_err}"
+                )
+        else:
+            if _orb_range_source == "instrument" and not self._strike_selector:
+                logger.warning(
+                    f"[ORB] Instrument pre-selection failed — falling back to underlying "
+                    f"(strike_selector not available). algo={algo.name}"
+                )
 
         window = ORBWindow(
             grid_entry_id=str(grid_entry_id),
@@ -1480,7 +1597,8 @@ class AlgoRunner:
             direction=direction,
             start_time=self._parse_time(algo.orb_start_time or "09:15"),
             end_time=self._parse_time(algo.orb_end_time or "11:16"),
-            instrument_token=underlying_token,
+            instrument_token=_tracking_token,      # was: underlying_token
+            orb_range_source=_orb_range_source,    # NEW field
             wt_value=0.0,   # ORB uses range breakout, not W&T buffer
             wt_unit="pts",
         )
@@ -1489,10 +1607,11 @@ class AlgoRunner:
             on_entry=self._make_orb_callback(str(grid_entry_id)),
         )
         if self._ltp_consumer:
-            self._ltp_consumer.subscribe([underlying_token])
+            self._ltp_consumer.subscribe([_tracking_token])   # was: underlying_token
         logger.info(
-            f"ORB registered: {algo.name} | underlying={underlying} token={underlying_token} "
-            f"direction={direction} window={algo.orb_start_time or '09:15'}–{algo.orb_end_time or '11:16'}"
+            f"ORB registered: {algo.name} | underlying={underlying} token={_tracking_token} "
+            f"direction={direction} orb_range_source={_orb_range_source} "
+            f"window={algo.orb_start_time or '09:15'}–{algo.orb_end_time or '11:16'}"
         )
 
     # ── Overnight SL check ───────────────────────────────────────────────────

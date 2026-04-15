@@ -68,6 +68,14 @@ class AlgoState(Base):
     reentry_count  = Column(Integer, default=0)        # how many re-entries fired today
     journey_level  = Column(String(10), nullable=True) # current level: "1", "1.1", "2.1"
 
+    # ── ORB tracking (populated when ORB window closes + breakout fires) ────────
+    orb_high          = Column(Float, nullable=True)   # locked ORB high price
+    orb_low           = Column(Float, nullable=True)   # locked ORB low price
+
+    # ── Split re-entry counts (parallel to algo_legs.reentry_max_sl/tp) ─────────
+    sl_reentry_count  = Column(Integer, default=0)     # SL re-entries fired today
+    tp_reentry_count  = Column(Integer, default=0)     # TP re-entries fired today
+
     # ── Error info ────────────────────────────────────────────────────────────
     error_message  = Column(Text, nullable=True)
     error_at       = Column(DateTime(timezone=True), nullable=True)
