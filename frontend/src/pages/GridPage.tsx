@@ -564,45 +564,44 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                             {/* Card row body */}
                             <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'20px 24px' }}>
 
-                              {/* ── Info block ── */}
-                              <div style={{ display:'flex', gap:'16px', width:'290px', flexShrink:0, alignItems:'flex-start' }}>
-                                <div style={{ display:'flex', flexDirection:'column', gap:'6px', minWidth:0, flex:1 }}>
-                                  <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
-                                    style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
-                                      cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                                      textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)',
-                                      marginRight:'8px' }}>
-                                    {algo.name}
-                                  </span>
-                                  <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                                    {algo.account || '—'}
-                                  </span>
-                                </div>
-                                <div style={{ display:'flex', flexDirection:'column', gap:'6px', minWidth:0, flex:1 }}>
-                                  <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
-                                    {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
-                                  </span>
-                                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
-                                    {instruments.map(ins => (
-                                      <span key={ins} style={{
-                                        display:'inline-flex', alignItems:'center', padding:'2px 7px', borderRadius:'100px',
-                                        fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'0.5px',
-                                        background:'rgba(255,107,0,0.10)', color:'var(--ox-glow)',
-                                        border:'0.5px solid rgba(255,107,0,0.28)',
-                                      }}>{ins}</span>
-                                    ))}
-                                    {isExpanded && algoErrors[algo.id] && (
-                                      <span style={{
-                                        background: 'rgba(255,68,68,0.15)',
-                                        border: '0.5px solid rgba(255,68,68,0.4)',
-                                        borderRadius: 4, padding: '1px 6px',
-                                        fontSize: 10, color: '#FF4444',
-                                        fontFamily: 'var(--font-mono)',
-                                        marginLeft: 6,
-                                        cursor: 'pointer',
-                                      }} title={algoErrors[algo.id]}>⚠ Entry failed</span>
-                                    )}
-                                  </div>
+                              {/* ── Name + account ── */}
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'160px', flexShrink:0 }}>
+                                <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
+                                  style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
+                                    cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                                    textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)' }}>
+                                  {algo.name}
+                                </span>
+                                <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                  {algo.account || '—'}
+                                </span>
+                              </div>
+
+                              {/* ── Strategy + instrument chip ── */}
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', flexShrink:0 }}>
+                                <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
+                                  {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
+                                </span>
+                                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
+                                  {instruments.map(ins => (
+                                    <span key={ins} style={{
+                                      display:'inline-flex', alignItems:'center', padding:'2px 7px', borderRadius:'100px',
+                                      fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'0.5px',
+                                      background:'rgba(255,107,0,0.10)', color:'var(--ox-glow)',
+                                      border:'0.5px solid rgba(255,107,0,0.28)',
+                                    }}>{ins}</span>
+                                  ))}
+                                  {isExpanded && algoErrors[algo.id] && (
+                                    <span style={{
+                                      background: 'rgba(255,68,68,0.15)',
+                                      border: '0.5px solid rgba(255,68,68,0.4)',
+                                      borderRadius: 4, padding: '1px 6px',
+                                      fontSize: 10, color: '#FF4444',
+                                      fontFamily: 'var(--font-mono)',
+                                      marginLeft: 6,
+                                      cursor: 'pointer',
+                                    }} title={algoErrors[algo.id]}>⚠ Entry failed</span>
+                                  )}
                                 </div>
                               </div>
 

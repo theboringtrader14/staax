@@ -689,6 +689,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
         is_active=True,
         is_archived=False,
     )
+    src_name = src.name   # capture now — db.commit() will expire src
     db.add(new_algo)
     await db.flush()
 
@@ -743,7 +744,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     await db.refresh(new_algo)
     for leg in new_legs:
         await db.refresh(leg)
-    logger.info(f"[ALGO] Duplicated {src.name} → {new_algo.name} (id={new_id})")
+    logger.info(f"[ALGO] Duplicated {src_name} → {new_algo.name} (id={new_id})")
     return _algo_to_dict(new_algo, new_legs)
 
 

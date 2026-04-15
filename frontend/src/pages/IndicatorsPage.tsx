@@ -372,6 +372,55 @@ function BotConfigurator({ accounts, onSave, onClose }: {
   )
 }
 
+// ── Per-bot signal log (collapsible) ──────────────────────────────────────────
+function BotSignalLog({ botId }: { botId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [signals, setSignals]   = useState<any[]>([])
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await apiGet(`/bots/${botId}/signals?limit=15`)
+      setSignals(Array.isArray(r.data) ? r.data : [])
+    } catch { /* ignore */ } finally { setLoading(false) }
+  }
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 10 }}>
+      <button onClick={() => { setExpanded(e => !e); if (!expanded && signals.length === 0) load() }}
+        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+          fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', padding: 0 }}>
+        {expanded ? '▾' : '▸'} Signal Log
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 8 }}>
+          {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading…</div>}
+          {!loading && signals.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No signals yet.</div>}
+          {signals.map((s: any) => {
+            const isExit = s.signal_type === 'exit'
+            const dirColor = isExit ? '#FFB300' : s.direction === 'BUY' ? '#22DD88' : '#FF4444'
+            const dirLabel = isExit ? 'EXIT' : s.direction
+            const statusColor = s.status === 'fired' ? '#22DD88' : s.status === 'skipped' ? '#888' : s.status === 'error' ? '#FF4444' : '#FFB300'
+            return (
+              <div key={s.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '4px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 11, flexWrap: 'wrap' }}>
+                <span style={{ padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                  background: `${dirColor}22`, color: dirColor }}>{dirLabel}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.signal_type}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                </span>
+                <span style={{ fontSize: 9, fontWeight: 600, color: statusColor }}>{s.status?.toUpperCase()}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Bot Card ──────────────────────────────────────────────────────────────────
 function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: {
   bot: Bot; accounts: any[]
@@ -389,23 +438,6 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   const [showArch, setShowArch]   = useState(false)
   const [ltp, setLtp]             = useState<number | null>(null)
   const [prevLtp, setPrevLtp]     = useState<number | null>(null)
-  const [psCode, setPsCode]       = useState(bot.pinescript_code || '')
-  const [psSaving, setPsSaving]   = useState(false)
-  const [psSaved, setPsSaved]     = useState(false)
-
-  const savePineScript = async () => {
-    setPsSaving(true);
-    try {
-      await apiPatch(`/bots/${bot.id}/pinescript`, { pinescript_code: psCode });
-      setPsSaved(true);
-      setTimeout(() => setPsSaved(false), 2000);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setPsSaving(false);
-    }
-  };
-
   useEffect(() => {
     apiGet(`/bots/${bot.id}/orders`).then(r => setOrders(r.data || [])).catch(() => {})
   }, [bot.id])
@@ -595,45 +627,8 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
             )}
           </>
         )}
-        {/* PineScript Editor */}
-        <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 14 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>PineScript Code</div>
-          <textarea
-            value={psCode}
-            onChange={e => setPsCode(e.target.value)}
-            placeholder="Paste your PineScript indicator code here..."
-            style={{
-              width: '100%',
-              minHeight: 120,
-              background: 'rgba(0,0,0,0.3)',
-              color: 'var(--text-primary)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 6,
-              padding: 10,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-            <button
-              onClick={savePineScript}
-              disabled={psSaving}
-              style={{
-                padding: '5px 14px',
-                background: psSaved ? 'rgba(50,200,100,0.2)' : 'rgba(255,107,0,0.2)',
-                color: psSaved ? '#6bff8b' : 'var(--accent)',
-                border: `1px solid ${psSaved ? 'rgba(100,255,100,0.3)' : 'rgba(255,107,0,0.3)'}`,
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontSize: 11,
-              }}
-            >
-              {psSaving ? 'Saving...' : psSaved ? 'Saved ✓' : 'Save PineScript'}
-            </button>
-          </div>
-        </div>
+        {/* Signal Log (inline, collapsible) */}
+        <BotSignalLog botId={bot.id} />
 
       </div>
 
