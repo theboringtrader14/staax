@@ -673,6 +673,8 @@ export default function IndicatorsPage() {
   const [signals, setSignals]     = useState<BotSignal[]>([])
   const signalTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
   const ordersTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
+  const ltpTimerRef               = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [ltpMap, setLtpMap]       = useState<Record<string, number>>({})
 
   useEffect(() => {
     Promise.all([
@@ -712,6 +714,25 @@ export default function IndicatorsPage() {
     ordersTimerRef.current = setInterval(fetchAllBotOrders, 30000)
     return () => { if (ordersTimerRef.current) clearInterval(ordersTimerRef.current) }
   }, [activeTab])
+
+  // 5s LTP polling for live P&L on open orders
+  useEffect(() => {
+    if (activeTab !== 'Orders') {
+      if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null }
+      return
+    }
+    const fetchLtps = () => {
+      const symbols = [...new Set(allBotOrders.filter(o => o.status === 'open').map((o: any) => o.instrument as string))]
+      symbols.forEach(sym => {
+        apiGet(`/bots/ltp?symbol=${sym}`)
+          .then(r => { if (r.data?.ltp != null) setLtpMap(prev => ({ ...prev, [sym]: r.data.ltp })) })
+          .catch(() => {})
+      })
+    }
+    fetchLtps()
+    ltpTimerRef.current = setInterval(fetchLtps, 5000)
+    return () => { if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null } }
+  }, [activeTab, allBotOrders])
 
   const handleSave = async (form: any) => {
     const res = await apiPost('/bots/', { ...form, is_practix: isPractixMode })
@@ -914,8 +935,21 @@ export default function IndicatorsPage() {
                     <td style={{ fontSize: '11px' }}>{o.lots}</td>
                     <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</td>
                     <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</td>
-                    <td style={{ fontSize: '11px', fontWeight: 600, color: (o.pnl || 0) >= 0 ? '#22DD88' : '#FF4444' }}>
-                      {o.pnl != null ? `${o.pnl >= 0 ? '+' : ''}₹${o.pnl.toLocaleString('en-IN')}` : '—'}
+                    <td style={{ fontSize: '11px', fontWeight: 600 }}>
+                      {o.status === 'open' && ltpMap[(o as any).instrument] != null && o.entry_price != null
+                        ? (() => {
+                            const live = (ltpMap[(o as any).instrument] - o.entry_price) * o.lots
+                            return <span style={{ color: live >= 0 ? '#22DD88' : '#FF4444' }}>
+                              {live >= 0 ? '+' : ''}₹{live.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                              <span style={{ fontSize: 8, marginLeft: 4, opacity: 0.55, fontWeight: 400 }}>LIVE</span>
+                            </span>
+                          })()
+                        : o.pnl != null
+                          ? <span style={{ color: o.pnl >= 0 ? '#22DD88' : '#FF4444' }}>
+                              {o.pnl >= 0 ? '+' : ''}₹{o.pnl.toLocaleString('en-IN')}
+                            </span>
+                          : <span style={{ color: 'var(--text-dim)' }}>—</span>
+                      }
                     </td>
                     <td><span style={{ fontSize: '10px', fontWeight: 600, color: o.status === 'open' ? '#22DD88' : 'var(--text-dim)' }}>{o.status.toUpperCase()}</span></td>
                   </tr>
@@ -931,7 +965,7 @@ export default function IndicatorsPage() {
                 {openOrders.length > 0 && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite', marginRight: '6px', verticalAlign: 'middle' }} />}
                 Open Positions · {openOrders.length}
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>orders 30s · ltp 5s</span>
             </div>
             {renderOrdersTable(openOrders)}
             <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '20px', marginBottom: '8px' }}>
