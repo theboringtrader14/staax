@@ -663,7 +663,9 @@ type BotSignal = {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function IndicatorsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
-  const [activeTab, setActiveTab] = useState<'Bots' | 'Signals' | 'Orders'>('Bots')
+  const [activeTab, setActiveTab] = useState<'Bots' | 'Signals' | 'Orders'>(
+    () => (localStorage.getItem('indicatorsTab') as 'Bots' | 'Signals' | 'Orders') || 'Bots'
+  )
   const [bots, setBots]           = useState<Bot[]>([])
   const [accounts, setAccounts]   = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
@@ -788,7 +790,7 @@ export default function IndicatorsPage() {
           const hasDot = (tab === 'Signals' && signals.some(s => s.status === 'fired')) ||
                          (tab === 'Orders' && allBotOrders.some(o => o.status === 'open'))
           return (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            <button key={tab} onClick={() => { setActiveTab(tab); localStorage.setItem('indicatorsTab', tab) }} style={{
               flex: 1, padding: '8px 4px', fontSize: '12px', fontWeight: 600,
               background: activeTab === tab ? 'rgba(255,107,0,0.08)' : 'transparent',
               border: 'none', cursor: 'pointer', position: 'relative',
