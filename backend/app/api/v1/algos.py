@@ -642,6 +642,109 @@ async def unarchive_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     return {"algo_id": algo_id, "action": "unarchived", "status": "ok"}
 
 
+# ── Duplicate ─────────────────────────────────────────────────────────────────
+
+@router.post("/{algo_id}/duplicate")
+async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    """Deep-copy an algo and all its legs. Returns the new algo."""
+    res = await db.execute(
+        select(Algo).where(Algo.id == uuid_lib.UUID(algo_id))
+    )
+    src = res.scalar_one_or_none()
+    if not src:
+        raise HTTPException(404, "Algo not found")
+
+    legs_res = await db.execute(
+        select(AlgoLeg).where(AlgoLeg.algo_id == src.id, AlgoLeg.is_archived == False)
+    )
+    src_legs = legs_res.scalars().all()
+
+    new_id = uuid_lib.uuid4()
+    new_algo = Algo(
+        id=new_id,
+        name=f"{src.name} (Copy)",
+        account_id=src.account_id,
+        strategy_mode=src.strategy_mode,
+        entry_type=src.entry_type,
+        order_type=src.order_type,
+        entry_time=src.entry_time,
+        exit_time=src.exit_time,
+        orb_start_time=src.orb_start_time,
+        orb_end_time=src.orb_end_time,
+        next_day_exit_time=src.next_day_exit_time,
+        dte=src.dte,
+        mtm_sl=src.mtm_sl,
+        mtm_tp=src.mtm_tp,
+        mtm_unit=src.mtm_unit,
+        entry_delay_buy_secs=src.entry_delay_buy_secs,
+        entry_delay_sell_secs=src.entry_delay_sell_secs,
+        exit_delay_buy_secs=src.exit_delay_buy_secs,
+        exit_delay_sell_secs=src.exit_delay_sell_secs,
+        exit_on_margin_error=src.exit_on_margin_error,
+        exit_on_entry_failure=src.exit_on_entry_failure,
+        base_lot_multiplier=src.base_lot_multiplier,
+        notes=src.notes,
+        is_live=False,
+        recurring_days=[],
+        is_active=True,
+        is_archived=False,
+    )
+    db.add(new_algo)
+    await db.flush()
+
+    new_legs = []
+    for leg in src_legs:
+        new_leg = AlgoLeg(
+            id=uuid_lib.uuid4(),
+            algo_id=new_id,
+            leg_number=leg.leg_number,
+            direction=leg.direction,
+            instrument=leg.instrument,
+            underlying=leg.underlying,
+            expiry=leg.expiry,
+            strike_type=leg.strike_type,
+            strike_offset=leg.strike_offset,
+            strike_value=leg.strike_value,
+            lots=leg.lots,
+            sl_type=leg.sl_type,
+            sl_value=leg.sl_value,
+            tp_type=leg.tp_type,
+            tp_value=leg.tp_value,
+            tsl_x=leg.tsl_x,
+            tsl_y=leg.tsl_y,
+            tsl_unit=leg.tsl_unit,
+            ttp_x=leg.ttp_x,
+            ttp_y=leg.ttp_y,
+            ttp_unit=leg.ttp_unit,
+            wt_enabled=leg.wt_enabled,
+            wt_direction=leg.wt_direction,
+            wt_value=leg.wt_value,
+            wt_unit=leg.wt_unit,
+            orb_range_source=leg.orb_range_source,
+            orb_entry_at=leg.orb_entry_at,
+            orb_sl_type=leg.orb_sl_type,
+            orb_tp_type=leg.orb_tp_type,
+            orb_buffer_value=leg.orb_buffer_value,
+            orb_buffer_unit=leg.orb_buffer_unit,
+            reentry_on_sl=leg.reentry_on_sl,
+            reentry_on_tp=leg.reentry_on_tp,
+            reentry_max=leg.reentry_max,
+            reentry_max_sl=leg.reentry_max_sl,
+            reentry_max_tp=leg.reentry_max_tp,
+            reentry_type=leg.reentry_type,
+            reentry_ltp_mode=leg.reentry_ltp_mode,
+            journey_config=leg.journey_config,
+            underlying_token=leg.underlying_token,
+        )
+        db.add(new_leg)
+        new_legs.append(new_leg)
+
+    await db.commit()
+    await db.refresh(new_algo)
+    logger.info(f"[ALGO] Duplicated {src.name} → {new_algo.name} (id={new_id})")
+    return _algo_to_dict(new_algo, new_legs)
+
+
 # ── Promote / Demote ──────────────────────────────────────────────────────────
 
 @router.post("/{algo_id}/promote")

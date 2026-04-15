@@ -58,6 +58,7 @@ class BotSignal(Base):
     instrument     = Column(String(20),  nullable=False)
     expiry         = Column(String(20),  nullable=False)
     trigger_price  = Column(Float,       nullable=True)
+    reason         = Column(String(50),  nullable=True)   # e.g. CHANNEL_LONG, TT_CROSS_HIGH
     status         = Column(String(20),  nullable=False, server_default='fired')
     bot_order_id   = Column(UUID(as_uuid=True), nullable=True)  # FK to bot_orders if executed
     error_message  = Column(String(200), nullable=True)

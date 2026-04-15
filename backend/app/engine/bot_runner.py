@@ -202,8 +202,9 @@ class BotRunner:
     def _init_bot(self, bot):
         """Create CandleAggregator + strategy instance for one bot."""
         from app.engine.candle_fetcher import CandleAggregator
-        from app.engine.indicators.dtr_strategy     import DTRStrategy
-        from app.engine.indicators.channel_strategy import ChannelStrategy
+        from app.engine.indicators.dtr_strategy      import DTRStrategy
+        from app.engine.indicators.channel_strategy  import ChannelStrategy
+        from app.engine.indicators.tt_bands_strategy import TTBandsStrategy
         from app.models.bot import IndicatorType
 
         bot_id = str(bot.id)
@@ -219,6 +220,13 @@ class BotRunner:
             self._strategies[bot_id] = ChannelStrategy(
                 timeframe_mins=bot.timeframe_mins,
                 num_candles=num,
+                long_only=True,
+            )
+        elif bot.indicator == IndicatorType.TT_BANDS:
+            lookback = bot.tt_lookback or 5
+            self._strategies[bot_id] = TTBandsStrategy(
+                timeframe_mins=bot.timeframe_mins,
+                lookback=lookback,
                 long_only=True,
             )
         else:
@@ -371,6 +379,7 @@ class BotRunner:
                     instrument=bot.instrument,
                     expiry=bot.expiry,
                     trigger_price=signal.price,
+                    reason=getattr(signal, "reason", None),
                     status=status,
                     fired_at=datetime.now(timezone.utc),
                     candle_timestamp=candle_ts,
@@ -385,13 +394,40 @@ class BotRunner:
     # ── Trade entry / exit ────────────────────────────────────────────────────
 
     async def _enter_trade(self, bot, price: float, signal=None):
-        """Record entry order for bot."""
+        """Record entry order for bot. Places real order if not is_practix."""
+        import uuid as uuid_lib
         logger.info(f"[BOT] ENTRY — {bot.name} BUY {bot.lots} lots {bot.instrument} @ ~{price:.2f}")
-        logger.info(f"[BOT] Signal-only mode — order NOT placed (observation only)")
+
+        broker_order_id: Optional[str] = None
+
+        # LIVE mode: place order via order_placer
+        if not bot.is_practix and self._order_placer:
+            try:
+                token = MCX_TOKENS.get(bot.instrument)
+                ikey = f"bot_{bot.id}_entry_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+                broker_order_id = await self._order_placer.place(
+                    idempotency_key = ikey,
+                    algo_id         = str(bot.id),
+                    symbol          = bot.instrument,
+                    exchange        = "MCX",
+                    direction       = "BUY",
+                    quantity        = bot.lots,
+                    order_type      = "MARKET",
+                    ltp             = price,
+                    is_practix      = False,
+                    broker_type     = "angelone",
+                    symbol_token    = str(token) if token else "",
+                    account_id      = str(bot.account_id) if bot.account_id else "",
+                )
+                logger.info(f"[BOT] LIVE order placed — broker_order_id={broker_order_id}")
+            except Exception as e:
+                logger.error(f"[BOT] LIVE order placement failed: {e}")
+        else:
+            logger.info(f"[BOT] PRACTIX / signal-only mode — order NOT placed")
+
         try:
             from app.core.database import AsyncSessionLocal
             from app.models.bot import BotOrder, BotOrderStatus
-            import uuid as uuid_lib
 
             async with AsyncSessionLocal() as db:
                 order = BotOrder(
@@ -406,6 +442,7 @@ class BotRunner:
                     entry_time=datetime.now(timezone.utc),
                     status=BotOrderStatus.OPEN,
                     signal_type="entry",
+                    broker_order_id=broker_order_id,
                 )
                 db.add(order)
                 bot.status = "live"
@@ -420,12 +457,36 @@ class BotRunner:
             logger.error(f"[BOT] Entry trade error: {e}")
 
     async def _exit_trade(self, bot, price: float):
-        """Record exit order for bot."""
+        """Record exit order for bot. Places real close order if not is_practix."""
         position = self._positions.get(str(bot.id))
         if not position:
             return
 
         logger.info(f"[BOT] EXIT — {bot.name} SELL {bot.lots} lots {bot.instrument} @ ~{price:.2f}")
+
+        # LIVE mode: place closing order via order_placer
+        if not bot.is_practix and self._order_placer:
+            try:
+                token = MCX_TOKENS.get(bot.instrument)
+                ikey = f"bot_{bot.id}_exit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+                exit_order_id = await self._order_placer.place(
+                    idempotency_key = ikey,
+                    algo_id         = str(bot.id),
+                    symbol          = bot.instrument,
+                    exchange        = "MCX",
+                    direction       = "SELL",
+                    quantity        = bot.lots,
+                    order_type      = "MARKET",
+                    ltp             = price,
+                    is_practix      = False,
+                    broker_type     = "angelone",
+                    symbol_token    = str(token) if token else "",
+                    account_id      = str(bot.account_id) if bot.account_id else "",
+                )
+                logger.info(f"[BOT] LIVE exit order placed — broker_order_id={exit_order_id}")
+            except Exception as e:
+                logger.error(f"[BOT] LIVE exit order placement failed: {e}")
+
         try:
             from app.core.database import AsyncSessionLocal
             from app.models.bot import BotOrder, BotOrderStatus

@@ -258,6 +258,7 @@ def _signal_dict(s: BotSignal) -> dict:
         "instrument":    s.instrument,
         "expiry":        s.expiry,
         "trigger_price": s.trigger_price,
+        "reason":        s.reason,
         "status":        s.status or "fired",
         "bot_order_id":  str(s.bot_order_id) if s.bot_order_id else None,
         "error_message": s.error_message,
