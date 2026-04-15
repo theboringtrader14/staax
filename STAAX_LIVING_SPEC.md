@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.9 | **Last Updated:** 15 April 2026 — Batch 23/24: STBT save FK fix (in-place leg update), AlgoPage UI (merged Timing+MTM row, STBT next-day exit wiring, chip heights, MTM labels), W&T LTP wait loop, GridPage next-day exit time display, INVEX SIP Engine live (migration 0002, scheduler 09:20 IST), n8n 3 workflows created, BUDGEX confirmed live | **PRD Reference:** v1.2
+**Version:** 8.0 | **Last Updated:** 15 April 2026 — Batch 25/26: ORB Phase 2 (range source, entry_at, orb_sl_type/tp_type, buffer, instrument pre-selection), re-entry max split (reentry_max_sl/tp + sl_reentry_count/tp_reentry_count), migration 0032, STAAX core fixes (system stats 0-counts, position reconciliation chip), INVEX watchlist live prices (NSE API), BUDGEX endpoint audit + Gemma 4 analytics, FINEX scaffold (port 8003/3003, LIFEX Score, net worth), mobile error banners, n8n workflow fix (PATCH not PUT) | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -4480,4 +4480,123 @@ Gates (both modes): `reentry_count < reentry_max`, `current_time < exit_time`, k
 - Background: #0A0A0B (NOT #2A2C2E — that was old spec error)
 - LIFEX AI uses Gemma 4 (gemma-4-31b-it) — NOT Claude API
 - ElevenLabs TTS for LIFEX AI voice output (confirmed direction)
+
+
+## Session Update — 2026-04-15 (Batch 25)
+
+### STAAX Core Fixes
+
+- `system.py` active_algos: counts `is_active=True AND is_archived=False` algos (was counting today's orders → always showed 0)
+- `system.py` open_positions: removed `created_at >= today` filter (was excluding overnight STBT positions)
+- `orders.py` `GET /orders/position-check`: new endpoint → `{total_open, reconciled, message}`
+- `OrdersPage.tsx` reconciliation chip in header: calls `/orders/position-check`, shows ✓ Synced (green) or ⚠ N open (amber)
+- `api.ts` `ordersAPI.positionCheck()` added
+- Debug log removal: removed stray `print()` from backend
+
+### INVEX — Watchlist Live Prices
+- `watchlist.py` `GET /watchlist/prices`: NSE session-seeded httpx fetch, 30s Redis cache, per-symbol null on failure
+- `WatchlistPage.tsx`: live LTP/change in teal #00C9A7, Refresh button
+- `api.ts` `watchlistAPI.getPrices()` added
+
+### BUDGEX — Endpoint Audit + Gemma 4 Analytics
+- `analytics.py` rewritten: fetches 30d expenses by category → Gemma 4 prompt → `{insights: [...]}`, rule-based fallback when GOOGLE_AI_API_KEY missing
+- `AnalyticsPage.tsx`: reads `insights` array (was `insight` string), renders bullet list
+
+### LIFEX Mobile — Error Banners (all 5 screens)
+- All 5 screens (index, portfolio, trading, budget, ai): styled error banners `View+Text` with `rgba(255,68,68,0.12)` background + `#FF4444` border/text
+
+### FINEX Scaffold (new module)
+- Backend: port 8003, `GET /api/v1/score` stub (72/100 with breakdown), `GET /api/v1/networth` (April 2026 static baseline + live INVEX equity + STAAX trading capital)
+- Frontend: port 3003, SVG gauge for LIFEX Score, three breakdown rows, Net Worth card with breakdown tiles
+- Brand color: #F59E0B amber (distinct from STAAX orange and INVEX teal)
+
+### n8n Workflow Fix
+- PUT /rest/workflows/{id} returns 404 in n8n v2.16.1 — fixed to use PATCH
+- Login credentials corrected: theboringtrader14@gmail.com / Staax@2024 (not admin@staax.local)
+
+### Commits
+- Backend+Frontend Batch 25 (hash TBD): all above changes
+
+---
+
+## Session Update — 2026-04-15 (Batch 26) — ORB Phase 2 + Re-entry Split
+
+### New AlgoLeg Columns (migration 0032)
+```
+orb_range_source   String(15)  — "underlying" | "instrument"
+orb_entry_at       String(5)   — "high" | "low"
+orb_sl_type        String(30)  — ORB or standard sl_type values
+orb_tp_type        String(30)  — ORB or standard tp_type values
+orb_buffer_value   Float       — buffer magnitude
+orb_buffer_unit    String(5)   — "pts" | "pct"
+reentry_max_sl     Integer     default 0
+reentry_max_tp     Integer     default 0
+```
+`reentry_max` KEPT (not dropped — backward compat). `is_archived` was added in 0030.
+
+### New AlgoState Columns (migration 0032)
+```
+orb_high           Float       — persisted from _make_orb_callback
+orb_low            Float       — persisted from _make_orb_callback
+sl_reentry_count   Integer     default 0
+tp_reentry_count   Integer     default 0
+```
+`reentry_count` kept and synced to `sl_count + tp_count`.
+
+### Migration Chain
+0029 → 0030 (is_archived on AlgoLeg) → 0032 (ORB Phase 2 + reentry split). **0031 does NOT exist.**
+
+### Engine Changes
+- `orb_tracker.py`: `orb_range_source` field added to ORBWindow dataclass
+- `algo_runner.py register_orb()`: entry direction from `orb_entry_at`; instrument pre-selection with conservative fallback (log warning + fall back to underlying on failure); persists `orb_high`/`orb_low` to AlgoState
+- `algo_runner.py _place_single_leg()`: full ORB SL/TP calculation — 5 variants each: `orb_high`, `orb_low`, `orb_range`, `orb_range_plus_pts`, `orb_range_minus_pts`
+- `reentry_engine.py`: `_SL_EXIT_REASONS` + `_TP_EXIT_REASONS` frozensets; Gate 2 split into `sl_reentry_count`/`tp_reentry_count`; `exit_reason` param threaded through `_do_re_execute` and `_watch_and_re_enter`
+
+### API Changes (algos.py)
+- `LegCreate`: all 8 new optional fields added
+- `_leg_to_dict()`, `_build_leg()`, `_update_leg_fields()`: all updated
+
+### Frontend Changes (AlgoPage.tsx)
+- Leg vals interface: `orb` sub-object (entryAt, slType, tpType, bufferValue, bufferUnit), `reentry.maxSl` + `reentry.maxTp` split
+- `orbRangeSource` state: Range Source toggle (Underlying / Instrument) in ORB config section
+- Per-leg Entry At toggle: ORB High (BUY) / ORB Low (SELL) when `entryType === 'orb'`
+- ORB SL/TP: 9-option dropdowns with buffer inputs when range±pts selected
+- `buildPayload()`: sends all ORB fields; excludes `sl_type`/`sl_value` for ORB algos; sends `reentry_max = Math.max(maxSl, maxTp)` for backward compat
+- `validate()`: wraps sl/tp value checks in `if (entryType !== 'orb')` guard
+
+### Frontend Changes (OrdersPage.tsx)
+- `AlgoGroup` interface: `orbHigh?: number | null`, `orbLow?: number | null`
+- `mapGroup()`: adds `orbHigh`, `orbLow`
+- `LegRow` ENTRY/REF cell: 3 ORB display branches — (1) waiting with range locked (shows H/L/Range), (2) waiting range not yet locked, (3) open ORB leg shows levels in muted text
+
+### Migrations Run
+- `alembic upgrade head` applied 0032 locally ✅
+- `npm run build` zero TypeScript errors ✅
+
+### Commits
+- Backend Batch 26: `f17b224` — feat: Batch 26 — ORB Phase 2 (range source, entry_at, ORB SL/TP), re-entry max split
+- Frontend Batch 26: `89e93a7` — feat: Batch 26 — ORB UI config section, re-entry separate max counts
+
+---
+
+## PENDING (as of 2026-04-15)
+
+### EC2 Deployment (H1/H2 — deferred until local testing complete)
+- Run migrations 0025–0032 on EC2
+- Deploy all latest commits: STAAX, INVEX, BUDGEX, FINEX
+- Start Session fix on EC2 (subprocess vs systemd)
+
+### Business Actions Required
+- Karthik AO + Wife AO: new SmartAPI apps with server IP 13.202.164.243
+- INVEX: Angel One API keys expired — regenerate from portal for all 3 accounts
+- BUDGEX: Add `GOOGLE_AI_API_KEY` to `/Users/bjkarthi/STAXX/budgex/backend/.env` for live Gemma responses
+- n8n: update push tokens once mobile app registers (POST /api/v1/mobile/register-push)
+- Android EAS build: new build needed with prod URLs
+- Apple Developer account: needed for iOS TestFlight / App Store
+
+### STAAX ORB — Verify Next Session
+- Test ORB algo with `orb_entry_at` = "high" → confirm BUY fires on ORB High breakout
+- Test `orb_range_source` = "instrument" → confirm instrument pre-selected at window open with fallback
+- Test `orb_sl_type` = "orb_low" → confirm SL set to ORB low level
+- Verify `orb_high`/`orb_low` appear in Orders page for ORB waiting legs
 
