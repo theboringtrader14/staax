@@ -4,7 +4,7 @@ import axios from 'axios'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 
-const API = `${(import.meta as any).env?.VITE_API_URL || 'https://api.lifexos.co.in'}/api/v1`
+const API = `${(import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'}/api/v1`
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('staax_token')}` } })
 const apiGet  = (p: string) => axios.get(`${API}${p}`, auth())
 const apiPost = (p: string, d: any = {}) => axios.post(`${API}${p}`, d, auth())
@@ -378,6 +378,7 @@ interface PerBotSignal {
   direction: string;
   instrument: string;
   trigger_price: number | null;
+  reason: string | null;
   status: string;
   error_message: string | null;
   fired_at: string | null;
@@ -413,24 +414,50 @@ function BotSignalLog({ botId }: { botId: string }) {
         <div style={{ marginTop: 8 }}>
           {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading...</div>}
           {!loading && signals.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No signals yet.</div>}
-          {signals.map(s => (
-            <div key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 11 }}>
-              <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, minWidth: 130 }}>
-                {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '—'}
-              </span>
-              <span style={{ color: s.direction === 'buy' ? '#6bff8b' : '#ff6b6b', minWidth: 36 }}>{s.direction?.toUpperCase()}</span>
-              <span style={{ color: 'var(--text-primary)' }}>{s.instrument}</span>
-              {s.trigger_price && <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>@ {s.trigger_price}</span>}
-              <span style={{
-                padding: '1px 6px',
-                borderRadius: 3,
-                fontSize: 9,
-                background: s.status === 'filled' ? 'rgba(50,200,100,0.15)' : s.status === 'failed' ? 'rgba(255,50,50,0.15)' : 'rgba(255,200,0,0.15)',
-                color: s.status === 'filled' ? '#6bff8b' : s.status === 'failed' ? '#ff6b6b' : '#ffd700',
-              }}>{s.status}</span>
-              {s.error_message && <span style={{ color: '#ff6b6b', fontSize: 10 }}>{s.error_message}</span>}
-            </div>
-          ))}
+          {signals.map(s => {
+            const dirColor = s.signal_type === 'exit'
+              ? '#FFB300'
+              : s.direction?.toLowerCase() === 'buy' ? '#22DD88' : '#FF4444'
+            const dirLabel = s.signal_type === 'exit' ? 'EXIT' : s.direction?.toUpperCase()
+            const statusBg =
+              s.status === 'filled' ? 'rgba(34,221,136,0.12)' :
+              s.status === 'failed' ? 'rgba(255,68,68,0.12)' :
+              s.status === 'skipped' ? 'rgba(255,255,255,0.06)' :
+              'rgba(255,179,0,0.12)'
+            const statusColor =
+              s.status === 'filled' ? '#22DD88' :
+              s.status === 'failed' ? '#FF4444' :
+              s.status === 'skipped' ? '#888' :
+              '#FFB300'
+            return (
+              <div key={s.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 11, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, minWidth: 128 }}>
+                  {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '—'}
+                </span>
+                {/* Direction chip */}
+                <span style={{ padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', background: `${dirColor}22`, color: dirColor }}>
+                  {dirLabel}
+                </span>
+                {/* Signal type label */}
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.signal_type}</span>
+                <span style={{ color: 'var(--text-primary)' }}>{s.instrument}</span>
+                {s.trigger_price != null && (
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 10 }}>@ {s.trigger_price}</span>
+                )}
+                {/* Reason tag */}
+                {s.reason && (
+                  <span style={{ padding: '1px 6px', borderRadius: 3, fontSize: 9, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {s.reason}
+                  </span>
+                )}
+                {/* Status pill */}
+                <span style={{ padding: '1px 7px', borderRadius: 10, fontSize: 9, fontWeight: 600, background: statusBg, color: statusColor, marginLeft: 'auto' }}>
+                  {s.status}
+                </span>
+                {s.error_message && <span style={{ color: '#FF4444', fontSize: 10, width: '100%', paddingLeft: 134 }}>{s.error_message}</span>}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

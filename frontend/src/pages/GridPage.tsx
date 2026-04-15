@@ -378,6 +378,12 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:false } : x))
     try { await algosAPI.unarchive(algoId) } catch { setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x)); flashError('Reactivate failed') }
   }
+  const duplicateAlgo = async (algoId: string) => {
+    try {
+      await algosAPI.duplicate(algoId)
+      await loadData()
+    } catch { flashError('Duplicate failed') }
+  }
   // ── SVG Icons ─────────────────────────────────────────────────────────────────
   const TrashIcon = () => (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -705,6 +711,25 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                 onMouseLeave={e => { e.currentTarget.style.color='rgba(96,165,250,0.6)'; e.currentTarget.style.background='rgba(96,165,250,0.05)' }}>
                                 <ArchiveIcon/>
                                 <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>ARCHIVE</span>
+                              </button>
+
+                              {/* Duplicate */}
+                              <button
+                                onClick={() => duplicateAlgo(algo.id)}
+                                title="Create a copy of this algo (no recurring days, practix mode)"
+                                style={{
+                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                                  gap:4, padding:'0 14px', background:'rgba(255,107,0,0.05)', border:'none',
+                                  borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
+                                  color:'rgba(255,107,0,0.6)', minWidth:52, transition:'all 150ms',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color='#FF6B00'; e.currentTarget.style.background='rgba(255,107,0,0.12)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color='rgba(255,107,0,0.6)'; e.currentTarget.style.background='rgba(255,107,0,0.05)' }}>
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <rect x="4.667" y="4.667" width="7.583" height="7.583" rx="0.583" stroke="currentColor" strokeWidth="1.2"/>
+                                  <path d="M2.333 9.333V1.75h7.584" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                                </svg>
+                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>COPY</span>
                               </button>
 
                               {/* Delete (soft-archive) */}
