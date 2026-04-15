@@ -57,6 +57,7 @@ class BotRunner:
         self._strategies:  Dict[str, Any] = {}   # bot_id → DTRStrategy | ChannelStrategy
         self._positions:   Dict[str, Optional[dict]] = {}  # bot_id → open position
         self._last_signal: Dict[str, str] = {}             # bot_id → last signal type+dir acted on
+        self._in_session:  bool = False                     # tracks MCX session ON/OFF for transition detection
 
         logger.info("[BOT] BotRunner initialised")
 
@@ -262,15 +263,23 @@ class BotRunner:
         """
         # ── MCX session + holiday guard ───────────────────────────────────────
         from app.core.mcx_holidays import MCX_HOLIDAYS_2026
+        from app.engine.candle_fetcher import CandleAggregator
         now = datetime.now(IST)
         t = (now.hour, now.minute)
         morning = (9, 0) <= t <= (11, 30)
         evening = (15, 30) <= t <= (23, 30)
-        if not (morning or evening):
+        now_in_session = (morning or evening) and now.date().isoformat() not in MCX_HOLIDAYS_2026
+
+        # Session OFF→ON transition: reset aggregators to discard stale cross-session candles
+        if now_in_session and not self._in_session:
+            logger.info("[BOT] MCX session started — resetting candle aggregators to discard stale data")
+            for bot in self._bots:
+                self._aggregators[str(bot.id)] = CandleAggregator(bot.timeframe_mins)
+
+        self._in_session = now_in_session
+
+        if not now_in_session:
             logger.debug("MCX session closed — skipping tick")
-            return
-        if now.date().isoformat() in MCX_HOLIDAYS_2026:
-            logger.info("MCX session closed — skipping tick")
             return
 
         bots_watching = sum(1 for b in self._bots if MCX_TOKENS.get(b.instrument) == token)

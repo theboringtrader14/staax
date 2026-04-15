@@ -562,7 +562,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               animation: st === 'open' ? 'statusPulseGreen 2s ease-in-out infinite' : st === 'algo_active' ? 'statusPulseOrange 2s ease-in-out infinite' : 'none' }}/>
 
                             {/* Card row body */}
-                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'20px', padding:'20px 24px' }}>
+                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'20px 24px' }}>
 
                               {/* ── Name + account ── */}
                               <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'160px', flexShrink:0 }}>
@@ -637,7 +637,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', flexShrink:0, justifyContent:'center' }}>
+                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', justifyContent:'center' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isActive = algo.recurringDays.includes(day)
                                   return (
