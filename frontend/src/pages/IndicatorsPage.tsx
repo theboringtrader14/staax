@@ -53,9 +53,10 @@ type Bot = {
   pinescript_code?: string;
 }
 type BotOrder = {
-  id: string; direction: string; lots: number
+  id: string; bot_name: string; is_practix: boolean
+  instrument: string; direction: string; lots: number
   entry_price?: number; exit_price?: number
-  entry_time?: string; exit_time?: string
+  entry_time?: string | null; exit_time?: string | null
   pnl?: number; status: string; signal_type?: string; expiry: string
 }
 
@@ -752,10 +753,10 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete }: 
   )
 }
 
-type AggOrder = BotOrder & { botName: string }
+type AggOrder = BotOrder
 type BotSignal = {
   id: string; bot_id: string; bot_name?: string; signal_type: string; direction: string | null
-  instrument: string; expiry: string; trigger_price: number | null
+  instrument: string; expiry: string; trigger_price: number | null; reason: string | null
   status: string; bot_order_id: string | null; error_message: string | null; fired_at: string | null
 }
 
@@ -794,34 +795,23 @@ export default function IndicatorsPage() {
     }
   }, [activeTab])
 
-  // Aggregate orders from all active bots
-  const fetchAllBotOrders = (botList: Bot[]) => {
-    const activeBotList = botList.filter(b => !b.is_archived)
-    if (activeBotList.length === 0) return
-    Promise.allSettled(
-      activeBotList.map(b =>
-        apiGet(`/bots/${b.id}/orders`).then(r =>
-          (r.data || []).map((o: BotOrder) => ({ ...o, botName: b.name }))
-        )
-      )
-    ).then(results => {
-      const flat: AggOrder[] = results
-        .filter(r => r.status === 'fulfilled')
-        .flatMap(r => (r as PromiseFulfilledResult<AggOrder[]>).value)
-      setAllBotOrders(flat)
-    })
+  // Fetch all bot orders via single global endpoint
+  const fetchAllBotOrders = () => {
+    botsAPI.orders()
+      .then(r => setAllBotOrders(r.data || []))
+      .catch(() => {})
   }
 
   useEffect(() => {
-    fetchAllBotOrders(bots)
-  }, [bots])
+    fetchAllBotOrders()
+  }, [])
 
   // 30s auto-refresh for Orders tab
   useEffect(() => {
     if (activeTab !== 'Orders') return
-    ordersTimerRef.current = setInterval(() => fetchAllBotOrders(bots), 30000)
+    ordersTimerRef.current = setInterval(fetchAllBotOrders, 30000)
     return () => { if (ordersTimerRef.current) clearInterval(ordersTimerRef.current) }
-  }, [activeTab, bots])
+  }, [activeTab])
 
   const handleSave = async (form: any) => {
     const res = await apiPost('/bots/', { ...form, is_practix: isPractixMode })
@@ -904,35 +894,46 @@ export default function IndicatorsPage() {
             <table className="staax-table">
               <thead>
                 <tr>
-                  <th>Bot</th><th>Signal</th><th>Instrument</th><th>Dir</th><th>Trigger ₹</th><th>Fired At</th><th>Status</th>
+                  <th>Bot</th><th>Signal</th><th>Instrument</th><th>Dir</th><th>Trigger ₹</th><th>Reason</th><th>Fired At</th><th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {signals.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>
                     No signals today
                   </td></tr>
-                ) : signals.map(s => (
-                  <tr key={s.id}>
-                    <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)' }}>{s.bot_name || '—'}</td>
-                    <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px' }}>{s.signal_type}</td>
-                    <td style={{ fontSize: '11px' }}>{s.instrument} · {s.expiry}</td>
-                    <td style={{ fontSize: '11px', fontWeight: 700, color: s.direction === 'BUY' ? 'var(--green)' : s.direction === 'SELL' ? 'var(--red)' : 'var(--text-muted)' }}>
-                      {s.direction || '—'}
-                    </td>
-                    <td style={{ fontSize: '11px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
-                    <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {s.fired_at ? new Date(s.fired_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
-                    </td>
-                    <td>
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
-                        color: s.status === 'executed' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'missed' ? 'var(--accent-amber)' : s.status === 'skipped' ? 'rgba(232,232,248,0.35)' : 'var(--indigo)',
-                        background: s.status === 'executed' ? 'rgba(34,221,136,0.12)' : s.status === 'error' ? 'rgba(255,68,68,0.12)' : s.status === 'missed' ? 'rgba(215,123,18,0.12)' : s.status === 'skipped' ? 'rgba(232,232,248,0.06)' : 'rgba(255,107,0,0.12)',
-                      }}>{s.status.toUpperCase()}</span>
-                    </td>
-                  </tr>
-                ))}
+                ) : signals.map(s => {
+                  const isExit = s.signal_type === 'exit'
+                  const dirColor = isExit ? '#FFB300' : s.direction === 'BUY' ? '#22DD88' : s.direction === 'SELL' ? '#FF4444' : 'var(--text-muted)'
+                  return (
+                    <tr key={s.id}>
+                      <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)' }}>{s.bot_name || '—'}</td>
+                      <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px' }}>{s.signal_type}</td>
+                      <td style={{ fontSize: '11px' }}>{s.instrument} · {s.expiry}</td>
+                      <td>
+                        <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', background: `${dirColor}22`, color: dirColor }}>
+                          {isExit ? 'EXIT' : (s.direction || '—')}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '11px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
+                      <td>
+                        {s.reason
+                          ? <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>{s.reason}</span>
+                          : <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
+                      </td>
+                      <td style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        {s.fired_at ? new Date(s.fired_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—'}
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
+                          color: s.status === 'executed' ? '#22DD88' : s.status === 'error' ? '#FF4444' : s.status === 'missed' ? '#FFB300' : s.status === 'skipped' ? 'rgba(232,232,248,0.35)' : '#FF6B00',
+                          background: s.status === 'executed' ? 'rgba(34,221,136,0.12)' : s.status === 'error' ? 'rgba(255,68,68,0.12)' : s.status === 'missed' ? 'rgba(255,179,0,0.12)' : s.status === 'skipped' ? 'rgba(232,232,248,0.06)' : 'rgba(255,107,0,0.12)',
+                        }}>{s.status.toUpperCase()}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -984,21 +985,39 @@ export default function IndicatorsPage() {
         const renderOrdersTable = (rows: AggOrder[]) => (
           <div className="cloud-fill" style={{ borderRadius: 8, overflow: 'hidden', border: '0.5px solid rgba(255,107,0,0.18)' }}>
             <table className="staax-table">
-              <thead><tr><th>Bot</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th></tr></thead>
+              <thead><tr><th>Time</th><th>Bot</th><th>Symbol</th><th>Dir</th><th>Lots</th><th>Entry ₹</th><th>Exit ₹</th><th>P&L</th><th>Status</th></tr></thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>No orders</td></tr>
+                  <tr><td colSpan={9} style={{ textAlign: 'center', padding: '18px', color: 'var(--text-dim)', fontSize: '12px' }}>No orders</td></tr>
                 ) : rows.map(o => (
                   <tr key={o.id}>
-                    <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{o.botName}</td>
-                    <td style={{ fontSize: '11px', fontWeight: 700, color: o.direction === 'BUY' ? 'var(--green)' : 'var(--red)' }}>{o.direction}</td>
+                    <td style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {o.entry_time ? new Date(o.entry_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                    </td>
+                    <td style={{ fontSize: '11px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--amber)' }}>{o.bot_name}</span>
+                      {' '}
+                      <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, fontWeight: 700,
+                        background: o.is_practix ? 'rgba(255,179,0,0.12)' : 'rgba(34,221,136,0.12)',
+                        color: o.is_practix ? '#FFB300' : '#22DD88' }}>
+                        {o.is_practix ? 'PRACTIX' : 'LIVE'}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.instrument}</td>
+                    <td>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        color: o.direction === 'BUY' ? '#22DD88' : '#FF4444',
+                        background: o.direction === 'BUY' ? 'rgba(34,221,136,0.12)' : 'rgba(255,68,68,0.12)' }}>
+                        {o.direction}
+                      </span>
+                    </td>
                     <td style={{ fontSize: '11px' }}>{o.lots}</td>
-                    <td style={{ fontSize: '11px' }}>{o.entry_price?.toLocaleString('en-IN') || '—'}</td>
-                    <td style={{ fontSize: '11px' }}>{o.exit_price?.toLocaleString('en-IN') || '—'}</td>
-                    <td style={{ fontSize: '11px', fontWeight: 600, color: (o.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</td>
+                    <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</td>
+                    <td style={{ fontSize: '11px', fontWeight: 600, color: (o.pnl || 0) >= 0 ? '#22DD88' : '#FF4444' }}>
                       {o.pnl != null ? `${o.pnl >= 0 ? '+' : ''}₹${o.pnl.toLocaleString('en-IN')}` : '—'}
                     </td>
-                    <td><span style={{ fontSize: '10px', color: o.status === 'open' ? 'var(--green)' : 'var(--text-dim)' }}>{o.status}</span></td>
+                    <td><span style={{ fontSize: '10px', fontWeight: 600, color: o.status === 'open' ? '#22DD88' : 'var(--text-dim)' }}>{o.status.toUpperCase()}</span></td>
                   </tr>
                 ))}
               </tbody>
