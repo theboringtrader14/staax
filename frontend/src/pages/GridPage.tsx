@@ -562,10 +562,10 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               animation: st === 'open' ? 'statusPulseGreen 2s ease-in-out infinite' : st === 'algo_active' ? 'statusPulseOrange 2s ease-in-out infinite' : 'none' }}/>
 
                             {/* Card row body */}
-                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'20px 24px' }}>
+                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'16px 20px' }}>
 
                               {/* ── Name + account ── */}
-                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'160px', flexShrink:0 }}>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'120px', flexShrink:0 }}>
                                 <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
                                   style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
                                     cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
@@ -578,7 +578,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               </div>
 
                               {/* ── Strategy + instrument chip ── */}
-                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', flexShrink:0 }}>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'120px', flexShrink:0 }}>
                                 <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
                                   {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
                                 </span>
@@ -606,7 +606,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               </div>
 
                               {/* ── Entry / Exit time ── */}
-                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'80px', flexShrink:0 }}>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'90px', flexShrink:0 }}>
                                   <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                                     <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
                                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
@@ -621,7 +621,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                 </div>
 
                               {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'80px', flexShrink:0, justifyContent:'center', alignSelf:'center' }}
+                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center' }}
                                 onClick={e => e.stopPropagation()}>
                                   <button onClick={() => changeCardMult(algo.id, mult - 1)}
                                     style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
@@ -637,7 +637,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flex:1, minWidth:'200px', justifyContent:'center' }}>
+                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', width:'252px', flexShrink:0, justifyContent:'center' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isActive = algo.recurringDays.includes(day)
                                   return (
