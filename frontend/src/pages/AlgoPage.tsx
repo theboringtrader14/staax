@@ -424,7 +424,7 @@ export default function AlgoPage() {
   const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([])
 
   const [legs, setLegs]             = useState<Leg[]>([mkLeg(1)])
-  const [recurringDays, setRecurringDays] = useState<string[]>(['MON','TUE','WED','THU','FRI'])
+  const [recurringDays, setRecurringDays] = useState<string[]>([])
   const [algoName, setAlgoName]     = useState('')
   const [stratMode, setStratMode]   = useState('intraday')
   const [entryType, setEntryType]   = useState('direct')
@@ -517,9 +517,18 @@ export default function AlgoPage() {
         setMtmUnit(a.mtm_unit || 'amt')
         setMtmSL(a.mtm_sl != null ? String(a.mtm_sl) : '')
         setMtmTP(a.mtm_tp != null ? String(a.mtm_tp) : '')
-        if (Array.isArray(a.recurring_days) && a.recurring_days.length > 0) setRecurringDays(a.recurring_days)
+        setRecurringDays(Array.isArray(a.recurring_days) ? a.recurring_days : [])
         if (a.exit_on_margin_error  != null) setErrorMargin(!!a.exit_on_margin_error)
         if (a.exit_on_entry_failure != null) setErrorEntry(!!a.exit_on_entry_failure)
+        // Load delay settings — infer scope from buy/sell values
+        const buyEntry = a.entry_delay_buy_secs ?? 0
+        const sellEntry = a.entry_delay_sell_secs ?? 0
+        const buyExit = a.exit_delay_buy_secs ?? 0
+        const sellExit = a.exit_delay_sell_secs ?? 0
+        setEntryDelay(String(buyEntry || sellEntry || 0))
+        setEntryDelayScope(buyEntry > 0 && sellEntry === 0 ? 'buy' : buyEntry === 0 && sellEntry > 0 ? 'sell' : 'all')
+        setExitDelay(String(buyExit || sellExit || 0))
+        setExitDelayScope(buyExit > 0 && sellExit === 0 ? 'buy' : buyExit === 0 && sellExit > 0 ? 'sell' : 'all')
         // Map API legs to local Leg format
         const revCode: Record<string, string> = Object.fromEntries(
           Object.entries(INST_CODES).map(([k, v]) => [v, k])
@@ -635,7 +644,8 @@ export default function AlgoPage() {
     return ''
   }
 
-  const buildPayload = () => ({
+  const buildPayload = () => {
+    const payload = ({
     name:                algoName.trim(),
     account_id:          account,
     strategy_mode:       stratMode,
@@ -648,10 +658,10 @@ export default function AlgoPage() {
     mtm_sl:              mtmSL ? parseFloat(mtmSL) : undefined,
     mtm_tp:              mtmTP ? parseFloat(mtmTP) : undefined,
     mtm_unit:            mtmUnit,
-    entry_delay_seconds: parseInt(entryDelay) || 0,
-    entry_delay_scope:   entryDelayScope,
-    exit_delay_seconds:  parseInt(exitDelay) || 0,
-    exit_delay_scope:    exitDelayScope,
+    entry_delay_buy_secs:  entryDelayScope !== 'sell' ? (parseInt(entryDelay) || 0) : 0,
+    entry_delay_sell_secs: entryDelayScope !== 'buy'  ? (parseInt(entryDelay) || 0) : 0,
+    exit_delay_buy_secs:   exitDelayScope  !== 'sell' ? (parseInt(exitDelay)  || 0) : 0,
+    exit_delay_sell_secs:  exitDelayScope  !== 'buy'  ? (parseInt(exitDelay)  || 0) : 0,
     exit_on_margin_error:  !!errorMargin,
     exit_on_entry_failure: !!errorEntry,
     is_live:             !isPractixMode,
@@ -666,15 +676,14 @@ export default function AlgoPage() {
       strike_value:    (l.strikeMode === 'premium' || l.strikeMode === 'straddle') ? parseFloat(l.premiumVal) || undefined : undefined,
       strike_offset:   0,
       lots:            parseInt(l.lots) || 1,
-      opt_type:        l.optType.toLowerCase(),
       // Features
       wt_enabled:  l.active.wt,
       wt_direction: l.vals.wt.direction, wt_value: parseFloat(l.vals.wt.value) || undefined, wt_unit: l.vals.wt.unit,
       sl_type:  l.active.sl ? l.vals.sl.type : undefined,
       sl_value: l.active.sl && !['orb_high','orb_low'].includes(l.vals.sl.type) ? parseFloat(l.vals.sl.value) : undefined,
       tp_type:  l.active.tp ? l.vals.tp.type : undefined,  tp_value: l.active.tp ? parseFloat(l.vals.tp.value) : undefined,
-      tsl_enabled: l.active.tsl, tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
-      ttp_enabled: l.active.ttp, ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
+      tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
+      ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
       reentry_on_sl:    l.active.reentry ? l.vals.reentry.onSl : false,
       reentry_on_tp:    l.active.reentry ? l.vals.reentry.onTp : false,
       reentry_max:      l.active.reentry ? parseInt(l.vals.reentry.max) || 0 : 0,
@@ -683,6 +692,9 @@ export default function AlgoPage() {
       journey_config: buildJourneyConfig(l.journey),
     })),
   })
+    console.log('[AlgoPage] payload →', JSON.stringify(payload, null, 2))
+    return payload
+  }
 
   const buildJourneyConfig = (j?: JourneyChild, depth = 1): any => {
     if (!j || !j.enabled || depth > 3) return undefined
@@ -728,7 +740,18 @@ export default function AlgoPage() {
       setIsDirty(false)
       setTimeout(() => { setSaved(false); navigate('/grid') }, 1200)
     } catch (e: any) {
-      const msg = e?.response?.data?.detail || 'Save failed. Please try again.'
+      const detail = e?.response?.data?.detail
+      console.error('[AlgoPage] save error', e?.response?.status, detail)
+      let msg = 'Save failed. Please try again.'
+      if (Array.isArray(detail)) {
+        // Pydantic validation errors — show each field + message
+        msg = detail.map((d: any) => {
+          const loc = Array.isArray(d.loc) ? d.loc.filter((s: any) => s !== 'body').join(' → ') : ''
+          return loc ? `${loc}: ${d.msg}` : d.msg
+        }).join('\n')
+      } else if (typeof detail === 'string') {
+        msg = detail
+      }
       setSaveError(msg)
     } finally {
       setSaving(false)
