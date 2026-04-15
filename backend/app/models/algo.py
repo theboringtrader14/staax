@@ -186,3 +186,4 @@ class AlgoLeg(Base):
     underlying_token  = Column(Integer, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_archived  = Column(Boolean, default=False)

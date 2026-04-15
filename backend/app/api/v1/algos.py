@@ -35,6 +35,7 @@ UNDERLYING_TOKENS = {
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class LegCreate(BaseModel):
+    id:              Optional[str]  = None
     leg_number:      int
     direction:       str
     instrument:      str
@@ -167,6 +168,7 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "reentry_type":     leg.reentry_type,
         "reentry_ltp_mode": leg.reentry_ltp_mode,
         "journey_config":  leg.journey_config,
+        "is_archived":     leg.is_archived,
     }
 
 
@@ -244,6 +246,40 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
     )
 
 
+def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
+    """Update an existing AlgoLeg row in-place from LegCreate data."""
+    leg.leg_number      = data.leg_number
+    leg.direction       = data.direction
+    leg.instrument      = data.instrument
+    leg.underlying      = data.underlying
+    leg.expiry          = data.expiry
+    leg.strike_type     = data.strike_type
+    leg.strike_offset   = data.strike_offset
+    leg.strike_value    = data.strike_value
+    leg.lots            = data.lots
+    leg.sl_type         = data.sl_type
+    leg.sl_value        = data.sl_value
+    leg.tp_type         = data.tp_type
+    leg.tp_value        = data.tp_value
+    leg.tsl_x           = data.tsl_x
+    leg.tsl_y           = data.tsl_y
+    leg.tsl_unit        = data.tsl_unit
+    leg.ttp_x           = data.ttp_x
+    leg.ttp_y           = data.ttp_y
+    leg.ttp_unit        = data.ttp_unit
+    leg.wt_enabled      = data.wt_enabled
+    leg.wt_direction    = data.wt_direction
+    leg.wt_value        = data.wt_value
+    leg.wt_unit         = data.wt_unit
+    leg.reentry_on_sl   = data.reentry_on_sl
+    leg.reentry_on_tp   = data.reentry_on_tp
+    leg.reentry_max     = data.reentry_max
+    leg.reentry_type    = data.reentry_type
+    leg.reentry_ltp_mode = data.reentry_ltp_mode
+    leg.journey_config  = data.journey_config
+    leg.underlying_token = UNDERLYING_TOKENS.get((data.underlying or "").upper(), 0)
+
+
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 @router.get("/states")
@@ -285,7 +321,7 @@ async def list_algos(
     out = []
     for a, acc in rows:
         legs_res = await db.execute(
-            select(AlgoLeg).where(AlgoLeg.algo_id == a.id).order_by(AlgoLeg.leg_number)
+            select(AlgoLeg).where(AlgoLeg.algo_id == a.id, AlgoLeg.is_archived == False).order_by(AlgoLeg.leg_number)
         )
         out.append(_algo_to_dict(a, legs=legs_res.scalars().all(), account_nickname=f"{acc.nickname} ({acc.broker.capitalize()})"))
     return out
@@ -384,7 +420,7 @@ async def get_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     if not algo:
         raise HTTPException(status_code=404, detail="Algo not found")
     legs_result = await db.execute(
-        select(AlgoLeg).where(AlgoLeg.algo_id == algo_id).order_by(AlgoLeg.leg_number)
+        select(AlgoLeg).where(AlgoLeg.algo_id == algo_id, AlgoLeg.is_archived == False).order_by(AlgoLeg.leg_number)
     )
     return _algo_to_dict(algo, legs_result.scalars().all())
 
@@ -395,51 +431,81 @@ async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = 
     Update algo config. All fields are optional — only provided (non-None) values are applied.
     If legs is provided (even []), existing legs are replaced. If legs is absent, legs are untouched.
     """
-    result = await db.execute(select(Algo).where(Algo.id == algo_id))
-    algo = result.scalar_one_or_none()
-    if not algo:
-        raise HTTPException(status_code=404, detail="Algo not found")
+    logger.info(f"[ALGO-SAVE] PUT /{algo_id} — strategy={body.strategy_mode} entry={body.entry_time} exit={body.exit_time} next_day_exit={body.next_day_exit_time} legs={'yes' if body.legs is not None else 'unchanged'}")
+    try:
+        result = await db.execute(select(Algo).where(Algo.id == algo_id))
+        algo = result.scalar_one_or_none()
+        if not algo:
+            raise HTTPException(status_code=404, detail="Algo not found")
 
-    if body.name                  is not None: algo.name                  = body.name
-    if body.account_id            is not None: algo.account_id            = body.account_id
-    if body.strategy_mode         is not None: algo.strategy_mode         = StrategyMode(body.strategy_mode)
-    if body.entry_type            is not None: algo.entry_type            = EntryType(body.entry_type)
-    if body.order_type            is not None: algo.order_type            = OrderType(body.order_type)
-    if body.entry_time            is not None: algo.entry_time            = body.entry_time
-    if body.exit_time             is not None: algo.exit_time             = body.exit_time
-    if body.orb_start_time        is not None: algo.orb_start_time        = body.orb_start_time
-    if body.orb_end_time          is not None: algo.orb_end_time          = body.orb_end_time
-    if body.next_day_exit_time    is not None: algo.next_day_exit_time    = body.next_day_exit_time
-    if body.dte                   is not None: algo.dte                   = body.dte
-    if body.mtm_sl                is not None: algo.mtm_sl                = body.mtm_sl
-    if body.mtm_tp                is not None: algo.mtm_tp                = body.mtm_tp
-    if body.mtm_unit              is not None: algo.mtm_unit              = body.mtm_unit
-    if body.entry_delay_buy_secs  is not None: algo.entry_delay_buy_secs  = body.entry_delay_buy_secs
-    if body.entry_delay_sell_secs is not None: algo.entry_delay_sell_secs = body.entry_delay_sell_secs
-    if body.exit_delay_buy_secs   is not None: algo.exit_delay_buy_secs   = body.exit_delay_buy_secs
-    if body.exit_delay_sell_secs  is not None: algo.exit_delay_sell_secs  = body.exit_delay_sell_secs
-    if body.exit_on_margin_error  is not None: algo.exit_on_margin_error  = body.exit_on_margin_error
-    if body.exit_on_entry_failure is not None: algo.exit_on_entry_failure = body.exit_on_entry_failure
-    if body.base_lot_multiplier   is not None: algo.base_lot_multiplier   = body.base_lot_multiplier
-    if body.notes                 is not None: algo.notes                 = body.notes
-    if body.is_live               is not None: algo.is_live               = body.is_live
-    if body.recurring_days        is not None: algo.recurring_days        = body.recurring_days
+        if body.name                  is not None: algo.name                  = body.name
+        if body.account_id            is not None: algo.account_id            = body.account_id
+        if body.strategy_mode         is not None: algo.strategy_mode         = StrategyMode(body.strategy_mode)
+        if body.entry_type            is not None: algo.entry_type            = EntryType(body.entry_type)
+        if body.order_type            is not None: algo.order_type            = OrderType(body.order_type)
+        if body.entry_time            is not None: algo.entry_time            = body.entry_time
+        if body.exit_time             is not None: algo.exit_time             = body.exit_time
+        if body.orb_start_time        is not None: algo.orb_start_time        = body.orb_start_time
+        if body.orb_end_time          is not None: algo.orb_end_time          = body.orb_end_time
+        if body.next_day_exit_time    is not None: algo.next_day_exit_time    = body.next_day_exit_time
+        if body.dte                   is not None: algo.dte                   = body.dte
+        if body.mtm_sl                is not None: algo.mtm_sl                = body.mtm_sl
+        if body.mtm_tp                is not None: algo.mtm_tp                = body.mtm_tp
+        if body.mtm_unit              is not None: algo.mtm_unit              = body.mtm_unit
+        if body.entry_delay_buy_secs  is not None: algo.entry_delay_buy_secs  = body.entry_delay_buy_secs
+        if body.entry_delay_sell_secs is not None: algo.entry_delay_sell_secs = body.entry_delay_sell_secs
+        if body.exit_delay_buy_secs   is not None: algo.exit_delay_buy_secs   = body.exit_delay_buy_secs
+        if body.exit_delay_sell_secs  is not None: algo.exit_delay_sell_secs  = body.exit_delay_sell_secs
+        if body.exit_on_margin_error  is not None: algo.exit_on_margin_error  = body.exit_on_margin_error
+        if body.exit_on_entry_failure is not None: algo.exit_on_entry_failure = body.exit_on_entry_failure
+        if body.base_lot_multiplier   is not None: algo.base_lot_multiplier   = body.base_lot_multiplier
+        if body.notes                 is not None: algo.notes                 = body.notes
+        if body.is_live               is not None: algo.is_live               = body.is_live
+        if body.recurring_days        is not None: algo.recurring_days        = body.recurring_days
 
-    # Legs: only replace when the field is explicitly sent in the request
-    if body.legs is not None:
-        await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
-        legs = [_build_leg(algo.id, l) for l in body.legs]
-        for leg in legs:
-            db.add(leg)
-    else:
-        legs_result = await db.execute(
-            select(AlgoLeg).where(AlgoLeg.algo_id == algo_id).order_by(AlgoLeg.leg_number)
-        )
-        legs = legs_result.scalars().all()
+        # Legs: only replace when the field is explicitly sent in the request
+        if body.legs is not None:
+            # Fetch existing active legs for this algo
+            existing_result = await db.execute(
+                select(AlgoLeg).where(AlgoLeg.algo_id == algo_id, AlgoLeg.is_archived == False)
+            )
+            existing_map = {str(l.id): l for l in existing_result.scalars().all()}
 
-    await db.commit()
-    await db.refresh(algo)
-    return _algo_to_dict(algo, legs)
+            seen_ids: set = set()
+            legs = []
+            for leg_data in body.legs:
+                if leg_data.id and leg_data.id in existing_map:
+                    # UPDATE in-place — preserves leg ID so orders.leg_id FK remains valid
+                    leg = existing_map[leg_data.id]
+                    _update_leg_fields(leg, leg_data)
+                    seen_ids.add(leg_data.id)
+                    legs.append(leg)
+                else:
+                    # INSERT new leg
+                    leg = _build_leg(algo.id, leg_data)
+                    db.add(leg)
+                    legs.append(leg)
+
+            # Archive removed legs — never delete, orders.leg_id may reference them
+            for lid, leg in existing_map.items():
+                if lid not in seen_ids:
+                    leg.is_archived = True
+        else:
+            legs_result = await db.execute(
+                select(AlgoLeg).where(AlgoLeg.algo_id == algo_id, AlgoLeg.is_archived == False).order_by(AlgoLeg.leg_number)
+            )
+            legs = legs_result.scalars().all()
+
+        await db.commit()
+        await db.refresh(algo)
+        logger.info(f"[ALGO-SAVE] ✅ saved {algo.name} (strategy={algo.strategy_mode})")
+        return _algo_to_dict(algo, legs)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ALGO-SAVE] ❌ PUT /{algo_id} failed — {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Save failed: {type(e).__name__}: {e}")
 
 
 @router.post("/{algo_id}/deploy-week")

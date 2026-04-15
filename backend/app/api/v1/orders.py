@@ -1583,6 +1583,36 @@ async def retry_entry(
     return {"status": "queued", "algo_name": algo.name, "grid_entry_id": grid_entry_id}
 
 
+# ── Position reconciliation ───────────────────────────────────────────────────
+
+@router.get("/position-check")
+async def position_check(
+    is_practix: Optional[bool] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Stub reconciliation check.
+    Returns total open orders count and a reconciled flag.
+    reconciled=True when total_open==0 (Phase 2 will compare against broker positions).
+    """
+    conditions = [Order.exit_time == None]  # noqa: E711
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
+
+    result = await db.execute(
+        select(Order).where(and_(*conditions))
+    )
+    open_orders = result.scalars().all()
+    total_open = len(open_orders)
+    reconciled = total_open == 0
+    message = "All positions closed" if reconciled else f"{total_open} open position{'s' if total_open != 1 else ''} found"
+    return {
+        "total_open": total_open,
+        "reconciled": reconciled,
+        "message":    message,
+    }
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @router.websocket("/ws/live")

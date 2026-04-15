@@ -130,30 +130,32 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     from datetime import date as _date, datetime as _dt, timezone as _tz, timedelta as _td
     from sqlalchemy import func, select as sa_select
     from app.models.order import Order, OrderStatus
+    from app.models.algo import Algo
 
     today = _date.today()
 
-    # IST midnight as UTC — used to scope active/open counts to today only
+    # IST midnight as UTC — used to scope P&L counts to today only
     _IST = _tz(_td(hours=5, minutes=30))
     today_start_ist = _dt.now(_IST).replace(hour=0, minute=0, second=0, microsecond=0)
     today_start_utc = today_start_ist.astimezone(_tz.utc)
 
-    # ── Active algos: distinct algo_ids with OPEN orders created today (IST) ───
+    # ── Active algos: count algos where is_active=True (not archived) ─────────
+    # This reflects algos that are configured and active, regardless of whether
+    # they have placed orders today (fixes 0 on fresh start).
     active_result = await db.execute(
-        sa_select(func.count(func.distinct(Order.algo_id))).where(
-            Order.status == OrderStatus.OPEN,
-            Order.is_practix == is_practix,
-            Order.created_at >= today_start_utc,
+        sa_select(func.count(Algo.id)).where(
+            Algo.is_active == True,
+            Algo.is_archived == False,
         )
     )
     active_algos = active_result.scalar() or 0
 
-    # ── Open positions: OPEN orders created today (IST) ───────────────────────
+    # ── Open positions: all OPEN orders (no date filter — covers STBT/BTST) ───
+    # Counts all currently open orders regardless of when they were created.
     open_result = await db.execute(
         sa_select(func.count(Order.id)).where(
             Order.status == OrderStatus.OPEN,
             Order.is_practix == is_practix,
-            Order.created_at >= today_start_utc,
         )
     )
     open_positions = open_result.scalar() or 0
