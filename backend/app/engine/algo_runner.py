@@ -610,6 +610,28 @@ class AlgoRunner:
                 # Ensure the underlying index token is subscribed so ticks flow
                 if self._ltp_consumer:
                     self._ltp_consumer.subscribe([wt_underlying_token])
+                # Check if index LTP is already in Redis; if not, wait up to 5s for first tick
+                if self._ltp_consumer:
+                    _wt_ltp = self._ltp_consumer.get_ltp(wt_underlying_token)
+                    if not _wt_ltp or _wt_ltp <= 0:
+                        logger.warning(
+                            f"[W&T] No LTP for {wt_underlying} (token={wt_underlying_token}) in Redis yet "
+                            f"— waiting up to 5s for first tick before W&T monitoring begins"
+                        )
+                        for _wt_wait in range(5):
+                            await asyncio.sleep(1)
+                            _wt_ltp = self._ltp_consumer.get_ltp(wt_underlying_token)
+                            if _wt_ltp and _wt_ltp > 0:
+                                logger.info(
+                                    f"[W&T] LTP for {wt_underlying} available after {_wt_wait + 1}s "
+                                    f"({_wt_ltp:.2f}) — W&T monitoring active"
+                                )
+                                break
+                        else:
+                            logger.warning(
+                                f"[W&T] No LTP for {wt_underlying} after 5s — W&T will capture "
+                                f"reference on first tick. Algo NOT marked as missed."
+                            )
                 logger.info(
                     f"W&T registered for leg {leg.leg_number}: {algo.name} | "
                     f"underlying={wt_underlying} token={wt_underlying_token}"
