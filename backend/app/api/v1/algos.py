@@ -94,8 +94,38 @@ class AlgoCreateRequest(BaseModel):
     legs:                  List[LegCreate] = []
 
 
-class AlgoUpdateRequest(AlgoCreateRequest):
-    pass
+class AlgoUpdateRequest(BaseModel):
+    """
+    All fields optional — supports partial updates.
+    Only provided (non-None) fields overwrite the existing algo.
+    legs=None → keep existing legs unchanged.
+    legs=[]   → delete all legs.
+    """
+    name:                  Optional[str]           = None
+    account_id:            Optional[str]           = None
+    strategy_mode:         Optional[str]           = None   # "intraday"|"btst"|"stbt"|"positional"
+    entry_type:            Optional[str]           = None   # "direct"|"orb"
+    order_type:            Optional[str]           = None   # "market"|"limit"
+    entry_time:            Optional[str]           = None
+    exit_time:             Optional[str]           = None
+    orb_start_time:        Optional[str]           = None
+    orb_end_time:          Optional[str]           = None
+    next_day_exit_time:    Optional[str]           = None
+    dte:                   Optional[int]           = None
+    mtm_sl:                Optional[float]         = None
+    mtm_tp:                Optional[float]         = None
+    mtm_unit:              Optional[str]           = None
+    entry_delay_buy_secs:  Optional[int]           = None
+    entry_delay_sell_secs: Optional[int]           = None
+    exit_delay_buy_secs:   Optional[int]           = None
+    exit_delay_sell_secs:  Optional[int]           = None
+    exit_on_margin_error:  Optional[bool]          = None
+    exit_on_entry_failure: Optional[bool]          = None
+    base_lot_multiplier:   Optional[int]           = None
+    notes:                 Optional[str]           = None
+    is_live:               Optional[bool]          = None
+    recurring_days:        Optional[List[str]]     = None
+    legs:                  Optional[List[LegCreate]] = None
 
 
 class SquareOffRequest(BaseModel):
@@ -361,39 +391,51 @@ async def get_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{algo_id}")
 async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = Depends(get_db)):
-    """Update algo config and replace all legs."""
+    """
+    Update algo config. All fields are optional — only provided (non-None) values are applied.
+    If legs is provided (even []), existing legs are replaced. If legs is absent, legs are untouched.
+    """
     result = await db.execute(select(Algo).where(Algo.id == algo_id))
     algo = result.scalar_one_or_none()
     if not algo:
         raise HTTPException(status_code=404, detail="Algo not found")
 
-    algo.name = body.name
-    algo.account_id = body.account_id
-    algo.strategy_mode = StrategyMode(body.strategy_mode)
-    algo.entry_type = EntryType(body.entry_type)
-    algo.order_type = OrderType(body.order_type)
-    algo.entry_time = body.entry_time
-    algo.exit_time = body.exit_time
-    algo.orb_start_time = body.orb_start_time
-    algo.orb_end_time = body.orb_end_time
-    algo.next_day_exit_time = body.next_day_exit_time
-    algo.dte = body.dte
-    algo.mtm_sl = body.mtm_sl
-    algo.mtm_tp = body.mtm_tp
-    algo.mtm_unit = body.mtm_unit
-    algo.entry_delay_buy_secs = body.entry_delay_buy_secs
-    algo.entry_delay_sell_secs = body.entry_delay_sell_secs
-    algo.exit_delay_buy_secs = body.exit_delay_buy_secs
-    algo.exit_delay_sell_secs = body.exit_delay_sell_secs
-    algo.exit_on_margin_error = body.exit_on_margin_error
-    algo.exit_on_entry_failure = body.exit_on_entry_failure
-    algo.base_lot_multiplier = body.base_lot_multiplier
-    algo.notes = body.notes
+    if body.name                  is not None: algo.name                  = body.name
+    if body.account_id            is not None: algo.account_id            = body.account_id
+    if body.strategy_mode         is not None: algo.strategy_mode         = StrategyMode(body.strategy_mode)
+    if body.entry_type            is not None: algo.entry_type            = EntryType(body.entry_type)
+    if body.order_type            is not None: algo.order_type            = OrderType(body.order_type)
+    if body.entry_time            is not None: algo.entry_time            = body.entry_time
+    if body.exit_time             is not None: algo.exit_time             = body.exit_time
+    if body.orb_start_time        is not None: algo.orb_start_time        = body.orb_start_time
+    if body.orb_end_time          is not None: algo.orb_end_time          = body.orb_end_time
+    if body.next_day_exit_time    is not None: algo.next_day_exit_time    = body.next_day_exit_time
+    if body.dte                   is not None: algo.dte                   = body.dte
+    if body.mtm_sl                is not None: algo.mtm_sl                = body.mtm_sl
+    if body.mtm_tp                is not None: algo.mtm_tp                = body.mtm_tp
+    if body.mtm_unit              is not None: algo.mtm_unit              = body.mtm_unit
+    if body.entry_delay_buy_secs  is not None: algo.entry_delay_buy_secs  = body.entry_delay_buy_secs
+    if body.entry_delay_sell_secs is not None: algo.entry_delay_sell_secs = body.entry_delay_sell_secs
+    if body.exit_delay_buy_secs   is not None: algo.exit_delay_buy_secs   = body.exit_delay_buy_secs
+    if body.exit_delay_sell_secs  is not None: algo.exit_delay_sell_secs  = body.exit_delay_sell_secs
+    if body.exit_on_margin_error  is not None: algo.exit_on_margin_error  = body.exit_on_margin_error
+    if body.exit_on_entry_failure is not None: algo.exit_on_entry_failure = body.exit_on_entry_failure
+    if body.base_lot_multiplier   is not None: algo.base_lot_multiplier   = body.base_lot_multiplier
+    if body.notes                 is not None: algo.notes                 = body.notes
+    if body.is_live               is not None: algo.is_live               = body.is_live
+    if body.recurring_days        is not None: algo.recurring_days        = body.recurring_days
 
-    await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
-    legs = [_build_leg(algo.id, l) for l in body.legs]
-    for leg in legs:
-        db.add(leg)
+    # Legs: only replace when the field is explicitly sent in the request
+    if body.legs is not None:
+        await db.execute(delete(AlgoLeg).where(AlgoLeg.algo_id == algo_id))
+        legs = [_build_leg(algo.id, l) for l in body.legs]
+        for leg in legs:
+            db.add(leg)
+    else:
+        legs_result = await db.execute(
+            select(AlgoLeg).where(AlgoLeg.algo_id == algo_id).order_by(AlgoLeg.leg_number)
+        )
+        legs = legs_result.scalars().all()
 
     await db.commit()
     await db.refresh(algo)

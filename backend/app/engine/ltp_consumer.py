@@ -69,6 +69,7 @@ class AngelOneTickerAdapter:
         self._last_tick_at: Optional[str]   = None    # ISO timestamp of last tick received
         self._corr_id                       = "staax_ltp"
         self._mcx_tokens: Set[str]          = set()   # tokens that need exchangeType=5
+        self._bfo_tokens: Set[str]          = set()   # tokens that need exchangeType=4 (BFO — BSE F&O)
         self._reconnect_count               = 0
         self._last_reconnect_at: Optional[str] = None
 
@@ -102,7 +103,10 @@ class AngelOneTickerAdapter:
 
         self._loop       = loop
         self._on_tick_cb = on_tick
-        self._subscribed = list(tokens)
+        # Merge with tokens pre-queued via subscribe() before start() was called
+        for t in tokens:
+            if t not in self._subscribed:
+                self._subscribed.append(t)
 
         ft_preview = (self.feed_token[:10] + "...") if self.feed_token and len(self.feed_token) > 10 else (self.feed_token or "EMPTY")
         logger.info(
@@ -140,41 +144,55 @@ class AngelOneTickerAdapter:
         self._mcx_tokens.update(tokens)
         logger.info(f"[AO] Registered {len(tokens)} MCX tokens: {tokens}")
 
+    def register_bfo_tokens(self, tokens: List[str]):
+        """Register tokens that belong to BSE F&O (exchangeType=3). Call before subscribing."""
+        self._bfo_tokens.update(tokens)
+        logger.info(f"[AO] Registered {len(tokens)} BFO tokens: {tokens}")
+
     def subscribe(self, tokens: List[str]):
         """Subscribe additional string tokens while running."""
         new = [t for t in tokens if t not in self._subscribed]
         if not new:
             return
         self._subscribed.extend(new)
-        if self._running and self._sws:
+        # Use _connected (set in _on_open) not _running (set after connect() returns,
+        # which is never while the WebSocket is alive — connect() blocks forever).
+        if self._connected and self._sws:
             try:
                 self._sws.subscribe(self._corr_id, 1, self._build_token_list(new))
-                logger.info(f"[AO] Subscribed {len(new)} new tokens")
+                logger.info(f"[AO] Subscribed {len(new)} new tokens via live WebSocket: {new}")
             except Exception as e:
                 logger.warning(f"[AO] Subscribe failed: {e}")
+        else:
+            logger.info(f"[AO] Queued {len(new)} tokens (not connected yet — will subscribe on _on_open): {new}")
 
     def _build_token_list(self, tokens: List[str]) -> List[dict]:
         """
         Build Angel One subscription payload grouped by exchange type.
-          exchangeType=1 → NSE index tokens
+          exchangeType=1 → NSE index tokens (NSE cash)
+          exchangeType=2 → NFO (NSE F&O)
+          exchangeType=4 → BFO (BSE F&O — SENSEX/BANKEX options)
           exchangeType=5 → MCX tokens (GOLDM, SILVERMIC, etc.)
-          exchangeType=2 → NFO (everything else)
         """
         index_set  = set(self.INDEX_TOKENS.values())
         nse_tokens = [t for t in tokens if t in index_set]
         mcx_tokens = [t for t in tokens if t not in index_set and t in self._mcx_tokens]
-        nfo_tokens = [t for t in tokens if t not in index_set and t not in self._mcx_tokens]
+        bfo_tokens = [t for t in tokens if t not in index_set and t not in self._mcx_tokens and t in self._bfo_tokens]
+        nfo_tokens = [t for t in tokens if t not in index_set and t not in self._mcx_tokens and t not in self._bfo_tokens]
         token_list = []
         if nse_tokens:
             token_list.append({"exchangeType": 1, "tokens": nse_tokens})
         if mcx_tokens:
             token_list.append({"exchangeType": 5, "tokens": mcx_tokens})
+        if bfo_tokens:
+            token_list.append({"exchangeType": 4, "tokens": bfo_tokens})
         if nfo_tokens:
             token_list.append({"exchangeType": 2, "tokens": nfo_tokens})
         return token_list
 
     def _on_open(self, ws):
         self._connected = True
+        self._running   = True   # connect() blocks forever so the line after it is dead code; set here instead
         logger.info("[AO-DEBUG] _on_open fired — SmartStream connected ✅")
         if self._subscribed and self._sws:
             try:
@@ -299,9 +317,11 @@ class AngelOneTickerAdapter:
             self._sws.on_data  = self._on_data
             self._sws.on_error = self._on_error
             self._sws.on_close = self._on_close
-            self._sws.connect()
-            self._running = True
-            logger.info("[AO] ✅ SmartStream reconnected")
+            # connect() blocks forever — must run in executor to avoid freezing the event loop
+            loop = self._loop or asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._sws.connect)
+            # _running is set to True in _on_open when the WebSocket actually opens
+            logger.info("[AO] ✅ SmartStream reconnect initiated (waiting for _on_open)")
         except Exception as e:
             logger.error(f"[AO] Reconnect failed: {e}")
 
@@ -313,10 +333,13 @@ class LTPConsumer:
         self.redis     = redis_client
         self._callbacks: List[Callable]       = []
         self._subscribed_tokens: List[int]    = []
+        self._bfo_token_set: Set[int]         = set()
         self._angel_adapter: Optional[AngelOneTickerAdapter] = None
         self._ws_manager                      = None   # injected via set_ws_manager()
         self._running  = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self.last_tick_time: Optional[float]  = None   # monotonic time of last tick — for BrokerReconnectManager
+        self._started_at: Optional[float]     = None   # monotonic time feed was started
 
     # ── Broker adapter injection ───────────────────────────────────────────────
 
@@ -328,6 +351,15 @@ class LTPConsumer:
     def set_angel_adapter(self, adapter: AngelOneTickerAdapter):
         """Attach Angel One SmartStream adapter. Called from services.py after AO login."""
         self._angel_adapter = adapter
+        # Push all tokens already tracked by this consumer to the new adapter.
+        # This handles the case where subscriptions were attempted before the adapter
+        # existed (e.g. tokens added during a period when adapter was None after restart).
+        if self._subscribed_tokens:
+            adapter.subscribe([str(t) for t in self._subscribed_tokens])
+            logger.info(f"[LTP] Replayed {len(self._subscribed_tokens)} existing tokens to new adapter")
+        if self._bfo_token_set:
+            adapter.register_bfo_tokens([str(t) for t in self._bfo_token_set])
+            logger.info(f"[LTP] Replayed {len(self._bfo_token_set)} BFO tokens to new adapter")
         logger.info("[LTP] Angel One adapter registered")
 
     def set_ws_manager(self, manager):
@@ -346,6 +378,12 @@ class LTPConsumer:
         logger.info(f"LTP callback registered: {callback.__name__}")
 
     # ── Subscription ──────────────────────────────────────────────────────────
+
+    def register_bfo_tokens(self, tokens: List[int]):
+        """Mark tokens as BFO (BSE F&O, exchangeType=3). Call before subscribe()."""
+        self._bfo_token_set.update(tokens)
+        if self._angel_adapter:
+            self._angel_adapter.register_bfo_tokens([str(t) for t in tokens])
 
     def subscribe(self, tokens: List[int]):
         """Subscribe to instruments. Safe to call while running. Propagates to both adapters."""
@@ -371,7 +409,9 @@ class LTPConsumer:
 
     def start(self, tokens: List[int]):
         """Start WebSocket(s). KiteTicker runs in a background thread (sync API)."""
+        import time as _time
         self._subscribed_tokens = tokens
+        self._started_at = _time.monotonic()
         self._loop = asyncio.get_event_loop()
 
         if self.ticker:
@@ -436,6 +476,8 @@ class LTPConsumer:
 
     async def _process_ticks(self, ticks: list):
         """Write to Redis + fire all callbacks + broadcast via WebSocket."""
+        import time as _time
+        self.last_tick_time = _time.monotonic()
         pipe = self.redis.pipeline()
         for tick in ticks:
             pipe.setex(

@@ -885,12 +885,12 @@ async def _get_ltp_with_fallback(
       2. Angel One REST ltpData (fallback for illiquid tokens with no tick stream)
       3. None / "unavailable" if both miss
     """
-    # 1. Redis cache (populated by SmartStream)
+    # 1. Redis cache (populated by SmartStream ticks — always preferred)
     if ltp_cache and token:
         try:
             redis_val = await ltp_cache.get(token)
             if redis_val is not None:
-                return float(redis_val), "live"
+                return float(redis_val), "smartstream"
         except Exception as e:
             logger.warning(f"[orders/ltp] Redis get failed for token {token}: {e}")
 
@@ -908,6 +908,69 @@ async def _get_ltp_with_fallback(
             logger.warning(f"[orders/ltp] REST LTP fallback failed for {symbol} (token={token}): {e}")
 
     return None, "unavailable"
+
+
+@router.post("/subscribe-tokens")
+async def subscribe_open_tokens(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Manually subscribe all open order instrument tokens to SmartStream.
+    Call this after start-market-feed to ensure open positions receive ticks.
+    """
+    result = await db.execute(select(Order).where(Order.status == OrderStatus.OPEN))
+    open_orders = result.scalars().all()
+
+    ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+    if not ltp_consumer:
+        raise HTTPException(status_code=503, detail="ltp_consumer not initialised")
+
+    adapter = getattr(ltp_consumer, "_angel_adapter", None)
+    if not adapter:
+        raise HTTPException(status_code=503, detail="SmartStream adapter not set — call start-market-feed first")
+
+    tokens = [int(o.instrument_token) for o in open_orders if o.instrument_token]
+    if not tokens:
+        return {"subscribed": 0, "tokens": [], "detail": "No open orders"}
+
+    # ltp_consumer.subscribe() dedupes against _subscribed_tokens — tokens already tracked
+    # by the consumer but never pushed to a fresh adapter won't be re-sent. Force-push
+    # directly to the adapter to bypass that dedup.
+    token_strs = [str(t) for t in tokens]
+    connected = getattr(adapter, "_connected", False)
+
+    # Register BFO tokens FIRST so _build_token_list uses exchangeType=3 when subscribe() fires
+    _bfo_toks = [int(o.instrument_token) for o in open_orders if o.instrument_token and (o.exchange or '').upper() in ('BFO', 'BSE') or (o.symbol or '').upper().startswith(('SENSEX', 'BANKEX'))]
+    if _bfo_toks:
+        ltp_consumer.register_bfo_tokens(_bfo_toks)
+
+    if connected:
+        # Clear the adapter's internal set so all tokens are treated as new
+        adapter._subscribed = [t for t in getattr(adapter, "_subscribed", []) if t not in token_strs]
+        adapter.subscribe(token_strs)
+        pushed = "live WebSocket"
+    else:
+        # Not connected yet — queue them; _on_open will subscribe
+        for t in token_strs:
+            if t not in adapter._subscribed:
+                adapter._subscribed.append(t)
+        pushed = "queued for _on_open"
+
+    # Also ensure LTPConsumer tracks them
+    ltp_consumer.subscribe(tokens)
+
+    after_adapter = getattr(adapter, "_subscribed", [])
+    matched = [t for t in after_adapter if t in token_strs]
+    logger.info(f"[subscribe-tokens] {len(tokens)} tokens → adapter ({pushed}), {len(matched)} confirmed in adapter._subscribed")
+
+    return {
+        "subscribed": len(tokens),
+        "tokens": tokens,
+        "adapter_connected": connected,
+        "push_method": pushed,
+        "tokens_in_adapter": len(matched),
+    }
 
 
 @router.get("/ltp")
@@ -931,6 +994,43 @@ async def get_orders_ltp(
 
     ltp_cache = getattr(request.app.state, "ltp_cache", None)
 
+    # Ensure open order tokens are subscribed to SmartStream so Redis stays warm.
+    # This is a no-op if already subscribed; safe to call on every poll.
+    ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+    _tokens: list = []
+    if ltp_consumer and open_orders:
+        _tokens = [int(o.instrument_token) for o in open_orders if o.instrument_token]
+        # Register BFO tokens FIRST so _build_token_list uses exchangeType=3 when subscribe() fires
+        _bfo_tokens = [int(o.instrument_token) for o in open_orders if o.instrument_token and (o.exchange or '').upper() in ('BFO', 'BSE') or (o.symbol or '').upper().startswith(('SENSEX', 'BANKEX'))]
+        if _bfo_tokens:
+            ltp_consumer.register_bfo_tokens(_bfo_tokens)
+        if _tokens:
+            ltp_consumer.subscribe(_tokens)
+
+    # If SmartStream adapter is not set (e.g. after backend restart without calling
+    # start-market-feed), attempt to auto-start the market feed — once every 30s.
+    if ltp_consumer and not getattr(ltp_consumer, '_angel_adapter', None):
+        import time as _time
+        logger.warning("[LTP] SmartStream adapter not set — cannot subscribe tokens")
+        _now  = _time.monotonic()
+        _last = getattr(request.app.state, '_feed_start_last_attempt', 0.0)
+        if _now - _last > 30.0:
+            request.app.state._feed_start_last_attempt = _now
+            logger.info("[LTP] Attempting auto-start of market feed...")
+            try:
+                from app.api.v1.system import start_market_feed as _smf
+                await _smf(request=request, db=db)
+                # Re-register BFO tokens on fresh adapter
+                _bfo_restart = [int(o.instrument_token) for o in open_orders if o.instrument_token and (o.exchange or '').upper() in ('BFO', 'BSE') or (o.symbol or '').upper().startswith(('SENSEX', 'BANKEX'))]
+                if _bfo_restart:
+                    ltp_consumer.register_bfo_tokens(_bfo_restart)
+                # Re-subscribe open order tokens now that adapter is attached
+                if _tokens:
+                    ltp_consumer.subscribe(_tokens)
+                logger.info("[LTP] ✅ Market feed auto-started successfully")
+            except Exception as _mf_err:
+                logger.warning(f"[LTP] Auto-start market feed failed: {_mf_err}")
+
     # Resolve any logged-in Angel One broker instance from app state
     angel_broker = None
     for _key in ("angelone_karthik", "angelone_wife", "angelone_mom"):
@@ -939,17 +1039,29 @@ async def get_orders_ltp(
             angel_broker = _b
             break
 
-    ltp_map: dict = {}
-    for order in open_orders:
-        oid = str(order.id)
+    def _effective_exchange(order) -> str:
+        """SENSEX/BANKEX options trade on BFO even if DB stores 'NFO'."""
+        sym = (order.symbol or '').upper()
+        if sym.startswith(('SENSEX', 'BANKEX')):
+            return 'BFO'
+        return order.exchange or 'NFO'
 
-        live_ltp, source = await _get_ltp_with_fallback(
+    # Fetch all LTPs concurrently — avoids sequential 15s REST timeouts
+    import asyncio as _asyncio
+    ltp_results = await _asyncio.gather(*[
+        _get_ltp_with_fallback(
             token=order.instrument_token,
-            exchange=order.exchange,
+            exchange=_effective_exchange(order),
             symbol=order.symbol,
             ltp_cache=ltp_cache,
             angel_broker=angel_broker,
         )
+        for order in open_orders
+    ])
+
+    ltp_map: dict = {}
+    for order, (live_ltp, source) in zip(open_orders, ltp_results):
+        oid = str(order.id)
 
         pnl: Optional[float] = None
         if live_ltp is not None and order.fill_price and order.quantity:

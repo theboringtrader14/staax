@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.models.order import Order
 from app.models.algo import Algo
-from app.api.v1.auth import require_admin
+
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ def _win_loss_streaks(daily_pnls: List[float]):
 async def get_advanced_metrics(
     algo_id: Optional[str] = Query(None, description="Filter by algo UUID (optional)"),
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(require_admin),
+    
 ):
     """
     Returns advanced portfolio metrics:

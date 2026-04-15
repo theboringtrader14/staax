@@ -254,6 +254,18 @@ async def activate(db, broker_registry, websocket_manager=None, account_ids: lis
         _state.error = "; ".join(errors)
         logger.error(f"[KILL SWITCH] Errors during activation: {_state.error}")
 
+    # System Log — kill switch activation visible in UI event feed
+    try:
+        from app.engine import event_logger as _ev_ks
+        await _ev_ks.error(
+            f"⚠️ KILL SWITCH ACTIVATED — {total_squared} position(s) squared off, "
+            f"{total_cancelled} order(s) cancelled"
+            + (f" | errors: {_state.error}" if errors else ""),
+            source="kill_switch",
+        )
+    except Exception as _log_err:
+        logger.warning(f"[KILL SWITCH] event_logger call failed: {_log_err}")
+
     if websocket_manager:
         try:
             await websocket_manager.broadcast({

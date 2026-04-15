@@ -381,6 +381,13 @@ class AngelOneBroker(BaseBroker):
         token: Angel One instrument token (e.g. "99926000" for NIFTY 50)
         """
         client = self._get_client()
+        # SDK hardcodes 7s read timeout — override to 15s so slow market-hours
+        # responses don't abort before Angel One replies
+        try:
+            if hasattr(client, 'timeout'):
+                client.timeout = 15
+        except Exception:
+            pass
         loop = asyncio.get_event_loop()
 
         try:

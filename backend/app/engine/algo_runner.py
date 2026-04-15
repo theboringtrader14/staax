@@ -1122,6 +1122,45 @@ class AlgoRunner:
 
                 await self._close_order(db, order, ltp, reason)
 
+                # ── System Log: per-order exit event ──────────────────────────
+                try:
+                    _sym  = order.symbol or ""
+                    _pnl  = float(order.pnl or 0)
+                    _algo_name = getattr(algo, "name", "") or ""
+                    _sign = "+" if _pnl >= 0 else ""
+                    if reason in ("sl", "overnight_sl"):
+                        await _ev.error(
+                            f"{_algo_name} · {_sym} SL HIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            algo_name=_algo_name, source="engine",
+                        )
+                    elif reason == "tp":
+                        await _ev.success(
+                            f"{_algo_name} · {_sym} TP HIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            algo_name=_algo_name, source="engine",
+                        )
+                    elif reason == "tsl":
+                        await _ev.info(
+                            f"{_algo_name} · {_sym} TSL EXIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            algo_name=_algo_name, source="engine",
+                        )
+                    elif reason in ("auto_sq", "all_legs_closed", "btst_exit", "stbt_exit"):
+                        await _ev.info(
+                            f"{_algo_name} · {_sym} AUTO SQ @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            algo_name=_algo_name, source="engine",
+                        )
+                    elif reason in ("terminate", "sq"):
+                        await _ev.info(
+                            f"{_algo_name} · {_sym} MANUAL SQ @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            algo_name=_algo_name, source="engine",
+                        )
+                    elif reason in ("global_sl",):
+                        await _ev.error(
+                            f"{_algo_name} · {_sym} GLOBAL SL EXIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            algo_name=_algo_name, source="engine",
+                        )
+                except Exception as _log_err:
+                    logger.warning(f"[ev] exit log failed: {_log_err}")
+
             except Exception as e:
                 logger.error(f"Error closing order {order.id}: {e}")
 
@@ -1506,6 +1545,30 @@ class AlgoRunner:
                         grid_entry.status      = GridStatus.ALGO_CLOSED
                         await db.commit()
                         logger.info(f"✅ All legs closed — AlgoState closed: {grid_entry_id}")
+
+                        # System Log: algo fully closed with total P&L
+                        try:
+                            closed_result = await db.execute(
+                                select(Order).where(
+                                    Order.grid_entry_id == grid_entry_id,
+                                    Order.status == OrderStatus.CLOSED,
+                                )
+                            )
+                            closed_orders = closed_result.scalars().all()
+                            _total_pnl = sum(float(o.pnl or 0) for o in closed_orders)
+                            _algo_result = await db.execute(
+                                select(Algo).where(Algo.id == algo_state.algo_id)
+                            )
+                            _algo = _algo_result.scalar_one_or_none()
+                            _algo_name = getattr(_algo, "name", str(algo_state.algo_id))
+                            _sign = "+" if _total_pnl >= 0 else ""
+                            await _ev.success(
+                                f"{_algo_name} · ALL LEGS CLOSED | Total P&L {_sign}₹{_total_pnl:,.2f}",
+                                algo_name=_algo_name, source="engine",
+                            )
+                        except Exception as _log_err:
+                            logger.warning(f"[ev] all-legs-closed log failed: {_log_err}")
+
                         # Clean up MTM tracking to prevent memory leak over long uptime
                         if self._mtm_monitor:
                             self._mtm_monitor.deregister_algo(str(algo_state.algo_id))

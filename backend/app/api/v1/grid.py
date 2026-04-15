@@ -180,9 +180,9 @@ async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = 
     await db.commit()
     await db.refresh(entry)
 
-    # ── Immediate activation if dragged to today after 09:15 IST ──────────────
-    from zoneinfo import ZoneInfo
-    IST = ZoneInfo("Asia/Kolkata")
+    # ── Immediate activation if deployed today after 09:15 IST ───────────────
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
     now_ist = datetime.now(IST)
     today_ist = now_ist.date()
     market_open = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
@@ -190,50 +190,85 @@ async def deploy_algo(request: Request, body: DeployRequest, db: AsyncSession = 
     if trading_date == today_ist and now_ist >= market_open:
         # Parse algo entry time
         try:
-            entry_h, entry_m, entry_s = map(int, (algo.entry_time or "09:15:00").split(":"))
-            entry_ist = now_ist.replace(hour=entry_h, minute=entry_m, second=entry_s, microsecond=0)
+            _ep = (algo.entry_time or "09:15").split(":")
+            entry_ist = now_ist.replace(hour=int(_ep[0]), minute=int(_ep[1]), second=int(_ep[2]) if len(_ep) > 2 else 0, microsecond=0)
         except Exception:
             entry_ist = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
 
-        if now_ist < entry_ist:
-            # Entry time not yet reached — activate immediately so runner can pick it up
-            from app.models.algo_state import AlgoState, AlgoRunStatus
-            import uuid as _uuid
+        # Parse algo exit time to determine the upper bound for activation
+        try:
+            _xp = (algo.exit_time or "15:30").split(":")
+            exit_ist = now_ist.replace(hour=int(_xp[0]), minute=int(_xp[1]), second=int(_xp[2]) if len(_xp) > 2 else 0, microsecond=0)
+        except Exception:
+            exit_ist = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+
+        if now_ist < exit_ist:
+            # Still within the trading window — activate the entry
             existing_state = await db.execute(
-                select(AlgoState).where(
-                    AlgoState.grid_entry_id == entry.id
-                )
+                select(AlgoState).where(AlgoState.grid_entry_id == entry.id)
             )
             if not existing_state.scalar_one_or_none():
                 algo_state = AlgoState(
-                    id=_uuid.uuid4(),
+                    id=uuid_lib.uuid4(),
                     algo_id=algo.id,
                     grid_entry_id=entry.id,
                     account_id=algo.account_id,
                     trading_date=str(trading_date),
                     status=AlgoRunStatus.WAITING,
                     is_practix=body.is_practix,
+                    activated_at=now_ist,
                 )
                 db.add(algo_state)
                 entry.status = GridStatus.ALGO_ACTIVE
                 await db.commit()
-                import logging
-                logging.getLogger(__name__).info(
-                    f"[GRID] Immediate activation: {algo.name} for {trading_date} "
-                    f"(entry={algo.entry_time}, now={now_ist.strftime('%H:%M:%S')})"
-                )
-                # Schedule the entry time job immediately
-                scheduler = getattr(request.app.state, "scheduler", None)
-                if scheduler:
-                    scheduler.schedule_algo_jobs(str(entry.id), algo, trading_date)
-                    logging.getLogger(__name__).info(
-                        f"[GRID] Scheduled entry job for {algo.name} @ {algo.entry_time}"
+
+                if now_ist < entry_ist:
+                    # Entry time not yet reached — schedule the per-algo jobs so the
+                    # entry fires at the configured entry_time
+                    _log.info(
+                        f"[GRID] Mid-day activation (pre-entry): {algo.name} for {trading_date} "
+                        f"(entry={algo.entry_time}, now={now_ist.strftime('%H:%M:%S')})"
                     )
+                    scheduler = getattr(request.app.state, "scheduler", None)
+                    if scheduler:
+                        scheduler.schedule_algo_jobs(str(entry.id), algo, trading_date)
+                        _log.info(
+                            f"[GRID] Scheduled entry/exit jobs for {algo.name} @ "
+                            f"entry={algo.entry_time}, exit={algo.exit_time}"
+                        )
+                    else:
+                        _log.warning(
+                            f"[GRID] Scheduler not available — entry job NOT scheduled for {algo.name}"
+                        )
+                else:
+                    # Entry time already passed but still before exit — fire entry immediately
+                    _log.info(
+                        f"[GRID] Mid-day activation (post-entry): {algo.name} for {trading_date} "
+                        f"(entry={algo.entry_time}, now={now_ist.strftime('%H:%M:%S')}) — "
+                        f"calling algo_runner.enter() immediately"
+                    )
+                    scheduler = getattr(request.app.state, "scheduler", None)
+                    if scheduler:
+                        # Schedule the exit job so the algo is squared off at exit_time
+                        scheduler.schedule_algo_jobs(str(entry.id), algo, trading_date)
+                        _log.info(
+                            f"[GRID] Scheduled exit job for {algo.name} @ exit={algo.exit_time}"
+                        )
+                    algo_runner = getattr(request.app.state, "algo_runner", None)
+                    if algo_runner:
+                        import asyncio as _asyncio
+                        _asyncio.ensure_future(algo_runner.enter(str(entry.id)))
+                        _log.info(
+                            f"[GRID] algo_runner.enter() queued for {algo.name} ({entry.id})"
+                        )
+                    else:
+                        _log.warning(
+                            f"[GRID] algo_runner not available — entry NOT fired for {algo.name}"
+                        )
         else:
-            # Entry time already passed — mark as no_trade
-            import logging
-            logging.getLogger(__name__).warning(
-                f"[GRID] Entry time {algo.entry_time} already passed for {algo.name} — no_trade"
+            # Past exit time — no activation possible today
+            _log.warning(
+                f"[GRID] Exit time {algo.exit_time} already passed for {algo.name} — no_trade"
             )
 
     result_dict = _entry_to_dict(entry)
