@@ -36,6 +36,8 @@ interface AlgoGroup {
   isLive?: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
   gridEntryId?: string; entryType?: string; orbEndTime?: string | null
+  orbHigh?: number | null
+  orbLow?: number | null
 }
 interface WaitingLeg {
   leg_number: number; direction: string; instrument: string
@@ -139,9 +141,12 @@ function formatSL(sl_value: number | null, sl_type?: string): string {
 }
 
 // ── LegRow ───────────────────────────────────────────────────────────────────
-function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
+function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHigh, orbLow, isOrbAlgo }: {
   leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
   onEditExit?: (orderId: string, price: number) => void
+  orbHigh?: number | null
+  orbLow?: number | null
+  isOrbAlgo?: boolean
 }) {
   const st  = STATUS_STYLE[leg.status] ?? STATUS_STYLE['pending']
   const ltp = liveLtp ?? leg.ltp
@@ -200,6 +205,14 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
             <span style={{ color: 'var(--text-dim)' }}>→</span>
             <span style={{ color: '#F59E0B', fontWeight: 600 }}>TRIG {wtTrigger.toFixed(0)}</span>
           </div>
+        ) : isOrbAlgo && leg.status === 'waiting' && orbHigh && orbLow ? (
+          <div style={{ fontSize: '10px', textAlign: 'center' }}>
+            <div style={{ color: '#22DD88', fontWeight: 600 }}>H: {orbHigh.toFixed(0)}</div>
+            <div style={{ color: '#FF4444', fontWeight: 600 }}>L: {orbLow.toFixed(0)}</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: '9px' }}>Range: {(orbHigh - orbLow).toFixed(0)}pts</div>
+          </div>
+        ) : isOrbAlgo && leg.status === 'waiting' ? (
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'center' }}>ORB window...</div>
         ) : (
           <>
             {leg.fillPrice != null
@@ -207,6 +220,9 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit }: {
               : <div style={{ color: 'var(--text-dim)' }}>Fill: —</div>}
             {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice} · {leg.entryCondition}</div>}
             {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
+            {isOrbAlgo && orbHigh && orbLow && leg.status === 'open' && (
+              <div style={{ color: 'var(--text-dim)', fontSize: '9px' }}>ORB H:{orbHigh.toFixed(0)} L:{orbLow.toFixed(0)}</div>
+            )}
           </>
         )}
       </td>
@@ -311,6 +327,8 @@ function mapGroup(g: any): AlgoGroup {
     gridEntryId:  g.grid_entry_id || undefined,
     entryType:    g.entry_type || undefined,
     orbEndTime:   g.orb_end_time ?? null,
+    orbHigh:      g.orb_high ?? null,
+    orbLow:       g.orb_low  ?? null,
     legs: (g.orders || []).map((o: any): Leg => ({
       id:              o.id,
       journeyLevel:    o.journey_level || '1',
@@ -1478,6 +1496,9 @@ export default function OrdersPage() {
                                       hasLivePoll={isLive}
                                       livePnl={leg.status === 'open' ? pollEntry?.pnl : undefined}
                                       onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
+                                      orbHigh={group.orbHigh}
+                                      orbLow={group.orbLow}
+                                      isOrbAlgo={group.entryType === 'orb'}
                                     />
                                   )
                                 })}

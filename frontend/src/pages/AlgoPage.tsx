@@ -35,11 +35,19 @@ interface LegVals {
     ltpMode: string;   // "ltp" | "candle_close"
     onSl: boolean;
     onTp: boolean;
-    max: string;       // string so input works, parsed to int on submit
+    maxSl: string;     // string so input works, parsed to int on submit
+    maxTp: string;     // string so input works, parsed to int on submit
   };
   tp:  { type: string; value: string }
   tsl: { x: string; y: string; unit: string }
   ttp: { x: string; y: string; unit: string }
+  orb: {
+    entryAt:     string;   // "high" | "low"
+    slType:      string;   // orb_sl_type
+    tpType:      string;   // orb_tp_type
+    bufferValue: string;   // string for input
+    bufferUnit:  string;   // "pts" | "pct"
+  }
 }
 interface JourneyChild {
   enabled: boolean
@@ -78,10 +86,11 @@ const mkLeg = (n: number): Leg => ({
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
   active: { wt: false, sl: false, re: false, reentry: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(),
   vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
-    reentry: { type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, max: '1' },
-    tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' } },
+    reentry: { type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, maxSl: '1', maxTp: '1' },
+    tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' },
+    orb: { entryAt: 'high', slType: 'orb_low', tpType: 'orb_range', bufferValue: '', bufferUnit: 'pts' } },
 })
-const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, reentry: { ...l.vals.reentry }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
+const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, reentry: { ...l.vals.reentry }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp }, orb: { ...l.vals.orb } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
 
 function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void; entryType: string }) {
   const active = FEATURES.filter(f => leg.active[f.key])
@@ -99,10 +108,37 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
           <span style={{ fontSize: '10px', color: f.color, fontWeight: 700, marginRight: '2px' }}>{f.label}:</span>
           {f.key === 'wt'  && <>{sel('wt',  'direction', [['up','↑Up'],['down','↓Dn']], '72px')} {inp('wt',  'value', 'val')} {sel('wt',  'unit', [['pts','pts'],['pct','%']], '60px')}</>}
           {f.key === 'sl'  && (() => {
+            if (entryType === 'orb') {
+              const orbSlOpts: [string,string][] = [
+                ['orb_low','ORB Low'],['orb_high','ORB High'],
+                ['orb_range','ORB Range'],['orb_range_plus_pts','Range+pts'],['orb_range_minus_pts','Range-pts'],
+                ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
+              ]
+              const ov = leg.vals.orb
+              const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
+              const needsBuf = ov.slType === 'orb_range_plus_pts' || ov.slType === 'orb_range_minus_pts'
+              return <>
+                <select value={ov.slType} onChange={e => uOrb('slType', e.target.value)}
+                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                  {orbSlOpts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                {needsBuf && (
+                  <>
+                    <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)}
+                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)' }} />
+                    <select value={ov.bufferUnit} onChange={e => uOrb('bufferUnit', e.target.value)}
+                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                      <option value="pts">pts</option>
+                      <option value="pct">%</option>
+                    </select>
+                  </>
+                )}
+                {(!ov.slType.startsWith('orb_')) && inp('sl', 'value', 'val')}
+              </>
+            }
+            // Non-ORB: original behavior
             const slOpts: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']]
-            if (entryType === 'orb') { slOpts.push(['orb_high','ORB High'],['orb_low','ORB Low']) }
-            const isOrbSL = leg.vals.sl.type === 'orb_high' || leg.vals.sl.type === 'orb_low'
-            return <>{sel('sl', 'type', slOpts, '88px')} {!isOrbSL && inp('sl', 'value', 'val')}</>
+            return <>{sel('sl', 'type', slOpts, '88px')} {inp('sl', 'value', 'val')}</>
           })()}
           {f.key === 're'  && <>{sel('re',  'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']], '80px')} {sel('re',  'trigger', [['sl','SL'],['tp','TP'],['any','Any']], '60px')} {sel('re', 'count', [['1','1×'],['2','2×'],['3','3×'],['4','4×'],['5','5×']], '56px')}</>}
           {f.key === 'reentry' && (() => {
@@ -127,12 +163,50 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
               <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-muted)' }}>
                 <input type="checkbox" checked={rv.onTp} onChange={e => uRe('onTp', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> TP
               </label>
-              <input type="number" min={1} max={5} value={rv.max}
-                onChange={e => uRe('max', e.target.value)}
-                style={{ width: 40, background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 5px', fontSize: 11 }} />
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-muted)' }}>
+                SL:<input type="number" min={0} max={5} value={rv.maxSl}
+                  onChange={e => uRe('maxSl', e.target.value)}
+                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)', textAlign: 'center' }} />
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-muted)' }}>
+                TP:<input type="number" min={0} max={5} value={rv.maxTp}
+                  onChange={e => uRe('maxTp', e.target.value)}
+                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)', textAlign: 'center' }} />
+              </span>
             </>
           })()}
-          {f.key === 'tp'  && <>{sel('tp',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('tp',  'value', 'val')}</>}
+          {f.key === 'tp'  && (() => {
+            if (entryType === 'orb') {
+              const orbTpOpts: [string,string][] = [
+                ['orb_range','ORB Range'],['orb_high','ORB High'],['orb_low','ORB Low'],
+                ['orb_range_plus_pts','Range+pts'],['orb_range_minus_pts','Range-pts'],
+                ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
+              ]
+              const ov = leg.vals.orb
+              const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
+              const needsBuf = ov.tpType === 'orb_range_plus_pts' || ov.tpType === 'orb_range_minus_pts'
+              return <>
+                <select value={ov.tpType} onChange={e => uOrb('tpType', e.target.value)}
+                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                  {orbTpOpts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                {needsBuf && (
+                  <>
+                    <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)}
+                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)' }} />
+                    <select value={ov.bufferUnit} onChange={e => uOrb('bufferUnit', e.target.value)}
+                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                      <option value="pts">pts</option>
+                      <option value="pct">%</option>
+                    </select>
+                  </>
+                )}
+                {(!ov.tpType.startsWith('orb_')) && inp('tp', 'value', 'val')}
+              </>
+            }
+            // Non-ORB: original behavior
+            return <>{sel('tp',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('tp',  'value', 'val')}</>
+          })()}
           {f.key === 'tsl' && <>{inp('tsl', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('tsl', 'y', 'Y')} {sel('tsl', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
         {f.key === 'ttp' && <>{inp('ttp', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('ttp', 'y', 'Y')} {sel('ttp', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
         </div>
@@ -360,6 +434,19 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '0.5px solid rgba(255,68,68,0.35)', color: 'var(--red)', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
+      {entryType === 'orb' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry At</span>
+          {(['high','low'] as const).map(ea => (
+            <button key={ea} type="button"
+              onClick={() => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...leg.vals.orb, entryAt: ea } } })}
+              className={`chip ${leg.vals.orb.entryAt === ea ? 'chip-active' : 'chip-inactive'}`}
+              style={{ height: '24px', padding: '0 8px', cursor: 'pointer', fontSize: '10px' }}>
+              {ea === 'high' ? 'ORB High (BUY)' : 'ORB Low (SELL)'}
+            </button>
+          ))}
+        </div>
+      )}
       <FeatVals leg={leg} onUpdate={onUpdate} entryType={entryType} />
       <JourneyPanel leg={leg} onUpdate={onUpdate} />
     </div>
@@ -429,6 +516,7 @@ export default function AlgoPage() {
   const [algoName, setAlgoName]     = useState('')
   const [stratMode, setStratMode]   = useState('intraday')
   const [entryType, setEntryType]   = useState('direct')
+  const [orbRangeSource, setOrbRangeSource] = useState('underlying')
   const [lotMult, setLotMult]       = useState('1')
   const [entryTime, setEntryTime]   = useState('09:15:00')
   const [orbEnd, setOrbEnd]         = useState('11:15:00')
@@ -481,7 +569,7 @@ export default function AlgoPage() {
   useEffect(() => {
     if (!formLoadedRef.current) return
     setIsDirty(true)
-  }, [algoName, stratMode, entryType, lotMult, entryTime, orbEnd, exitTime, dte, account,
+  }, [algoName, stratMode, entryType, orbRangeSource, lotMult, entryTime, orbEnd, exitTime, dte, account,
       mtmUnit, mtmSL, mtmTP, errorMargin, errorEntry, legs])
 
   const [dragIdx, setDragIdx]       = useState<number | null>(null)
@@ -573,7 +661,15 @@ export default function AlgoPage() {
                 ltpMode: l.reentry_ltp_mode || 'ltp',
                 onSl:    l.reentry_on_sl ?? false,
                 onTp:    l.reentry_on_tp ?? false,
-                max:     String(l.reentry_max || 1),
+                maxSl:   String(l.reentry_max_sl ?? l.reentry_max ?? 1),
+                maxTp:   String(l.reentry_max_tp ?? l.reentry_max ?? 1),
+              },
+              orb: {
+                entryAt:     l.orb_entry_at || (l.direction === 'buy' ? 'high' : 'low'),
+                slType:      l.orb_sl_type || l.sl_type || 'orb_low',
+                tpType:      l.orb_tp_type || l.tp_type || 'orb_range',
+                bufferValue: l.orb_buffer_value != null ? String(l.orb_buffer_value) : '',
+                bufferUnit:  l.orb_buffer_unit || 'pts',
               },
               re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
             },
@@ -581,6 +677,9 @@ export default function AlgoPage() {
           }
         })
         if (mappedLegs.length > 0) setLegs(mappedLegs)
+        if (mappedLegs.length > 0 && (a.legs || [])[0]?.orb_range_source) {
+          setOrbRangeSource((a.legs || [])[0].orb_range_source)
+        }
         // Mark loaded after React processes all setters above
         setTimeout(() => { formLoadedRef.current = true }, 0)
       })
@@ -640,8 +739,10 @@ export default function AlgoPage() {
         }
       }
       const slType = (leg.vals.sl as any).type || ''
-      if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return fail(`❌ ${L}: SL value is required when SL is enabled`)
-      if (leg.active['tp'] && !(leg.vals.tp as any).value) return fail(`❌ ${L}: TP value is required when TP is enabled`)
+      if (entryType !== 'orb') {
+        if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return fail(`❌ ${L}: SL value is required when SL is enabled`)
+        if (leg.active['tp'] && !(leg.vals.tp as any).value) return fail(`❌ ${L}: TP value is required when TP is enabled`)
+      }
       if (leg.active['wt'] && !(leg.vals.wt as any).value) return fail(`❌ ${L}: W&T value is required when W&T is enabled`)
       if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return fail(`❌ ${L}: TSL requires SL to be enabled with a value`)
       if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return fail(`❌ ${L}: TTP requires TP to be enabled with a value`)
@@ -686,16 +787,24 @@ export default function AlgoPage() {
       // Features
       wt_enabled:  l.active.wt,
       wt_direction: l.vals.wt.direction, wt_value: parseFloat(l.vals.wt.value) || undefined, wt_unit: l.vals.wt.unit,
-      sl_type:  l.active.sl ? l.vals.sl.type : undefined,
-      sl_value: l.active.sl && !['orb_high','orb_low'].includes(l.vals.sl.type) ? parseFloat(l.vals.sl.value) : undefined,
-      tp_type:  l.active.tp ? l.vals.tp.type : undefined,  tp_value: l.active.tp ? parseFloat(l.vals.tp.value) : undefined,
+      sl_type:  l.active.sl && entryType !== 'orb' ? l.vals.sl.type : undefined,
+      sl_value: l.active.sl && entryType !== 'orb' ? parseFloat(l.vals.sl.value) : undefined,
+      tp_type:  l.active.tp && entryType !== 'orb' ? l.vals.tp.type : undefined,  tp_value: l.active.tp && entryType !== 'orb' ? parseFloat(l.vals.tp.value) : undefined,
       tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
       ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
       reentry_on_sl:    l.active.reentry ? l.vals.reentry.onSl : false,
       reentry_on_tp:    l.active.reentry ? l.vals.reentry.onTp : false,
-      reentry_max:      l.active.reentry ? parseInt(l.vals.reentry.max) || 0 : 0,
+      reentry_max_sl:   l.active.reentry ? parseInt(l.vals.reentry.maxSl) || 0 : 0,
+      reentry_max_tp:   l.active.reentry ? parseInt(l.vals.reentry.maxTp) || 0 : 0,
+      reentry_max:      l.active.reentry ? Math.max(parseInt(l.vals.reentry.maxSl) || 0, parseInt(l.vals.reentry.maxTp) || 0) : 0,
       reentry_type:     l.active.reentry ? l.vals.reentry.type : null,
       reentry_ltp_mode: l.active.reentry ? l.vals.reentry.ltpMode : null,
+      orb_range_source:  entryType === 'orb' ? orbRangeSource : undefined,
+      orb_entry_at:      entryType === 'orb' ? l.vals.orb.entryAt : undefined,
+      orb_sl_type:       entryType === 'orb' ? l.vals.orb.slType : undefined,
+      orb_tp_type:       entryType === 'orb' ? l.vals.orb.tpType : undefined,
+      orb_buffer_value:  l.vals.orb.bufferValue ? parseFloat(l.vals.orb.bufferValue) : undefined,
+      orb_buffer_unit:   l.vals.orb.bufferUnit || undefined,
       journey_config: buildJourneyConfig(l.journey),
     })),
   })
@@ -878,6 +987,20 @@ export default function AlgoPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ORB End</label>
                   <TimeInput value={orbEnd} onChange={setOrbEnd} />
+                </div>
+              )}
+              {entryType === 'orb' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Range Source</label>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    {(['underlying','instrument'] as const).map(s => (
+                      <button key={s} type="button" onClick={() => setOrbRangeSource(s)}
+                        className={`chip ${orbRangeSource === s ? 'chip-active' : 'chip-inactive'}`}
+                        style={{ height: '28px', padding: '0 10px', cursor: 'pointer', fontSize: '10px' }}>
+                        {s === 'underlying' ? 'Underlying' : 'Instrument'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
