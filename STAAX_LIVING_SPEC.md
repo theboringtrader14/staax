@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 8.1 | **Last Updated:** 15 April 2026 — Batch 27: TT Bands strategy (fractal bands, crossover signals), LIVE bot order placement (MCX/AngelOne), BotSignal reason column (migration 0033), POST /algos/{id}/duplicate, IndicatorsPage prod URL fix, signal log UI (direction chips, reason tag, status pills), COPY button on algo card | **PRD Reference:** v1.2
+**Version:** 8.2 | **Last Updated:** 15 April 2026 — Batch 28: global GET /bots/orders endpoint, GET /holidays/today-is-holiday, Signals tab (reason col, direction chips, HH:MM:SS), Orders tab (single endpoint, Time/Symbol/PRACTIX-LIVE badge), AlgoPage container height equalisation, n8n holiday guard (all 3 workflows), BUDGEX GOOGLE_AI_API_KEY comment, EC2 full deploy (STAAX 0025→0033, INVEX, BUDGEX), Start Session verified | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -4629,17 +4629,86 @@ tp_reentry_count   Integer     default 0
 
 ---
 
+## Session Update — 2026-04-15 (Batch 28) — Orders/Signals UI, Holiday Endpoint, n8n Guards, EC2 Deploy
+
+### Backend Changes (STAAX)
+
+**bots.py**
+- `GET /bots/orders` — global orders endpoint; joins BotOrder + Bot → returns bot_name, is_practix, instrument, entry_time; newest first; fixes 405 on the old per-bot-only pattern
+- `list_bot_orders` per-bot endpoint — bug fix: `o.status.value` → `o.status or "open"` (status is String, not Enum)
+
+**holidays.py**
+- `GET /holidays/today-is-holiday` — checks today IST date against MarketHoliday fo segment; returns `{"is_holiday": bool, "name": str|null}` for n8n holiday guard
+
+### Frontend Changes (STAAX)
+
+**IndicatorsPage.tsx — Signals tab**
+- `BotSignal` type: added `reason: string | null`
+- Direction cells: chips with coloured bg (BUY=#22DD88, SELL=#FF4444, EXIT=#FFB300 when signal_type=exit)
+- Time: `HH:MM:SS` format (added `second: '2-digit'`)
+- Added Reason column: mono tag pill; `—` when absent
+- colSpan 7 → 8
+
+**IndicatorsPage.tsx — Orders tab**
+- `BotOrder` type: added `bot_name`, `is_practix`, `instrument`, `entry_time`
+- `AggOrder = BotOrder` (removed per-bot N-call aggregator)
+- Single `botsAPI.orders()` call replaces per-bot loop
+- Table columns: Time (IST HH:MM) | Bot + PRACTIX/LIVE badge | Symbol | Dir chip | Lots | Entry ₹ | Exit ₹ | P&L | Status — 9 columns
+
+**AlgoPage.tsx**
+- Line 970 parent flex row: `alignItems: 'flex-start'` → `alignItems: 'stretch'`
+- Entry Type & Timing container (line 972): added `height: '100%'`
+- MTM Controls container (line 1033): added `height: '100%'`
+
+**api.ts**
+- `botsAPI.orders()` → `GET /bots/orders` (global all-bots orders)
+- `botsAPI.botOrders(id)` → `GET /bots/{id}/orders` (renamed from duplicate `orders`)
+
+### n8n Workflows — Holiday Guard (all 3)
+Added to each workflow: Schedule Trigger → HTTP GET `/holidays/today-is-holiday` → IF is_holiday → true: stop / false: continue to original first node
+- Angel One Auto-Login: Schedule → Holiday Check → Is Holiday? → false → Auto-Login Request
+- Zerodha Token Reminder: Schedule → Holiday Check → Is Holiday? → false → Check Token
+- EOD P&L Summary: Schedule → Holiday Check → Is Holiday? → false → Fetch Stats
+
+### BUDGEX
+- `analytics.py`: added 3-line comment block at top documenting `GOOGLE_AI_API_KEY` requirement
+- Fallback (no key): returns `_build_fallback_insights()` — 3 rule-based sentences from real DB data
+- `GOOGLE_AI_API_KEY` added to EC2 BUDGEX `.env` by Karthik ✅
+
+### EC2 Deploy — 2026-04-15
+
+**DB Backup:** `~/backup_staax_20260415_2015.sql` (177K) ✅
+
+**STAAX** (migrations 0025→0033 applied):
+- 0026: drop reentry_enabled/mode | 0027: reentry_type/ltp_mode | 0028: account scope
+- 0029: bot pinescript | 0030: algo_leg is_archived | 0032: ORB Phase 2 | 0033: bot_signal reason
+- Frontend built ✅ | `systemctl restart staax-backend` ✅
+- Health: `ready:True | db:True | env:production` ✅
+
+**INVEX:**
+- git pull ✅ | migrations already at head | frontend built ✅ | `systemctl restart invex-backend` ✅
+- Health: `{"status":"ok","service":"invex"}` ✅
+
+**BUDGEX:**
+- git pull ✅ | no alembic (no migrations) | frontend built ✅ | `systemctl restart budgex-backend` ✅
+- Health: `{"status":"ok","service":"budgex","version":"2.0.0"}` ✅
+
+**Task 4 — Start Session on EC2:**
+- `POST /services/start-all` returns: PostgreSQL: running, Redis: running, Backend API: running, Market Feed: running ✅
+- Market Feed auto-picked Mom's active AO token; no subprocess calls in services.py ✅
+
+### Commits
+- STAAX backend: `bff9c42` — feat: Batch 28 — global bot orders endpoint, holiday check endpoint
+- STAAX frontend: `ed41f87` — feat: Batch 28 — signals tab improvements, orders tab, AlgoPage height fix
+- BUDGEX: `4f91120` — docs: GOOGLE_AI_API_KEY requirement comment
+
+---
+
 ## PENDING (as of 2026-04-15)
 
-### EC2 Deployment (H1/H2 — deferred until local testing complete)
-- Run migrations 0025–0032 on EC2
-- Deploy all latest commits: STAAX, INVEX, BUDGEX, FINEX
-- Start Session fix on EC2 (subprocess vs systemd)
-
 ### Business Actions Required
-- Karthik AO + Wife AO: new SmartAPI apps with server IP 13.202.164.243
+- Karthik AO + Wife AO: new SmartAPI apps with server IP 13.202.164.243 (token expired)
 - INVEX: Angel One API keys expired — regenerate from portal for all 3 accounts
-- BUDGEX: Add `GOOGLE_AI_API_KEY` to `/Users/bjkarthi/STAXX/budgex/backend/.env` for live Gemma responses
 - n8n: update push tokens once mobile app registers (POST /api/v1/mobile/register-push)
 - Android EAS build: new build needed with prod URLs
 - Apple Developer account: needed for iOS TestFlight / App Store
