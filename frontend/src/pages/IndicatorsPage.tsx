@@ -815,7 +815,14 @@ export default function IndicatorsPage() {
             <table className="staax-table">
               <thead>
                 <tr>
-                  <th>Fired At</th><th>Bot</th><th style={{ width:'60px' }}>Signal</th><th>Instrument</th><th style={{ width:'50px' }}>Dir</th><th>Trigger ₹</th><th>Reason</th><th style={{ width:'70px' }}>Status</th>
+                  <th>Fired At</th>
+                  <th style={{ paddingLeft:'20px' }}>Bot</th>
+                  <th style={{ paddingLeft:'20px', width:'70px' }}>Signal</th>
+                  <th style={{ paddingLeft:'20px' }}>Instrument</th>
+                  <th style={{ paddingLeft:'20px', width:'60px' }}>Dir</th>
+                  <th style={{ paddingLeft:'20px' }}>Trigger ₹</th>
+                  <th style={{ paddingLeft:'20px' }}>Reason</th>
+                  <th style={{ paddingLeft:'20px', width:'80px' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -831,21 +838,21 @@ export default function IndicatorsPage() {
                       <td style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {s.fired_at ? new Date(s.fired_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(',', '') : '—'}
                       </td>
-                      <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)' }}>{s.bot_name || '—'}</td>
-                      <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px' }}>{s.signal_type}</td>
-                      <td style={{ fontSize: '11px' }}>{s.instrument} · {s.expiry}</td>
-                      <td>
+                      <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--amber)', paddingLeft:'20px' }}>{s.bot_name || '—'}</td>
+                      <td style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '11px', paddingLeft:'20px' }}>{s.signal_type}</td>
+                      <td style={{ fontSize: '11px', paddingLeft:'20px' }}>{s.instrument} · {s.expiry}</td>
+                      <td style={{ paddingLeft:'20px' }}>
                         <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', background: `${dirColor}22`, color: dirColor }}>
                           {isExit ? 'EXIT' : (s.direction || '—')}
                         </span>
                       </td>
-                      <td style={{ fontSize: '11px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
-                      <td>
+                      <td style={{ fontSize: '11px', paddingLeft:'20px' }}>{s.trigger_price != null ? `₹${s.trigger_price.toLocaleString('en-IN')}` : '—'}</td>
+                      <td style={{ paddingLeft:'20px' }}>
                         {s.reason
                           ? <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>{s.reason}</span>
                           : <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
                       </td>
-                      <td>
+                      <td style={{ paddingLeft:'20px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px',
                           color: s.status === 'executed' ? '#22DD88' : s.status === 'error' ? '#FF4444' : s.status === 'missed' ? '#FFB300' : s.status === 'skipped' ? 'rgba(232,232,248,0.35)' : '#FF6B00',
