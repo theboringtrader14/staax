@@ -209,6 +209,10 @@ class BotRunner:
         except Exception as _e:
             logger.warning(f"[BOT] Could not seed _last_signal from DB: {_e}")
 
+        # FIX D: load DTR daily data at startup so DTR bots have levels
+        # immediately, regardless of what time the backend starts/restarts.
+        await self.load_daily_data()
+
     def _init_bot(self, bot):
         """Create CandleAggregator + strategy instance for one bot."""
         from app.engine.candle_fetcher import CandleAggregator
