@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 7.8 | **Last Updated:** 14 April 2026 — Dashboard 8 fixes, re-entry engine rewrite, account scope/deactivate, advanced analytics metrics, bot PineScript, reports metrics | **PRD Reference:** v1.2
+**Version:** 7.9 | **Last Updated:** 15 April 2026 — Batch 23/24: STBT save FK fix (in-place leg update), AlgoPage UI (merged Timing+MTM row, STBT next-day exit wiring, chip heights, MTM labels), W&T LTP wait loop, GridPage next-day exit time display, INVEX SIP Engine live (migration 0002, scheduler 09:20 IST), n8n 3 workflows created, BUDGEX confirmed live | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -59,7 +59,7 @@ Personal F&O algo trading platform. Owner: Karthikeyan. Three broker accounts.
 
 **Stack:** React 18 + TypeScript + Tailwind + Zustand | Python 3.12 + FastAPI + APScheduler | PostgreSQL 16 + Redis 7 | AWS EC2 t3.medium (ap-south-1)
 
-**Theme:** Dark. Background `#2A2C2E`. Accent `#00B0F0` (cyan). Amber `#D77B12`. Fonts: ADLaM Display (headings) + Dubai (body).
+**Theme:** Dark. Background `#0A0A0B` (--bg-void pure black). Primary accent `#FF6B00` (--ox-radiant orange). Amber `#D77B12`. Fonts: ADLaM Display (headings) + Dubai (body). Note: NO cyan/blue anywhere — #00B0F0 and #38bdf8 are replaced with orange throughout.
 
 ---
 
@@ -152,7 +152,7 @@ Three account cards — Karthik, Mom, Wife:
 - Status badge (top left): NO TRADE / ACTIVE / PENDING / OPEN / CLOSED / ERROR
 - PRAC / LIVE badge (top right) — per-cell toggle
 - **M:** lot multiplier
-- **E:** entry time (cyan)
+- **E:** entry time (orange #FF6B00)
 - **X:** exit time
 - P&L value (when open or closed)
 - × close button (remove from this day)
@@ -542,7 +542,7 @@ A human animated avatar — Karthikeyan's own avatar — embedded in FINEX as an
 **Technical considerations:**
 - Animated avatar: could use Ready Player Me, custom 2D/3D, or illustrated character
 - Voice: Web Speech API (listen) + TTS (speak)
-- AI reasoning: Anthropic Claude API (same model family)
+- AI reasoning: Gemma 4 (gemma-4-31b-it) via Google AI — NOT Claude API. ElevenLabs TTS for voice output.
 - Data context: pulls structured summaries from all modules
 
 ---
@@ -3817,7 +3817,7 @@ Use these as source of truth for any future UI work.
 
 ### INVEX v1.0 — Pages Status  
 - Portfolio: ✅ Complete — ₹46.8L live, Redis cache (instant load)
-- SIP Engine: ✅ Built (UI only, backend pending)
+- SIP Engine: ✅ Live — sip_engine.py, scheduler 09:20 IST Mon-Fri, migration 0002 applied 2026-04-15, execute-now endpoint, Run Now button in UI
 - Watchlist: ✅ Built (UI only, backend pending)
 - IPO Bot: ✅ Placeholder
 - Analysis: ✅ Placeholder
@@ -4420,3 +4420,64 @@ Gates (both modes): `reentry_count < reentry_max`, `current_time < exit_time`, k
 - Android EAS build with production URLs
 - INVEX SIP backend wiring + Angel One API key regeneration
 - FINEX data wiring (STAAX + INVEX + BUDGEX APIs)
+
+## Session Update — 2026-04-15 (Batch 23/24)
+
+### STAAX Backend
+- FK violation fix: PUT /algos/{id} now updates legs in-place (never deletes)
+  - `is_archived` column added to AlgoLeg (migration 0030 applied)
+  - `LegCreate.id` optional field — frontend passes backend UUID to enable in-place match
+  - PUT: match by id → UPDATE, new → INSERT, missing → archive (is_archived=True)
+  - Filtered from all GET responses
+- Backend restart required to pick up new code (was failing until process restart)
+- [ALGO-SAVE] error logging with full exception on PUT handler
+- STBT/BTST: next_day_exit_time now correctly wired through frontend → backend → scheduler
+- W&T engine: LTP availability check with 5s retry loop before monitoring begins
+
+### STAAX Frontend (AlgoPage.tsx)
+- TIME_MIN/MAX format fixed: '09:15:00' → '09:15' (was causing false validation failures)
+- STBT exit range check skipped for STBT/BTST strategies
+- validate() now has console.error instrumentation via fail() helper
+- nextDayExitTime state added; Exit Time field routes to correct state per strategy
+- buildPayload(): delay fields now use correct backend field names
+  (entry_delay_buy/sell_secs, exit_delay_buy/sell_secs — not entry_delay_seconds)
+- Extra leg fields removed (opt_type, tsl_enabled, ttp_enabled not in LegCreate schema)
+- catch block improved: shows status code + parses Pydantic detail array
+- Entry Type & Timing + MTM Controls merged into single row with vertical separator
+- Exit Time label: STBT/BTST shows ⚠ symbol with hover tooltip (no chip below)
+- MTM Controls: labels added above Unit/MTM SL/MTM TP matching Entry Time style
+- Direct/ORB chips height fixed to 32px to match TimeInput
+- leg backendId stored and sent in PUT payload to enable in-place update
+
+### STAAX Frontend (GridPage.tsx)
+- Algo card: xt (exit time) now shows next_day_exit_time for STBT/BTST strategies
+- ⚠ tooltip indicator on exit time for STBT/BTST
+
+### INVEX Phase 2 — SIP Engine (committed 59b445a)
+- sip_engine.py: NSE LTP fetch, Zerodha/Angel order placement, NSE holiday guard
+- Scheduler: _scheduled_sip_run at 09:20 IST Mon-Fri in main.py
+- Migration 0002: last_executed_at column on invex_sips (applied)
+- POST /sips/execute-now: manual trigger endpoint
+- Frontend: Run Now button + Last Run field in SIPCard
+- sipsAPI.executeNow() added to api.ts
+- Angel One order placement guarded (API keys currently expired)
+
+### BUDGEX — Confirmed Live
+- Both subdomains live: budgex.lifexos.co.in + budgex-api.lifexos.co.in
+- No deployment work needed — already running on server
+
+### n8n Automation
+- Container: staax_n8n on port 5678, Asia/Kolkata timezone, auto-restart
+- 3 workflows created (all inactive — activate manually):
+  1. Angel One Auto-Login (08:45 IST) — id: itzEGvulzNGr2RAe
+  2. Zerodha Token Reminder (08:50 IST) — id: Lbq2Hnh0sN2pFmPo  
+  3. EOD P&L Summary (15:35 IST) — id: 3IOdIX8pQW2RDZ2o
+- Expo push token: reads from push_tokens.json (populated by mobile register-push)
+- URL: http://localhost:5678 | admin@staax.local / Staax@2024
+
+### Brand Corrections (canonical, enforce always)
+- Primary color: #FF6B00 orange (NOT #00B0F0 cyan — that was old spec error)
+- Background: #0A0A0B (NOT #2A2C2E — that was old spec error)
+- LIFEX AI uses Gemma 4 (gemma-4-31b-it) — NOT Claude API
+- ElevenLabs TTS for LIFEX AI voice output (confirmed direction)
+
