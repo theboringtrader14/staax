@@ -913,7 +913,7 @@ export default function IndicatorsPage() {
                 ) : rows.map(o => (
                   <tr key={o.id}>
                     <td style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      {o.entry_time ? new Date(o.entry_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                      {o.entry_time ? new Date(o.entry_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
                     </td>
                     <td style={{ fontSize: '11px' }}>
                       <span style={{ fontWeight: 600, color: 'var(--amber)' }}>{o.bot_name}</span>
