@@ -41,7 +41,7 @@ class SetModeRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _entry_to_dict(entry: GridEntry, algo_state: "AlgoState | None" = None) -> dict:
+def _entry_to_dict(entry: GridEntry, algo_state: "AlgoState | None" = None, algo_name: "str | None" = None) -> dict:
     status = entry.status.value if entry.status else "no_trade"
     # Show "waiting" when AlgoState is WAITING but GridEntry is already ALGO_ACTIVE
     # (entry time not yet reached — activated at 09:15 but order not placed yet)
@@ -54,6 +54,7 @@ def _entry_to_dict(entry: GridEntry, algo_state: "AlgoState | None" = None) -> d
     return {
         "id":             str(entry.id),
         "algo_id":        str(entry.algo_id),
+        "algo_name":      algo_name,
         "account_id":     str(entry.account_id),
         "trading_date":   entry.trading_date.isoformat() if entry.trading_date else None,
         "day_of_week":    entry.day_of_week,
@@ -96,14 +97,16 @@ async def get_week_grid(
         range_end = monday + timedelta(days=6)
 
     result = await db.execute(
-        select(GridEntry).where(
+        select(GridEntry, Algo).join(Algo, GridEntry.algo_id == Algo.id).where(
             GridEntry.trading_date >= monday,
             GridEntry.trading_date <= range_end,
             GridEntry.is_archived == False,
             *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
         ).order_by(GridEntry.trading_date, GridEntry.created_at)
     )
-    entries = result.scalars().all()
+    rows = result.all()
+    entries = [r[0] for r in rows]
+    algo_names: dict = {str(r[0].id): r[1].name for r in rows}
 
     # Bulk-fetch AlgoStates for today's entries so we can show WAITING status
     today = date.today()
@@ -120,12 +123,12 @@ async def get_week_grid(
         algo_id = str(entry.algo_id)
         if algo_id not in by_algo:
             by_algo[algo_id] = []
-        by_algo[algo_id].append(_entry_to_dict(entry, states.get(str(entry.id))))
+        by_algo[algo_id].append(_entry_to_dict(entry, states.get(str(entry.id)), algo_names.get(str(entry.id))))
 
     return {
         "week_start": monday.isoformat(),
         "week_end":   range_end.isoformat(),
-        "entries":    [_entry_to_dict(e, states.get(str(e.id))) for e in entries],
+        "entries":    [_entry_to_dict(e, states.get(str(e.id)), algo_names.get(str(e.id))) for e in entries],
         "by_algo":    by_algo,
     }
 

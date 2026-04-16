@@ -639,27 +639,107 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               {/* ── Day pills M T W T F S S ── */}
                               <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', width:'252px', flexShrink:0, justifyContent:'center', marginLeft:'12px' }}>
                                 {ALL_DAYS.map((day, i) => {
-                                  const isActive = algo.recurringDays.includes(day)
+                                  const isInRecurring = algo.recurringDays.includes(day)
+                                  const cell = grid[algo.id]?.[day]
+
+                                  // Compute pill style based on cell status
+                                  let pillBg     = 'transparent'
+                                  let pillBorder = '0.5px solid rgba(255,255,255,0.12)'
+                                  let pillColor  = 'rgba(255,255,255,0.25)'
+                                  let pillWeight: number|string = 400
+                                  let showDot    = false
+                                  let dotColor   = 'transparent'
+                                  let dotAnim    = false
+
+                                  if (!cell && !isInRecurring) {
+                                    // not deployed — transparent, dim
+                                    pillBg     = 'transparent'
+                                    pillBorder = '0.5px solid rgba(255,255,255,0.12)'
+                                    pillColor  = 'rgba(255,255,255,0.25)'
+                                    pillWeight = 400
+                                  } else if (!cell && isInRecurring) {
+                                    // deployed but no entry yet — no_trade style (dim orange)
+                                    pillBg     = 'rgba(255,107,0,0.05)'
+                                    pillBorder = '0.5px solid rgba(255,107,0,0.30)'
+                                    pillColor  = 'rgba(255,107,0,0.50)'
+                                    pillWeight = 500
+                                  } else if (cell) {
+                                    const s = cell.status
+                                    if (s === 'waiting' || s === 'algo_active') {
+                                      pillBg     = 'rgba(255,180,0,0.25)'
+                                      pillBorder = '0.5px solid rgba(255,180,0,0.70)'
+                                      pillColor  = '#FFB800'
+                                      pillWeight = 700
+                                      showDot    = false
+                                    } else if (s === 'open' || s === 'order_pending') {
+                                      pillBg     = 'rgba(34,221,136,0.20)'
+                                      pillBorder = '0.5px solid rgba(34,221,136,0.60)'
+                                      pillColor  = '#22DD88'
+                                      pillWeight = 700
+                                      showDot    = true
+                                      dotColor   = '#22DD88'
+                                      dotAnim    = true
+                                    } else if (s === 'algo_closed') {
+                                      pillBg     = 'rgba(34,221,136,0.08)'
+                                      pillBorder = '0.5px solid rgba(34,221,136,0.25)'
+                                      pillColor  = 'rgba(34,221,136,0.55)'
+                                      pillWeight = 600
+                                    } else if (s === 'error') {
+                                      pillBg     = 'rgba(255,68,68,0.20)'
+                                      pillBorder = '0.5px solid rgba(255,68,68,0.60)'
+                                      pillColor  = '#FF4444'
+                                      pillWeight = 700
+                                      showDot    = true
+                                      dotColor   = '#FF4444'
+                                      dotAnim    = true
+                                    } else {
+                                      // no_trade or unknown
+                                      pillBg     = 'transparent'
+                                      pillBorder = '0.5px solid rgba(255,255,255,0.12)'
+                                      pillColor  = 'rgba(255,255,255,0.25)'
+                                      pillWeight = 400
+                                    }
+                                  }
+
                                   return (
                                     <button key={day}
                                       onClick={e => { e.stopPropagation(); void toggleDay(algo, day) }}
-                                      title={`${day} · ${isActive ? 'click to remove' : 'click to deploy'}`}
+                                      title={`${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
                                       style={{
                                         width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
                                         fontFamily:'var(--font-display)', fontSize:'10px',
                                         display:'flex', alignItems:'center', justifyContent:'center',
+                                        position:'relative',
                                         transition:'all 0.15s ease', flexShrink:0,
-                                        border: isActive ? '0.5px solid rgba(255,107,0,0.60)' : '0.5px solid rgba(255,255,255,0.12)',
-                                        background: isActive ? 'rgba(255,107,0,0.20)' : 'transparent',
-                                        color: isActive ? '#FF6B00' : 'rgba(255,255,255,0.25)',
-                                        fontWeight: isActive ? 700 : 400,
+                                        border: pillBorder,
+                                        background: pillBg,
+                                        color: pillColor,
+                                        fontWeight: pillWeight,
                                         boxShadow: 'none',
                                       }}>
                                       {DAY_LBL[i]}
+                                      {showDot && (
+                                        <span style={{
+                                          position:'absolute',
+                                          top:'4px',
+                                          right:'4px',
+                                          width:'4px',
+                                          height:'4px',
+                                          borderRadius:'50%',
+                                          background: dotColor,
+                                          animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
+                                        }}/>
+                                      )}
                                     </button>
                                   )
                                 })}
                               </div>
+                              <style>{`
+                                @keyframes pillDotPulse {
+                                  0%, 100% { opacity: 1; transform: scale(1); }
+                                  50% { opacity: 0.3; transform: scale(0.6); }
+                                }
+                              `}</style>
 
 
                             </div>{/* end card row body */}
