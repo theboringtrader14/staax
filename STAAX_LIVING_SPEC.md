@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 8.2 | **Last Updated:** 15 April 2026 — Batch 28: global GET /bots/orders endpoint, GET /holidays/today-is-holiday, Signals tab (reason col, direction chips, HH:MM:SS), Orders tab (single endpoint, Time/Symbol/PRACTIX-LIVE badge), AlgoPage container height equalisation, n8n holiday guard (all 3 workflows), BUDGEX GOOGLE_AI_API_KEY comment, EC2 full deploy (STAAX 0025→0033, INVEX, BUDGEX), Start Session verified | **PRD Reference:** v1.2
+**Version:** 8.2 | **Last Updated:** 15 April 2026 — Batch 28 Post-Fixes: GridPage fixed-width card columns, IndicatorsPage live P&L + Signals layout + tab persistence, bot engine: MCX session reset (_in_session), channel two-TF aggregators (_channel_aggregators), _last_signal open-position override, DTR startup daily data load; Journey child leg bug noted; §25a Journey trigger selector spec added | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -1112,6 +1112,11 @@ All items below are pending implementation. Work through them in order unless in
 **Problem:** Kill Switch button is taller than Start Session / Stop All buttons. Cancel button in modal also has height mismatch.
 **Fix:** Ensure Kill Switch uses identical height (`height: "34px"`) and padding as `btn btn-primary`. Cancel button in modal should match `btn btn-ghost` height.
 
+### UI-3 — Journey child leg config not saving
+**Reported:** 15 Apr 2026 | **Status:** ⬜ Open
+**Problem:** When editing a Journey algo, the child leg configuration (journey_config JSON) is not persisted on AlgoLeg update. Changes to child leg appear to save but revert on next load.
+**Fix:** Ensure `journey_config` JSON field is included in AlgoLeg PATCH/PUT payload and correctly written to DB on update.
+
 ---
 
 ## 24. Account-Level Kill Switch
@@ -1162,6 +1167,40 @@ Scheduler resets both fields daily at 09:00 IST.
 ### API
 - `POST /api/v1/accounts/{id}/deactivate` — set deactivated for today
 - `POST /api/v1/accounts/{id}/reactivate` — re-enable for today
+
+---
+
+## 25a. Journey Trigger Selector
+
+**Spec status:** ⬜ Phase 1F backlog — migration 0034
+
+### Requirement
+When a parent leg has **both SL and TP enabled**, show a **"Journey Trigger"** dropdown below the journey toggle in AlgoPage. This lets Karthikeyan choose which exit event fires the child (journey) leg.
+
+### UI
+- Dropdown: **SL Hit | TP Hit | Either**
+- Visible only when: leg has journey child configured AND both SL and TP are enabled on parent
+- Default: **Either**
+- Label: "Journey Trigger"
+
+### Data Model
+New field on `AlgoLeg`:
+```
+journey_trigger: String, nullable, default "either"
+# Values: "sl_hit" | "tp_hit" | "either"
+```
+
+### Engine Logic
+In `bot_runner.py` / algo runner — when parent leg exits:
+- `"sl_hit"` → fire child only if exit reason = SL
+- `"tp_hit"` → fire child only if exit reason = TP
+- `"either"` → fire child on any exit (current behaviour)
+
+### Migration
+**0034_journey_trigger** — `down_revision = 0033`
+```sql
+ALTER TABLE algo_legs ADD COLUMN journey_trigger VARCHAR DEFAULT 'either';
+```
 
 ---
 
@@ -1329,6 +1368,7 @@ Currently `Start Session` button calls `servicesAPI.startAll()` but the backend 
 | EXIT | Manual exit price correction | Low |
 | NOTIF | NotificationService — Twilio WhatsApp + AWS SES | Low |
 | §25 | Account-Level Manual Deactivation | Low |
+| 0034 | Journey trigger selector (`journey_trigger` field on AlgoLeg) | Low |
 
 **📋 UI debt (minor, non-blocking):**
 | # | Item |
@@ -4718,4 +4758,51 @@ Added to each workflow: Schedule Trigger → HTTP GET `/holidays/today-is-holida
 - Test `orb_range_source` = "instrument" → confirm instrument pre-selected at window open with fallback
 - Test `orb_sl_type` = "orb_low" → confirm SL set to ORB low level
 - Verify `orb_high`/`orb_low` appear in Orders page for ORB waiting legs
+
+---
+
+## Session Notes — 15 April 2026 (Batch 28 Post-Fixes)
+
+### Completed this session
+
+**GridPage.tsx — Card layout fixed-width columns**
+- Card body gap `20px → 16px`, padding `20px 24px → 16px 20px`
+- All columns now fixed width (no `flex:1` fluid): Name `120px` | Strategy+chip `100px` | Entry/Exit time `90px` | Lot multiplier `90px` (marginLeft 12px) | Day pills `252px` (marginLeft 12px)
+- Removes uneven spacing between algo cards regardless of content length
+
+**IndicatorsPage.tsx — Orders tab live P&L**
+- `ltpMap` state + 5s polling interval (`ltpTimerRef`) fetches `/bots/ltp?symbol=X` for each unique open instrument
+- P&L cell: `(ltp − entry_price) × lots`, green if ≥0, red if <0, "LIVE" badge in 8px text
+- TIME column: added date (`day:'2-digit', month:'short'`) — was time-only
+
+**IndicatorsPage.tsx — Signals tab layout**
+- Fired At column moved to first position, `whiteSpace:'nowrap'`, year added to format
+- Column padding refined: Bot+Signal `20px`, Instrument+Trigger `32px`, Dir+Reason `10px`, Status `20px`
+- Tab persistence: `useState` reads `localStorage.getItem('indicatorsTab')` on mount; click writes back
+
+**Backend bot_runner.py — Four engine fixes**
+- **FIX 3 (MCX session reset):** `_in_session` flag — on OFF→ON transition, replace all `CandleAggregator` instances (entry-TF and channel-TF) with fresh ones to avoid spurious signals from stale bars
+- **FIX A (channel_strategy.py):** `on_candle(candle, channel_candles=None)` — accepts optional external candles list for two-TF architecture; computes `upper`/`lower` from `channel_candles` when provided
+- **FIX B (bot_runner.py):** `_channel_aggregators: Dict[str, Any]` — separate `CandleAggregator` per bot for channel TF; fed every tick in parallel with entry-TF aggregator; completed channel candles passed as `channel_candles=` to `strategy.on_candle()`
+- **FIX C (bot_runner.py):** `_last_signal` override after seeding — if `_positions[bot_id]` is open but `_last_signal == "exit:sell"` (from prior session DB signal), reset to `"entry:buy"` to prevent exit dedup blocking next exit
+- **FIX D (bot_runner.py):** `await self.load_daily_data()` called at end of `load_bots()` — DTR levels now set at startup, not only at 09:00 IST scheduler; fixes DTR bots generating zero signals after any restart after market open
+
+### Bot Test Matrix (as of session end)
+| Bot | TF | Channel TF | Issue | Fix Applied |
+|-----|----|-----------|-------|-------------|
+| Test 1 — DTR 3h | 180min | — | No signals (daily data null at startup) | FIX D |
+| Test 2 — Channel 240×1 | 45min | 240min | Wrong channel (used 45min instead of 240min) | FIX B |
+| Test 3 — Channel 60×7 | 15min | 60min | Wrong channel (used 15min instead of 60min) | FIX B |
+
+### Pending (start of next session)
+- Monitor first signals from Test 1 (18:00 IST, first 3h bar), Test 2 (19:30 IST, first 4h bar), Test 3 (needs 7×60min bars)
+- Verify channel levels match TradingView reference for Test 2 and Test 3
+- Journey child leg config not saving (UI-3 above) — investigate `journey_config` JSON in AlgoLeg update
+- Journey trigger selector (§25a) — implement after Journey config bug fixed
+
+### Key file locations
+- Bot runner: `backend/app/engine/bot_runner.py`
+- Channel strategy: `backend/app/engine/indicators/channel_strategy.py`
+- Indicators page: `frontend/src/pages/IndicatorsPage.tsx`
+- Grid page: `frontend/src/pages/GridPage.tsx`
 
