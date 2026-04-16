@@ -44,16 +44,6 @@ interface Algo {
 }
 
 
-// ── Status bar (left strip) ─────────────────────────────────────────────────────
-const STATUS_BAR: Record<CS,{color:string;glow:string}> = {
-  algo_active:   { color:'#FF6B00',              glow:'rgba(255,107,0,0.70)' },
-  open:          { color:'#00FF88',              glow:'rgba(0,255,136,0.70)' },
-  algo_closed:   { color:'rgba(0,255,136,0.45)', glow:'rgba(0,255,136,0.30)' },
-  error:         { color:'#FF2244',              glow:'rgba(255,34,68,0.70)' },
-  waiting:       { color:'#FFE600',              glow:'rgba(255,230,0,0.70)' },
-  order_pending: { color:'#FF8C00',              glow:'rgba(255,140,0,0.65)' },
-  no_trade:      { color:'rgba(255,255,255,0.20)', glow:'transparent' },
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getWeekDates(): Record<string, string> {
@@ -94,13 +84,6 @@ function toTitleCase(s: string): string {
   return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
-function worstStatus(cells: Record<string,Cell>|undefined): CS {
-  if (!cells) return 'no_trade'
-  const v = Object.values(cells).map(c => c.status)
-  for (const s of ['error','open','order_pending','algo_active','waiting','algo_closed'] as CS[])
-    if (v.includes(s)) return s
-  return 'no_trade'
-}
 
 // ── Custom dropdown ────────────────────────────────────────────────────────────
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -126,6 +109,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
   const [showDeferModal, setShowDeferModal] = useState(false)
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
+  const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -378,6 +362,21 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:false } : x))
     try { await algosAPI.unarchive(algoId) } catch { setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x)); flashError('Reactivate failed') }
   }
+
+  // ── Cancel WAITING/ERROR entry ─────────────────────────────────────────────────
+  const cancelEntry = async (algoId: string, day: string, entryId: string) => {
+    if (!window.confirm(`Cancel this ${day} run? It will be marked NO_TRADE.`)) return
+    try {
+      await gridAPI.cancel(entryId)
+      setGrid(g => ({
+        ...g,
+        [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], status: 'no_trade' as CS } }
+      }))
+    } catch (e: any) {
+      flashError(e?.response?.data?.detail || 'Cancel failed')
+    }
+  }
+
   const duplicateAlgo = async (algoId: string) => {
     try {
       await algosAPI.duplicate(algoId)
@@ -535,8 +534,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                 {!isCollapsed && (
                   <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'4px' }}>
                     {groupAlgos.map(algo => {
-                      const st          = worstStatus(grid[algo.id])
-                      const bar         = STATUS_BAR[st]
                       const mult        = cardMults[algo.id] || 1
                       const isExpanded  = expandedId === algo.id
                       const typeStr     = algo.account?.toLowerCase().includes('ao') ? 'Direct' : 'Broker'
@@ -555,11 +552,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                           {/* ── Main row ── */}
                           <div className="algo-card" style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
 
-                            {/* Status strip — full card height */}
-                            <div style={{ width:'4px', flexShrink:0, alignSelf:'stretch',
-                              background:bar.color, borderRadius:'2px',
-                              boxShadow:`0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}`,
-                              animation: st === 'open' ? 'statusPulseGreen 2s ease-in-out infinite' : st === 'algo_active' ? 'statusPulseOrange 2s ease-in-out infinite' : 'none' }}/>
 
                             {/* Card row body */}
                             <div style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'16px 20px' }}>
@@ -651,60 +643,60 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                   let dotColor   = 'transparent'
                                   let dotAnim    = false
 
-                                  if (!cell && !isInRecurring) {
-                                    // not deployed — transparent, dim
+                                  const s = cell?.status
+
+                                  // Status colors always win — even if day not in recurringDays
+                                  // (handles manually-deployed days that aren't in recurring schedule)
+                                  if (s === 'waiting' || s === 'algo_active') {
+                                    pillBg     = 'rgba(255,180,0,0.25)'
+                                    pillBorder = '0.5px solid rgba(255,180,0,0.70)'
+                                    pillColor  = '#FFB800'
+                                    pillWeight = 700
+                                  } else if (s === 'open' || s === 'order_pending') {
+                                    pillBg     = 'rgba(34,221,136,0.20)'
+                                    pillBorder = '0.5px solid rgba(34,221,136,0.60)'
+                                    pillColor  = '#22DD88'
+                                    pillWeight = 700
+                                    showDot    = true
+                                    dotColor   = '#22DD88'
+                                    dotAnim    = true
+                                  } else if (s === 'algo_closed') {
+                                    pillBg     = 'rgba(34,221,136,0.08)'
+                                    pillBorder = '0.5px solid rgba(34,221,136,0.25)'
+                                    pillColor  = 'rgba(34,221,136,0.55)'
+                                    pillWeight = 600
+                                  } else if (s === 'error') {
+                                    pillBg     = 'rgba(255,68,68,0.20)'
+                                    pillBorder = '0.5px solid rgba(255,68,68,0.60)'
+                                    pillColor  = '#FF4444'
+                                    pillWeight = 700
+                                    showDot    = true
+                                    dotColor   = '#FF4444'
+                                    dotAnim    = true
+                                  } else if (isInRecurring) {
+                                    // Enabled (in recurring schedule), no active status — orange
+                                    pillBg     = 'rgba(255,107,0,0.20)'
+                                    pillBorder = '0.5px solid rgba(255,107,0,0.60)'
+                                    pillColor  = '#FF6B00'
+                                    pillWeight = 700
+                                  } else {
+                                    // Not in recurring schedule, no active cell — grey
                                     pillBg     = 'transparent'
                                     pillBorder = '0.5px solid rgba(255,255,255,0.12)'
                                     pillColor  = 'rgba(255,255,255,0.25)'
                                     pillWeight = 400
-                                  } else if (!cell && isInRecurring) {
-                                    // deployed but no entry yet — no_trade style (dim orange)
-                                    pillBg     = 'rgba(255,107,0,0.05)'
-                                    pillBorder = '0.5px solid rgba(255,107,0,0.30)'
-                                    pillColor  = 'rgba(255,107,0,0.50)'
-                                    pillWeight = 500
-                                  } else if (cell) {
-                                    const s = cell.status
-                                    if (s === 'waiting' || s === 'algo_active') {
-                                      pillBg     = 'rgba(255,180,0,0.25)'
-                                      pillBorder = '0.5px solid rgba(255,180,0,0.70)'
-                                      pillColor  = '#FFB800'
-                                      pillWeight = 700
-                                      showDot    = false
-                                    } else if (s === 'open' || s === 'order_pending') {
-                                      pillBg     = 'rgba(34,221,136,0.20)'
-                                      pillBorder = '0.5px solid rgba(34,221,136,0.60)'
-                                      pillColor  = '#22DD88'
-                                      pillWeight = 700
-                                      showDot    = true
-                                      dotColor   = '#22DD88'
-                                      dotAnim    = true
-                                    } else if (s === 'algo_closed') {
-                                      pillBg     = 'rgba(34,221,136,0.08)'
-                                      pillBorder = '0.5px solid rgba(34,221,136,0.25)'
-                                      pillColor  = 'rgba(34,221,136,0.55)'
-                                      pillWeight = 600
-                                    } else if (s === 'error') {
-                                      pillBg     = 'rgba(255,68,68,0.20)'
-                                      pillBorder = '0.5px solid rgba(255,68,68,0.60)'
-                                      pillColor  = '#FF4444'
-                                      pillWeight = 700
-                                      showDot    = true
-                                      dotColor   = '#FF4444'
-                                      dotAnim    = true
-                                    } else {
-                                      // no_trade or unknown
-                                      pillBg     = 'transparent'
-                                      pillBorder = '0.5px solid rgba(255,255,255,0.12)'
-                                      pillColor  = 'rgba(255,255,255,0.25)'
-                                      pillWeight = 400
-                                    }
                                   }
+
+                                  const pillKey = `${algo.id}-${day}`
+                                  const canCancel = (s === 'waiting' || s === 'algo_active' || s === 'error') && !!cell?.gridEntryId
+                                  const isPillHovered = hoveredPill === pillKey
 
                                   return (
                                     <button key={day}
                                       onClick={e => { e.stopPropagation(); void toggleDay(algo, day) }}
-                                      title={`${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
+                                      onMouseEnter={() => canCancel && setHoveredPill(pillKey)}
+                                      onMouseLeave={() => setHoveredPill(null)}
+                                      title={canCancel ? `${day} · hover for cancel` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
                                       style={{
                                         width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
                                         fontFamily:'var(--font-display)', fontSize:'10px',
@@ -718,7 +710,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                         boxShadow: 'none',
                                       }}>
                                       {DAY_LBL[i]}
-                                      {showDot && (
+                                      {showDot && !isPillHovered && (
                                         <span style={{
                                           position:'absolute',
                                           top:'4px',
@@ -729,6 +721,17 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                           background: dotColor,
                                           animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
                                         }}/>
+                                      )}
+                                      {canCancel && isPillHovered && (
+                                        <span
+                                          onClick={e => { e.stopPropagation(); void cancelEntry(algo.id, day, cell!.gridEntryId!) }}
+                                          title="Cancel this run"
+                                          style={{
+                                            position:'absolute', inset:0, borderRadius:'50%',
+                                            display:'flex', alignItems:'center', justifyContent:'center',
+                                            background: 'rgba(0,0,0,0.65)', fontSize:'13px', color:'#FF4444',
+                                            fontWeight:700, lineHeight:1,
+                                          }}>×</span>
                                       )}
                                     </button>
                                   )

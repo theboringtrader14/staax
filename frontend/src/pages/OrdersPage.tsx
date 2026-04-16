@@ -669,27 +669,6 @@ export default function OrdersPage() {
   const openLegs = (idx: number) => (orders[idx]?.legs || []).filter(l => l.status === 'open')
 
   // ── Actions ──────────────────────────────────────────────────────────────
-  const doRE = async (idx: number) => {
-    const algoId = orders[idx].algoId
-    setLoading(l => ({ ...l, [`re-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '↻ Retrying...', 'var(--accent-amber)')
-    try {
-      const res  = await algosAPI.re(algoId)
-      const data = res.data as { retried: number; skipped_duplicate: number; max_retries_reached: number }
-      if (data.retried === 0 && data.skipped_duplicate > 0) {
-        setInlineStatus(setOrders, idx, '⚠️ Position already open at broker', 'var(--amber)')
-      } else if (data.retried === 0 && data.max_retries_reached > 0) {
-        setInlineStatus(setOrders, idx, '⛔ Max retries reached', 'var(--red)')
-      } else {
-        setInlineStatus(setOrders, idx, `↻ Retrying ${data.retried} leg${data.retried !== 1 ? 's' : ''}`, 'var(--green)')
-      }
-    } catch {
-      setInlineStatus(setOrders, idx, '⚠️ Retry failed', 'var(--red)', 0, true)
-    } finally {
-      setLoading(l => ({ ...l, [`re-${idx}`]: false }))
-    }
-  }
-
   const doRetry = async (idx: number) => {
     const gridEntryId = orders[idx]?.gridEntryId
     if (!gridEntryId) return
@@ -710,10 +689,34 @@ export default function OrdersPage() {
         .then(res => setWaitingAlgos(res.data?.waiting || []))
         .catch(() => {})
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.message || 'RE-RUN failed'
+      const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
       setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
+    }
+  }
+
+  // Retry specific errored legs (partial failure — some legs succeeded)
+  const doRetryLegs = async (idx: number) => {
+    const gridEntryId = orders[idx]?.gridEntryId
+    if (!gridEntryId) return
+    const selectedLegIds = Object.keys(retryChecked).filter(k => retryChecked[k])
+    if (selectedLegIds.length === 0) return
+    setLoading(l => ({ ...l, [`retry-${idx}`]: true }))
+    setInlineStatus(setOrders, idx, '↻ Retrying legs...', 'var(--accent-amber)', 30000)
+    try {
+      await ordersAPI.retryLegs(gridEntryId, selectedLegIds)
+      await new Promise(r => setTimeout(r, 800))
+      setInlineStatus(setOrders, idx, '✅ Done', 'var(--green)', 3000)
+      ordersAPI.list(selectedDate, isPractixMode)
+        .then(r => { const raw: any[] = r.data?.groups || []; setOrders(raw.map(mapGroup)) })
+        .catch(() => {})
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Retry legs failed'
+      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+    } finally {
+      setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
+      setRetryModal(null)
     }
   }
 
@@ -892,9 +895,9 @@ export default function OrdersPage() {
   const isPastDay = selectedDate < todayDate
 
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
-  // Past days: hide groups with zero filled legs (WAITING/ERROR/NO_TRADE placeholders that have no actual fills)
+  // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
   const localFilteredOrders  = isPastDay
-    ? localFilteredOrdersRaw.filter(g => g.legs.some(l => l.fillPrice != null))
+    ? localFilteredOrdersRaw.filter(g => g.legs.some(l => l.fillPrice != null && (l.status === 'open' || l.status === 'closed')))
     : localFilteredOrdersRaw
   // Past days: never show the waiting/error section (nothing actionable about yesterday's errors)
   const localFilteredWaiting = isPastDay ? [] : (accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter))
@@ -1140,10 +1143,8 @@ export default function OrdersPage() {
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
               }
 
-              const canReRun  = (isMissed || isError) && !isRetrying
-              const canRetry  = (!!w.latest_error || isError) && !isRetrying
+              const canRetry  = (isMissed || isError || !!w.latest_error) && !isRetrying
               const missedBtns = [
-                { label: isRetrying ? '↻' : 'RE-RUN', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canReRun,  action: canReRun  ? doWaitingRE : undefined },
                 { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
                 { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
                 { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true, action: undefined },
@@ -1289,7 +1290,9 @@ export default function OrdersPage() {
         {/* Empty state */}
         {localFilteredOrders.length === 0 && localFilteredWaiting.length === 0 && (
           <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
-            {isPastDay ? 'No trades executed on this day.' : 'No orders for today.'}
+            {isPastDay
+            ? `No trades executed on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}.`
+            : 'No orders for today.'}
           </div>
         )}
 
@@ -1340,6 +1343,7 @@ export default function OrdersPage() {
                     // Action button helper booleans
                     const hasOpenLegs  = openLegs(gi).length > 0
                     const allLegsError = group.legs.length > 0 && group.legs.every(l => l.status === 'error')
+                    const someLegsError = group.legs.some(l => l.status === 'error')
                     const isTerminated = !!group.terminated
                     const isOrbAlgo    = group.entryType === 'orb'
                     const isOrbMissed  = isOrbAlgo && !!group.orbEndTime && (() => {
@@ -1347,16 +1351,27 @@ export default function OrdersPage() {
                       const istNow   = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
                       return istNow.getHours() > hh || (istNow.getHours() === hh && istNow.getMinutes() >= mm)
                     })()
-                    const canRetry = !!group.gridEntryId && allLegsError && !isTerminated && !isClosed && !isOrbMissed
-                    const canReRun = algoSt === 'no_trade' && !isTerminated && !!group.gridEntryId
+                    // RETRY is available when: algo errored (all or some legs), or no_trade (missed entry)
+                    const canRetry = !!group.gridEntryId && !isTerminated && !isOrbMissed &&
+                      (algoSt === 'error' || algoSt === 'no_trade' || someLegsError)
 
-                    // Action button definitions
+                    // RETRY action: direct retry if all legs errored or no_trade; modal for partial errors
+                    const doSmartRetry = () => {
+                      if (allLegsError || algoSt === 'no_trade') {
+                        doRetry(gi)
+                      } else {
+                        const errLegs = group.legs.filter(l => l.status === 'error')
+                        setRetryChecked(Object.fromEntries(errLegs.map(l => [l.id, true] as [string, boolean])))
+                        setRetryModal({ algoIdx: gi, legs: errLegs })
+                      }
+                    }
+
+                    // Action button definitions — RE-RUN removed, single smart RETRY
                     const BTNS = [
-                      { label: loading[`retry-${gi}`] ? '↻' : 'RE-RUN', col: canReRun ? '#F59E0B' : '#6B6B6B', bg: canReRun ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canReRun || !!loading[`retry-${gi}`], title: canReRun ? undefined : 'Available only when algo missed entry (no_trade)', action: () => doRetry(gi) },
                       { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
                       { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs, title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: loading[`re-${gi}`] ? '↻' : 'RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`re-${gi}`], title: isOrbMissed ? 'ORB window closed' : (allLegsError ? undefined : 'All legs must be in error state'), action: () => { const errLegs = group.legs.filter(l => l.status === 'error'); setRetryChecked(Object.fromEntries(errLegs.map(l => [l.id, true] as [string, boolean]))); setRetryModal({ algoIdx: gi, legs: errLegs }) } },
+                      { label: loading[`retry-${gi}`] ? '↻' : 'RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`], title: isOrbMissed ? 'ORB window closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined), action: doSmartRetry },
                       { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
@@ -1661,7 +1676,7 @@ export default function OrdersPage() {
               <button className="btn btn-ghost" onClick={() => setRetryModal(null)}>Cancel</button>
               <button className="btn btn-primary"
                 disabled={!Object.values(retryChecked).some(Boolean) || !!loading[`re-${retryModal.algoIdx}`]}
-                onClick={() => { doRE(retryModal.algoIdx); setRetryModal(null) }}>
+                onClick={() => doRetryLegs(retryModal.algoIdx)}>
                 {loading[`re-${retryModal.algoIdx}`] ? '↻ Retrying...' : '↻ Retry Selected'}
               </button>
             </div>

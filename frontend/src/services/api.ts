@@ -98,6 +98,7 @@ export const gridAPI = {
 
   remove:    (entryId: string, removeRecurring = false) =>
     api.delete(`/grid/${entryId}`, { params: removeRecurring ? { remove_recurring: true } : {} }),
+  cancel:    (entryId: string) => api.patch(`/grid/${entryId}/cancel`),
   archive:   (entryId: string) => api.post(`/grid/${entryId}/archive`),
   unarchive: (entryId: string) => api.post(`/grid/${entryId}/unarchive`),
 
@@ -133,6 +134,8 @@ export const ordersAPI = {
     api.post(`/orders/${algoId}/sync`, data),
   retryEntry: (gridEntryId: string) =>
     api.post(`/orders/${gridEntryId}/retry`),
+  retryLegs: (gridEntryId: string, legIds: string[]) =>
+    api.post(`/orders/${gridEntryId}/retry-legs`, { leg_ids: legIds }),
   positionCheck: (isPractix?: boolean) =>
     api.get('/orders/position-check', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
 }
