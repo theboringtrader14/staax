@@ -75,6 +75,7 @@ class LegCreate(BaseModel):
     reentry_max_sl:    Optional[int]   = 0
     reentry_max_tp:    Optional[int]   = 0
     journey_config:  Optional[dict] = None
+    journey_trigger: Optional[str]  = 'either'   # 'sl' | 'tp' | 'either'
 
 
 class AlgoCreateRequest(BaseModel):
@@ -186,6 +187,7 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "reentry_type":     leg.reentry_type,
         "reentry_ltp_mode": leg.reentry_ltp_mode,
         "journey_config":  leg.journey_config,
+        "journey_trigger": leg.journey_trigger or 'either',
         "is_archived":     leg.is_archived,
     }
 
@@ -268,6 +270,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         reentry_type=leg_data.reentry_type,
         reentry_ltp_mode=leg_data.reentry_ltp_mode,
         journey_config=leg_data.journey_config,
+        journey_trigger=leg_data.journey_trigger or 'either',
         underlying_token=UNDERLYING_TOKENS.get((leg_data.underlying or "").upper(), 0),
     )
 
@@ -310,7 +313,8 @@ def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     leg.reentry_max_tp    = data.reentry_max_tp or 0
     leg.reentry_type    = data.reentry_type
     leg.reentry_ltp_mode = data.reentry_ltp_mode
-    leg.journey_config  = data.journey_config
+    leg.journey_config   = data.journey_config
+    leg.journey_trigger  = data.journey_trigger or 'either'
     leg.underlying_token = UNDERLYING_TOKENS.get((data.underlying or "").upper(), 0)
 
 
@@ -735,6 +739,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
             reentry_type=leg.reentry_type,
             reentry_ltp_mode=leg.reentry_ltp_mode,
             journey_config=leg.journey_config,
+            journey_trigger=leg.journey_trigger or 'either',
             underlying_token=leg.underlying_token,
         )
         db.add(new_leg)

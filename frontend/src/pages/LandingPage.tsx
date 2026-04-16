@@ -43,7 +43,7 @@ const MODULES = [
   {
     id: 'FINEX',
     tagline: 'Personal CFO',
-    description: 'Your financial command center. Daily briefings, LIFEX Score, and cross-module intelligence.',
+    description: 'Your Personal CFO. LIFEX Score, net worth tracking, goal planning & FI progress, and daily AI briefings — all in one intelligence center.',
     accent: '#F59E0B',
     accentDim: 'rgba(245,158,11,0.12)',
     accentKey: 'gold',
@@ -51,6 +51,20 @@ const MODULES = [
     statusColor: '#F59E0B',
     path: null,
     externalUrl: 'https://finex.lifexos.co.in',
+  },
+  {
+    id: 'TRAVEX',
+    tagline: 'Travel Intelligence',
+    description: 'Log air, train, and bus journeys on an animated 3D globe. AI travel buddy that knows your finances and suggests when and where you can travel next.',
+    accent: '#38bdf8',
+    accentDim: 'rgba(56,189,248,0.12)',
+    accentKey: 'sky',
+    status: 'COMING SOON',
+    statusColor: 'rgba(56,189,248,0.8)',
+    building: true,
+    comingSoon: false,
+    externalUrl: null,
+    path: null,
   },
   {
     id: 'HEALTHEX',
@@ -64,28 +78,17 @@ const MODULES = [
     path: null,
   },
   {
-    id: 'NETEX',
-    tagline: 'Net Worth Engine',
-    description: 'Complete balance sheet — assets, liabilities, and real-time net worth tracking.',
-    accent: '#64748B',
-    accentDim: 'rgba(100,116,139,0.08)',
+    id: 'HISTEX',
+    tagline: 'Historical Data & Backtesting',
+    description: 'OHLCV data across NSE/MCX, strategy replay engine, backtest your algo strategies against historical market data.',
+    accent: '#4488FF',
+    accentDim: 'rgba(68,136,255,0.12)',
     accentKey: 'muted',
-    status: '🚧 Coming Soon',
+    status: 'COMING SOON',
     statusColor: 'rgba(232,232,248,0.4)',
     path: null,
     comingSoon: true,
-  },
-  {
-    id: 'GOALEX',
-    tagline: 'Goals & FI Planning',
-    description: 'Track financial goals and your path to Financial Independence.',
-    accent: '#64748B',
-    accentDim: 'rgba(100,116,139,0.08)',
-    accentKey: 'muted',
-    status: '🚧 Coming Soon',
-    statusColor: 'rgba(232,232,248,0.4)',
-    path: null,
-    comingSoon: true,
+    externalUrl: null,
   },
 ]
 
@@ -162,8 +165,8 @@ export default function LandingPage() {
           { color: ss ? ok : err,    text: `${ss     ? '✓' : '✗'} SmartStream   — ${ss     ? 'active'    : 'down'}` },
           { color: sched ? ok : err, text: `${sched  ? '✓' : '✗'} Scheduler     — ${sched  ? 'running'   : 'down'}` },
           { color: finexOk ? ok : err, text: `${finexOk ? '✓' : '✗'} FINEX         — ${finexOk ? 'online' : 'offline'}` },
-          { color: unk,              text: '— NETEX         — coming soon' },
-          { color: unk,              text: '— GOALEX        — coming soon' },
+          { color: unk,              text: '— TRAVEX        — building' },
+          { color: unk,              text: '— HISTEX        — planned' },
         ])
       })
       .catch(() => {
@@ -173,8 +176,8 @@ export default function LandingPage() {
           { color: unk, text: '— Database      — unknown' },
           { color: unk, text: '— Redis         — unknown' },
           { color: unk, text: '— FINEX         — unknown' },
-          { color: unk, text: '— NETEX         — coming soon' },
-          { color: unk, text: '— GOALEX        — coming soon' },
+          { color: unk, text: '— TRAVEX        — building' },
+          { color: unk, text: '— HISTEX        — planned' },
         ])
       })
   }, [])
@@ -285,6 +288,7 @@ export default function LandingPage() {
         .landing-module-card[data-accent="purple"]:hover  { box-shadow: 0 0 40px rgba(124,58,237,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="gold"]:hover    { box-shadow: 0 0 40px rgba(245,158,11,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="red"]:hover     { box-shadow: 0 0 40px rgba(239,68,68,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
+        .landing-module-card[data-accent="sky"]:hover     { box-shadow: 0 0 40px rgba(56,189,248,0.15), 0 0 80px rgba(52,211,153,0.08), 0 12px 40px rgba(0,0,0,0.5) !important; }
         .landing-module-card[data-accent="muted"]:hover   { transform: none !important; box-shadow: none !important; }
         .landing-terminal { position: relative; overflow: hidden; }
         .landing-terminal::after {
@@ -556,14 +560,26 @@ export default function LandingPage() {
               onClick={() => { if (!('comingSoon' in mod && mod.comingSoon) && ('externalUrl' in mod) && mod.externalUrl) handleModuleClick(mod.id) }}
               style={{
                 background: `rgba(10,10,26,0.7)`,
-                border: ('comingSoon' in mod && mod.comingSoon) ? '0.5px solid rgba(255,255,255,0.08)' : `1px solid ${mod.accent}30`,
+                border: ('comingSoon' in mod && mod.comingSoon)
+                  ? '0.5px solid rgba(255,255,255,0.08)'
+                  : ('building' in mod && mod.building)
+                    ? '1px solid rgba(56,189,248,0.3)'
+                    : `1px solid ${mod.accent}30`,
                 borderRadius: '12px',
                 padding: '20px',
                 cursor: ('comingSoon' in mod && mod.comingSoon) ? 'default' : (('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default'),
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
-                borderTop: ('comingSoon' in mod && mod.comingSoon) ? '0.5px solid rgba(255,255,255,0.08)' : `2px solid ${mod.accent}`,
-                boxShadow: ('comingSoon' in mod && mod.comingSoon) ? 'none' : `inset 0 1px 0 ${mod.accent}20, 0 4px 24px rgba(0,0,0,0.4)`,
+                borderTop: ('comingSoon' in mod && mod.comingSoon)
+                  ? '0.5px solid rgba(255,255,255,0.08)'
+                  : ('building' in mod && mod.building)
+                    ? '2px solid #38bdf8'
+                    : `2px solid ${mod.accent}`,
+                boxShadow: ('comingSoon' in mod && mod.comingSoon)
+                  ? 'none'
+                  : ('building' in mod && mod.building)
+                    ? '0 0 40px rgba(56,189,248,0.15), 0 0 80px rgba(52,211,153,0.08), 0 12px 40px rgba(0,0,0,0.5)'
+                    : `inset 0 1px 0 ${mod.accent}20, 0 4px 24px rgba(0,0,0,0.4)`,
                 opacity: ('comingSoon' in mod && mod.comingSoon) ? 0.55 : 1,
               } as React.CSSProperties}
             >
@@ -571,7 +587,12 @@ export default function LandingPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <div style={{
                   fontSize: '15px', fontWeight: 800, letterSpacing: '0.05em',
-                  color: mod.accent,
+                  color: ('building' in mod && mod.building) ? undefined : mod.accent,
+                  ...(('building' in mod && mod.building) ? {
+                    background: 'linear-gradient(135deg, #38bdf8, #2dd4bf, #34d399)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  } : {}),
                 }}>{mod.id}</div>
                 <span style={{
                   fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em',
@@ -653,7 +674,7 @@ export default function LandingPage() {
               items: [
                 'BUDGEX — expense categorisation and budget tracking',
                 'STAAX analytics — per-algo P&L breakdown and reports',
-                'Mobile-responsive layouts across all modules',
+                'TRAVEX — travel log, 3D globe, AI travel buddy',
                 'Notification system — alerts for SL/TP hits and events',
               ],
             },
@@ -665,7 +686,7 @@ export default function LandingPage() {
               statusColor: 'rgba(167,139,250,0.6)',
               items: [
                 'HEALTHEX — workouts, nutrition, wearable integration',
-                'GOALEX — life goals, milestones, and habit loops',
+                'HISTEX — historical data, strategy backtesting',
                 'AI-powered spending and portfolio insights',
                 'Cross-module unified P&L and net worth view',
               ],

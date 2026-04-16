@@ -1245,7 +1245,8 @@ class AlgoRunner:
         # ── Register Journey ────────────────────────────────────────────────────
         journey_cfg = getattr(leg, "journey_config", None)
         if self._journey_engine and journey_cfg:
-            self._journey_engine.register(str(order.id), journey_cfg, depth=1)
+            journey_trigger = getattr(leg, "journey_trigger", None) or 'either'
+            self._journey_engine.register(str(order.id), journey_cfg, depth=1, journey_trigger=journey_trigger)
 
         return order
 

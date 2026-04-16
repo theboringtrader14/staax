@@ -104,13 +104,13 @@ class JourneyEngine:
         # order_id → journey_config for active parent orders
         self._watched: dict = {}
 
-    def register(self, order_id: str, journey_config: dict, depth: int = 1):
+    def register(self, order_id: str, journey_config: dict, depth: int = 1, journey_trigger: str = 'either'):
         """Called after order is placed if leg.journey_config is set."""
         if depth >= MAX_JOURNEY_DEPTH:
             logger.info(f"Journey: max depth {MAX_JOURNEY_DEPTH} reached for {order_id} — no child")
             return
-        self._watched[order_id] = {"config": journey_config, "depth": depth}
-        logger.info(f"Journey registered: {order_id} depth={depth}")
+        self._watched[order_id] = {"config": journey_config, "depth": depth, "journey_trigger": journey_trigger}
+        logger.info(f"Journey registered: {order_id} depth={depth} trigger={journey_trigger}")
 
     def deregister(self, order_id: str):
         self._watched.pop(order_id, None)
@@ -136,11 +136,23 @@ class JourneyEngine:
         if not entry:
             return
 
+        # ── journey_trigger gate ─────────────────────────────────────────────
+        journey_trigger = entry.get("journey_trigger", "either")
+        SL_EXITS = {'sl', 'tsl', 'overnight_sl'}
+        TP_EXITS = {'tp', 'tsl_tp', 'mtm_tp'}
+        if journey_trigger == 'sl' and exit_reason not in SL_EXITS:
+            logger.info(f"[JOURNEY] Skipping child — trigger=sl, exit={exit_reason} not in SL exits")
+            return
+        if journey_trigger == 'tp' and exit_reason not in TP_EXITS:
+            logger.info(f"[JOURNEY] Skipping child — trigger=tp, exit={exit_reason} not in TP exits")
+            return
+        # 'either' falls through
+
         config = entry["config"]
         depth  = entry["depth"]
 
         logger.info(
-            f"Journey trigger: {order.id} | reason={exit_reason} | depth={depth} → firing child"
+            f"Journey trigger: {order.id} | reason={exit_reason} | trigger={journey_trigger} | depth={depth} → firing child"
         )
 
         try:

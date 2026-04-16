@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 8.4 | **Last Updated:** 16 April 2026 — Batch 30: P0 data loss prevention — G2 per-leg DB session isolation (commit after each leg + refresh algo_state/grid_entry; error paths reload orders by ID from cache); G3 write-before-broker (Order(PENDING) flushed before broker call → PENDING→OPEN on confirm, PENDING→ERROR on broker failure); G4 order_audit_log table + order_audit.py module (fire-and-forget audit writes per transition); RETRY ORB-awareness (isOrbWindowPast computed from orb_end_time IST, RETRY button greyed with "ORB ✕" label, W&T info line in row 2); waiting card 2-row layout (row 1: name+chips+time; row 2: full error/missed detail); GridPage no_trade pill → dim grey; /waiting endpoint adds entry_type + orb_end_time; §32 RETRY rules table added | **PRD Reference:** v1.2
+**Version:** 8.5 | **Last Updated:** 16 April 2026 — Session 16 Apr: P0 engine fixes (MissingGreenlet root cause, per-leg DB session isolation, write-before-broker, order audit log, recover_today_jobs ERROR handling, retry reliability), Orders page (past-day filter, unified RETRY, ERROR/MISSED cards, cancel pill), Analytics Latency tab upgrade (p99/success_rate/distribution/broker breakdown/recent orders), Broker View toggle, Accounts funds strip, Positions endpoint, TRAVEX Phase 1 scaffold (Globe3D, FastAPI :8004, React :3004, 11 cities, 5 trips), Landing page restructure (TRAVEX+HISTEX added, NETEX+GOALEX removed), start.sh improvements, DB conflict resolved (pg16 vs Docker), platform family table updated to 7 modules | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -11,15 +11,18 @@ This section exists so Claude never loses sight of the bigger picture across ses
 
 ### The Platform Family
 
-A personal financial OS being built by Karthikeyan. Five modules planned, each independent but feeding into FINEX as the master layer:
+A personal financial OS being built by Karthikeyan. Seven modules, each independent but feeding into FINEX as the master layer. NETEX and GOALEX are sub-features of FINEX, not separate modules.
 
 | Module | Full Name | Purpose | Status |
 |--------|-----------|---------|--------|
 | **STAAX** | Algo Trading Platform | F&O algo trading — automated strategies, order management, live P&L | 🔄 Phase 1F active |
 | **INVEX** | Portfolio Manager | Fetches investments across all mapped accounts (Karthik, Mom, Wife). Fundamental + tech analysis dashboards. Quick insights to manage equity/MF portfolio. AI-assisted flagging and rebalancing. | 🔭 Future |
 | **BUDGEX** | Expense Tracker | Captures everyday expenditure, organises it, feeds structured data to FINEX and the AI Avatar for financial reasoning | 🔭 Future |
-| **FINEX** | Financial OS | Sits atop all modules. Consolidates data from STAAX + INVEX + BUDGEX. Tax planning, advance tax computation, networth view, financial independence status, expense management | 🔭 Future |
-| **Avatar** | AI Financial Companion | Animated human avatar (Karthikeyan's avatar) embedded in FINEX. Greets on login, speaks & listens, surfaces tasks and portfolio insights. Name TBD. Replaces the earlier "FINEY" concept. | 🔭 Future |
+| **FINEX** | Financial OS | Sits atop all modules. Consolidates data from STAAX + INVEX + BUDGEX. Tax planning, advance tax computation, networth view, financial independence status, goal tracking, expense management. Note: NETEX (net worth tracking) and GOALEX (goal planning) are sub-features of FINEX. | 🔭 Future |
+| **TRAVEX** | Travel Intelligence | Trip log, 3D globe visualisation, AI travel buddy (Gemma 4), budget-aware travel suggestions | 🔄 Phase 1 active |
+| **HEALTHEX** | Health Tracker | Fitness, nutrition, and wellness tracking | 🔭 Future |
+| **HISTEX** | Historical Data | OHLCV data store, backtesting engine | 🔭 Planned |
+| **Avatar** | AI Financial Companion | Animated human avatar (Karthikeyan's avatar) embedded in FINEX. Greets on login, speaks & listens, surfaces tasks and portfolio insights. | 🔭 Future |
 
 ### Module relationships
 
@@ -3747,15 +3750,21 @@ None.
 
 | Item | Value |
 |------|-------|
-| Local backend | port 8000 |
-| Local frontend | port 3000 (npm run dev) |
+| STAAX backend | port 8000 |
+| INVEX backend | port 8001 |
+| BUDGEX backend | port 8002 |
+| FINEX backend | port 8003 |
+| TRAVEX backend | port 8004 |
+| STAAX frontend | port 3000 (npm run dev) |
+| TRAVEX frontend | port 3004 (npm run dev) |
 | DB backup | `~/STAXX/backup_db.sh` |
-| Local DB | Docker `staax_db`, TCP 127.0.0.1:5432 |
+| Local DB | Docker `staax_db`, TCP 127.0.0.1:5432 (Homebrew pg16 disabled — was conflicting on 5432) |
+| travex_db | In same Docker container as staax_db |
 | NSE tokens | NIFTY=99926000, BANKNIFTY=99926009, FINNIFTY=99926037, SENSEX=99919000 |
 | MCX exchange type | 5 (not NFO=2) |
 | Instrument master | `backend/instrument_master_cache.json` |
 | Git org | github.com/theboringtrader14 |
-| Repos | staax, invex, budgex |
+| Repos | staax, invex, budgex, travex |
 
 ## Audit Findings — 2026-04-02
 
@@ -4917,3 +4926,272 @@ Frontend: `isOrbWindowPast = isOrbAlgo && orb_end_time && (IST.hours*60 + IST.mi
 
 The `orb_end_time` field is returned by `/waiting` as `"HH:MM"` (truncated from `"HH:MM:SS"` stored in DB).
 
+
+---
+
+## Session Notes — 16 April 2026 (Batch 30 + TRAVEX Phase 1)
+
+### P0 Engine Fixes
+
+#### MissingGreenlet — Root Cause Found and Fixed
+
+Full chain:
+1. `_place_leg()` called `self._ltp_consumer.get_ltp(wt_underlying_token)` — method did not exist on `LTPConsumer`
+2. `AttributeError` raised inside the try block
+3. `except` block accessed `leg.leg_number` on an ORM object already **expired by `await db.rollback()`**
+4. SQLAlchemy lazy-load triggered synchronously without greenlet context → `MissingGreenlet` cascade
+
+**Fix — `ltp_consumer.py`:**
+- Added `self._ltp_map: Dict[int, float] = {}` populated in `_process_ticks` on every tick
+- Added `get_ltp(self, token: int) -> float` — sync lookup from in-memory map, returns `0.0` if unseen
+
+**Fix — `algo_runner.py`:**
+- Captured `leg_number = leg.leg_number` as a plain Python `int` **before** the `try` block in the legs loop — all `except` references use this captured value, never touch the expired ORM object
+
+#### Per-Leg DB Session Isolation
+
+Each leg in `_enter_with_db()` now uses its own `AsyncSessionLocal()` context. One leg's failure (rollback) no longer corrupts other legs' sessions.
+
+#### Write-Before-Broker (Order Durability)
+
+`_place_leg()` now creates `Order(status=PENDING)` and **commits to DB before calling broker API**:
+- Broker success → updates order to `OPEN` with `fill_price`
+- Broker failure → updates order to `ERROR` with error message
+- Order record is never lost even if broker call throws
+
+#### Order Audit Log (Migration 0034)
+
+- New `order_audit_log` table: `(id, order_id, event, detail, created_at)`
+- `order_audit.py` module with **independent session** (not tied to request lifecycle)
+- Events logged as background tasks: `ORDER_ATTEMPTED`, `ORDER_PENDING`, `ORDER_PLACED`, `ORDER_FAILED`
+- Fired from `_place_leg()` at each transition
+
+#### recover_today_jobs() — ERROR State Handling
+
+- WHERE clause extended to include `AlgoRunStatus.ERROR`
+- ERROR algos with `entry_time` in future: reset to WAITING, clear `error_message` + `closed_at`, set `grid_entry.status = ALGO_ACTIVE`, re-register `_job_entry`
+- ERROR/WAITING algos with `entry_time` in past: mark NO_TRADE immediately
+- Guard: skips NO_TRADE override when `grid_entry.status == ALGO_ACTIVE` (set by RETRY endpoint) — prevents restart wiping RETRY state
+
+#### Retry Endpoint Fixes
+
+- Uses `run_coroutine_threadsafe` with scheduler's captured event loop — no more `MissingGreenlet` on RETRY
+- `force_direct=True` + `force_immediate=True` flags on `enter()` — RETRY bypasses `entry_time` check and W&T deferral, fires immediately
+- `force_direct` skips W&T block entirely in `_place_leg()` — places market order at current LTP
+- Cancels `entry_expiry_{grid_entry_id}` APScheduler job before re-arming — prevents stale expiry killing the retried algo
+
+#### /orders/waiting Endpoint Extended
+
+Now surfaces:
+- NO_TRADE algos with `error_message` set (engine failures)
+- NO_TRADE algos with `activated_at` set and no error (ENTRY_MISSED)
+
+Added fields to response: `entry_type`, `orb_end_time` (for RETRY rules)
+
+**RETRY rules by entry type:**
+- Direct / W&T / STBT / BTST → always allow RETRY
+- ORB → blocked with "ORB window passed" if `orb_end_time` has passed
+
+**W&T info line on RETRY:** "⚡ Will re-capture strike and ref price at current market levels"
+
+#### Miscellaneous Engine Fixes
+
+- `execution_logs.grid_entry_id` column added (was missing, caused `/logs/` 500s)
+- `placed_at`, `filled_at`, `latency_ms` columns added to `orders` (were missing from pg16→Docker migration)
+- `orders.py` API: `_parse_date()` default changed from `date.today()` to `datetime.now(ZoneInfo("Asia/Kolkata")).date()` — fixes wrong date after midnight UTC on server
+
+---
+
+### Orders Page Fixes
+
+| Fix | Detail |
+|-----|--------|
+| Past-day filter | Shows ONLY executed trades: `fillPrice != null AND status in (open, closed)`. Prevents errored legs from making historic days appear as traded. |
+| Orders API date | Now uses IST (`ZoneInfo("Asia/Kolkata")`) not UTC for `trading_date` param |
+| Unified RETRY button | Replaces RE-RUN + RETRY. Smart: all-legs-error → `retryEntry` (full re-run); partial error → leg selection modal → `retryLegs` |
+| ERROR cards | Red cards in waiting section with truncated error message |
+| MISSED cards | Amber cards with "Missed entry at HH:MM" |
+| Day pill cancel | OPEN/ERROR/MISSED → blocked with toast. WAITING → confirmation modal + `PATCH /grid/{id}/cancel`. CLOSED/NO_TRADE → silent remove. |
+| New endpoint | `PATCH /api/v1/grid/{entry_id}/cancel` — sets AlgoState + GridEntry to NO_TRADE, cancels APScheduler jobs |
+| New endpoint | `POST /api/v1/orders/{grid_entry_id}/retry-legs` — retry specific errored legs by leg_id list |
+
+---
+
+### Analytics Latency Tab Upgrade (Task 1)
+
+**Backend — `/api/v1/reports/latency`** now returns:
+- `p99_latency_ms`, `success_rate` (`(total - errors) / total * 100`), `fast_pct`
+- `distribution`: bucketed counts — excellent (<150ms), good (150–250ms), acceptable (250–400ms), slow (>400ms)
+- `by_broker`: per-broker `p50_ms`, `p99_ms`, `fast_pct`, `count`
+- `recent_orders`: 20 most recent (sorted by `placed_at DESC`) with time/symbol/broker/latency/status
+
+**Frontend — AnalyticsPage LatencyTab** replaced with:
+- 4 stat cards: Avg / P50 + P99 / Fast% / Success Rate
+- 4 colour-coded distribution bars
+- Broker comparison table (Avg / P50 / P99 / Fast% / Orders)
+- Recent orders table (Time / Symbol / Broker / Latency / Status)
+
+---
+
+### Orders Page — Broker View Toggle (Task 2)
+
+**Backend — `GET /api/v1/orders/broker-orderbook`** (placed BEFORE `/{order_id}` catch-all):
+- Iterates `angelone_karthik`, `angelone_mom`, `angelone_wife` from `app.state`
+- Calls `broker.get_order_book()`, normalises to `{account, time, order_id, symbol, type, qty, price, status, product, order_type}`
+
+**Frontend — OrdersPage:**
+- "Broker View" toggle button in page header
+- Raw broker orders panel: Account / Time / Symbol / Type / Qty / Price / Product / Status columns
+- BUY=green / SELL=red; COMPLETE=green / REJECTED=red / OPEN=amber
+
+---
+
+### Accounts Page — Funds Strip (Task 3)
+
+**Backend — `GET /api/v1/accounts/angelone/{slug}/funds`:**
+- Calls `asyncio.gather(broker.get_margins(), broker.get_positions())`
+- Redis cache key `funds:{state_key}`, 60s TTL; `?refresh=true` busts cache
+- Returns `{available, used, total, unrealized_pnl, realized_pnl}`
+
+**Frontend — AccountsPage:**
+- Funds strip inside each account card (below token status)
+- 4 compact metric tiles: Cash / Used / Total / Unrealized P&L
+- ↻ Refresh button; auto-fetches after token status check
+- `NAME_TO_SLUG = {'Mom': 'mom', 'Wife': 'wife', 'Karthik AO': 'karthik'}`
+
+---
+
+### Positions Endpoint (Task 4)
+
+**Backend — `GET /api/v1/accounts/positions`** (placed BEFORE `/{account_id}` catch-all):
+- Iterates all 3 Angel One accounts from `app.state`
+- Returns `{positions: [...], count, total_pnl}`
+
+**Routing rule (burned twice today):** Literal FastAPI routes MUST be defined BEFORE `/{id}` catch-alls in the same router file. Applied to: `/broker-orderbook` before `/{order_id}`, `/positions` before `/{account_id}`.
+
+---
+
+### TRAVEX Module — Phase 1 Complete
+
+New LIFEX module. Repo: `github.com/theboringtrader14/travex` (separate git repo under `~/STAXX/travex/`).
+
+**Backend** (`~/STAXX/travex/backend/` — FastAPI port 8004):
+- DB: `travex_db` in shared Docker Postgres container (matches invex_db/budgex_db pattern)
+- Alembic: `version_table = travex_alembic_version` (namespaced to prevent collision)
+- Models: `cities` (id, code, lat, lng, name), `trips` (from_city_id, to_city_id, mode, travel_date, cost_inr, notes)
+- Endpoints: `GET /health`, `GET/POST /api/v1/cities`, `GET/POST /api/v1/trips`, `GET /api/v1/trips/timeline` (BEFORE `/{id}`), `GET /api/v1/stats`, `GET /api/v1/stats/arcs`
+- `/stats/arcs` groups trips by (from_city_id, to_city_id, mode) → deduplicated routes for Globe3D arc rendering
+- Seeded: 11 Indian cities (BLR, DEL, MUM, GOI, CHN, HYD, PNQ, AMD, CBE, MYS, OTY), 5 demo trips
+- Health verified: `{"status":"ok","module":"TRAVEX","version":"1.0.0","checks":{"database":{"ok":true}}}`
+
+**Frontend** (`~/STAXX/travex/frontend/` — Vite + React + TypeScript + Three.js, port 3004):
+- Pages: GlobePage, TripsPage, StatsPage, BuddyPage, BudgetPage
+- Centrepiece: `Globe3D.tsx`
+  - Custom `ShaderMaterial` with GLSL lat-based gradient + fresnel rim (no texture map)
+  - Atmosphere: `SphereGeometry(R*1.08)`, `BackSide`, `AdditiveBlending`, fresnel fragment shader
+  - Wireframe: `SphereGeometry(R*1.001, 24, 16)`, opacity 0.06
+  - Lighting: `AmbientLight(teal, 0.3)`, `DirLight(sky, 0.8)` at `(3,2,4)`, `RimLight(forest, 0.4)` at `(-3,-1,-2)`
+  - Stars: 1200 `Points`, r=8–20
+  - Arcs: `QuadraticBezierCurve3`, 80 points, height factors: air=0.45, train=0.22, bus=0.12
+  - Traveller dots: `SphereGeometry(0.018)`, progress 0→1 loop, `applyEuler(globe.rotation)`
+  - City markers: `RingGeometry(0.028, 0.036, 16)` + `SphereGeometry(0.014)`, pulse `0.85+0.15*sin(elapsed*2+i*0.7)`
+  - HUD: DOM refs `latRef/lngRef`, `.textContent` update (NOT `setState` — avoids 60fps re-renders)
+  - `ResizeObserver` for responsive sizing; full cleanup on unmount (`scene.traverse()` dispose + `renderer.dispose()` + `cancelAnimationFrame`)
+  - `latLngToVec3`: `phi=(90-lat)*PI/180`, `theta=(lng+180)*PI/180`, returns `(-r*sin(phi)*cos(theta), r*cos(phi), r*sin(phi)*sin(theta))`
+- Build: zero TypeScript errors (`npm run build` ✅)
+
+**Brand identity:**
+- Sky `#38bdf8` (air), Teal `#2dd4bf` (train/primary), Forest `#34d399` (bus), Deep `#040d0a` (bg)
+- Gradient: `linear-gradient(135deg, #38bdf8, #2dd4bf, #34d399)` — applied as gradient text on module name
+
+**AI Buddy:** Calls Gemma 4, budget-aware travel suggestions
+
+**First commit:** `0268b32` — "feat: TRAVEX scaffold — 3D globe travel intelligence module" (49 files)
+
+---
+
+### LIFEX Landing Page Restructure
+
+File: `~/STAXX/staax/frontend/src/pages/LandingPage.tsx`
+
+**Removed:** NETEX card, GOALEX card (both folded into FINEX description)
+
+**Added:**
+- TRAVEX card: `building: true`, Sky-Forest gradient text on module name, `#38bdf8` top border, sky-blue glow on hover
+- HISTEX card: `comingSoon: true`, `#4488FF`
+
+**New module order:** STAAX → INVEX → BUDGEX → FINEX → TRAVEX → HEALTHEX → HISTEX (7 modules total)
+
+**Status terminal updated:** TRAVEX = building, HISTEX = planned
+
+**Roadmap:** Phase 2 includes TRAVEX; Phase 3 includes HISTEX (was GOALEX)
+
+---
+
+### start.sh Improvements
+
+- Retry loop for backend health checks (5 attempts × 3s gap)
+- pg16 killed proactively at startup every morning (`brew services stop postgresql@16`)
+- `travex_db` creation guard (psql check, `CREATE DATABASE travex_db IF NOT EXISTS`)
+- `alembic upgrade head` for travex (in `~/STAXX/travex/backend/`)
+- uvicorn start for TRAVEX on port 8004, piped to `~/STAXX/logs/travex.log`
+- Port health loop extended to include 8004
+- All 5 module backends shown in startup summary
+
+---
+
+### DB Conflict Resolved Permanently
+
+**Root cause:** Homebrew `postgresql@16` competed with Docker `staax_db` on port 5432 — Docker container would fail to bind, causing all backends to fail at startup.
+
+**Fix:**
+- `brew services stop postgresql@16` added to `start.sh` (runs every morning)
+- `alembic.ini` hardcoded to `127.0.0.1:5432` (not `localhost`, which sometimes resolves via socket)
+- `travex_db` created in the same Docker container
+
+---
+
+### Migrations Applied Locally
+
+| Migration | Description |
+|-----------|-------------|
+| `0033_reentry_max_split` | reentry_max split into reentry_max_sl + reentry_max_tp |
+| `0034_order_audit_log` | New order_audit_log table |
+| `0035_journey_trigger` | `journey_trigger VARCHAR(10) DEFAULT 'either'` on algo_legs — **pending**, Journey fix in progress |
+| `travex/0001_initial_schema` | cities + trips tables in travex_db |
+
+---
+
+### Journey Fixes — In Progress (J1 + J2)
+
+**J1 — Journey config not round-tripping on edit:**
+- Root cause: `AlgoPage.tsx:676` — edit load always calls `mkJourneyChild()`, ignoring `l.journey_config` from API response
+- Backend is fully correct (save ✅ update ✅ return ✅)
+- Fix: Add `fromJourneyConfig()` that reverses `buildJourneyConfig`; call at line 676
+
+**J2 — Journey trigger selector:**
+- New `journey_trigger` column on `algo_legs` (`'sl'|'tp'|'either'`, default `'either'`)
+- `journey_engine.py`: gate child firing in `on_exit()` based on `journey_trigger` stored in `_watched`
+- Frontend: trigger chip selector in JourneyPanel, visible only when parent leg has both SL + TP active
+- Not yet implemented — plan approved, implementation pending
+
+---
+
+### Pending
+
+| Item | Priority |
+|------|----------|
+| Journey J1 + J2 implementation | P1 — approved, implementing next |
+| EC2 full deploy (all modules) | P1 |
+| Android EAS build | P1 |
+| TRAVEX Phase 2: real trip CRUD, budget tracking, map view | P2 |
+| HISTEX: plan backtesting engine | P3 |
+
+---
+
+### OpenAlgo — Decision
+
+- Cloned to `~/STAXX/openalgo/` for reference; not integrated into STAAX
+- Removed from `start.sh` and Living Spec as an active dependency
+- `historical.py` endpoint deleted
+- Items from OpenAlgo backlogged for Phase 2/3: ZeroMQ bus, Python Strategy Manager, MCP Server, Flow Builder

@@ -73,10 +73,55 @@ const mkJourneyChild = (): JourneyChild => ({
   ttp_enabled: false, ttp_x: '', ttp_y: '', ttp_unit: 'pts',
   child: undefined,
 })
+
+// Reverse of buildJourneyConfig — restores JourneyChild from stored JSON on edit load
+const _REV_CODES: Record<string, string> = Object.fromEntries(Object.entries(INST_CODES).map(([k, v]) => [v, k]))
+const fromJourneyConfig = (jc: any): JourneyChild => {
+  if (!jc || !jc.child) return mkJourneyChild()
+  const c = jc.child
+  return {
+    enabled:       true,
+    instType:      c.instrument === 'fu' ? 'FU' : 'OP',
+    instCode:      _REV_CODES[c.underlying] || 'NF',
+    direction:     (c.direction || 'buy').toUpperCase(),
+    optType:       c.instrument === 'fu' ? 'CE' : (c.instrument || 'ce').toUpperCase(),
+    strikeMode:    'leg',
+    strikeType:    c.strike_type || 'atm',
+    premiumVal:    c.strike_value != null ? String(c.strike_value) : '',
+    lots:          String(c.lots || 1),
+    expiry:        c.expiry || 'current_weekly',
+    wt_enabled:    !!c.wt_enabled,
+    wt_direction:  c.wt_direction || 'up',
+    wt_value:      c.wt_value != null ? String(c.wt_value) : '',
+    wt_unit:       c.wt_unit || 'pts',
+    sl_enabled:    !!(c.sl_type && c.sl_value != null),
+    sl_type:       c.sl_type || 'pts_instrument',
+    sl_value:      c.sl_value != null ? String(c.sl_value) : '',
+    re_enabled:    false,
+    re_sl_enabled: !!c.reentry_on_sl,
+    re_tp_enabled: !!c.reentry_on_tp,
+    re_mode:       'at_entry_price',
+    re_trigger:    'sl',
+    re_count:      String(c.reentry_max || 0),
+    tp_enabled:    !!(c.tp_type && c.tp_value != null),
+    tp_type:       c.tp_type || 'pts_instrument',
+    tp_value:      c.tp_value != null ? String(c.tp_value) : '',
+    tsl_enabled:   !!c.tsl_enabled,
+    tsl_x:         c.tsl_x != null ? String(c.tsl_x) : '',
+    tsl_y:         c.tsl_y != null ? String(c.tsl_y) : '',
+    tsl_unit:      c.tsl_unit || 'pts',
+    ttp_enabled:   !!c.ttp_enabled,
+    ttp_x:         c.ttp_x != null ? String(c.ttp_x) : '',
+    ttp_y:         c.ttp_y != null ? String(c.ttp_y) : '',
+    ttp_unit:      c.ttp_unit || 'pts',
+    child:         c.journey_config ? fromJourneyConfig(c.journey_config) : undefined,
+  }
+}
 interface Leg {
   id: string; no: number; instType: string; instCode: string; direction: string; optType: string
   strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
   active: Record<FeatureKey, boolean>; vals: LegVals; journey?: JourneyChild
+  journey_trigger?: string  // 'sl' | 'tp' | 'either' — gates which exit fires child
   backendId?: string  // backend UUID — sent back on PUT to enable in-place update
 }
 
@@ -84,7 +129,7 @@ const mkLeg = (n: number): Leg => ({
   id: `leg-${Date.now()}-${n}`, no: n,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
-  active: { wt: false, sl: false, re: false, reentry: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(),
+  active: { wt: false, sl: false, re: false, reentry: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(), journey_trigger: 'either',
   vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
     reentry: { type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, maxSl: '1', maxTp: '1' },
     tp: { type: 'pts_instrument', value: '' }, tsl: { x: '', y: '', unit: 'pts' }, ttp: { x: '', y: '', unit: 'pts' },
@@ -352,10 +397,18 @@ function JourneyChildPanel({ child, depth, onChange }: {
   )
 }
 
+const JOURNEY_TRIGGER_OPTS: { value: string; label: string; color: string }[] = [
+  { value: 'sl',     label: 'SL Hit',  color: '#FF4444' },
+  { value: 'tp',     label: 'TP Hit',  color: '#22DD88' },
+  { value: 'either', label: 'Either',  color: '#A78BFA' },
+]
+
 function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void }) {
   const [open, setOpen] = useState(false)
   const j = leg.journey || mkJourneyChild()
   const hasJourney = j.enabled
+  const showTriggerChips = hasJourney && leg.active.sl && leg.active.tp
+  const currentTrigger = leg.journey_trigger || 'either'
   return (
     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(167,139,250,0.15)' }}>
       <button onClick={() => setOpen((o: boolean) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
@@ -363,9 +416,31 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
           {open ? '▾' : '▸'} Journey {hasJourney ? '● Active' : ''}
         </span>
       </button>
-      {open && (
+      {open && (<>
+        {showTriggerChips && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: '5px 0 4px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, marginRight: '2px' }}>Trigger on:</span>
+            {JOURNEY_TRIGGER_OPTS.map(opt => {
+              const active = currentTrigger === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => onUpdate(leg.id, { journey_trigger: opt.value })}
+                  style={{
+                    height: '22px', padding: '0 10px', borderRadius: '11px', fontSize: '10px', fontWeight: 600,
+                    cursor: 'pointer', border: 'none', transition: 'all 0.12s',
+                    background: active ? opt.color : 'var(--bg-surface)',
+                    color: active ? '#000' : 'var(--text-dim)',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
         <JourneyChildPanel child={j} depth={1} onChange={c => onUpdate(leg.id, { journey: c })} />
-      )}
+      </>)}
     </div>
   )
 }
@@ -673,7 +748,8 @@ export default function AlgoPage() {
               },
               re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
             },
-            journey: mkJourneyChild(),
+            journey:         l.journey_config ? fromJourneyConfig(l.journey_config) : mkJourneyChild(),
+            journey_trigger: l.journey_trigger || 'either',
           }
         })
         if (mappedLegs.length > 0) setLegs(mappedLegs)
@@ -805,7 +881,8 @@ export default function AlgoPage() {
       orb_tp_type:       entryType === 'orb' ? l.vals.orb.tpType : undefined,
       orb_buffer_value:  l.vals.orb.bufferValue ? parseFloat(l.vals.orb.bufferValue) : undefined,
       orb_buffer_unit:   l.vals.orb.bufferUnit || undefined,
-      journey_config: buildJourneyConfig(l.journey),
+      journey_config:  buildJourneyConfig(l.journey),
+      journey_trigger: l.active.sl && l.active.tp ? (l.journey_trigger || 'either') : 'either',
     })),
   })
     return payload

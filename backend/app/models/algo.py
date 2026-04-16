@@ -199,7 +199,8 @@ class AlgoLeg(Base):
     reentry_ltp_mode  = Column(String(15), nullable=True)   # "ltp" | "candle_close"
 
     # ── Journey config (child leg to fire on exit — Phase 1E) ─────────────────
-    journey_config = Column(JSON, nullable=True)
+    journey_config   = Column(JSON, nullable=True)
+    journey_trigger  = Column(String(10), nullable=True, default='either')  # 'sl'|'tp'|'either'
 
     # ── Runtime strike resolution (set by algo_runner after strike selection) ──
     # Stored so LTP tracking and position monitors can access it via leg reference.
