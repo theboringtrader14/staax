@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 8.3 | **Last Updated:** 16 April 2026 — Batch 29: P0 MissingGreenlet root cause fixed (LTPConsumer.get_ltp() missing → AttributeError → ORM lazy-load after rollback in except block); leg_number captured as plain int before try block; enter_specific_legs() for partial leg retry; scheduler.recover_today_jobs() recovers ERROR algos (reset to WAITING + re-register if future, NO_TRADE if past); IST date default for orders list endpoint; retry endpoint cancels stale expiry APScheduler job; PATCH /grid/{id}/cancel marks WAITING/ERROR as NO_TRADE; Orders page: unified smart RETRY (RE-RUN removed), past-day filter requires fillPrice+open/closed status; GridPage: WAITING/ERROR pills show × cancel overlay on hover | **PRD Reference:** v1.2
+**Version:** 8.4 | **Last Updated:** 16 April 2026 — Batch 30: P0 data loss prevention — G2 per-leg DB session isolation (commit after each leg + refresh algo_state/grid_entry; error paths reload orders by ID from cache); G3 write-before-broker (Order(PENDING) flushed before broker call → PENDING→OPEN on confirm, PENDING→ERROR on broker failure); G4 order_audit_log table + order_audit.py module (fire-and-forget audit writes per transition); RETRY ORB-awareness (isOrbWindowPast computed from orb_end_time IST, RETRY button greyed with "ORB ✕" label, W&T info line in row 2); waiting card 2-row layout (row 1: name+chips+time; row 2: full error/missed detail); GridPage no_trade pill → dim grey; /waiting endpoint adds entry_type + orb_end_time; §32 RETRY rules table added | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -4861,4 +4861,50 @@ The true root cause was **NOT** the scheduler sync wrapper. The full chain:
 ### Commits
 - `505fa44` — backend: ltp_consumer, algo_runner, scheduler, orders, grid
 - `ed2be09` — frontend: OrdersPage, GridPage, api.ts
+
+---
+
+## 32. RETRY Rules — Entry Type Behaviour
+
+RETRY re-enters an algo that missed its original entry window (MISSED) or errored during entry (ERROR). The behaviour at re-entry differs by entry type.
+
+### RETRY eligibility
+
+| Condition | RETRY allowed? |
+|-----------|---------------|
+| `algo_state_status == 'error'` | ✅ Yes |
+| `algo_state_status == 'no_trade' AND error_message present` | ✅ Yes (engine error caused NO_TRADE) |
+| `is_missed == True` (NO_TRADE + activated_at + no error) | ✅ Yes |
+| ORB algo + current IST time ≥ orb_end_time | ❌ No — ORB window passed; button shows "ORB ✕" greyed |
+| Any other state | ❌ No |
+
+### Behaviour by entry_type
+
+| entry_type | Strike selection at RETRY | Reference price | Notes |
+|------------|--------------------------|-----------------|-------|
+| **direct** | Fresh ATM/OTM/ITM selection from current option chain | Current LTP | Same as original entry, just at current market levels |
+| **orb** | Only if within ORB window (entry_time ≤ now < orb_end_time); else RETRY disabled | ORB high/low recaptured | If orb_end_time has passed, RETRY button is greyed with "ORB ✕" label |
+| **wt** (W&T legs) | W&T trigger re-armed; strike + ref price captured fresh at trigger fire | Current underlying LTP when W&T fires | Info line shown: "⚡ Will re-capture strike and ref price at current market levels" |
+| **stbt/btst** | Treated same as `direct` for retry purposes | Current LTP | Overnight legs — retry only valid same session day |
+
+### Frontend display rules (OrdersPage waiting card)
+
+- Row 1: `[algo name] [account pill] [ERROR|MISSED|WAITING chip] ... [Entry HH:MM]`
+- Row 2: Full error/missed detail (no truncation)
+  - ERROR: full `error_message` or `latest_error.reason`
+  - MISSED: `⏭ Missed entry at HH:MM`
+  - ORB window passed: `ORB window passed (HH:MM) — RETRY disabled` (dim grey italic)
+  - W&T legs: `⚡ Will re-capture strike and ref price at current market levels` (light blue)
+
+### Backend RETRY endpoint
+
+`POST /orders/{grid_entry_id}/retry` — calls `enter_specific_legs()` with all legs (full re-entry). The scheduler re-registers the entry job with immediate trigger. Cancels any stale expiry APScheduler job before re-arming.
+
+`POST /orders/{grid_entry_id}/retry-legs` — partial retry for specific leg IDs only.
+
+### ORB window passed detection
+
+Frontend: `isOrbWindowPast = isOrbAlgo && orb_end_time && (IST.hours*60 + IST.minutes) >= (HH*60 + MM)`
+
+The `orb_end_time` field is returned by `/waiting` as `"HH:MM"` (truncated from `"HH:MM:SS"` stored in DB).
 

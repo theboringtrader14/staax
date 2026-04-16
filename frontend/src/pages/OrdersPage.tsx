@@ -52,6 +52,8 @@ interface WaitingAlgo {
   algo_state_status?: string   // "waiting" | "error" | "no_trade"
   error_message?: string | null
   is_missed?: boolean
+  entry_type?: string           // "direct" | "orb"
+  orb_end_time?: string | null  // "HH:MM" — null for non-ORB algos
 }
 interface OpenPosition {
   algo_id: string; algo_name: string; account: string
@@ -1121,6 +1123,14 @@ export default function OrdersPage() {
               const isOrbExpired  = errType.includes('ORB_EXPIRED') || (w.latest_error?.reason || '').includes('ORB_EXPIRED')
               const isRetrying = waitingRetryLoading[w.grid_entry_id]
 
+              // ORB window awareness — disable RETRY if past orb_end_time (IST)
+              const isOrbAlgo = w.entry_type === 'orb'
+              const isOrbWindowPast = isOrbAlgo && !!w.orb_end_time && (() => {
+                const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+                const [hh, mm] = w.orb_end_time!.split(':').map(Number)
+                return ist.getHours() * 60 + ist.getMinutes() >= hh * 60 + mm
+              })()
+
               // Card accent colours — red for ERROR, amber for WAITING/MISSED
               const legStatusChip = isMissed
                 ? { label: 'MISSED',  color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' }
@@ -1143,12 +1153,16 @@ export default function OrdersPage() {
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
               }
 
-              const canRetry  = (isMissed || isError || !!w.latest_error || w.algo_state_status === 'no_trade') && !isRetrying
+              const canRetry  = (isMissed || isError || !!w.latest_error || w.algo_state_status === 'no_trade') && !isRetrying && !isOrbWindowPast
+              const retryLabel = isRetrying ? '↻' : isOrbWindowPast ? 'ORB ✕' : 'RETRY'
+              const retryCol   = isOrbWindowPast ? 'rgba(255,255,255,0.2)' : '#F59E0B'
+              const retryBg    = isOrbWindowPast ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.05)'
+              const retryHBg   = isOrbWindowPast ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.14)'
               const missedBtns = [
                 { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
                 { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
                 { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true, action: undefined },
-                { label: isRetrying ? '↻' : 'RETRY', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
+                { label: retryLabel, col: retryCol, bg: retryBg, hBg: retryHBg, border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
                 { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, action: undefined },
               ]
 
@@ -1167,70 +1181,79 @@ export default function OrdersPage() {
                     {/* Left status strip */}
                     <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: stripBg, boxShadow: `0 0 8px ${stripGlow}, 0 0 20px ${stripGlow}` }}/>
 
-                    {/* Info row */}
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap' as const, minWidth: 0 }}>
+                    {/* Info column — row 1: name+chips+time; row 2: error/status detail */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-                      {/* Algo name */}
-                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: 'rgba(232,232,248,0.85)', whiteSpace: 'nowrap' as const }}>
-                        {w.algo_name}
-                      </span>
+                      {/* Row 1: name + chips + entry time */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap' as const, minWidth: 0 }}>
 
-                      {/* Account pill */}
-                      {w.account_name && (
-                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'rgba(255,107,0,0.10)', color: 'var(--ox-glow)', border: '0.5px solid rgba(255,107,0,0.28)', whiteSpace: 'nowrap' as const }}>
-                          {w.account_name}
+                        {/* Algo name */}
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: 'rgba(232,232,248,0.85)', whiteSpace: 'nowrap' as const }}>
+                          {w.algo_name}
                         </span>
-                      )}
 
-                      {/* Status chip — ERROR (red) | MISSED (grey) | WAITING (amber) */}
-                      {isError ? (
-                        <span className="tag" style={{ color: '#FF4444', background: 'rgba(255,68,68,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>ERROR</span>
-                      ) : (
-                        <span className="tag" style={{ color: '#FFD700', background: 'rgba(255,215,0,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>
-                          {isMissed ? 'MISSED' : 'WAITING'}
-                        </span>
-                      )}
-
-                      {/* Error message (engine error — MissingGreenlet, PendingRollbackError etc) */}
-                      {isError && w.error_message && (
-                        <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)' }}>
-                          ⛔ {w.error_message.slice(0, 80)}
-                        </span>
-                      )}
-                      {isError && !w.error_message && w.latest_error?.reason && (
-                        <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)' }}>
-                          ⛔ {w.latest_error.reason.slice(0, 80)}
-                        </span>
-                      )}
-
-                      {/* Missed entry note */}
-                      {isMissed && (
-                        <span style={{ fontSize: '11px', color: '#D77B12' }}>
-                          ⏭ Missed entry at {w.entry_time?.slice(0, 5) || '—'}
-                        </span>
-                      )}
-
-                      {/* Other non-error states */}
-                      {!isError && !isMissed && isFeedErr && (
-                        <span style={{ fontSize: '11px', color: '#D77B12' }}>⚡ Feed not ready</span>
-                      )}
-                      {!isError && !isMissed && isOrbExpired && (
-                        <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
-                      )}
-                      {!isError && !isMissed && w.latest_error && !isFeedErr && !isOrbExpired && (
-                        <span style={{ fontSize: '11px', color: '#EF4444' }}>
-                          ⛔ {(w.latest_error.reason || '').slice(0, 60)}
-                        </span>
-                      )}
-
-                      {/* Entry time — right side */}
-                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
-                        {w.entry_time && (
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                            Entry {w.entry_time.slice(0, 5)}
+                        {/* Account pill */}
+                        {w.account_name && (
+                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'rgba(255,107,0,0.10)', color: 'var(--ox-glow)', border: '0.5px solid rgba(255,107,0,0.28)', whiteSpace: 'nowrap' as const }}>
+                            {w.account_name}
                           </span>
                         )}
+
+                        {/* Status chip — ERROR (red) | MISSED (grey) | WAITING (amber) */}
+                        {isError ? (
+                          <span className="tag" style={{ color: '#FF4444', background: 'rgba(255,68,68,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>ERROR</span>
+                        ) : (
+                          <span className="tag" style={{ color: '#FFD700', background: 'rgba(255,215,0,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>
+                            {isMissed ? 'MISSED' : 'WAITING'}
+                          </span>
+                        )}
+
+                        {/* Entry time — pushed to right */}
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+                          {w.entry_time && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              Entry {w.entry_time.slice(0, 5)}
+                            </span>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Row 2: full error / missed / status detail (hidden when nothing to show) */}
+                      {(isError || isMissed || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error)) && (
+                        <div style={{ padding: '0 14px 10px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {isError && (w.error_message || w.latest_error?.reason) && (
+                            <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const }}>
+                              ⛔ {w.error_message || w.latest_error?.reason}
+                            </span>
+                          )}
+                          {isMissed && (
+                            <span style={{ fontSize: '11px', color: '#D77B12' }}>
+                              ⏭ Missed entry at {w.entry_time?.slice(0, 5) || '—'}
+                            </span>
+                          )}
+                          {!isError && !isMissed && isFeedErr && (
+                            <span style={{ fontSize: '11px', color: '#D77B12' }}>⚡ Feed not ready</span>
+                          )}
+                          {!isError && !isMissed && isOrbExpired && (
+                            <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
+                          )}
+                          {!isError && !isMissed && w.latest_error && !isFeedErr && !isOrbExpired && (
+                            <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const }}>
+                              ⛔ {w.latest_error.reason || ''}
+                            </span>
+                          )}
+                          {isOrbWindowPast && (
+                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                              ORB window passed ({w.orb_end_time}) — RETRY disabled
+                            </span>
+                          )}
+                          {(isMissed || isError) && (w.legs || []).some(l => l.wt_enabled) && !isOrbWindowPast && (
+                            <span style={{ fontSize: '11px', color: 'rgba(100,180,255,0.7)' }}>
+                              ⚡ Will re-capture strike and ref price at current market levels
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* ── Tall action buttons ── */}

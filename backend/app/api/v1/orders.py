@@ -897,6 +897,8 @@ async def get_waiting_algos(
             "algo_state_status":  _state.status.value,
             "error_message":      (_state.error_message or "")[:200] or None,
             "is_missed":          _is_missed,
+            "entry_type":         a.entry_type.value if a.entry_type else "direct",
+            "orb_end_time":       a.orb_end_time[:5] if a.orb_end_time else None,
         })
 
     # Sort combined list by entry_time

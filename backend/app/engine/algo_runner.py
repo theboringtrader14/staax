@@ -56,6 +56,7 @@ from app.engine.execution_errors import ExecutionErrorCode
 from app.engine.ltp_consumer import LTPConsumer
 from app.engine import event_logger as _ev
 from app.engine import push_sender as _push
+from app.engine import order_audit as _audit
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
@@ -394,6 +395,9 @@ class AlgoRunner:
 
         # ── 6. Place orders for each leg ───────────────────────────────────────
         placed_orders: List[Order] = []
+        # G2: cache plain Python values before per-leg commits expire ORM objects.
+        # Keys are str(order.id); values are tuples of (ltp, fill_price, direction, symbol).
+        _order_cache: dict = {}
         entry_error = False
 
         for leg in legs:
@@ -412,11 +416,25 @@ class AlgoRunner:
                     account=account,
                 )
                 if order:
+                    # G2: cache attributes before commit expires them
+                    _oid = order.id
+                    _order_cache[str(_oid)] = (
+                        order.ltp or 0.0,
+                        order.fill_price or 0.0,
+                        order.direction or "",
+                        order.symbol or "",
+                    )
                     placed_orders.append(order)
                     logger.info(
                         f"[ENTER] Leg {leg_number} placed: "
-                        f"symbol={order.symbol} fill={order.fill_price} token={order.instrument_token}"
+                        f"symbol={_order_cache[str(_oid)][3]} fill={_order_cache[str(_oid)][1]} token={order.instrument_token}"
                     )
+                    # G2: per-leg commit — each Order is durably persisted independently
+                    # of subsequent legs. A later leg failure rolls back only its own
+                    # uncommitted work; earlier legs' OPEN records survive.
+                    await db.commit()
+                    await db.refresh(algo_state)
+                    await db.refresh(grid_entry)
                 else:
                     logger.info(f"[ENTER] Leg {leg_number} deferred (W&T / ORB)")
             except Exception as e:
@@ -424,6 +442,9 @@ class AlgoRunner:
                 # without this, every subsequent db operation raises PendingRollbackError.
                 try:
                     await db.rollback()
+                    # Re-attach expired objects after rollback so the loop can continue
+                    await db.refresh(algo_state)
+                    await db.refresh(grid_entry)
                 except Exception:
                     pass
                 logger.error(
@@ -468,7 +489,10 @@ class AlgoRunner:
                             algo_name=algo.name, algo_id=str(algo.id), source="engine",
                         )
                         for placed in placed_orders:
-                            await self._close_order(db, placed, placed.ltp or 0.0, "margin_error")
+                            _cached_ltp = _order_cache.get(str(placed.id), (0.0,))[0]
+                            _p = await db.get(Order, placed.id)
+                            if _p:
+                                await self._close_order(db, _p, _cached_ltp, "margin_error")
                         await self._set_error(
                             db, algo_state, grid_entry,
                             f"Margin error on leg {leg.leg_number}: {str(e)}",
@@ -492,7 +516,10 @@ class AlgoRunner:
                         f"on_entry_fail=exit_all — squaring off {len(placed_orders)} placed legs"
                     )
                     for placed in placed_orders:
-                        await self._close_order(db, placed, placed.ltp or 0.0, "entry_fail")
+                        _cached_ltp = _order_cache.get(str(placed.id), (0.0,))[0]
+                        _p = await db.get(Order, placed.id)
+                        if _p:
+                            await self._close_order(db, _p, _cached_ltp, "entry_fail")
                     await self._set_error(
                         db, algo_state, grid_entry, f"Leg {leg.leg_number} failed: {str(e)}",
                         algo_name=algo.name,
@@ -501,8 +528,9 @@ class AlgoRunner:
                     return
 
         # ── 7. Update MTM combined premium ─────────────────────────────────────
+        # Use cached fill_prices (index 1) since per-leg commits expire ORM attrs.
         if self._mtm_monitor and placed_orders:
-            cp = sum(o.fill_price or 0.0 for o in placed_orders)
+            cp = sum(_order_cache.get(str(o.id), (0.0, 0.0))[1] for o in placed_orders)
             if str(algo.id) in self._mtm_monitor._algos:
                 self._mtm_monitor._algos[str(algo.id)].combined_premium = cp
                 self._mtm_monitor._algos[str(algo.id)].order_ids = [
@@ -519,15 +547,18 @@ class AlgoRunner:
         await db.commit()
 
         # ── 9. WebSocket notifications ────────────────────────────────────────
+        # Use cached attributes (per-leg commits expire ORM objects).
         for order in placed_orders:
-            sign = order.direction.upper() if order.direction else "?"
+            _cached = _order_cache.get(str(order.id), (0.0, 0.0, "", ""))
+            _ltp, _fill, _dir, _sym = _cached
+            sign = _dir.upper() if _dir else "?"
             await _ev.success(
-                f"{algo.name} · {sign} {order.symbol} OPEN @ {order.fill_price or 0:.2f}",
+                f"{algo.name} · {sign} {_sym} OPEN @ {_fill:.2f}",
                 algo_name=algo.name, source="engine",
             )
             asyncio.create_task(_push.send_push(
                 "⚡ Entry",
-                f"{algo.name} {sign} {order.symbol} @ {order.fill_price or 0:.2f}",
+                f"{algo.name} {sign} {_sym} @ {_fill:.2f}",
             ))
         logger.info(
             f"✅ Entry complete: {algo.name} | {len(placed_orders)} orders placed"
@@ -865,73 +896,14 @@ class AlgoRunner:
             f"trigger={_trigger_price:.2f} limit={_limit_price:.2f}"
         )
 
-        _placed_at = datetime.now(IST)
-        if self._execution_manager:
-            order_id_str = await self._execution_manager.place(
-                db              = db,
-                idempotency_key = idempotency_key,
-                algo_id         = str(algo.id),
-                account_id      = str(algo.account_id),
-                symbol          = symbol,
-                exchange        = "NFO",
-                direction       = direction,
-                quantity        = quantity,
-                order_type      = _order_type,
-                ltp             = ltp,
-                limit_price     = _limit_price,
-                trigger_price   = _trigger_price,
-                algo_tag        = algo_tag,
-                is_practix      = grid_entry.is_practix,
-                is_overnight    = is_overnight,
-                broker_type     = broker_type,
-                symbol_token    = str(instrument_token),
-            )
-        else:
-            # Fallback: direct OrderPlacer (execution_manager not wired)
-            logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer")
-            order_id_str = await self._order_placer.place(
-                idempotency_key = idempotency_key,
-                algo_id         = str(algo.id),
-                symbol          = symbol,
-                exchange        = "NFO",
-                direction       = direction,
-                quantity        = quantity,
-                order_type      = _order_type,
-                ltp             = ltp,
-                limit_price     = _limit_price,
-                trigger_price   = _trigger_price,
-                is_practix      = grid_entry.is_practix,
-                is_overnight    = is_overnight,
-                broker_type     = broker_type,
-                symbol_token    = str(instrument_token),
-                algo_tag        = algo_tag,
-                account_id      = str(algo.account_id),
-            )
-
-        _filled_at  = datetime.now(IST)
-        _latency_ms = int((_filled_at - _placed_at).total_seconds() * 1000)
-
-        if not order_id_str:
-            logger.warning(f"Order blocked or duplicate: {idempotency_key}")
-            return None
-
-        fill_price = ltp  # MARKET fill at LTP; LIMIT would use limit_price
-
-        # ── Log exchange order ID ──────────────────────────────────────────────
-        if not grid_entry.is_practix:
-            logger.info(
-                f"[ORDER] Exchange order ID: {order_id_str} | "
-                f"{symbol} {direction.upper()} qty={quantity} "
-                f"broker={broker_type} tag={algo_tag}"
-            )
-
-        # ── Persist Order to DB ────────────────────────────────────────────────
+        # ── G3: Write PENDING order before broker call ─────────────────────────
+        # Ensures a DB record exists even if the post-broker commit fails.
+        fill_price = ltp  # market fill at LTP (set early for the pre-flight record)
         journey_level = (
             f"{algo_state.reentry_count + 1}"
             if not reentry
             else f"{algo_state.journey_level or '1'}.{algo_state.reentry_count}"
         )
-
         order = Order(
             id=uuid.uuid4(),
             algo_id=algo.id,
@@ -947,25 +919,107 @@ class AlgoRunner:
             is_practix=grid_entry.is_practix,
             is_overnight=is_overnight,
             entry_type=algo.entry_type,
-            fill_price=fill_price,
-            fill_time=datetime.now(IST),
-            ltp=fill_price,
-            status=OrderStatus.OPEN,
+            status=OrderStatus.PENDING,
             journey_level=journey_level,
-            broker_order_id=order_id_str,            # exchange order ID (P2)
+            instrument_token=instrument_token,
+            sl_original=leg.sl_value,
         )
+        db.add(order)
+        await db.flush()  # persist PENDING record — order.id now set
+        asyncio.create_task(_audit.log_transition(
+            order_id=order.id, algo_id=algo.id, grid_entry_id=grid_entry.id,
+            account_id=algo.account_id, from_status=None, to_status="pending",
+            symbol=symbol, direction=direction, is_practix=grid_entry.is_practix,
+        ))
 
-        # Instrument token — stored for LTP lookup at exit and reconciliation
-        order.instrument_token = instrument_token
+        # ── Broker call ─────────────────────────────────────────────────────────
+        _placed_at = datetime.now(IST)
+        try:
+            if self._execution_manager:
+                order_id_str = await self._execution_manager.place(
+                    db              = db,
+                    idempotency_key = idempotency_key,
+                    algo_id         = str(algo.id),
+                    account_id      = str(algo.account_id),
+                    symbol          = symbol,
+                    exchange        = "NFO",
+                    direction       = direction,
+                    quantity        = quantity,
+                    order_type      = _order_type,
+                    ltp             = ltp,
+                    limit_price     = _limit_price,
+                    trigger_price   = _trigger_price,
+                    algo_tag        = algo_tag,
+                    is_practix      = grid_entry.is_practix,
+                    is_overnight    = is_overnight,
+                    broker_type     = broker_type,
+                    symbol_token    = str(instrument_token),
+                )
+            else:
+                # Fallback: direct OrderPlacer (execution_manager not wired)
+                logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer")
+                order_id_str = await self._order_placer.place(
+                    idempotency_key = idempotency_key,
+                    algo_id         = str(algo.id),
+                    symbol          = symbol,
+                    exchange        = "NFO",
+                    direction       = direction,
+                    quantity        = quantity,
+                    order_type      = _order_type,
+                    ltp             = ltp,
+                    limit_price     = _limit_price,
+                    trigger_price   = _trigger_price,
+                    is_practix      = grid_entry.is_practix,
+                    is_overnight    = is_overnight,
+                    broker_type     = broker_type,
+                    symbol_token    = str(instrument_token),
+                    algo_tag        = algo_tag,
+                    account_id      = str(algo.account_id),
+                )
+        except Exception as _broker_exc:
+            # Broker call failed — mark the PENDING record as ERROR (visible in Orders page)
+            order.status = OrderStatus.ERROR
+            try:
+                await db.flush()
+            except Exception:
+                pass
+            raise  # outer handler in _enter_with_db will rollback + log
 
-        # Order latency — time from request to broker confirmation
-        order.placed_at  = _placed_at
-        order.filled_at  = _filled_at
-        order.latency_ms = _latency_ms
+        _filled_at  = datetime.now(IST)
+        _latency_ms = int((_filled_at - _placed_at).total_seconds() * 1000)
 
-        # SL/TP stored on order for display — sl_actual is the PRICE, not the value
-        order.sl_original = leg.sl_value
-        # ── ORB SL/TP calculation ─────────────────────────────────────────────────
+        if not order_id_str:
+            order.status = OrderStatus.ERROR
+            await db.flush()
+            logger.warning(f"Order blocked or duplicate: {idempotency_key}")
+            return None
+
+        # ── Log exchange order ID ──────────────────────────────────────────────
+        if not grid_entry.is_practix:
+            logger.info(
+                f"[ORDER] Exchange order ID: {order_id_str} | "
+                f"{symbol} {direction.upper()} qty={quantity} "
+                f"broker={broker_type} tag={algo_tag}"
+            )
+
+        # ── PENDING → OPEN: update with broker confirmation ──────────────────
+        asyncio.create_task(_audit.log_transition(
+            order_id=order.id, algo_id=algo.id, grid_entry_id=grid_entry.id,
+            account_id=algo.account_id, from_status="pending", to_status="open",
+            symbol=symbol, direction=direction, fill_price=fill_price,
+            broker_order_id=order_id_str, is_practix=grid_entry.is_practix,
+        ))
+        order.status          = OrderStatus.OPEN
+        order.fill_price      = fill_price
+        order.fill_time       = datetime.now(IST)
+        order.ltp             = fill_price
+        order.broker_order_id = order_id_str
+        order.placed_at       = _placed_at
+        order.filled_at       = _filled_at
+        order.latency_ms      = _latency_ms
+
+        # ── SL/TP stored on order for display (sl_actual is PRICE, not value) ─
+        # ── ORB SL/TP calculation ─────────────────────────────────────────────
         # When entry_type == "orb" and orb_sl_type is set, compute actual SL price
         # from orb range levels rather than using leg.sl_value.
         _effective_sl_type = None
@@ -1000,7 +1054,7 @@ class AlgoRunner:
         else:
             order.sl_actual = leg.sl_value
 
-        # ── ORB TP calculation ─────────────────────────────────────────────────────
+        # ── ORB TP calculation ─────────────────────────────────────────────────
         if _effective_tp_type and _effective_tp_type.startswith('orb_'):
             _orb_h, _orb_l = self._orb_levels.get(str(grid_entry.id), (0.0, 0.0))
             _orb_range = (_orb_h - _orb_l) if _orb_h and _orb_l else 0.0
@@ -1019,8 +1073,6 @@ class AlgoRunner:
                 order.target = leg.tp_value
         else:
             order.target = leg.tp_value
-        db.add(order)
-        await db.flush()  # get order.id before registering monitors
 
         # ── Subscribe LTP ──────────────────────────────────────────────────────
         if self._ltp_consumer and instrument_token:

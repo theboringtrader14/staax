@@ -673,6 +673,11 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                     showDot    = true
                                     dotColor   = '#FF4444'
                                     dotAnim    = true
+                                  } else if (s === 'no_trade') {
+                                    pillBg     = 'transparent'
+                                    pillBorder = '0.5px solid rgba(255,255,255,0.08)'
+                                    pillColor  = 'rgba(255,255,255,0.15)'
+                                    pillWeight = 400
                                   } else if (isInRecurring) {
                                     // Enabled (in recurring schedule), no active status — orange
                                     pillBg     = 'rgba(255,107,0,0.20)'
