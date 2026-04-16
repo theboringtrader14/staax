@@ -18,58 +18,17 @@ const STATUS_CLR: Record<ServiceStatus, string> = {
 }
 
 
-function PnlCard({ label, value, isPositive, sparkId, equityCurve, roi }: { label: string; value: number; isPositive: boolean; sparkId: string; equityCurve?: {month: string; cumulative: number}[]; roi?: string }) {
+function PnlCard({ label, value, isPositive, roi }: { label: string; value: number; isPositive: boolean; roi?: string }) {
   const rupee = String.fromCharCode(0x20B9)
   const display = (isPositive ? '+' : '') + rupee + Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-  const col  = isPositive ? 'var(--ox-radiant)' : 'var(--sem-short)'
-  const col2 = isPositive ? '#FF6B00' : '#FF4444'
+  const col = isPositive ? 'var(--ox-radiant)' : 'var(--sem-short)'
   return (
-    <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
+    <div className="card cloud-fill" style={{ padding: '12px 14px' }}>
       <div className="card-label">{label}</div>
-      <div style={{ fontSize: 'clamp(20px,2.2vw,28px)', fontWeight: 800, color: col, fontFamily: 'var(--font-mono)', letterSpacing: '-1px', lineHeight: 1 }}>{display}</div>
-      <div style={{ fontSize: '10px', color: isPositive ? 'rgba(255,107,0,0.65)' : 'rgba(255,68,68,0.65)', marginTop: '3px', fontWeight: 600 }}>
+      <div style={{ fontSize: '28px', fontWeight: 800, color: col, fontFamily: 'var(--font-mono)', letterSpacing: '-1.5px', lineHeight: 1 }}>{display}</div>
+      <div style={{ fontSize: '10px', color: isPositive ? 'rgba(255,107,0,0.65)' : 'rgba(255,68,68,0.65)', marginTop: '4px', fontWeight: 600 }}>
         {isPositive ? '▲' : '▼'} {isPositive ? 'Profit' : 'Loss'} · {roi ?? '0.00'}% ROI
       </div>
-      <svg width="100%" height="36" viewBox="0 0 200 36" preserveAspectRatio="none" style={{ marginTop: '10px', display: 'block' }}>
-        <defs>
-          <linearGradient id={'sg-' + sparkId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={col2} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={col2} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {/* Dynamic sparkline */}
-        {(() => {
-          const pts = (equityCurve || []).map(p => p.cumulative)
-          if (pts.length < 2) {
-            // fallback static path
-            return (
-              <>
-                <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2 L200,36 L0,36Z" fill={`url(#sg-${sparkId})`} />
-                <path d="M0,30 C30,28 50,22 80,18 S120,12 150,8 S180,4 200,2" fill="none" stroke={col2} strokeWidth="1.8" strokeLinecap="round" />
-              </>
-            )
-          }
-          const W = 200, H = 36, PAD = 3
-          const minV = Math.min(...pts), maxV = Math.max(...pts)
-          const range = maxV - minV || 1
-          const toX = (i: number) => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
-          const toY = (v: number) => H - PAD - ((v - minV) / range) * (H - PAD * 2 - 4)
-          const coords = pts.map((v, i) => ({ x: toX(i), y: toY(v) }))
-          let line = `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`
-          for (let i = 1; i < coords.length; i++) {
-            const p = coords[i-1], c = coords[i]
-            const mx = ((p.x + c.x) / 2).toFixed(1)
-            line += ` C${mx},${p.y.toFixed(1)} ${mx},${c.y.toFixed(1)} ${c.x.toFixed(1)},${c.y.toFixed(1)}`
-          }
-          const area = line + ` L${coords[coords.length-1].x.toFixed(1)},${H} L${coords[0].x.toFixed(1)},${H}Z`
-          return (
-            <>
-              <path d={area} fill={`url(#sg-${sparkId})`} />
-              <path d={line} fill="none" stroke={col2} strokeWidth="1.8" strokeLinecap="round" />
-            </>
-          )
-        })()}
-      </svg>
     </div>
   )
 }
@@ -545,12 +504,12 @@ export default function DashboardPage() {
       })()}
 
       {/* ── UNIFIED STATUS STRIP: Accounts · Next Algo · Next Holiday ── */}
-      <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '16px 20px', display: 'flex', alignItems: 'stretch', gap: '0' }}>
+      <div className="card cloud-fill" style={{ marginBottom: '12px', padding: '12px 20px', display: 'flex', alignItems: 'stretch', gap: '0' }}>
 
         {/* ── Accounts ~50% ── */}
         <div style={{ flex: '0 0 50%', minWidth: 0, paddingRight: '20px' }}>
-          <div className="card-label" style={{ marginBottom: '12px' }}>Account Status</div>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, gap: '4px' }}>
+          <div className="card-label" style={{ marginBottom: '10px' }}>Account Status</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
             {dashboardAccounts.map((acc: any, idx: number) => {
               const isZerodha = acc.broker === 'zerodha'
               const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
@@ -564,7 +523,7 @@ export default function DashboardPage() {
               const succeeded = loginSucceeded[acc.id] ?? false
               const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
               return (
-                <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 20px', borderLeft: idx > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                <div key={acc.id} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '4px 0', borderLeft: idx > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
                   <span className={isLive ? 'pulse-live-lg' : 'pulse-warn-lg'} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 600, color: 'var(--ox-glow)', whiteSpace: 'nowrap' as const }}>{acc.nickname || acc.name}</div>
@@ -684,19 +643,24 @@ export default function DashboardPage() {
       </div>
 
       {/* ── STAT CARDS ── */}
-      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
-        <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
+      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '12px' }}>
+        <div className="card cloud-fill" style={{ padding: '12px 14px' }}>
           <div className="card-label">Active Algos</div>
-          <div style={{ fontSize: '38px', fontWeight: 800, color: 'var(--ox-radiant)', fontFamily: 'var(--font-mono)', letterSpacing: '-2px', lineHeight: 1 }}>{stats['active_algos'] ?? 0}</div>
-          <div style={{ fontSize: '10px', color: 'rgba(255,107,0,0.6)', marginTop: '5px', fontWeight: 600 }}>of {(algos as any[]).length} algos</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--ox-radiant)', fontFamily: 'var(--font-mono)', letterSpacing: '-1.5px', lineHeight: 1 }}>{stats['active_algos'] ?? 0}</div>
+          <div style={{ fontSize: '10px', color: 'rgba(255,107,0,0.6)', marginTop: '4px', fontWeight: 600 }}>of {stats['total_algos'] ?? 0} algos</div>
         </div>
-        <div className="card cloud-fill" style={{ padding: '16px 18px' }}>
+        <div className="card cloud-fill" style={{ padding: '12px 14px' }}>
           <div className="card-label">Open Positions</div>
-          <div style={{ fontSize: '38px', fontWeight: 800, color: 'var(--sem-long)', fontFamily: 'var(--font-mono)', letterSpacing: '-2px', lineHeight: 1 }}>{stats['open_positions'] ?? 0}</div>
-          <div style={{ fontSize: '10px', color: 'rgba(34,221,136,0.6)', marginTop: '5px', fontWeight: 600 }}>open lots</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--sem-long)', fontFamily: 'var(--font-mono)', letterSpacing: '-1.5px', lineHeight: 1 }}>{stats['open_positions'] ?? 0}</div>
+          <div style={{ fontSize: '10px', color: 'rgba(34,221,136,0.6)', marginTop: '4px', fontWeight: 600 }}>open lots</div>
         </div>
-        <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} sparkId="today" />
-        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} sparkId="fy" equityCurve={equityCurveData} roi={fyRoi} />
+        <div className="card cloud-fill" style={{ padding: '12px 14px' }}>
+          <div className="card-label">Errors</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: (stats['error_algos'] ?? 0) > 0 ? 'var(--sem-short)' : 'rgba(255,255,255,0.25)', fontFamily: 'var(--font-mono)', letterSpacing: '-1.5px', lineHeight: 1 }}>{stats['error_algos'] ?? 0}</div>
+          <div style={{ fontSize: '10px', color: (stats['error_algos'] ?? 0) > 0 ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.2)', marginTop: '4px', fontWeight: 600 }}>{(stats['error_algos'] ?? 0) > 0 ? 'needs attention' : 'all clear'}</div>
+        </div>
+        <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} />
+        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} roi={fyRoi} />
       </div>
 
       {/* ── SERVICES + SYSTEM LOG ── */}

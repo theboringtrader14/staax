@@ -10,10 +10,12 @@ from typing import Optional
 from datetime import date, timedelta, datetime
 from zoneinfo import ZoneInfo
 import uuid as uuid_lib
+from sqlalchemy import func
 from app.core.database import get_db
 from app.models.grid import GridEntry, GridStatus
 from app.models.algo import Algo, StrategyMode
 from app.models.algo_state import AlgoState, AlgoRunStatus
+from app.models.order import Order, OrderStatus
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -41,16 +43,18 @@ class SetModeRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _entry_to_dict(entry: GridEntry, algo_state: "AlgoState | None" = None, algo_name: "str | None" = None) -> dict:
+def _entry_to_dict(entry: GridEntry, algo_state: "AlgoState | None" = None, algo_name: "str | None" = None, has_error_orders: bool = False) -> dict:
     status = entry.status.value if entry.status else "no_trade"
-    # Show "waiting" when AlgoState is WAITING but GridEntry is already ALGO_ACTIVE
-    # (entry time not yet reached — activated at 09:15 but order not placed yet)
-    if (
-        algo_state is not None
-        and algo_state.status == AlgoRunStatus.WAITING
-        and status == "algo_active"
-    ):
-        status = "waiting"
+    if algo_state is not None:
+        # Show "waiting" when AlgoState is WAITING but GridEntry is already ALGO_ACTIVE
+        if algo_state.status == AlgoRunStatus.WAITING and status == "algo_active":
+            status = "waiting"
+        # Show "error" when AlgoState is ERROR
+        elif algo_state.status == AlgoRunStatus.ERROR:
+            status = "error"
+    # Show "error" when algo is active but has partially-failed orders
+    if has_error_orders and status not in ("error", "no_trade", "algo_closed"):
+        status = "error"
     return {
         "id":             str(entry.id),
         "algo_id":        str(entry.algo_id),
@@ -108,27 +112,42 @@ async def get_week_grid(
     entries = [r[0] for r in rows]
     algo_names: dict = {str(r[0].id): r[1].name for r in rows}
 
-    # Bulk-fetch AlgoStates for today's entries so we can show WAITING status
-    today = date.today()
-    today_ids = [e.id for e in entries if e.trading_date == today]
+    # Bulk-fetch AlgoStates for all entries in range
     states: dict = {}
-    if today_ids:
+    all_ids = [e.id for e in entries]
+    if all_ids:
         states_result = await db.execute(
-            select(AlgoState).where(AlgoState.grid_entry_id.in_(today_ids))
+            select(AlgoState).where(AlgoState.grid_entry_id.in_(all_ids))
         )
         states = {str(s.grid_entry_id): s for s in states_result.scalars().all()}
+
+    # Bulk-count ERROR orders per grid_entry — catches partial placement failures
+    # where algo_state is ACTIVE (some legs open) but others failed
+    error_entry_ids: set = set()
+    if all_ids:
+        err_result = await db.execute(
+            select(Order.grid_entry_id).where(
+                Order.grid_entry_id.in_(all_ids),
+                Order.status == OrderStatus.ERROR,
+            ).distinct()
+        )
+        error_entry_ids = {str(r) for r in err_result.scalars().all()}
+
+    def _to_dict(e: GridEntry) -> dict:
+        eid = str(e.id)
+        return _entry_to_dict(e, states.get(eid), algo_names.get(eid), eid in error_entry_ids)
 
     by_algo: dict = {}
     for entry in entries:
         algo_id = str(entry.algo_id)
         if algo_id not in by_algo:
             by_algo[algo_id] = []
-        by_algo[algo_id].append(_entry_to_dict(entry, states.get(str(entry.id)), algo_names.get(str(entry.id))))
+        by_algo[algo_id].append(_to_dict(entry))
 
     return {
         "week_start": monday.isoformat(),
         "week_end":   range_end.isoformat(),
-        "entries":    [_entry_to_dict(e, states.get(str(e.id)), algo_names.get(str(e.id))) for e in entries],
+        "entries":    [_to_dict(e) for e in entries],
         "by_algo":    by_algo,
     }
 

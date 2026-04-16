@@ -48,6 +48,8 @@ export default function AccountsPage() {
   const [editingCreds, setEditingCreds] = useState<EditCredsState | null>(null)
   const [showSecret,   setShowSecret]   = useState(false)
   const [showTotp,     setShowTotp]     = useState(false)
+  const [fundsData,    setFundsData]    = useState<Record<string, { available: number; used: number; total: number; unrealized_pnl: number; realized_pnl: number } | null>>({})
+  const [fundsLoading, setFundsLoading] = useState<Record<string, boolean>>({})
 
   // Add Account modal
   const [addModal,   setAddModal]   = useState(false)
@@ -169,6 +171,23 @@ export default function AccountsPage() {
       .catch(() => {})
   }
 
+  // Map account display name → angel one slug
+  const NAME_TO_SLUG: Record<string, string> = { 'Mom': 'mom', 'Wife': 'wife', 'Karthik AO': 'karthik' }
+
+  const fetchFunds = async (accName: string, refresh = false) => {
+    const slug = NAME_TO_SLUG[accName]
+    if (!slug) return
+    setFundsLoading(prev => ({ ...prev, [accName]: true }))
+    try {
+      const res = await accountsAPI.angeloneFunds(slug, refresh)
+      setFundsData(prev => ({ ...prev, [accName]: res.data }))
+    } catch {
+      setFundsData(prev => ({ ...prev, [accName]: null }))
+    } finally {
+      setFundsLoading(prev => ({ ...prev, [accName]: false }))
+    }
+  }
+
   // Check token status for all accounts on mount
   useEffect(() => {
     const checkTokens = async () => {
@@ -177,16 +196,21 @@ export default function AccountsPage() {
         const momStatus = await accountsAPI.angeloneTokenStatus('mom')
         const wifeStatus= await accountsAPI.angeloneTokenStatus('wife')
         const kaoStatus = await accountsAPI.angeloneTokenStatus('karthik')
-        setTokenStatus({
+        const status = {
           'Karthik':    zStatus.data?.connected   ?? false,
           'Mom':        momStatus.data?.connected  ?? false,
           'Wife':       wifeStatus.data?.connected ?? false,
           'Karthik AO': kaoStatus.data?.connected  ?? false,
-        })
+        }
+        setTokenStatus(status)
+        // Auto-fetch funds for connected Angel One accounts
+        for (const [name, connected] of Object.entries(status)) {
+          if (connected && NAME_TO_SLUG[name]) fetchFunds(name)
+        }
       } catch {}
     }
     checkTokens()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync from store when it changes
   useEffect(() => {
@@ -391,6 +415,43 @@ export default function AccountsPage() {
                   </span>
                 </span>
               </div>
+
+              {/* Funds strip — live margin + P&L from broker */}
+              {NAME_TO_SLUG[acc.name] && (
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Live Funds</div>
+                    <button
+                      onClick={() => fetchFunds(acc.name, true)}
+                      disabled={fundsLoading[acc.name]}
+                      style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '10px', padding: 0 }}
+                    >{fundsLoading[acc.name] ? '…' : '↻'}</button>
+                  </div>
+                  {!tokenConnected ? (
+                    <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.25)', padding: '6px 0' }}>Login to see funds</div>
+                  ) : fundsLoading[acc.name] && !fundsData[acc.name] ? (
+                    <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.35)', padding: '6px 0' }}>Loading…</div>
+                  ) : fundsData[acc.name] ? (() => {
+                    const f = fundsData[acc.name]!
+                    const metrics = [
+                      { label: 'Cash',     value: `₹${(f.available / 100000).toFixed(1)}L`, color: '#F0F0FF' },
+                      { label: 'Used',     value: `₹${(f.used / 100000).toFixed(1)}L`,      color: 'rgba(232,232,248,0.6)' },
+                      { label: 'Total',    value: `₹${(f.total / 100000).toFixed(1)}L`,     color: '#F0F0FF' },
+                      { label: 'Unreal.',  value: `${f.unrealized_pnl >= 0 ? '+' : ''}₹${Math.abs(f.unrealized_pnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: f.unrealized_pnl >= 0 ? '#22DD88' : '#FF4444' },
+                    ]
+                    return (
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {metrics.map(m => (
+                          <div key={m.label} style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: '5px', padding: '6px 4px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '9px', color: 'rgba(232,232,248,0.4)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: m.color }}>{m.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })() : null}
+                </div>
+              )}
 
               {/* Edit API Keys button + Deactivate/Reactivate */}
               <div style={{ marginBottom: '10px', display: 'flex', gap: 8, alignItems: 'center' }}>

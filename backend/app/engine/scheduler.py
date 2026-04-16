@@ -916,6 +916,18 @@ class AlgoScheduler:
                         entry_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
 
                         if now >= entry_dt:
+                            # Guard: don't overwrite live/retried entries with NO_TRADE on restart.
+                            if grid_entry.status in (
+                                GridStatus.ALGO_ACTIVE,
+                                GridStatus.ORDER_PENDING,
+                                GridStatus.OPEN,
+                            ):
+                                logger.info(
+                                    f"[RECOVERY] Skipping NO_TRADE for {algo.name} — "
+                                    f"grid_entry is {grid_entry.status.value}, preserving state"
+                                )
+                                continue
+
                             # Entry time already passed — mark NO_TRADE immediately
                             algo_state.status    = AlgoRunStatus.NO_TRADE
                             algo_state.closed_at = now

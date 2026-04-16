@@ -259,9 +259,11 @@ class AlgoRunner:
 
     async def enter(
         self,
-        grid_entry_id: str,
-        reentry:       bool = False,
+        grid_entry_id:  str,
+        reentry:        bool = False,
         original_order: Optional[Order] = None,
+        force_direct:   bool = False,
+        force_immediate: bool = False,
     ):
         """
         Main entry point — executes all legs for a grid entry.
@@ -270,10 +272,53 @@ class AlgoRunner:
           - on_orb_entry callback (ORB algos)
           - on_wt_entry callback  (W&T algos)
           - ReentryEngine._trigger_reentry (re-entries)
+          - Manual RETRY endpoint (force_direct=True, force_immediate=True)
+
+        force_direct=True:   Skip W&T deferral — place immediately at current LTP.
+        force_immediate=True: Fire _enter_with_db now even if entry_time is in the future.
+                              If False and entry_time is still ahead, schedule for that time.
         """
+        from zoneinfo import ZoneInfo as _ZI
+        IST_ZONE = _ZI("Asia/Kolkata")
+
+        # ── Entry-time gate (only for non-immediate, non-reentry calls) ─────────
+        if not force_immediate and not reentry:
+            async with AsyncSessionLocal() as _db:
+                _res = await _db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(AlgoState.grid_entry_id == grid_entry_id)
+                )
+                _row = _res.one_or_none()
+            if _row:
+                _, _, _algo = _row
+                _et = getattr(_algo, "entry_time", None)
+                if _et:
+                    _h, _m = map(int, str(_et).split(":")[:2])
+                    _now = datetime.now(IST_ZONE).time()
+                    _entry_t = datetime.now(IST_ZONE).replace(
+                        hour=_h, minute=_m, second=0, microsecond=0
+                    ).time()
+                    if _now < _entry_t:
+                        logger.info(
+                            f"[enter] {getattr(_algo, 'name', grid_entry_id)} entry_time {_et} "
+                            f"still ahead ({_now} < {_entry_t}) — scheduling job instead of firing now"
+                        )
+                        if self._scheduler:
+                            import asyncio as _aio
+                            _loop = getattr(self._scheduler, "_loop", None)
+                            if _loop and _loop.is_running():
+                                import asyncio
+                                asyncio.run_coroutine_threadsafe(
+                                    self._enter_with_db_wrap(grid_entry_id, force_direct),
+                                    _loop,
+                                )
+                        return
+
         async with AsyncSessionLocal() as db:
             try:
-                await self._enter_with_db(db, grid_entry_id, reentry, original_order)
+                await self._enter_with_db(db, grid_entry_id, reentry, original_order, force_direct=force_direct)
             except Exception as e:
                 import traceback
                 logger.error(
@@ -286,12 +331,26 @@ class AlgoRunner:
                     pass
                 await self._mark_error(grid_entry_id, f"{type(e).__name__}: {str(e)[:200]}")
 
+    async def _enter_with_db_wrap(self, grid_entry_id: str, force_direct: bool = False):
+        """Thin wrapper used when scheduling an enter from a threadsafe context."""
+        async with AsyncSessionLocal() as db:
+            try:
+                await self._enter_with_db(db, grid_entry_id, False, None, force_direct=force_direct)
+            except Exception as e:
+                logger.error(f"[enter_wrap] {grid_entry_id}: {e}", exc_info=True)
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                await self._mark_error(grid_entry_id, f"{type(e).__name__}: {str(e)[:200]}")
+
     async def _enter_with_db(
         self,
         db: AsyncSession,
         grid_entry_id: str,
         reentry: bool,
         original_order: Optional[Order],
+        force_direct: bool = False,
     ):
         # ── 1. Load state ──────────────────────────────────────────────────────
         result = await db.execute(
@@ -347,7 +406,7 @@ class AlgoRunner:
 
         # ── 3b. Pre-execution validation ───────────────────────────────────────
         for leg in legs:
-            ok, reason, is_waiting = await self._pre_execution_check(algo, grid_entry, leg)
+            ok, reason, is_waiting = await self._pre_execution_check(algo, grid_entry, leg, force_direct=force_direct)
             if not ok:
                 log_level = "warning" if is_waiting else "error"
                 getattr(logger, log_level)(
@@ -413,7 +472,7 @@ class AlgoRunner:
             try:
                 order = await self._place_leg(
                     db, leg, algo, algo_state, grid_entry, reentry, original_order,
-                    account=account,
+                    account=account, force_direct=force_direct,
                 )
                 if order:
                     # G2: cache attributes before commit expires them
@@ -565,7 +624,7 @@ class AlgoRunner:
         )
 
     async def _pre_execution_check(
-        self, algo: "Algo", grid_entry: "GridEntry", leg: "AlgoLeg"
+        self, algo: "Algo", grid_entry: "GridEntry", leg: "AlgoLeg", force_direct: bool = False,
     ) -> tuple[bool, ExecutionErrorCode, bool]:
         """
         Returns (ok, ExecutionErrorCode, is_waiting).
@@ -624,7 +683,8 @@ class AlgoRunner:
         # 2. SmartStream check for W&T legs and ORB algos (live only)
         # Returns is_waiting=True so _enter_with_db uses WAITING (not ERROR) status —
         # the algo will trigger once SmartStream connects and ticks arrive.
-        if not is_practix:
+        # force_direct=True: W&T is bypassed in _place_leg, so no stream needed for W&T legs.
+        if not is_practix and not force_direct:
             needs_stream = (
                 getattr(leg, "wt_enabled", False)
                 or getattr(algo, "entry_type", None) == "orb"
@@ -668,6 +728,7 @@ class AlgoRunner:
         reentry:        bool,
         original_order: Optional[Order],
         account:        Optional[Account] = None,
+        force_direct:   bool = False,
     ) -> Optional[Order]:
         """
         Resolve strike, apply W&T/delay, place order, register monitors.
@@ -698,7 +759,8 @@ class AlgoRunner:
             )
 
         # ── W&T: register watcher and defer — order placed when threshold hits ─
-        if leg.wt_enabled and leg.wt_value and not reentry:
+        # force_direct=True (manual RETRY): skip W&T, enter immediately at current LTP
+        if leg.wt_enabled and leg.wt_value and not reentry and not force_direct:
             # W&T monitors the UNDERLYING INDEX, not the option premium.
             # Map the underlying name to its spot index token.
             wt_underlying = (leg.underlying or "").upper()

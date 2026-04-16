@@ -480,6 +480,9 @@ export default function OrdersPage() {
   const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
   const [openPositions, setOpenPositions] = useState<OpenPosition[]>([])
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
+  const [brokerViewOn, setBrokerViewOn] = useState(false)
+  const [brokerOrders, setBrokerOrders] = useState<{account: string; time: string; order_id: string; symbol: string; type: string; qty: number|string; price: number|string; status: string; product: string; order_type: string}[]>([])
+  const [brokerLoading, setBrokerLoading] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
   const [showWeekends, setShowWeekends] = useState(false)
@@ -582,6 +585,16 @@ export default function OrdersPage() {
       .then(res => setWaitingAlgos(res.data?.waiting || []))
       .catch(() => {})
   }, [selectedDate, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Broker orderbook fetch when panel is toggled on
+  useEffect(() => {
+    if (!brokerViewOn) return
+    setBrokerLoading(true)
+    ordersAPI.brokerOrderbook()
+      .then(res => setBrokerOrders(res.data?.orders || []))
+      .catch(() => setBrokerOrders([]))
+      .finally(() => setBrokerLoading(false))
+  }, [brokerViewOn]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live LTP via WebSocket
   useEffect(() => {
@@ -978,7 +991,18 @@ export default function OrdersPage() {
               </span>
             </div>
           </div>
-          <div className="page-header-actions">
+          <div className="page-header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setBrokerViewOn(v => !v)}
+              style={{
+                padding: '5px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'var(--font-display)',
+                background: brokerViewOn ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.04)',
+                border: brokerViewOn ? '0.5px solid rgba(255,107,0,0.5)' : '0.5px solid rgba(255,255,255,0.12)',
+                color: brokerViewOn ? 'var(--ox-glow)' : 'rgba(255,255,255,0.4)',
+                transition: 'all 0.15s',
+              }}
+            >Broker View</button>
             <StaaxSelect
               value={accountFilter}
               onChange={setAccountFilter}
@@ -1098,6 +1122,62 @@ export default function OrdersPage() {
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ height: '6px' }} />
 
+        {/* Broker Orderbook Panel */}
+        {brokerViewOn && (
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--ox-glow)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Broker Orderbook · {brokerOrders.length} orders
+              </div>
+              <button
+                onClick={() => {
+                  setBrokerLoading(true)
+                  ordersAPI.brokerOrderbook()
+                    .then(res => setBrokerOrders(res.data?.orders || []))
+                    .catch(() => setBrokerOrders([]))
+                    .finally(() => setBrokerLoading(false))
+                }}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '11px', padding: '0' }}
+              >↻ Refresh</button>
+            </div>
+            <div className="card cloud-fill" style={{ padding: '0', overflow: 'hidden', border: '0.5px solid rgba(255,107,0,0.18)' }}>
+              {brokerLoading ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>Loading…</div>
+              ) : brokerOrders.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>No orders returned from broker.</div>
+              ) : (
+                <table className="staax-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      {(['Account', 'Time', 'Symbol', 'Type', 'Qty', 'Price', 'Product', 'Status'] as const).map(h => (
+                        <th key={h} style={{ textAlign: h === 'Symbol' ? 'left' : 'center', padding: '8px 10px', fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brokerOrders.map((o, i) => {
+                      const sColor = o.status === 'COMPLETE' ? 'var(--green)' : o.status === 'REJECTED' || o.status === 'CANCELLED' ? 'var(--red)' : o.status === 'OPEN' ? 'var(--accent-amber)' : 'rgba(232,232,248,0.5)'
+                      const tColor = o.type === 'BUY' ? '#22DD88' : '#FF4444'
+                      return (
+                        <tr key={i}>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', color: 'var(--ox-glow)', fontWeight: 600, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.account}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', color: 'rgba(232,232,248,0.4)', fontFamily: 'var(--font-mono)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.time}</td>
+                          <td style={{ textAlign: 'left',   padding: '6px 10px', fontSize: '11px', fontWeight: 600, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.symbol}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', fontWeight: 700, color: tColor, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.type}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', fontFamily: 'var(--font-mono)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.qty}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', fontFamily: 'var(--font-mono)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.price}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '10px', color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.product}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '10px', fontWeight: 700, color: sColor, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.status}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Live MTM wired to header — strip removed */}
 
         {/* Holiday banner */}
@@ -1143,9 +1223,13 @@ export default function OrdersPage() {
               const stripGlow  = isError ? 'rgba(255,68,68,0.5)'   : 'rgba(255,215,0,0.5)'
 
               const doWaitingRE = async () => {
+                // Disable immediately to prevent double-click before React re-renders
+                if (waitingRetryLoading[w.grid_entry_id]) return
                 setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: true }))
                 try {
                   await ordersAPI.retryEntry(w.grid_entry_id)
+                  // Keep disabled for 5s after RETRY — scheduler fires in 2s, give it time
+                  await new Promise(r => setTimeout(r, 5000))
                   ordersAPI.waiting(selectedDate, isPractixMode)
                     .then(res => setWaitingAlgos(res.data?.waiting || []))
                     .catch(() => {})
@@ -1153,7 +1237,9 @@ export default function OrdersPage() {
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
               }
 
-              const canRetry  = (isMissed || isError || !!w.latest_error || w.algo_state_status === 'no_trade') && !isRetrying && !isOrbWindowPast
+              // All entries in the waiting list are retryable — they haven't entered yet.
+              // Only block for ORB window past or already retrying.
+              const canRetry  = !isRetrying && !isOrbWindowPast
               const retryLabel = isRetrying ? '↻' : isOrbWindowPast ? 'ORB ✕' : 'RETRY'
               const retryCol   = isOrbWindowPast ? 'rgba(255,255,255,0.2)' : '#F59E0B'
               const retryBg    = isOrbWindowPast ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.05)'

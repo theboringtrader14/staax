@@ -1123,6 +1123,43 @@ async def get_orders_ltp(
     return {"ltp": ltp_map, "timestamp": now_ist}
 
 
+@router.get("/broker-orderbook")
+async def broker_orderbook(request: Request):
+    """
+    Fetch raw Angel One order book for all logged-in accounts.
+    Returns normalized list of orders across all active broker instances.
+    """
+    ACCOUNT_KEYS = [
+        ("angelone_karthik", "Karthik"),
+        ("angelone_mom",     "Mom"),
+        ("angelone_wife",    "Wife"),
+    ]
+    results = []
+    for state_key, label in ACCOUNT_KEYS:
+        broker = getattr(request.app.state, state_key, None)
+        if broker is None or not broker.is_token_set():
+            continue
+        try:
+            raw = await broker.get_order_book()
+        except Exception:
+            raw = []
+        for o in (raw or []):
+            results.append({
+                "account":    label,
+                "time":       o.get("updatetime") or o.get("exchorderupdatetime") or "",
+                "order_id":   o.get("orderid") or o.get("uniqueorderid") or "",
+                "symbol":     o.get("tradingsymbol") or o.get("symboltoken") or "",
+                "type":       o.get("transactiontype") or "",
+                "qty":        o.get("quantity") or o.get("filledshares") or 0,
+                "price":      o.get("price") or o.get("averageprice") or 0,
+                "status":     (o.get("status") or "").upper(),
+                "product":    o.get("producttype") or "",
+                "order_type": o.get("ordertype") or "",
+            })
+    results.sort(key=lambda x: x["time"], reverse=True)
+    return {"orders": results, "count": len(results)}
+
+
 @router.get("/{order_id}")
 async def get_order(order_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single order by ID."""
@@ -1614,10 +1651,6 @@ async def retry_entry(
         source="orders_api",
     )
 
-    # Fire algo_runner — use run_coroutine_threadsafe (same pattern as scheduler sync wrappers)
-    # to ensure SQLAlchemy async sessions have proper greenlet context.
-    # Manual retry does NOT schedule a 5-minute expiry; it attempts entry immediately.
-    algo_runner = getattr(request.app.state, "algo_runner", None)
     _scheduler = getattr(request.app.state, "scheduler", None)
 
     # Cancel any existing expiry job — prevents a stale expiry from marking NO_TRADE
@@ -1628,16 +1661,35 @@ async def retry_entry(
             _expiry_job.remove()
             logger.info(f"[RETRY] Removed stale expiry job for {grid_entry_id}")
 
-    if algo_runner:
-        import asyncio
-        _loop = getattr(_scheduler, "_loop", None) if _scheduler else None
-        if _loop and _loop.is_running():
-            asyncio.run_coroutine_threadsafe(algo_runner.enter(grid_entry_id), _loop)
-        else:
-            # Fallback: we're already in the event loop (request handler context)
-            asyncio.ensure_future(algo_runner.enter(grid_entry_id))
+    # Schedule enter() via APScheduler's AsyncIOExecutor — fires in 2 seconds.
+    # This is the ONLY way to get proper SQLAlchemy greenlet context outside of
+    # the scheduler's own job runners. Direct await / ensure_future / run_coroutine_threadsafe
+    # all fail because they run outside the greenlet bridge that AsyncIOExecutor provides.
+    # force_direct=True: skip W&T deferral, enter immediately at current LTP
+    # force_immediate=True: bypass entry_time gate (entry window is already past)
+    if _scheduler:
+        from datetime import timedelta
+        from apscheduler.triggers.date import DateTrigger
+        from app.engine.algo_runner import algo_runner as _algo_runner
+        # Idempotency: if a retry job is already pending, don't schedule another.
+        # Prevents double-placement when user clicks RETRY twice in quick succession.
+        _retry_job_id = f"retry_{grid_entry_id}"
+        if _scheduler._scheduler.get_job(_retry_job_id):
+            logger.warning(f"[RETRY] Job already pending for {grid_entry_id} — ignoring duplicate click")
+            return {"status": "already_scheduled", "algo_name": algo.name, "grid_entry_id": grid_entry_id}
+        _run_at = datetime.now(IST) + timedelta(seconds=2)
+        _scheduler._scheduler.add_job(
+            _algo_runner.enter,
+            DateTrigger(run_date=_run_at, timezone=IST),
+            kwargs={"grid_entry_id": grid_entry_id, "force_direct": True, "force_immediate": True},
+            id=_retry_job_id,
+            replace_existing=False,
+        )
+        logger.info(f"[RETRY] Scheduled enter() via APScheduler in 2s for {grid_entry_id}")
+    else:
+        logger.error(f"[RETRY] Scheduler not available — cannot schedule retry for {grid_entry_id}")
 
-    return {"status": "queued", "algo_name": algo.name, "grid_entry_id": grid_entry_id}
+    return {"status": "ok", "algo_name": algo.name, "grid_entry_id": grid_entry_id}
 
 
 # ── Retry specific errored legs (partial re-entry) ────────────────────────────

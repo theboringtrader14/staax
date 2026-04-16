@@ -38,6 +38,8 @@ export const accountsAPI = {
     api.post(`/accounts/angelone/${account}/auto-login`),
   angeloneTokenStatus: (account: string) =>
     api.get(`/accounts/angelone/${account}/token-status`),
+  angeloneFunds: (account: string, refresh = false) =>
+    api.get(`/accounts/angelone/${account}/funds`, { params: refresh ? { refresh: true } : {} }),
 
   updateCredentials: (id: string, creds: { api_key?: string; api_secret?: string; totp_secret?: string }) =>
     api.patch(`/accounts/${id}/credentials`, creds),
@@ -138,6 +140,8 @@ export const ordersAPI = {
     api.post(`/orders/${gridEntryId}/retry-legs`, { leg_ids: legIds }),
   positionCheck: (isPractix?: boolean) =>
     api.get('/orders/position-check', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
+  brokerOrderbook: () =>
+    api.get('/orders/broker-orderbook'),
 }
 
 // ── Services (Dashboard panel) ────────────────────────────────────────────────

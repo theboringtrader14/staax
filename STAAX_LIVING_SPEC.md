@@ -3485,22 +3485,31 @@ cd ~/STAXX/budgex/frontend && npm run dev -- --port 3002
 | F-4 | Global SL/TP verification | Check if Global SL and Global TP settings are wired and working |
 | F-5 | Algo Health Score | Score based on P&L, drawdown, win rate, consistency — for Analytics page |
 
-### 🔵 Phase 2 Features (Analytics)
+### 🔵 Phase 2 Features (Analytics + Architecture)
 - Wire Analytics tabs to new backend endpoints (day-breakdown, errors, slippage endpoints built, not yet wired)
 - Risk Heatmap: proper Day×Algo matrix using /reports/day-breakdown
-- Failure Analytics: wire to /reports/errors endpoint  
+- Failure Analytics: wire to /reports/errors endpoint
 - Slippage Report: wire to /reports/slippage endpoint
 - Trade Replay: store LTP snapshots (5s, 90-day FIFO), replay engine
-- Intelligent Alerting: Telegram bot for backend down, broker failures, kill switch
 - Latency Tracker: order placement time vs broker response time
+- **ZMQ-1**: ZeroMQ message bus for market data — replace direct SmartStream with pub/sub architecture (ref: OpenAlgo https://github.com/marketcalls/openalgo)
+- **PSM-1**: Python Strategy Manager — upload .py strategy files, run in process isolation, signals flow to bot_runner (ref: OpenAlgo)
+- **HST-1**: ⬜ Deferred — historical OHLCV data engine. OpenAlgo + Historify evaluated; will build natively, no external dependency.
+- **MCP-1**: MCP Server for STAAX — expose order placement and algo management via MCP protocol for LIFEX AI
+- **MOB-2**: Mobile app enhanced notifications — trade fill alerts with symbol/price, SL/TP hit with P&L, daily briefing
 
-### 🔵 Phase 3 Features (Infrastructure)
+### 🔵 Phase 3 Features (Infrastructure + Long Term)
 - Server setup + static IP registration with SEBI
 - Angel One family account mapping (post 2-3 months)
 - Execution Guard: check kill switch, duplicate orders, retry state before ANY order
 - Startup Safety Check: validate broker vs DB positions on startup
 - get_option_chain caching: cache per underlying+expiry for duration of single enter() call
 - Native mobile app (iOS/Android) — Phase 4
+- **FVB-1**: Flow Visual Strategy Builder — React Flow node editor replacing AlgoPage form
+- **PRC-1**: PRACTIX DB isolation — separate schema/DB for paper trading, ₹1Cr virtual capital
+
+### Dropped Items
+- Telegram Bot — mobile app is superior for this use case, already integrated
 
 ### Live Trading Plan
 - Phase 1: Mom's Angel One account (after Monday testing)

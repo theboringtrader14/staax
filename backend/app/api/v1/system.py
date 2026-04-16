@@ -131,6 +131,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     from sqlalchemy import func, select as sa_select
     from app.models.order import Order, OrderStatus
     from app.models.algo import Algo
+    from app.models.algo_state import AlgoState, AlgoRunStatus
 
     today = _date.today()
 
@@ -140,8 +141,6 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     today_start_utc = today_start_ist.astimezone(_tz.utc)
 
     # ── Active algos: count algos where is_active=True (not archived) ─────────
-    # This reflects algos that are configured and active, regardless of whether
-    # they have placed orders today (fixes 0 on fresh start).
     active_result = await db.execute(
         sa_select(func.count(Algo.id)).where(
             Algo.is_active == True,
@@ -149,6 +148,21 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
         )
     )
     active_algos = active_result.scalar() or 0
+
+    # ── Total algos: all non-archived algos (denominator for "X of Y") ────────
+    total_result = await db.execute(
+        sa_select(func.count(Algo.id)).where(Algo.is_archived == False)
+    )
+    total_algos = total_result.scalar() or 0
+
+    # ── Error algos: algo states in ERROR for today ────────────────────────────
+    error_result = await db.execute(
+        sa_select(func.count(AlgoState.id)).where(
+            AlgoState.status == AlgoRunStatus.ERROR,
+            AlgoState.trading_date == str(today),
+        )
+    )
+    error_algos = error_result.scalar() or 0
 
     # ── Open positions: all OPEN orders (no date filter — covers STBT/BTST) ───
     # Counts all currently open orders regardless of when they were created.
@@ -196,6 +210,8 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
 
     return {
         "active_algos":   active_algos,
+        "total_algos":    total_algos,
+        "error_algos":    error_algos,
         "open_positions": open_positions,
         "today_pnl":      today_pnl,
         "fy_pnl":         fy_pnl,

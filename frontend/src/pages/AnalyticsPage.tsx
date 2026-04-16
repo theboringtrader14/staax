@@ -685,10 +685,15 @@ interface LatencyData {
   avg_latency_ms: number
   p50_latency_ms: number
   p95_latency_ms: number
+  p99_latency_ms: number
   max_latency_ms: number
-  total_orders: number
-  by_broker: { broker: string; avg_ms: number; count: number }[]
+  total_orders:   number
+  success_rate:   number
+  fast_pct:       number
+  distribution:   { excellent: number; good: number; acceptable: number; slow: number }
+  by_broker: { broker: string; avg_ms: number; p50_ms: number; p99_ms: number; fast_pct: number; count: number }[]
   by_algo:   { algo_name: string; avg_ms: number; count: number; total_orders: number }[]
+  recent_orders: { time: string; symbol: string; broker: string; latency_ms: number | null; status: string }[]
 }
 
 function LatencyTab({ data }: { data: LatencyData | null }) {
@@ -700,14 +705,28 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
     )
   }
 
-  const maxBrokerMs = Math.max(...data.by_broker.map(b => b.avg_ms), 1)
-  const maxAlgoMs   = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
+  const maxAlgoMs = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
+  const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
-    if (ms < 500)  return 'var(--green)'
-    if (ms < 2000) return 'var(--accent-amber)'
+    if (ms < 150)  return 'var(--green)'
+    if (ms < 250)  return '#4ade80'
+    if (ms < 400)  return 'var(--accent-amber)'
     return 'var(--red)'
   }
+
+  function statusColor(s: string): string {
+    if (s === 'filled') return 'var(--green)'
+    if (s === 'error')  return 'var(--red)'
+    return 'rgba(232,232,248,0.5)'
+  }
+
+  const distBuckets = [
+    { key: 'excellent',  label: 'Excellent (<150ms)',   color: 'var(--green)',         count: data.distribution.excellent  },
+    { key: 'good',       label: 'Good (150–250ms)',      color: '#4ade80',              count: data.distribution.good       },
+    { key: 'acceptable', label: 'Acceptable (250–400ms)', color: 'var(--accent-amber)', count: data.distribution.acceptable },
+    { key: 'slow',       label: 'Slow (>400ms)',          color: 'var(--red)',           count: data.distribution.slow       },
+  ]
 
   return (
     <div>
@@ -715,15 +734,36 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
         <SummaryCard label="Avg Latency" value={`${data.avg_latency_ms} ms`}
           valueColor={latencyColor(data.avg_latency_ms)} sub={`${data.total_orders} orders`} />
-        <SummaryCard label="P50 (Median)" value={`${data.p50_latency_ms} ms`}
+        <SummaryCard label="P50 / P99" value={`${data.p50_latency_ms} / ${data.p99_latency_ms} ms`}
           valueColor={latencyColor(data.p50_latency_ms)} />
-        <SummaryCard label="P95" value={`${data.p95_latency_ms} ms`}
-          valueColor={latencyColor(data.p95_latency_ms)} />
-        <SummaryCard label="Max" value={`${data.max_latency_ms} ms`}
-          valueColor={latencyColor(data.max_latency_ms)} />
+        <SummaryCard label="Fast Orders" value={`${data.fast_pct}%`}
+          valueColor={data.fast_pct >= 80 ? 'var(--green)' : data.fast_pct >= 50 ? 'var(--accent-amber)' : 'var(--red)'}
+          sub="<150ms" />
+        <SummaryCard label="Success Rate" value={`${data.success_rate}%`}
+          valueColor={data.success_rate >= 95 ? 'var(--green)' : data.success_rate >= 80 ? 'var(--accent-amber)' : 'var(--red)'} />
       </div>
 
-      {/* Row 2 — By Broker */}
+      {/* Row 2 — Distribution bars */}
+      <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
+        <div style={secHdr}>Latency Distribution</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {distBuckets.map(b => {
+            const pct = distTotal > 0 ? b.count / distTotal * 100 : 0
+            return (
+              <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '160px', fontSize: '11px', color: 'rgba(232,232,248,0.6)', flexShrink: 0 }}>{b.label}</div>
+                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: '4px', height: '10px', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: b.color, borderRadius: '4px', transition: 'width 0.4s ease', opacity: 0.8 }} />
+                </div>
+                <div style={{ width: '48px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: b.color }}>{b.count}</div>
+                <div style={{ width: '38px', textAlign: 'right', fontSize: '11px', color: 'rgba(232,232,248,0.4)' }}>{pct.toFixed(0)}%</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Row 3 — By Broker (enhanced) */}
       {data.by_broker.length > 0 && (
         <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
           <div style={secHdr}>By Broker</div>
@@ -731,10 +771,9 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Broker</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Avg (ms)</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Orders</th>
-                  <th style={{ width: '160px', textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>Bar</th>
+                  {(['Broker', 'Avg', 'P50', 'P99', 'Fast%', 'Orders'] as const).map(h => (
+                    <th key={h} style={{ textAlign: h === 'Broker' ? 'left' : 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -742,10 +781,10 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <tr key={b.broker}>
                     <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.broker}</td>
                     <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(b.avg_ms), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.avg_ms}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: latencyColor(b.p50_ms), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.p50_ms}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: latencyColor(b.p99_ms), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.p99_ms}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: b.fast_pct >= 80 ? 'var(--green)' : b.fast_pct >= 50 ? 'var(--accent-amber)' : 'var(--red)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.fast_pct}%</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{b.count}</td>
-                    <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                      <div style={{ width: `${Math.round(b.avg_ms / maxBrokerMs * 140)}px`, height: '8px', background: 'rgba(245,158,11,0.6)', borderRadius: '3px', transition: 'width 0.3s' }} />
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -754,9 +793,9 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
         </div>
       )}
 
-      {/* Row 3 — By Algo */}
+      {/* Row 4 — By Algo */}
       {data.by_algo.length > 0 && (
-        <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
+        <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
           <div style={secHdr}>By Algo</div>
           <div style={tblWrap}>
             <table className="staax-table" style={{ width: '100%' }}>
@@ -777,6 +816,37 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                     <td style={{ textAlign: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                       <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 140)}px`, height: '8px', background: 'rgba(245,158,11,0.6)', borderRadius: '3px', transition: 'width 0.3s' }} />
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Row 5 — Recent Orders */}
+      {data.recent_orders.length > 0 && (
+        <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
+          <div style={secHdr}>Recent Orders</div>
+          <div style={tblWrap}>
+            <table className="staax-table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  {(['Time', 'Symbol', 'Broker', 'Latency', 'Status'] as const).map(h => (
+                    <th key={h} style={{ textAlign: h === 'Symbol' ? 'left' : 'center', borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.recent_orders.map((o, i) => (
+                  <tr key={i}>
+                    <td style={{ textAlign: 'center', ...numStyle, color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{o.time}</td>
+                    <td style={{ textAlign: 'left', fontWeight: 600, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{o.symbol}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: 'rgba(232,232,248,0.6)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{o.broker}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: o.latency_ms != null ? latencyColor(o.latency_ms) : 'rgba(232,232,248,0.3)', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+                      {o.latency_ms != null ? `${o.latency_ms} ms` : '—'}
+                    </td>
+                    <td style={{ textAlign: 'center', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: statusColor(o.status), borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{o.status}</td>
                   </tr>
                 ))}
               </tbody>

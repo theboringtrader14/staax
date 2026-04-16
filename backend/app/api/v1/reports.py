@@ -561,80 +561,137 @@ async def latency_analytics(
     account_id: str | None   = Query(None),
     is_practix: bool | None  = Query(None),
 ):
-    """Order latency analytics — avg/p50/p95/max + breakdown by broker and algo."""
+    """Order latency analytics — avg/p50/p95/p99/max + distribution + broker/algo breakdown + recent orders."""
     from app.models.algo import Algo
     from app.models.account import Account
     fy_start, fy_end = _fy_range(fy)
-    conditions = [
-        Order.latency_ms.isnot(None),
+    base_conditions = [
         Order.placed_at >= fy_start,
         Order.placed_at <= fy_end,
     ]
     if account_id:
         import uuid as _uuid
         try:
-            conditions.append(Order.account_id == _uuid.UUID(account_id))
+            base_conditions.append(Order.account_id == _uuid.UUID(account_id))
         except ValueError:
             pass
     if is_practix is not None:
-        conditions.append(Order.is_practix == is_practix)
+        base_conditions.append(Order.is_practix == is_practix)
 
-    result = await db.execute(
+    # All orders in range (for success_rate denominator)
+    all_result = await db.execute(
         select(Order, Algo.name.label("algo_name"), Account.nickname.label("broker"))
         .join(Algo, Order.algo_id == Algo.id, isouter=True)
         .join(Account, Order.account_id == Account.id, isouter=True)
-        .where(*conditions)
+        .where(*base_conditions)
+        .order_by(Order.placed_at.desc())
     )
-    rows = result.all()
+    all_rows = all_result.all()
 
-    if not rows:
+    if not all_rows:
         return {
             "avg_latency_ms": 0, "p50_latency_ms": 0, "p95_latency_ms": 0,
-            "max_latency_ms": 0, "total_orders": 0,
-            "by_broker": [], "by_algo": [], "fy": fy,
+            "p99_latency_ms": 0, "max_latency_ms": 0,
+            "total_orders": 0, "success_rate": 0.0, "fast_pct": 0.0,
+            "distribution": {"excellent": 0, "good": 0, "acceptable": 0, "slow": 0},
+            "by_broker": [], "by_algo": [], "recent_orders": [], "fy": fy,
         }
 
-    all_ms = sorted(int(r.Order.latency_ms) for r in rows)
+    total_all = len(all_rows)
+    error_count = sum(1 for r in all_rows if r.Order.status and r.Order.status.value == "error")
+    success_rate = round((total_all - error_count) / total_all * 100, 1) if total_all > 0 else 0.0
+
+    # Latency rows only
+    lat_rows = [r for r in all_rows if r.Order.latency_ms is not None]
+
+    if not lat_rows:
+        return {
+            "avg_latency_ms": 0, "p50_latency_ms": 0, "p95_latency_ms": 0,
+            "p99_latency_ms": 0, "max_latency_ms": 0,
+            "total_orders": total_all, "success_rate": success_rate, "fast_pct": 0.0,
+            "distribution": {"excellent": 0, "good": 0, "acceptable": 0, "slow": 0},
+            "by_broker": [], "by_algo": [], "recent_orders": [], "fy": fy,
+        }
+
+    all_ms = sorted(int(r.Order.latency_ms) for r in lat_rows)
     total  = len(all_ms)
 
     def percentile(data: list, pct: float) -> float:
         idx = max(0, int(len(data) * pct / 100) - 1)
         return float(data[idx])
 
-    # By broker
+    fast_pct = round(sum(1 for ms in all_ms if ms < 150) / total * 100, 1)
+
+    # Distribution buckets
+    dist = {"excellent": 0, "good": 0, "acceptable": 0, "slow": 0}
+    for ms in all_ms:
+        if ms < 150:
+            dist["excellent"] += 1
+        elif ms < 250:
+            dist["good"] += 1
+        elif ms < 400:
+            dist["acceptable"] += 1
+        else:
+            dist["slow"] += 1
+
+    # By broker — with p50, p99, fast_pct
     broker_map: dict = {}
-    for r in rows:
+    for r in lat_rows:
         b = r.broker or "unknown"
         broker_map.setdefault(b, []).append(int(r.Order.latency_ms))
     by_broker = sorted([
-        {"broker": b, "avg_ms": round(sum(v) / len(v), 1), "count": len(v)}
+        {
+            "broker":   b,
+            "avg_ms":   round(sum(v) / len(v), 1),
+            "p50_ms":   percentile(sorted(v), 50),
+            "p99_ms":   percentile(sorted(v), 99),
+            "fast_pct": round(sum(1 for ms in v if ms < 150) / len(v) * 100, 1),
+            "count":    len(v),
+        }
         for b, v in broker_map.items()
     ], key=lambda x: x["avg_ms"])
 
     # By algo
     algo_map: dict = {}
-    for r in rows:
+    for r in lat_rows:
         name = r.algo_name or str(r.Order.algo_id)
         algo_map.setdefault(name, []).append(int(r.Order.latency_ms))
     by_algo = sorted([
         {
-            "algo_name": name,
-            "avg_ms": round(sum(v) / len(v), 1),
-            "count": len(v),
+            "algo_name":   name,
+            "avg_ms":      round(sum(v) / len(v), 1),
+            "count":       len(v),
             "total_orders": len(v),
         }
         for name, v in algo_map.items()
     ], key=lambda x: x["avg_ms"])
 
+    # Recent 20 orders (most recent first, with latency)
+    recent_orders = []
+    for r in all_rows[:20]:
+        o = r.Order
+        recent_orders.append({
+            "time":       o.placed_at.strftime("%H:%M:%S") if o.placed_at else "",
+            "symbol":     o.symbol or "",
+            "broker":     r.broker or "unknown",
+            "latency_ms": int(o.latency_ms) if o.latency_ms is not None else None,
+            "status":     o.status.value if o.status else "unknown",
+        })
+
     return {
         "avg_latency_ms": round(sum(all_ms) / total, 1),
         "p50_latency_ms": percentile(all_ms, 50),
         "p95_latency_ms": percentile(all_ms, 95),
+        "p99_latency_ms": percentile(all_ms, 99),
         "max_latency_ms": float(all_ms[-1]),
-        "total_orders": total,
-        "by_broker": by_broker,
-        "by_algo":   by_algo,
-        "fy":        fy,
+        "total_orders":   total_all,
+        "success_rate":   success_rate,
+        "fast_pct":       fast_pct,
+        "distribution":   dist,
+        "by_broker":      by_broker,
+        "by_algo":        by_algo,
+        "recent_orders":  recent_orders,
+        "fy":             fy,
     }
 
 

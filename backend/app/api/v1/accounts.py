@@ -270,6 +270,41 @@ async def reactivate_account(
     return {"message": "Account reactivated", "account_id": account_id}
 
 
+@router.get("/positions")
+async def get_all_positions(request: Request):
+    """
+    Aggregate open positions across all logged-in Angel One accounts.
+    Returns normalized list: { account, symbol, exchange, quantity, average_price, ltp, pnl, product }
+    """
+    ACCOUNT_KEYS = [
+        ("angelone_karthik", "Karthik AO"),
+        ("angelone_mom",     "Mom"),
+        ("angelone_wife",    "Wife"),
+    ]
+    all_positions = []
+    for state_key, label in ACCOUNT_KEYS:
+        broker = getattr(request.app.state, state_key, None)
+        if broker is None or not broker.is_token_set():
+            continue
+        try:
+            positions = await broker.get_positions()
+        except Exception:
+            positions = []
+        for p in positions:
+            all_positions.append({
+                "account":       label,
+                "symbol":        p.get("symbol", ""),
+                "exchange":      p.get("exchange", ""),
+                "quantity":      p.get("quantity", 0),
+                "average_price": p.get("average_price", 0),
+                "ltp":           p.get("ltp", 0),
+                "pnl":           p.get("pnl", 0),
+                "product":       p.get("product", ""),
+            })
+    total_pnl = sum(p["pnl"] for p in all_positions)
+    return {"positions": all_positions, "count": len(all_positions), "total_pnl": round(total_pnl, 2)}
+
+
 @router.get("/{account_id}")
 async def get_account(account_id: str, db: AsyncSession = Depends(get_db)):
     """Fetch a single account by ID. Used for edit form pre-fill."""
@@ -600,3 +635,61 @@ async def angelone_token_status(
         "message": "Connected today ✅" if connected else "Login required",
         "token_generated_at": account.token_generated_at.isoformat() if connected else None,
     }
+
+
+@router.get("/angelone/{account_nickname}/funds")
+async def angelone_funds(
+    account_nickname: str,
+    request: Request,
+    refresh: bool = False,
+):
+    """
+    Return live margin + position P&L for a given Angel One account.
+    Redis-cached for 60s; ?refresh=true busts cache.
+    """
+    import json
+    import asyncio as _asyncio
+
+    entry = _AO_ACCOUNT_MAP.get(account_nickname.lower())
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid account. Use 'mom', 'wife', or 'karthik'")
+    _, state_key, _ = entry
+
+    broker = getattr(request.app.state, state_key, None)
+    if broker is None or not broker.is_token_set():
+        raise HTTPException(status_code=503, detail="Broker not logged in")
+
+    cache = getattr(request.app.state, "ltp_cache", None)
+    cache_key = f"funds:{state_key}"
+
+    if cache and not refresh:
+        try:
+            cached = await cache.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
+
+    margins, positions = await _asyncio.gather(
+        broker.get_margins(),
+        broker.get_positions(),
+    )
+
+    unrealized = sum(p.get("pnl", 0) for p in positions)
+    realized   = 0.0
+
+    result = {
+        "available": round(margins.get("available", 0), 2),
+        "used":      round(margins.get("used", 0), 2),
+        "total":     round(margins.get("total", 0), 2),
+        "unrealized_pnl": round(unrealized, 2),
+        "realized_pnl":   round(realized, 2),
+    }
+
+    if cache:
+        try:
+            await cache.set(cache_key, json.dumps(result), ex=60)
+        except Exception:
+            pass
+
+    return result
