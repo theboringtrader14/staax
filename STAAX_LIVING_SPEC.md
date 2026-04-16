@@ -1,5 +1,5 @@
 # STAAX — Living Engineering Spec
-**Version:** 8.2 | **Last Updated:** 15 April 2026 — Batch 28 Post-Fixes: GridPage fixed-width card columns, IndicatorsPage live P&L + Signals layout + tab persistence, bot engine: MCX session reset (_in_session), channel two-TF aggregators (_channel_aggregators), _last_signal open-position override, DTR startup daily data load; Journey child leg bug noted; §25a Journey trigger selector spec added | **PRD Reference:** v1.2
+**Version:** 8.3 | **Last Updated:** 16 April 2026 — Batch 29: P0 MissingGreenlet root cause fixed (LTPConsumer.get_ltp() missing → AttributeError → ORM lazy-load after rollback in except block); leg_number captured as plain int before try block; enter_specific_legs() for partial leg retry; scheduler.recover_today_jobs() recovers ERROR algos (reset to WAITING + re-register if future, NO_TRADE if past); IST date default for orders list endpoint; retry endpoint cancels stale expiry APScheduler job; PATCH /grid/{id}/cancel marks WAITING/ERROR as NO_TRADE; Orders page: unified smart RETRY (RE-RUN removed), past-day filter requires fillPrice+open/closed status; GridPage: WAITING/ERROR pills show × cancel overlay on hover | **PRD Reference:** v1.2
 
 This document is the single engineering source of truth. Read this at the start of every session — do not re-read transcripts for context.
 
@@ -4805,4 +4805,60 @@ Added to each workflow: Schedule Trigger → HTTP GET `/holidays/today-is-holida
 - Channel strategy: `backend/app/engine/indicators/channel_strategy.py`
 - Indicators page: `frontend/src/pages/IndicatorsPage.tsx`
 - Grid page: `frontend/src/pages/GridPage.tsx`
+
+---
+
+## Session Update — 2026-04-16 (Batch 29) — MissingGreenlet Root Cause + Retry Reliability + UI Polish
+
+### Root Cause: MissingGreenlet (P0)
+
+The true root cause was **NOT** the scheduler sync wrapper. The full chain:
+1. `_place_leg()` called `self._ltp_consumer.get_ltp(wt_underlying_token)` — method did not exist
+2. `AttributeError` raised inside the try block
+3. `except` block accessed `leg.leg_number` on an ORM object that had already been **expired by `await db.rollback()`**
+4. SQLAlchemy lazy-load triggered synchronously without greenlet context → `MissingGreenlet`
+
+### Fixes Applied
+
+**`ltp_consumer.py`**
+- Added `self._ltp_map: Dict[int, float] = {}` populated in `_process_ticks` on every tick
+- Added `get_ltp(self, token: int) -> float` — sync lookup from in-memory map, returns 0.0 if unseen
+
+**`algo_runner.py`**
+- Captured `leg_number = leg.leg_number` as a plain Python `int` **before** the `try` block in the legs loop in `_enter_with_db` — all `except` references use this captured value, never touch the expired ORM object
+- Added `enter_specific_legs(grid_entry_id, leg_ids)` — re-places only specified legs (by AlgoLeg UUID); does NOT transition AlgoState (caller already sets to ACTIVE); used by the retry-legs endpoint
+
+**`scheduler.py`**
+- `recover_today_jobs()` WHERE clause extended to include `AlgoRunStatus.ERROR`
+- ERROR algos with `entry_time` in future: reset to WAITING, clear `error_message` + `closed_at`, set `grid_entry.status = ALGO_ACTIVE`, register `_job_entry`
+- ERROR/WAITING algos with `entry_time` in past: mark NO_TRADE immediately
+
+**`orders.py` (API)**
+- `_parse_date()` default: `date.today()` → `datetime.now(ZoneInfo("Asia/Kolkata")).date()` — fixes wrong date after midnight UTC on server
+- Retry endpoint: cancels `entry_expiry_{grid_entry_id}` APScheduler job before firing `enter()` — prevents stale expiry from marking algo NO_TRADE right after manual retry resets to WAITING
+- New `POST /orders/{grid_entry_id}/retry-legs`: validates all specified leg_ids are in ERROR state, resets AlgoState to ACTIVE, sets `grid_entry.status = OPEN`, fires `enter_specific_legs()` via `run_coroutine_threadsafe`
+
+**`grid.py` (API)**
+- New `PATCH /grid/{entry_id}/cancel`: validates state is WAITING or ERROR (400 otherwise), sets AlgoState → NO_TRADE, sets GridEntry → NO_TRADE, removes `entry_{id}` and `entry_expiry_{id}` APScheduler jobs
+
+### Frontend Changes
+
+**`OrdersPage.tsx`**
+- **RE-RUN button removed** from both order cards (BTNS array) and waiting cards (missedBtns array)
+- **Unified smart RETRY**: if all legs ERROR or algo is NO_TRADE → `retryEntry` (full re-run); if some legs ERROR → opens partial retry modal; modal confirm calls `retryLegs`
+- **Past-day filter**: `l.fillPrice != null` condition extended to also require `l.status === 'open' || l.status === 'closed'` — prevents errored-but-unfilled legs from making historic days appear as traded
+- **Empty state** message now includes day name (e.g. "No trades executed on Wednesday, 16 Apr.")
+
+**`GridPage.tsx`**
+- WAITING, ALGO_ACTIVE, and ERROR pills: on hover, show a `×` overlay (dark background, red ×)
+- Clicking `×` calls `window.confirm()` then `PATCH /grid/{entry_id}/cancel` — marks run as NO_TRADE without touching recurring_days
+- Existing defer modal still fires for OPEN/ORDER_PENDING/today-ALGO_CLOSED when pill is clicked normally
+
+**`api.ts`**
+- `ordersAPI.retryLegs(gridEntryId, legIds)` → `POST /orders/{id}/retry-legs`
+- `gridAPI.cancel(entryId)` → `PATCH /grid/{id}/cancel`
+
+### Commits
+- `505fa44` — backend: ltp_consumer, algo_runner, scheduler, orders, grid
+- `ed2be09` — frontend: OrdersPage, GridPage, api.ts
 
