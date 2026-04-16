@@ -49,6 +49,8 @@ interface WaitingAlgo {
   is_practix: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
   legs?: WaitingLeg[]
+  algo_state_status?: string   // "waiting" | "error"
+  error_message?: string | null
 }
 interface OpenPosition {
   algo_id: string; algo_name: string; account: string
@@ -886,8 +888,16 @@ export default function OrdersPage() {
   const filteredOrders  = activeAccountNickname ? orders.filter(g => g.account === activeAccountNickname) : orders
   const filteredWaiting = activeAccountNickname ? waitingAlgos.filter(w => w.account_name === activeAccountNickname) : waitingAlgos
 
-  const localFilteredOrders  = accountFilter === 'all' ? filteredOrders  : filteredOrders.filter(g => g.account === accountFilter)
-  const localFilteredWaiting = accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter)
+  // Past-day detection — ISO date string compare is safe (both are YYYY-MM-DD)
+  const isPastDay = selectedDate < todayDate
+
+  const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
+  // Past days: hide groups with zero filled legs (WAITING/ERROR/NO_TRADE placeholders that have no actual fills)
+  const localFilteredOrders  = isPastDay
+    ? localFilteredOrdersRaw.filter(g => g.legs.some(l => l.fillPrice != null))
+    : localFilteredOrdersRaw
+  // Past days: never show the waiting/error section (nothing actionable about yesterday's errors)
+  const localFilteredWaiting = isPastDay ? [] : (accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter))
 
   const groupedByInstrument: Record<string, AlgoGroup[]> = {}
   for (const group of localFilteredOrders) {
@@ -1097,21 +1107,32 @@ export default function OrdersPage() {
         {localFilteredWaiting.length > 0 && !isHolidayToday && (
           <div style={{ marginBottom: '16px' }}>
             {localFilteredWaiting.map(w => {
-              const isMissed = !!w.entry_time && (() => {
+              const isError   = w.algo_state_status === 'error'
+              const isMissed  = !isError && !!w.entry_time && (() => {
                 const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
                 return now >= w.entry_time.slice(0, 5)
               })()
               const errType = w.latest_error?.event_type || ''
-              const isFeedErr = errType.includes('FEED') || (w.latest_error?.reason || '').includes('FEED_ERROR')
+              const isFeedErr    = errType.includes('FEED') || (w.latest_error?.reason || '').includes('FEED_ERROR')
               const isEntryMissed = errType.includes('ENTRY_MISSED') || (w.latest_error?.reason || '').includes('ENTRY_MISSED')
-              const isOrbExpired = errType.includes('ORB_EXPIRED') || (w.latest_error?.reason || '').includes('ORB_EXPIRED')
+              const isOrbExpired  = errType.includes('ORB_EXPIRED') || (w.latest_error?.reason || '').includes('ORB_EXPIRED')
               const isRetrying = waitingRetryLoading[w.grid_entry_id]
+
+              // Card accent colours — red for ERROR, amber for WAITING/MISSED
+              const legStatusChip = isMissed
+                ? { label: 'MISSED',  color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' }
+                : { label: isError ? 'ERROR' : 'WAITING', color: isError ? '#FF4444' : '#FFD700', bg: isError ? 'rgba(255,68,68,0.10)' : 'rgba(255,215,0,0.10)' }
+              const accentHex  = isError ? '#FF4444'               : '#FFE600'
+              void accentHex
+              const accentRgba = isError ? 'rgba(255,68,68,0.20)'  : 'rgba(255,215,0,0.20)'
+              const accentHover= isError ? 'rgba(255,68,68,0.45)'  : 'rgba(255,215,0,0.45)'
+              const stripBg    = isError ? '#FF4444'               : (isMissed ? 'rgba(255,215,0,0.35)' : '#FFE600')
+              const stripGlow  = isError ? 'rgba(255,68,68,0.5)'   : 'rgba(255,215,0,0.5)'
 
               const doWaitingRE = async () => {
                 setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: true }))
                 try {
                   await ordersAPI.retryEntry(w.grid_entry_id)
-                  // Refresh orders + waiting list
                   ordersAPI.waiting(selectedDate, isPractixMode)
                     .then(res => setWaitingAlgos(res.data?.waiting || []))
                     .catch(() => {})
@@ -1119,18 +1140,16 @@ export default function OrdersPage() {
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
               }
 
+              const canReRun  = (isMissed || isError) && !isRetrying
+              const canRetry  = (!!w.latest_error || isError) && !isRetrying
               const missedBtns = [
-                { label: isRetrying ? '↻' : 'RE-RUN', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !isMissed || isRetrying, action: isMissed ? doWaitingRE : undefined },
-                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true,      action: undefined },
-                { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true,      action: undefined },
-                { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true,      action: undefined },
-                { label: isRetrying ? '↻' : 'RETRY', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !w.latest_error || isRetrying, action: w.latest_error ? doWaitingRE : undefined },
+                { label: isRetrying ? '↻' : 'RE-RUN', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canReRun,  action: canReRun  ? doWaitingRE : undefined },
+                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
+                { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
+                { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true, action: undefined },
+                { label: isRetrying ? '↻' : 'RETRY', col: '#F59E0B', bg: 'rgba(245,158,11,0.05)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
                 { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, action: undefined },
               ]
-
-              const legStatusChip = isMissed
-                ? { label: 'MISSED',  color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' }
-                : { label: 'WAITING', color: '#FFD700',               bg: 'rgba(255,215,0,0.10)'   }
 
               return (
                 <div key={w.grid_entry_id}
@@ -1138,14 +1157,14 @@ export default function OrdersPage() {
                   onMouseLeave={() => setHoveredCard(null)}
                   style={{
                     borderRadius: '10px', overflow: 'hidden', marginBottom: 10,
-                    border: `0.5px solid ${hoveredCard === w.grid_entry_id ? 'rgba(255,215,0,0.45)' : 'rgba(255,215,0,0.20)'}`,
+                    border: `0.5px solid ${hoveredCard === w.grid_entry_id ? accentHover : accentRgba}`,
                   }}>
 
                   {/* ── Card header ── */}
                   <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'stretch' }}>
 
                     {/* Left status strip */}
-                    <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: isMissed ? 'rgba(255,215,0,0.35)' : '#FFE600', boxShadow: '0 0 8px rgba(255,215,0,0.5), 0 0 20px rgba(255,215,0,0.3)' }}/>
+                    <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: stripBg, boxShadow: `0 0 8px ${stripGlow}, 0 0 20px ${stripGlow}` }}/>
 
                     {/* Info row */}
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap' as const, minWidth: 0 }}>
@@ -1162,21 +1181,32 @@ export default function OrdersPage() {
                         </span>
                       )}
 
-                      {/* MISSED / WAITING chip */}
-                      <span className="tag" style={{ color: '#FFD700', background: 'rgba(255,215,0,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>
-                        {isMissed ? 'MISSED' : 'WAITING'}
-                      </span>
+                      {/* Status chip — ERROR (red) | MISSED (grey) | WAITING (amber) */}
+                      {isError ? (
+                        <span className="tag" style={{ color: '#FF4444', background: 'rgba(255,68,68,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>ERROR</span>
+                      ) : (
+                        <span className="tag" style={{ color: '#FFD700', background: 'rgba(255,215,0,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>
+                          {isMissed ? 'MISSED' : 'WAITING'}
+                        </span>
+                      )}
 
-                      {/* Inline event note */}
-                      {(isFeedErr || isEntryMissed) && (
+                      {/* Error message (engine error) */}
+                      {isError && (w.error_message || w.latest_error?.reason) && (
+                        <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)' }}>
+                          ⛔ {(w.error_message || w.latest_error?.reason || '').slice(0, 80)}
+                        </span>
+                      )}
+
+                      {/* Inline event note for non-error states */}
+                      {!isError && (isFeedErr || isEntryMissed) && (
                         <span style={{ fontSize: '11px', color: '#D77B12' }}>
                           ⏭ {isEntryMissed ? 'Entry missed — server restarted after window' : 'Feed not ready'}
                         </span>
                       )}
-                      {isOrbExpired && (
+                      {!isError && isOrbExpired && (
                         <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
                       )}
-                      {w.latest_error && !isFeedErr && !isEntryMissed && !isOrbExpired && (
+                      {!isError && w.latest_error && !isFeedErr && !isEntryMissed && !isOrbExpired && (
                         <span style={{ fontSize: '11px', color: '#EF4444' }}>
                           ⛔ {(w.latest_error.reason || '').slice(0, 60)}
                         </span>
@@ -1257,9 +1287,9 @@ export default function OrdersPage() {
         )}
 
         {/* Empty state */}
-        {localFilteredOrders.length === 0 && (
+        {localFilteredOrders.length === 0 && localFilteredWaiting.length === 0 && (
           <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
-            No orders for today.
+            {isPastDay ? 'No trades executed on this day.' : 'No orders for today.'}
           </div>
         )}
 

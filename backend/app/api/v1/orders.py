@@ -781,7 +781,9 @@ async def get_waiting_algos(
     IST = timezone(timedelta(hours=5, minutes=30))
     one_hour_ago = datetime.now(IST) - timedelta(hours=1)
 
-    # Post-09:15: ALGO_ACTIVE grid entries with a WAITING AlgoState
+    # Post-09:15: ALGO_ACTIVE/ERROR grid entries with WAITING/ERROR AlgoState
+    # Includes ERROR algos that failed before placing any order (e.g. PendingRollbackError)
+    from sqlalchemy import or_ as _or
     activated_result = await db.execute(
         select(GridEntry, Algo, Account, AlgoState)
         .join(Algo, GridEntry.algo_id == Algo.id)
@@ -789,10 +791,10 @@ async def get_waiting_algos(
         .join(AlgoState, AlgoState.grid_entry_id == GridEntry.id)
         .where(
             GridEntry.trading_date == target_date,
-            GridEntry.status == GridStatus.ALGO_ACTIVE,
+            GridEntry.status.in_([GridStatus.ALGO_ACTIVE, GridStatus.ERROR]),
             GridEntry.is_archived == False,
             GridEntry.is_enabled == True,
-            AlgoState.status == AlgoRunStatus.WAITING,
+            AlgoState.status.in_([AlgoRunStatus.WAITING, AlgoRunStatus.ERROR]),
             *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
         )
         .order_by(Algo.entry_time)
@@ -847,18 +849,20 @@ async def get_waiting_algos(
             logger.warning(f"[waiting] legs fetch failed for algo {a.id}: {_le}")
 
         waiting.append({
-            "grid_entry_id":  str(ge.id),
-            "algo_id":        str(a.id),
-            "algo_name":      a.name,
-            "account_id":     str(acc.id),
-            "account_name":   acc.nickname,
-            "entry_time":     a.entry_time,
-            "exit_time":      a.exit_time,
-            "is_practix":     ge.is_practix,
-            "lot_multiplier": ge.lot_multiplier,
-            "phase":          "activated",   # post-09:15, waiting for entry_time
-            "latest_error":   latest_error,
-            "legs":           legs_data,
+            "grid_entry_id":      str(ge.id),
+            "algo_id":            str(a.id),
+            "algo_name":          a.name,
+            "account_id":         str(acc.id),
+            "account_name":       acc.nickname,
+            "entry_time":         a.entry_time,
+            "exit_time":          a.exit_time,
+            "is_practix":         ge.is_practix,
+            "lot_multiplier":     ge.lot_multiplier,
+            "phase":              "activated",
+            "latest_error":       latest_error,
+            "legs":               legs_data,
+            "algo_state_status":  _state.status.value,           # "waiting" | "error"
+            "error_message":      _state.error_message or None,  # populated on engine error
         })
 
     # Sort combined list by entry_time
