@@ -92,6 +92,7 @@ class AlgoScheduler:
         self._scheduler = AsyncIOScheduler(timezone=IST)
         self._per_algo_jobs: dict = {}   # grid_entry_id → [job_ids]
         self._algo_runner = None         # injected from main.py after wire_engines()
+        self._loop = None                # captured in start() — used by sync job wrappers
 
     def set_algo_runner(self, runner):
         """Called once from main.py after algo_runner.wire_engines()."""
@@ -104,12 +105,8 @@ class AlgoScheduler:
         """Start the scheduler and register daily fixed-time jobs."""
         import asyncio as _asyncio
         from apscheduler.executors.asyncio import AsyncIOExecutor as _AsyncIOExecutor
-        # Explicitly bind the running event loop and AsyncIOExecutor so that all
-        # async jobs (_job_entry, _job_auto_sq, etc.) run as asyncio Tasks in
-        # uvicorn's event loop — NOT in a thread pool executor.  Without this,
-        # APScheduler may spawn jobs in threads which lack the SQLAlchemy greenlet
-        # context and raise MissingGreenlet on every DB call.
         _loop = _asyncio.get_event_loop()
+        self._loop = _loop                  # stored for run_coroutine_threadsafe wrappers
         self._scheduler.configure(
             executors={'default': _AsyncIOExecutor()},
             event_loop=_loop,
@@ -578,9 +575,22 @@ class AlgoScheduler:
         else:
             logger.error("AlgoRunner not wired into Scheduler — overnight SL check skipped")
 
-    async def _job_entry(self, grid_entry_id: str):
+    def _job_entry(self, grid_entry_id: str):
         """
-        Per-algo entry time job.
+        Sync APScheduler job wrapper — submits async work to the uvicorn event loop
+        via run_coroutine_threadsafe so SQLAlchemy async sessions have full greenlet
+        context regardless of which executor APScheduler uses to call this function.
+        """
+        import asyncio as _asyncio
+        loop = self._loop or _asyncio.get_event_loop()
+        if loop and loop.is_running():
+            _asyncio.run_coroutine_threadsafe(self._job_entry_coro(grid_entry_id), loop)
+        else:
+            logger.error(f"[SCHEDULER] Event loop not running — entry skipped for {grid_entry_id}")
+
+    async def _job_entry_coro(self, grid_entry_id: str):
+        """
+        Async entry job implementation.
         For Direct algos: fire AlgoRunner.enter() immediately.
         For ORB algos: ORBTracker handles entry via LTP callback — no action here.
         For W&T algos: WTEvaluator handles entry via LTP callback — no action here.
@@ -590,10 +600,7 @@ class AlgoScheduler:
         """
         logger.info(f"⏰ Entry time: {grid_entry_id}")
 
-        # ── Phase 1: read-only DB check (session closed before enter()) ──────────
-        # enter() opens its OWN AsyncSessionLocal — keeping the check session open
-        # while enter() runs causes nested SQLAlchemy greenlet contexts that can
-        # raise MissingGreenlet on Python 3.12 + SQLAlchemy 2.0.
+        # Phase 1: read-only DB check (session closed before enter())
         should_enter = False
         algo_name    = ""
         algo_id_str  = ""
@@ -622,12 +629,12 @@ class AlgoScheduler:
                     should_enter = True
                     algo_name    = algo.name
                     algo_id_str  = str(algo.id)
-            # ← session closed here; all primitives captured above
+            # ← session closed; all primitives captured above
         except Exception as e:
             logger.error(f"Entry job pre-check failed for {grid_entry_id}: {e}")
             return
 
-        # ── Phase 2: fire entry (no outer session open) ───────────────────────────
+        # Phase 2: fire entry (no outer session open)
         if should_enter:
             await _ev.info(
                 f"Entry fired: {algo_name}",
@@ -654,7 +661,16 @@ class AlgoScheduler:
         )
         logger.info(f"Entry expiry scheduled at {expiry_time.strftime('%H:%M:%S')} for {grid_entry_id}")
 
-    async def _job_entry_expiry(self, grid_entry_id: str):
+    def _job_entry_expiry(self, grid_entry_id: str):
+        """Sync APScheduler wrapper — submits async work to the uvicorn event loop."""
+        import asyncio as _asyncio
+        loop = self._loop or _asyncio.get_event_loop()
+        if loop and loop.is_running():
+            _asyncio.run_coroutine_threadsafe(self._job_entry_expiry_coro(grid_entry_id), loop)
+        else:
+            logger.error(f"[SCHEDULER] Event loop not running — expiry skipped for {grid_entry_id}")
+
+    async def _job_entry_expiry_coro(self, grid_entry_id: str):
         """
         Fires 5 minutes after entry_time.
         If the algo is still WAITING (no order was placed), mark it NO_TRADE.
