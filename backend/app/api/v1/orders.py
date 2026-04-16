@@ -786,9 +786,11 @@ async def get_waiting_algos(
     IST = timezone(timedelta(hours=5, minutes=30))
     one_hour_ago = datetime.now(IST) - timedelta(hours=1)
 
-    # Post-09:15: ALGO_ACTIVE/ERROR grid entries with WAITING/ERROR AlgoState
-    # Includes ERROR algos that failed before placing any order (e.g. PendingRollbackError)
-    from sqlalchemy import or_ as _or
+    # Four conditions for surfacing an algo in the waiting section:
+    # 1. ALGO_ACTIVE + WAITING  → entry time not yet reached, genuinely waiting
+    # 2. ERROR (grid or state)  → hard error before/during placement
+    # 3. NO_TRADE + error_msg   → engine failure (MissingGreenlet, PendingRollbackError, etc.)
+    # 4. NO_TRADE + activated_at + no error_msg → ENTRY_MISSED (backend restarted after window)
     activated_result = await db.execute(
         select(GridEntry, Algo, Account, AlgoState)
         .join(Algo, GridEntry.algo_id == Algo.id)
@@ -796,11 +798,32 @@ async def get_waiting_algos(
         .join(AlgoState, AlgoState.grid_entry_id == GridEntry.id)
         .where(
             GridEntry.trading_date == target_date,
-            GridEntry.status.in_([GridStatus.ALGO_ACTIVE, GridStatus.ERROR]),
             GridEntry.is_archived == False,
             GridEntry.is_enabled == True,
-            AlgoState.status.in_([AlgoRunStatus.WAITING, AlgoRunStatus.ERROR]),
             *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
+            or_(
+                # 1. Genuinely waiting — entry time not reached yet
+                and_(
+                    GridEntry.status == GridStatus.ALGO_ACTIVE,
+                    AlgoState.status == AlgoRunStatus.WAITING,
+                ),
+                # 2. Hard error on grid entry or algo state
+                GridEntry.status == GridStatus.ERROR,
+                AlgoState.status == AlgoRunStatus.ERROR,
+                # 3. Engine failure — NO_TRADE with error recorded
+                and_(
+                    GridEntry.status == GridStatus.NO_TRADE,
+                    AlgoState.status == AlgoRunStatus.NO_TRADE,
+                    AlgoState.error_message.isnot(None),
+                ),
+                # 4. ENTRY_MISSED — NO_TRADE with activation record but no error
+                and_(
+                    GridEntry.status == GridStatus.NO_TRADE,
+                    AlgoState.status == AlgoRunStatus.NO_TRADE,
+                    AlgoState.activated_at.isnot(None),
+                    AlgoState.error_message.is_(None),
+                ),
+            ),
         )
         .order_by(Algo.entry_time)
     )
@@ -853,6 +876,11 @@ async def get_waiting_algos(
         except Exception as _le:
             logger.warning(f"[waiting] legs fetch failed for algo {a.id}: {_le}")
 
+        _is_missed = (
+            _state.status == AlgoRunStatus.NO_TRADE
+            and _state.activated_at is not None
+            and not _state.error_message
+        )
         waiting.append({
             "grid_entry_id":      str(ge.id),
             "algo_id":            str(a.id),
@@ -866,8 +894,9 @@ async def get_waiting_algos(
             "phase":              "activated",
             "latest_error":       latest_error,
             "legs":               legs_data,
-            "algo_state_status":  _state.status.value,           # "waiting" | "error"
-            "error_message":      _state.error_message or None,  # populated on engine error
+            "algo_state_status":  _state.status.value,
+            "error_message":      (_state.error_message or "")[:200] or None,
+            "is_missed":          _is_missed,
         })
 
     # Sort combined list by entry_time

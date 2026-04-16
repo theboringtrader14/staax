@@ -49,8 +49,9 @@ interface WaitingAlgo {
   is_practix: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
   legs?: WaitingLeg[]
-  algo_state_status?: string   // "waiting" | "error"
+  algo_state_status?: string   // "waiting" | "error" | "no_trade"
   error_message?: string | null
+  is_missed?: boolean
 }
 interface OpenPosition {
   algo_id: string; algo_name: string; account: string
@@ -1110,14 +1111,13 @@ export default function OrdersPage() {
         {localFilteredWaiting.length > 0 && !isHolidayToday && (
           <div style={{ marginBottom: '16px' }}>
             {localFilteredWaiting.map(w => {
-              const isError   = w.algo_state_status === 'error'
-              const isMissed  = !isError && !!w.entry_time && (() => {
-                const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false })
-                return now >= w.entry_time.slice(0, 5)
-              })()
+              // isError: algo_state ERROR, or NO_TRADE caused by engine failure (has error_message)
+              const isError   = w.algo_state_status === 'error' ||
+                                (w.algo_state_status === 'no_trade' && !!w.error_message)
+              // isMissed: backend-authoritative flag (NO_TRADE + activated_at + no error)
+              const isMissed  = !!w.is_missed
               const errType = w.latest_error?.event_type || ''
               const isFeedErr    = errType.includes('FEED') || (w.latest_error?.reason || '').includes('FEED_ERROR')
-              const isEntryMissed = errType.includes('ENTRY_MISSED') || (w.latest_error?.reason || '').includes('ENTRY_MISSED')
               const isOrbExpired  = errType.includes('ORB_EXPIRED') || (w.latest_error?.reason || '').includes('ORB_EXPIRED')
               const isRetrying = waitingRetryLoading[w.grid_entry_id]
 
@@ -1143,7 +1143,7 @@ export default function OrdersPage() {
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
               }
 
-              const canRetry  = (isMissed || isError || !!w.latest_error) && !isRetrying
+              const canRetry  = (isMissed || isError || !!w.latest_error || w.algo_state_status === 'no_trade') && !isRetrying
               const missedBtns = [
                 { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
                 { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
@@ -1191,23 +1191,33 @@ export default function OrdersPage() {
                         </span>
                       )}
 
-                      {/* Error message (engine error) */}
-                      {isError && (w.error_message || w.latest_error?.reason) && (
+                      {/* Error message (engine error — MissingGreenlet, PendingRollbackError etc) */}
+                      {isError && w.error_message && (
                         <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)' }}>
-                          ⛔ {(w.error_message || w.latest_error?.reason || '').slice(0, 80)}
+                          ⛔ {w.error_message.slice(0, 80)}
+                        </span>
+                      )}
+                      {isError && !w.error_message && w.latest_error?.reason && (
+                        <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)' }}>
+                          ⛔ {w.latest_error.reason.slice(0, 80)}
                         </span>
                       )}
 
-                      {/* Inline event note for non-error states */}
-                      {!isError && (isFeedErr || isEntryMissed) && (
+                      {/* Missed entry note */}
+                      {isMissed && (
                         <span style={{ fontSize: '11px', color: '#D77B12' }}>
-                          ⏭ {isEntryMissed ? 'Entry missed — server restarted after window' : 'Feed not ready'}
+                          ⏭ Missed entry at {w.entry_time?.slice(0, 5) || '—'}
                         </span>
                       )}
-                      {!isError && isOrbExpired && (
+
+                      {/* Other non-error states */}
+                      {!isError && !isMissed && isFeedErr && (
+                        <span style={{ fontSize: '11px', color: '#D77B12' }}>⚡ Feed not ready</span>
+                      )}
+                      {!isError && !isMissed && isOrbExpired && (
                         <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
                       )}
-                      {!isError && w.latest_error && !isFeedErr && !isEntryMissed && !isOrbExpired && (
+                      {!isError && !isMissed && w.latest_error && !isFeedErr && !isOrbExpired && (
                         <span style={{ fontSize: '11px', color: '#EF4444' }}>
                           ⛔ {(w.latest_error.reason || '').slice(0, 60)}
                         </span>
