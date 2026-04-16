@@ -299,6 +299,17 @@ async def lifespan(app: FastAPI):
     # ── 13c2. Auto-create grid entries for today's recurring algos ────────────
     await _ensure_today_grid_entries()
 
+    # ── 13c3. Catch-up activation if backend started after 09:15 IST ─────────
+    # The activation cron fires at 09:15 exactly. If the backend restarts after
+    # that time (e.g. morning restart at 09:35), the cron is missed and all
+    # GridEntries stay no_trade for the day. This block catches up.
+    _IST_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    _market_open  = _IST_now.replace(hour=9,  minute=15, second=0, microsecond=0)
+    _market_close = _IST_now.replace(hour=15, minute=30, second=0, microsecond=0)
+    if _market_open <= _IST_now <= _market_close:
+        logger.info("[STARTUP] Past 09:15 — running catch-up activation for today's algos")
+        await scheduler._job_activate_all()
+
     # ── 13d. MCX contract expiry check ───────────────────────────────────────
     try:
         from app.core.mcx_holidays import check_mcx_expiry_warnings
