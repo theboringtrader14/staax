@@ -102,6 +102,18 @@ class AlgoScheduler:
 
     def start(self):
         """Start the scheduler and register daily fixed-time jobs."""
+        import asyncio as _asyncio
+        from apscheduler.executors.asyncio import AsyncIOExecutor as _AsyncIOExecutor
+        # Explicitly bind the running event loop and AsyncIOExecutor so that all
+        # async jobs (_job_entry, _job_auto_sq, etc.) run as asyncio Tasks in
+        # uvicorn's event loop — NOT in a thread pool executor.  Without this,
+        # APScheduler may spawn jobs in threads which lack the SQLAlchemy greenlet
+        # context and raise MissingGreenlet on every DB call.
+        _loop = _asyncio.get_event_loop()
+        self._scheduler.configure(
+            executors={'default': _AsyncIOExecutor()},
+            event_loop=_loop,
+        )
         self._register_fixed_jobs()
         self._scheduler.start()
         logger.info("✅ AlgoScheduler started")
@@ -577,12 +589,20 @@ class AlgoScheduler:
         didn't place any order the AlgoState transitions to NO_TRADE cleanly.
         """
         logger.info(f"⏰ Entry time: {grid_entry_id}")
-        async with AsyncSessionLocal() as db:
-            try:
+
+        # ── Phase 1: read-only DB check (session closed before enter()) ──────────
+        # enter() opens its OWN AsyncSessionLocal — keeping the check session open
+        # while enter() runs causes nested SQLAlchemy greenlet contexts that can
+        # raise MissingGreenlet on Python 3.12 + SQLAlchemy 2.0.
+        should_enter = False
+        algo_name    = ""
+        algo_id_str  = ""
+        try:
+            async with AsyncSessionLocal() as db:
                 result = await db.execute(
                     select(AlgoState, Algo)
                     .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
-                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .join(Algo,      GridEntry.algo_id == Algo.id)
                     .where(AlgoState.grid_entry_id == grid_entry_id)
                 )
                 row = result.one_or_none()
@@ -599,19 +619,29 @@ class AlgoScheduler:
                 # Only fire directly for DIRECT entry type
                 # ORB and W&T are driven entirely by LTP callbacks
                 if algo.entry_type == EntryType.DIRECT:
-                    await _ev.info(
-                        f"Entry fired: {algo.name}",
-                        source="scheduler",
-                        algo_name=algo.name,
-                        algo_id=str(algo.id),
-                    )
-                    if self._algo_runner:
-                        await self._algo_runner.enter(grid_entry_id)
-                    else:
-                        logger.error("AlgoRunner not wired into Scheduler — entry skipped")
+                    should_enter = True
+                    algo_name    = algo.name
+                    algo_id_str  = str(algo.id)
+            # ← session closed here; all primitives captured above
+        except Exception as e:
+            logger.error(f"Entry job pre-check failed for {grid_entry_id}: {e}")
+            return
 
-            except Exception as e:
-                logger.error(f"Entry job failed for {grid_entry_id}: {e}")
+        # ── Phase 2: fire entry (no outer session open) ───────────────────────────
+        if should_enter:
+            await _ev.info(
+                f"Entry fired: {algo_name}",
+                source="scheduler",
+                algo_name=algo_name,
+                algo_id=algo_id_str,
+            )
+            if self._algo_runner:
+                try:
+                    await self._algo_runner.enter(grid_entry_id)
+                except Exception as e:
+                    logger.error(f"Entry job enter() failed for {grid_entry_id}: {e}", exc_info=True)
+            else:
+                logger.error("AlgoRunner not wired into Scheduler — entry skipped")
 
         # Schedule expiry check — cleans up WAITING → NO_TRADE if no order placed
         expiry_time = datetime.now(IST) + timedelta(minutes=5)

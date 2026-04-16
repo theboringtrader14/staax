@@ -203,6 +203,10 @@ class AlgoRunner:
                     f"[CRITICAL] AlgoRunner.enter failed for {grid_entry_id}: "
                     f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
                 )
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
                 await self._mark_error(grid_entry_id, f"{type(e).__name__}: {str(e)[:200]}")
 
     async def _enter_with_db(
@@ -336,6 +340,12 @@ class AlgoRunner:
                 else:
                     logger.info(f"[ENTER] Leg {leg.leg_number} deferred (W&T / ORB)")
             except Exception as e:
+                # Reset session — a DB flush failure leaves it in PendingRollback state;
+                # without this, every subsequent db operation raises PendingRollbackError.
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
                 logger.error(
                     f"[ENTER] Leg {leg.leg_number} failed: {e}",
                     exc_info=True,
@@ -1065,7 +1075,11 @@ class AlgoRunner:
             try:
                 await self._exit_all_with_db(db, grid_entry_id, reason, cancel_broker_sl)
             except Exception as e:
-                logger.error(f"exit_all failed for {grid_entry_id}: {e}")
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                logger.error(f"[ENGINE] exit_all DB error, rolled back for {grid_entry_id}: {e}")
 
     async def _exit_all_with_db(
         self,

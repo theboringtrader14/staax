@@ -414,7 +414,19 @@ class ReentryEngine:
                     # Record on original order
                     order.reentry_count = new_count
                     order.reentry_type_used = "re_entry"
-                    await db.flush()
+                    try:
+                        await db.flush()
+                        await db.commit()
+                    except Exception as _flush_err:
+                        try:
+                            await db.rollback()
+                        except Exception:
+                            pass
+                        logger.error(
+                            "reentry_engine: RE-ENTRY DB flush/commit failed (order %s): %s",
+                            order_id, _flush_err,
+                        )
+                        return
 
                     try:
                         from app.engine.algo_runner import algo_runner
@@ -428,7 +440,6 @@ class ReentryEngine:
                             "reentry_engine: RE-ENTRY enter() failed (order %s): %s",
                             order_id, exc,
                         )
-                    await db.commit()
                     return
 
                 await asyncio.sleep(1)

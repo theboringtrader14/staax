@@ -344,7 +344,7 @@ class AngelOneBroker(BaseBroker):
         """
         client = self._get_client()
         result: Dict[str, float] = {}
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         for symbol in symbols:
             try:
@@ -388,7 +388,7 @@ class AngelOneBroker(BaseBroker):
                 client.timeout = 15
         except Exception:
             pass
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(
@@ -625,7 +625,7 @@ class AngelOneBroker(BaseBroker):
           "SLM"    → "STOPLOSS_MARKET"
         """
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         # Map direction
         transaction_type = "BUY" if direction.lower() == "buy" else "SELL"
@@ -687,7 +687,7 @@ class AngelOneBroker(BaseBroker):
     async def cancel_order(self, order_id: str, variety: str = "NORMAL") -> bool:
         """Cancel a pending order. Returns True on success."""
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(
@@ -712,7 +712,7 @@ class AngelOneBroker(BaseBroker):
     async def get_order_status(self, order_id: str) -> dict:
         """Get status of a specific order."""
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(
@@ -739,7 +739,7 @@ class AngelOneBroker(BaseBroker):
           { symbol, exchange, quantity, average_price, ltp, pnl, product }
         """
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(None, client.position)
@@ -781,7 +781,7 @@ class AngelOneBroker(BaseBroker):
         Returns: { "available": float, "used": float, "total": float }
         """
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(None, client.rmsLimit)
@@ -809,7 +809,7 @@ class AngelOneBroker(BaseBroker):
     async def get_order_book(self) -> list:
         """Get full order book for today."""
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(None, client.orderBook)
@@ -846,7 +846,7 @@ class AngelOneBroker(BaseBroker):
         """
         from datetime import datetime, timedelta, timezone as _tz
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         # Date range: explicit or computed from days_back
         if not from_dt or not to_dt:
@@ -896,7 +896,7 @@ class AngelOneBroker(BaseBroker):
     async def get_profile(self) -> dict:
         """Get account profile — used to verify login."""
         client = self._get_client()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         try:
             data = await loop.run_in_executor(None, client.getProfile)
