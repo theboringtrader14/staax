@@ -180,6 +180,82 @@ class AlgoRunner:
 
     # ── Entry ─────────────────────────────────────────────────────────────────
 
+    async def enter_specific_legs(self, grid_entry_id: str, leg_ids: list):
+        """
+        Re-place only the specified legs (by AlgoLeg UUID) for a grid entry already in ERROR state.
+        Called by the retry-legs endpoint when some legs succeeded and only a subset errored.
+        Does NOT transition AlgoState — caller already reset it to ACTIVE.
+        """
+        import uuid as _uuid_mod
+        leg_uuid_set = {_uuid_mod.UUID(lid) for lid in leg_ids}
+
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo, GridEntry.algo_id == Algo.id)
+                    .where(AlgoState.grid_entry_id == grid_entry_id)
+                )
+                row = result.one_or_none()
+                if not row:
+                    logger.error(f"[RETRY-LEGS] No AlgoState for {grid_entry_id}")
+                    return
+                algo_state, grid_entry, algo = row
+
+                account = None
+                if algo.account_id:
+                    acc_res = await db.execute(select(Account).where(Account.id == algo.account_id))
+                    account = acc_res.scalar_one_or_none()
+
+                legs_result = await db.execute(
+                    select(AlgoLeg)
+                    .where(AlgoLeg.algo_id == algo.id, AlgoLeg.id.in_(leg_uuid_set))
+                    .order_by(AlgoLeg.leg_number)
+                )
+                legs = legs_result.scalars().all()
+                if not legs:
+                    logger.error(f"[RETRY-LEGS] No matching legs found for {grid_entry_id}")
+                    return
+
+                placed: list = []
+                any_error = False
+                for leg in legs:
+                    leg_number = leg.leg_number
+                    try:
+                        order = await self._place_leg(
+                            db, leg, algo, algo_state, grid_entry,
+                            reentry=False, original_order=None, account=account,
+                        )
+                        if order:
+                            placed.append(order)
+                            logger.info(f"[RETRY-LEGS] Leg {leg_number} placed: {order.symbol}")
+                    except Exception as e:
+                        try:
+                            await db.rollback()
+                        except Exception:
+                            pass
+                        logger.error(f"[RETRY-LEGS] Leg {leg_number} failed: {e}", exc_info=True)
+                        any_error = True
+
+                if placed:
+                    grid_entry.status = GridStatus.OPEN
+                await db.commit()
+
+                for order in placed:
+                    await _ev.success(
+                        f"{algo.name} · {order.direction.upper()} {order.symbol} OPEN @ {order.fill_price or 0:.2f}",
+                        algo_name=algo.name, source="engine",
+                    )
+                logger.info(f"[RETRY-LEGS] {len(placed)} legs placed, any_error={any_error}")
+
+            except Exception as e:
+                logger.error(f"[RETRY-LEGS] enter_specific_legs failed for {grid_entry_id}: {e}", exc_info=True)
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+
     async def enter(
         self,
         grid_entry_id: str,
@@ -321,8 +397,12 @@ class AlgoRunner:
         entry_error = False
 
         for leg in legs:
+            # Capture plain Python values from ORM object before any try/except so that
+            # accessing them in the except block (after a rollback expires ORM objects)
+            # never triggers a lazy-load → MissingGreenlet.
+            leg_number = leg.leg_number
             logger.info(
-                f"[ENTER] Leg {leg.leg_number}/{len(legs)} — "
+                f"[ENTER] Leg {leg_number}/{len(legs)} — "
                 f"{leg.underlying} {leg.instrument} {leg.direction} "
                 f"expiry={leg.expiry} strike={leg.strike_type} lots={leg.lots}"
             )
@@ -334,11 +414,11 @@ class AlgoRunner:
                 if order:
                     placed_orders.append(order)
                     logger.info(
-                        f"[ENTER] Leg {leg.leg_number} placed: "
+                        f"[ENTER] Leg {leg_number} placed: "
                         f"symbol={order.symbol} fill={order.fill_price} token={order.instrument_token}"
                     )
                 else:
-                    logger.info(f"[ENTER] Leg {leg.leg_number} deferred (W&T / ORB)")
+                    logger.info(f"[ENTER] Leg {leg_number} deferred (W&T / ORB)")
             except Exception as e:
                 # Reset session — a DB flush failure leaves it in PendingRollback state;
                 # without this, every subsequent db operation raises PendingRollbackError.
@@ -347,7 +427,7 @@ class AlgoRunner:
                 except Exception:
                     pass
                 logger.error(
-                    f"[ENTER] Leg {leg.leg_number} failed: {e}",
+                    f"[ENTER] Leg {leg_number} failed: {e}",
                     exc_info=True,
                 )
                 entry_error = True
@@ -363,12 +443,12 @@ class AlgoRunner:
                         reason        = str(e),
                         event_type    = "entry_failed",
                         is_practix    = grid_entry.is_practix,
-                        details       = {"leg": leg.leg_number, "error": str(e)},
+                        details       = {"leg": leg_number, "error": str(e)},
                     )
 
                 # Write to event_log so leg failure surfaces in System Log / notification bell
                 await _ev.error(
-                    f"{algo.name} · Leg {leg.leg_number} failed: {str(e)[:200]}",
+                    f"{algo.name} · Leg {leg_number} failed: {str(e)[:200]}",
                     algo_name=algo.name,
                     algo_id=str(algo.id),
                     source="engine",

@@ -862,14 +862,14 @@ class AlgoScheduler:
         """
         Called once at server startup — recovers APScheduler jobs lost on restart.
 
-        Three cases handled for today's WAITING/ACTIVE intraday algos:
+        Cases handled for today's WAITING/ACTIVE/ERROR intraday algos:
 
-        1. WAITING + entry_time already passed by >5 min → mark NO_TRADE immediately.
+        1. WAITING/ERROR + entry_time already passed → mark NO_TRADE immediately.
            (The entry job fired before restart but _job_entry_expiry was never scheduled,
            or the entry job itself never fired. Either way the trade window is gone.)
 
-        2. WAITING + entry_time still in the future → re-register _job_entry so the
-           algo can still enter at the right time.
+        2. WAITING/ERROR + entry_time still in the future → reset to WAITING, clear
+           error_message, re-register _job_entry so the algo can still enter at the right time.
 
         3. WAITING or ACTIVE + exit_time still in the future → re-register _job_auto_sq
            (existing logic, unchanged).
@@ -895,6 +895,7 @@ class AlgoScheduler:
                             AlgoState.status.in_([
                                 AlgoRunStatus.WAITING,
                                 AlgoRunStatus.ACTIVE,
+                                AlgoRunStatus.ERROR,
                             ])
                         )
                     )
@@ -904,36 +905,54 @@ class AlgoScheduler:
                 recovered_exits   = 0
                 recovered_entries = 0
                 immediate_notrade = 0
+                recovered_errors  = 0
 
                 for algo_state, grid_entry, algo in rows:
                     geid = str(grid_entry.id)
 
-                    # ── Case 1 & 2: WAITING algos — handle entry recovery ──────
-                    if algo_state.status == AlgoRunStatus.WAITING and algo.entry_time:
+                    # ── Case 1 & 2: WAITING and ERROR algos — handle entry recovery ──
+                    if algo_state.status in (AlgoRunStatus.WAITING, AlgoRunStatus.ERROR) and algo.entry_time:
                         h, m = map(int, algo.entry_time.split(":")[:2])
                         entry_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
-                        entry_cutoff = entry_dt + timedelta(minutes=5)
 
-                        if now >= entry_cutoff:
-                            # Case 1: entry window expired — mark NO_TRADE immediately
+                        if now >= entry_dt:
+                            # Entry time already passed — mark NO_TRADE immediately
                             algo_state.status    = AlgoRunStatus.NO_TRADE
                             algo_state.closed_at = now
                             grid_entry.status    = GridStatus.NO_TRADE
                             immediate_notrade += 1
                             logger.info(
-                                f"[RECOVERY] Entry expired → NO_TRADE: {algo.name} "
-                                f"(entry was {algo.entry_time})"
+                                f"[RECOVERY] Entry passed → NO_TRADE: {algo.name} "
+                                f"(entry was {algo.entry_time}, was {algo_state.status.value})"
                             )
                             await _ev.warn(
-                                f"[ENTRY_MISSED] {algo.name} — server restarted after entry window ({algo.entry_time}) → NO_TRADE",
+                                f"[ENTRY_MISSED] {algo.name} — server restarted after entry time ({algo.entry_time}) → NO_TRADE",
                                 algo_name=algo.name,
                                 algo_id=str(algo_state.algo_id),
                                 source="scheduler",
                             )
                             continue  # no jobs to register
 
-                        elif now < entry_dt:
-                            # Case 2: entry time still in future — re-register entry job
+                        else:
+                            # Entry time still in future — reset ERROR → WAITING and re-register entry job
+                            was_error = algo_state.status == AlgoRunStatus.ERROR
+                            if was_error:
+                                algo_state.status        = AlgoRunStatus.WAITING
+                                algo_state.error_message = None
+                                algo_state.closed_at     = None
+                                grid_entry.status        = GridStatus.ALGO_ACTIVE
+                                recovered_errors += 1
+                                logger.info(
+                                    f"[RECOVERY] ERROR → WAITING: {algo.name} "
+                                    f"(entry @ {algo.entry_time})"
+                                )
+                                await _ev.info(
+                                    f"[RECOVERY] {algo.name} — reset ERROR → WAITING, entry job re-registered @ {algo.entry_time}",
+                                    algo_name=algo.name,
+                                    algo_id=str(algo_state.algo_id),
+                                    source="scheduler",
+                                )
+
                             job_id = f"entry_{geid}"
                             if not self._scheduler.get_job(job_id):
                                 self._scheduler.add_job(
@@ -969,14 +988,15 @@ class AlgoScheduler:
                         )
                         recovered_exits += 1
 
-                if immediate_notrade:
+                if immediate_notrade or recovered_errors:
                     await db.commit()
 
                 logger.info(
                     f"✅ Job recovery complete — "
                     f"{immediate_notrade} NO_TRADE, "
                     f"{recovered_entries} entry jobs, "
-                    f"{recovered_exits} exit jobs"
+                    f"{recovered_exits} exit jobs, "
+                    f"{recovered_errors} ERROR→WAITING resets"
                 )
 
             except Exception as e:

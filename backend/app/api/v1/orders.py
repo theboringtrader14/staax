@@ -16,6 +16,7 @@ from sqlalchemy import select, and_, or_
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import logging
 import uuid as _uuid
 from app.core.database import get_db
@@ -45,6 +46,10 @@ class SyncOrderRequest(BaseModel):
 class SquareOffRequest(BaseModel):
     order_ids: Optional[list] = None  # if None/empty → SQ all open legs
     reason: str = "manual_sq"
+
+
+class RetryLegsRequest(BaseModel):
+    leg_ids: list  # AlgoLeg UUIDs (order.leg_id values) to retry
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -115,7 +120,7 @@ async def list_orders(
     Defaults to today. Filterable by algo, account, status.
     Groups results by algo_id for the Orders page view.
     """
-    target_date = _parse_date(trading_date) or date.today()
+    target_date = _parse_date(trading_date) or datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
     # Find all GridEntries for this day
     day_name = target_date.strftime('%a').lower()  # 'mon', 'tue', etc.
@@ -776,7 +781,7 @@ async def get_waiting_algos(
     (entry time not yet reached / no order placed).
     Pre-09:15 NO_TRADE entries are excluded — they clutter the Orders page.
     """
-    target_date = _parse_date(trading_date) or date.today()
+    target_date = _parse_date(trading_date) or datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
     IST = timezone(timedelta(hours=5, minutes=30))
     one_hour_ago = datetime.now(IST) - timedelta(hours=1)
@@ -1578,13 +1583,112 @@ async def retry_entry(
         source="orders_api",
     )
 
-    # Fire algo_runner in background
+    # Fire algo_runner — use run_coroutine_threadsafe (same pattern as scheduler sync wrappers)
+    # to ensure SQLAlchemy async sessions have proper greenlet context.
+    # Manual retry does NOT schedule a 5-minute expiry; it attempts entry immediately.
     algo_runner = getattr(request.app.state, "algo_runner", None)
+    _scheduler = getattr(request.app.state, "scheduler", None)
+
+    # Cancel any existing expiry job — prevents a stale expiry from marking NO_TRADE
+    # while enter() is in flight or if entry succeeds on retry.
+    if _scheduler:
+        _expiry_job = _scheduler._scheduler.get_job(f"entry_expiry_{grid_entry_id}")
+        if _expiry_job:
+            _expiry_job.remove()
+            logger.info(f"[RETRY] Removed stale expiry job for {grid_entry_id}")
+
     if algo_runner:
         import asyncio
-        asyncio.ensure_future(algo_runner.enter(grid_entry_id))
+        _loop = getattr(_scheduler, "_loop", None) if _scheduler else None
+        if _loop and _loop.is_running():
+            asyncio.run_coroutine_threadsafe(algo_runner.enter(grid_entry_id), _loop)
+        else:
+            # Fallback: we're already in the event loop (request handler context)
+            asyncio.ensure_future(algo_runner.enter(grid_entry_id))
 
     return {"status": "queued", "algo_name": algo.name, "grid_entry_id": grid_entry_id}
+
+
+# ── Retry specific errored legs (partial re-entry) ────────────────────────────
+
+@router.post("/{grid_entry_id}/retry-legs")
+async def retry_specific_legs(
+    grid_entry_id: str,
+    body: RetryLegsRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-place only the specified errored legs for a grid entry where some legs succeeded.
+    leg_ids: list of AlgoLeg UUIDs (order.leg_id values that are in error state).
+    Returns 400 if any leg_id is not in error state.
+    """
+    try:
+        ge_uuid = _uuid.UUID(grid_entry_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid grid_entry_id")
+
+    if not body.leg_ids:
+        raise HTTPException(status_code=400, detail="leg_ids must not be empty")
+
+    # Validate all specified legs are in error state
+    try:
+        leg_uuids = [_uuid.UUID(lid) for lid in body.leg_ids]
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid leg_id in list")
+
+    error_orders = await db.execute(
+        select(Order)
+        .where(
+            Order.grid_entry_id == ge_uuid,
+            Order.leg_id.in_(leg_uuids),
+        )
+    )
+    orders_found = error_orders.scalars().all()
+
+    non_error = [o for o in orders_found if o.status != OrderStatus.ERROR]
+    if non_error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Legs not in error state: {[str(o.leg_id) for o in non_error]}",
+        )
+
+    # Load grid entry + algo state
+    ge_result = await db.execute(
+        select(GridEntry, Algo)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .where(GridEntry.id == ge_uuid)
+    )
+    ge_row = ge_result.one_or_none()
+    if not ge_row:
+        raise HTTPException(status_code=404, detail="Grid entry not found")
+    grid_entry, algo = ge_row
+
+    state_result = await db.execute(select(AlgoState).where(AlgoState.grid_entry_id == ge_uuid))
+    algo_state = state_result.scalar_one_or_none()
+
+    # Reset algo state to ACTIVE (not WAITING — other legs already filled)
+    if algo_state:
+        algo_state.status = AlgoRunStatus.ACTIVE
+        algo_state.error_message = None
+    grid_entry.status = GridStatus.OPEN
+    await db.commit()
+
+    # Fire enter_specific_legs in background via run_coroutine_threadsafe
+    algo_runner = getattr(request.app.state, "algo_runner", None)
+    _scheduler  = getattr(request.app.state, "scheduler", None)
+    if algo_runner:
+        import asyncio
+        _loop = getattr(_scheduler, "_loop", None) if _scheduler else None
+        leg_id_strs = [str(lid) for lid in leg_uuids]
+        if _loop and _loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                algo_runner.enter_specific_legs(grid_entry_id, leg_id_strs), _loop
+            )
+        else:
+            asyncio.ensure_future(algo_runner.enter_specific_legs(grid_entry_id, leg_id_strs))
+
+    return {"status": "queued", "algo_name": algo.name, "leg_count": len(leg_uuids)}
 
 
 # ── Position reconciliation ───────────────────────────────────────────────────

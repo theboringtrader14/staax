@@ -340,6 +340,7 @@ class LTPConsumer:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self.last_tick_time: Optional[float]  = None   # monotonic time of last tick — for BrokerReconnectManager
         self._started_at: Optional[float]     = None   # monotonic time feed was started
+        self._ltp_map: Dict[int, float]       = {}     # in-memory cache for sync get_ltp()
 
     # ── Broker adapter injection ───────────────────────────────────────────────
 
@@ -404,6 +405,10 @@ class LTPConsumer:
         self._subscribed_tokens = [t for t in self._subscribed_tokens if t not in tokens]
         if self._running and self.ticker:
             self.ticker.unsubscribe(tokens)
+
+    def get_ltp(self, token: int) -> float:
+        """Synchronous LTP lookup from in-memory tick cache. Returns 0.0 if not yet received."""
+        return self._ltp_map.get(int(token), 0.0)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -485,6 +490,8 @@ class LTPConsumer:
                 LTP_EXPIRY_SECS,
                 str(tick.get("last_price", 0))
             )
+            # Update in-memory cache for sync get_ltp() callers
+            self._ltp_map[int(tick['instrument_token'])] = float(tick.get('last_price', 0))
         await pipe.execute()
 
         # Broadcast batches — split index tickers from position LTPs

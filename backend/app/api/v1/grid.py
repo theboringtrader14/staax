@@ -331,6 +331,40 @@ async def remove_entry(
     return {"status": "ok", "entry_id": entry_id, "algo_recurring_days": updated_recurring}
 
 
+@router.patch("/{entry_id}/cancel")
+async def cancel_entry(entry_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Cancel a WAITING or ERROR algo run — marks it NO_TRADE and removes pending scheduler jobs."""
+    result = await db.execute(select(GridEntry).where(GridEntry.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Grid entry not found")
+
+    state_result = await db.execute(select(AlgoState).where(AlgoState.grid_entry_id == entry_id))
+    state = state_result.scalar_one_or_none()
+
+    if state:
+        if state.status not in (AlgoRunStatus.WAITING, AlgoRunStatus.ERROR):
+            raise HTTPException(status_code=400, detail=f"Cannot cancel algo in '{state.status}' state")
+        state.status = AlgoRunStatus.NO_TRADE
+        state.closed_at = datetime.now(IST)
+        state.error_message = None
+
+    entry.status = GridStatus.NO_TRADE
+
+    # Remove pending APScheduler jobs for this entry
+    try:
+        _scheduler = request.app.state.scheduler
+        for job_id in [f"entry_{entry_id}", f"entry_expiry_{entry_id}"]:
+            job = _scheduler._scheduler.get_job(job_id)
+            if job:
+                job.remove()
+    except Exception:
+        pass
+
+    await db.commit()
+    return {"status": "ok", "entry_id": entry_id, "action": "cancelled"}
+
+
 @router.post("/{entry_id}/archive")
 async def archive_entry(entry_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(GridEntry).where(GridEntry.id == entry_id))
