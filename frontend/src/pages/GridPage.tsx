@@ -16,14 +16,15 @@ type CS = 'no_trade'|'waiting'|'algo_active'|'order_pending'|'open'|'algo_closed
 type CM = 'practix'|'live'
 
 interface Cell {
-  gridEntryId?: string
-  multiplier:   number
-  status:       CS
-  mode:         CM
-  entry:        string
-  exit?:        string
-  pnl?:         number
-  tradingDate?: string
+  gridEntryId?:  string
+  multiplier:    number
+  status:        CS
+  mode:          CM
+  entry:         string
+  exit?:         string
+  pnl?:          number
+  tradingDate?:  string
+  is_monitoring?: boolean
 }
 interface Algo {
   id:            string
@@ -182,14 +183,15 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
         if (!newGrid[algoId]) newGrid[algoId] = {}
         const algoMatch = apiAlgos.find(a => a.id === algoId)
         newGrid[algoId][day] = {
-          gridEntryId: String(e.id),
-          multiplier:  e.lot_multiplier || 1,
-          status:      mapStatus(e.status || 'algo_active'),
-          mode:        e.is_practix ? 'practix' : 'live',
-          entry:       e.entry_time  || algoMatch?.et || '09:16',
-          exit:        e.exit_time   || algoMatch?.xt || '15:10',
-          pnl:         e.pnl ?? undefined,
-          tradingDate: e.trading_date || undefined,
+          gridEntryId:   String(e.id),
+          multiplier:    e.lot_multiplier || 1,
+          status:        mapStatus(e.status || 'algo_active'),
+          mode:          e.is_practix ? 'practix' : 'live',
+          entry:         e.entry_time  || algoMatch?.et || '09:16',
+          exit:          e.exit_time   || algoMatch?.xt || '15:10',
+          pnl:           e.pnl ?? undefined,
+          tradingDate:   e.trading_date || undefined,
+          is_monitoring: e.is_monitoring ?? false,
         }
       }
       setGrid(newGrid)
@@ -436,9 +438,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
               <span style={{ fontSize:'12px', color:'var(--gs-muted)' }}>
                 Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })}
               </span>
-              <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize:'10px', padding:'1px 8px' }}>
-                {isPractixMode ? 'PRACTIX' : 'LIVE'}
-              </span>
             </div>
           </div>
           <div className="page-header-actions">
@@ -634,71 +633,17 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                   const isInRecurring = algo.recurringDays.includes(day)
                                   const cell = grid[algo.id]?.[day]
 
-                                  // Compute pill style based on cell status
-                                  let pillBg     = 'transparent'
-                                  let pillBorder = '0.5px solid rgba(255,255,255,0.12)'
-                                  let pillColor  = 'rgba(255,255,255,0.25)'
-                                  let pillWeight: number|string = 400
-                                  let showDot    = false
-                                  let dotColor   = 'transparent'
-                                  let dotAnim    = false
+                                  // Simple 2-state: selected (in recurring) = orange, unselected = grey
+                                  const pillBg     = isInRecurring ? 'rgba(255,107,0,0.20)' : 'rgba(255,255,255,0.06)'
+                                  const pillBorder = isInRecurring ? '0.5px solid rgba(255,107,0,0.60)' : '0.5px solid rgba(255,255,255,0.12)'
+                                  const pillColor  = isInRecurring ? '#FF6B00' : 'rgba(255,255,255,0.25)'
+                                  const pillWeight = isInRecurring ? 700 : 400
+                                  const showDot    = false
+                                  const dotColor   = 'transparent'
+                                  const dotAnim    = false
 
                                   const s = cell?.status
-
-                                  // Status colors always win — even if day not in recurringDays
-                                  // (handles manually-deployed days that aren't in recurring schedule)
-                                  if (s === 'waiting' || s === 'algo_active') {
-                                    pillBg     = 'rgba(255,180,0,0.25)'
-                                    pillBorder = '0.5px solid rgba(255,180,0,0.70)'
-                                    pillColor  = '#FFB800'
-                                    pillWeight = 700
-                                  } else if (s === 'open' || s === 'order_pending') {
-                                    pillBg     = 'rgba(34,221,136,0.20)'
-                                    pillBorder = '0.5px solid rgba(34,221,136,0.60)'
-                                    pillColor  = '#22DD88'
-                                    pillWeight = 700
-                                    showDot    = true
-                                    dotColor   = '#22DD88'
-                                    dotAnim    = true
-                                  } else if (s === 'algo_closed') {
-                                    pillBg     = 'rgba(34,221,136,0.08)'
-                                    pillBorder = '0.5px solid rgba(34,221,136,0.25)'
-                                    pillColor  = 'rgba(34,221,136,0.55)'
-                                    pillWeight = 600
-                                  } else if (s === 'error') {
-                                    pillBg     = 'rgba(255,68,68,0.20)'
-                                    pillBorder = '0.5px solid rgba(255,68,68,0.60)'
-                                    pillColor  = '#FF4444'
-                                    pillWeight = 700
-                                    showDot    = true
-                                    dotColor   = '#FF4444'
-                                    dotAnim    = true
-                                  } else if (s === 'no_trade') {
-                                    if (isInRecurring) {
-                                      // Recurring day that didn't trade — dimmed orange
-                                      pillBg     = 'rgba(255,107,0,0.08)'
-                                      pillBorder = '0.5px solid rgba(255,107,0,0.25)'
-                                      pillColor  = 'rgba(255,107,0,0.40)'
-                                      pillWeight = 500
-                                    } else {
-                                      pillBg     = 'transparent'
-                                      pillBorder = '0.5px solid rgba(255,255,255,0.08)'
-                                      pillColor  = 'rgba(255,255,255,0.15)'
-                                      pillWeight = 400
-                                    }
-                                  } else if (isInRecurring) {
-                                    // Enabled (in recurring schedule), no active status — orange
-                                    pillBg     = 'rgba(255,107,0,0.20)'
-                                    pillBorder = '0.5px solid rgba(255,107,0,0.60)'
-                                    pillColor  = '#FF6B00'
-                                    pillWeight = 700
-                                  } else {
-                                    // Not in recurring schedule, no active cell — grey
-                                    pillBg     = 'transparent'
-                                    pillBorder = '0.5px solid rgba(255,255,255,0.12)'
-                                    pillColor  = 'rgba(255,255,255,0.25)'
-                                    pillWeight = 400
-                                  }
+                                  const isMonitoring = cell?.is_monitoring === true
 
                                   const pillKey = `${algo.id}-${day}`
                                   const canCancel = (s === 'waiting' || s === 'algo_active' || s === 'error') && !!cell?.gridEntryId
@@ -722,18 +667,35 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                         fontWeight: pillWeight,
                                         boxShadow: 'none',
                                       }}>
-                                      {DAY_LBL[i]}
-                                      {showDot && !isPillHovered && (
-                                        <span style={{
-                                          position:'absolute',
-                                          top:'4px',
-                                          right:'4px',
-                                          width:'4px',
-                                          height:'4px',
-                                          borderRadius:'50%',
-                                          background: dotColor,
-                                          animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
-                                        }}/>
+                                      {isMonitoring && !isPillHovered ? (
+                                        <>
+                                          <span style={{
+                                            display: 'inline-block',
+                                            width: 7, height: 7,
+                                            borderRadius: '50%',
+                                            background: '#2dd4bf',
+                                            animation: 'pillDotPulse 1.4s ease-in-out infinite',
+                                            marginRight: 3,
+                                            flexShrink: 0,
+                                          }} />
+                                          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.3px' }}>W&T</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          {DAY_LBL[i]}
+                                          {showDot && !isPillHovered && !isMonitoring && (
+                                            <span style={{
+                                              position:'absolute',
+                                              top:'4px',
+                                              right:'4px',
+                                              width:'4px',
+                                              height:'4px',
+                                              borderRadius:'50%',
+                                              background: dotColor,
+                                              animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
+                                            }}/>
+                                          )}
+                                        </>
                                       )}
                                       {canCancel && isPillHovered && (
                                         <span

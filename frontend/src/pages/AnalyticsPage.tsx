@@ -306,6 +306,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                 style={{
                   padding: '4px 12px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer',
                   fontFamily: 'var(--font-display)', fontWeight: 600, border: 'none',
+                  display: 'inline-flex', alignItems: 'center',
                   background: activeView === v ? 'rgba(255,107,0,0.15)' : 'transparent',
                   color: activeView === v ? '#FF6B00' : 'rgba(232,232,248,0.5)',
                   outline: activeView === v ? '0.5px solid rgba(255,107,0,0.4)' : '0.5px solid rgba(232,232,248,0.12)',
@@ -315,7 +316,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
           {activeView === 'heatmap' && (
             <div onClick={() => setShowWeekends(!showWeekends)} style={{
               padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-              fontSize: 11, fontFamily: 'Syne',
+              fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center',
               background: showWeekends ? 'rgba(68,136,255,0.15)' : 'transparent',
               border: showWeekends ? '0.5px solid rgba(68,136,255,0.5)' : '0.5px solid rgba(255,255,255,0.15)',
               color: showWeekends ? '#4488FF' : 'rgba(255,255,255,0.4)'
@@ -745,7 +747,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 
       {/* Row 2 — Distribution bars */}
       <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
-        <div style={secHdr}>Latency Distribution</div>
+        <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Latency Distribution</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {distBuckets.map(b => {
             const pct = distTotal > 0 ? b.count / distTotal * 100 : 0
@@ -766,7 +768,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
       {/* Row 3 — By Broker (enhanced) */}
       {data.by_broker.length > 0 && (
         <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
-          <div style={secHdr}>By Broker</div>
+          <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>By Broker</div>
           <div style={tblWrap}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
@@ -796,7 +798,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
       {/* Row 4 — By Algo */}
       {data.by_algo.length > 0 && (
         <div className="card cloud-fill" style={{ ...glassCard, marginBottom: '12px', padding: '16px 18px' }}>
-          <div style={secHdr}>By Algo</div>
+          <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>By Algo</div>
           <div style={tblWrap}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
@@ -827,7 +829,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
       {/* Row 5 — Recent Orders */}
       {data.recent_orders.length > 0 && (
         <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px' }}>
-          <div style={secHdr}>Recent Orders</div>
+          <div style={{ ...secHdr, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Recent Orders</div>
           <div style={tblWrap}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
@@ -949,13 +951,12 @@ export default function AnalyticsPage() {
   }, [isPractixMode, fy])
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)', overflow: 'hidden' }}>
       <div className="page-header">
         <div>
           <h1 style={{ color: 'var(--ox-radiant)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '22px' }}>Analytics</h1>
-          <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            Performance deep-dive ·{' '}
-            <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>{isPractixMode ? 'PRACTIX' : 'LIVE'}</span>
+          <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '3px' }}>
+            Performance deep-dive
           </p>
         </div>
         <div className="page-header-actions">
@@ -968,21 +969,22 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div style={{display:'flex', borderBottom:'0.5px solid rgba(255,255,255,0.08)', marginBottom:20}}>
+      <div style={{display:'flex', borderTop:'0.5px solid var(--ox-border)', borderBottom:'0.5px solid var(--ox-border)', flexShrink: 0}}>
         {(['Performance','Failures','Slippage','Latency'] as Tab[]).map(tab => (
           <button key={tab} onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }} style={{
             flex: 1, padding:'12px 0',
             background: activeTab === tab ? 'rgba(255,107,0,0.08)' : 'transparent', border: 'none',
             borderBottom: activeTab===tab ? '2px solid #FF6B00' : '2px solid transparent',
             color: activeTab===tab ? '#FF6B00' : 'rgba(255,255,255,0.4)',
-            fontFamily: 'Syne', fontSize: 12, fontWeight: 600,
-            cursor: 'pointer', transition: 'all 200ms'
+            fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', transition: 'all 0.15s ease'
           }}>
             {tab}
           </button>
         ))}
       </div>
 
+      <div style={{ flex: 1, overflowY: 'auto', paddingTop: 20 }}>
       {loading ? (
         <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>Loading…</div>
       ) : (
@@ -994,9 +996,11 @@ export default function AnalyticsPage() {
         </>
       )}
 
-      {/* Advanced Metrics */}
-      <div style={{ background: 'var(--glass-bg)', border: '0.5px solid rgba(255,107,0,0.22)', borderRadius: 'var(--radius-lg)', padding: '20px 24px', marginTop: 24 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16 }}>Advanced Metrics</div>
+      {/* Advanced Metrics — Performance tab only */}
+      {activeTab === 'Performance' && <div className="card cloud-fill" style={{ ...glassCard, padding: '16px 18px', marginTop: 12 }}>
+        <div style={{ marginBottom: '12px' }}>
+          <span style={{ ...secHdr, marginBottom: 0, borderLeft: 'none', paddingLeft: 0, color: 'var(--ox-radiant)' }}>Advanced Metrics</span>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {[
             { label: 'Sharpe Ratio', value: advMetrics?.sharpe_ratio != null ? advMetrics.sharpe_ratio.toFixed(3) : '—' },
@@ -1007,11 +1011,12 @@ export default function AnalyticsPage() {
             { label: 'Trading Days', value: advMetrics ? `${advMetrics.total_trading_days}` : '—' },
           ].map(({ label, value }) => (
             <div key={label}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text-primary)', fontWeight: 600 }}>{value}</div>
+              <div style={{ fontFamily: 'Syne', fontSize: 10, textTransform: 'uppercase', color: 'rgba(232,232,248,0.5)', fontWeight: 600, letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+              <div style={{ ...numStyle, fontSize: 18 }}>{value}</div>
             </div>
           ))}
         </div>
+      </div>}
       </div>
     </div>
   )

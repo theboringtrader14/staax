@@ -15,6 +15,7 @@ set_daily_data() must be called once per day before market open
 with previous day's OHLC data.
 """
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.engine.candle_fetcher import Candle
@@ -36,6 +37,10 @@ class DTRStrategy:
         # Tracks previous candle close for crossover detection
         self._prev_close: Optional[float] = None
 
+        # Failure tracking for rate-limited warnings
+        self._data_load_failed: bool = False
+        self._last_warn_ts: Optional[datetime] = None
+
     # ── Daily setup ───────────────────────────────────────────────────────────
 
     def set_daily_data(self, day_open: float, prev_high: float,
@@ -49,10 +54,22 @@ class DTRStrategy:
         self._prev_low  = prev_low
         self._prev_close = None   # reset; first candle of the day seeds it
 
+        # Clear failure flag on successful data load
+        self._data_load_failed = False
+        self._last_warn_ts = None
+
         logger.info(
             f"[DTR] Daily data set — open={day_open:.2f} "
             f"prev_H={prev_high:.2f} prev_L={prev_low:.2f} "
             f"UPP1={self.upper_pivot:.2f} LPP1={self.lower_pivot:.2f}"
+        )
+
+    def mark_data_failed(self, bot_id: str) -> None:
+        """Called when load_daily_data() fails — sets failure flag and logs error."""
+        self._data_load_failed = True
+        logger.error(
+            "[DTR] Daily data load failed — bot %s will not fire signals until data is loaded",
+            bot_id,
         )
 
     # ── Pivots ────────────────────────────────────────────────────────────────
@@ -87,7 +104,12 @@ class DTRStrategy:
         lpp1 = self.lower_pivot
 
         if upp1 is None:
-            # Daily data not yet set — skip
+            # Rate-limit warning to once per minute
+            now = datetime.now(timezone.utc)
+            if self._data_load_failed:
+                if self._last_warn_ts is None or (now - self._last_warn_ts).total_seconds() >= 60:
+                    logger.warning("[DTR] Waiting for daily data — no signals will fire")
+                    self._last_warn_ts = now
             self._prev_close = curr
             return None
 

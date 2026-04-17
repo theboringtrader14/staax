@@ -31,6 +31,11 @@ from app.models.execution_log import ExecutionLog
 
 router = APIRouter()
 
+# ── In-memory retry timestamps (set by explicit user RETRY, cleared on exit) ──
+# Key: grid_entry_id (str), Value: datetime of retry. Used by /waiting to
+# suppress "effectively missed" for W&T algos that were just manually retried.
+_retry_timestamps: dict = {}
+
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +75,7 @@ def _order_to_dict(order: Order) -> dict:
         "expiry_date":       order.expiry_date,
         "direction":         order.direction,
         "lots":              order.lots,
+        "lot_size":          order.lot_size or 1,
         "quantity":          order.quantity,
         "entry_type":        order.entry_type,
         "entry_reference":   order.entry_reference,
@@ -79,6 +85,7 @@ def _order_to_dict(order: Order) -> dict:
         "ltp":               order.ltp,
         "sl_original":       order.sl_original,
         "sl_actual":         order.sl_actual,
+        "sl_type":           getattr(order, 'sl_type', None),  # on AlgoLeg, not Order — safe fallback
         "tsl_trail_count":   order.tsl_trail_count,
         "target":            order.target,
         "exit_price":        order.exit_price_manual if order.exit_price_manual else order.exit_price,
@@ -87,6 +94,7 @@ def _order_to_dict(order: Order) -> dict:
         "exit_time":         order.exit_time.isoformat() if order.exit_time and order.status == OrderStatus.CLOSED else None,
         "exit_reason":       order.exit_reason.value if order.exit_reason else None,
         "pnl":               order.pnl,
+        "reconcile_status":  order.reconcile_status,
         "status":            order.status.value if order.status else "pending",
         "journey_level":     order.journey_level,
         "error_message":     order.error_message,
@@ -800,6 +808,7 @@ async def get_waiting_algos(
             GridEntry.trading_date == target_date,
             GridEntry.is_archived == False,
             GridEntry.is_enabled == True,
+            Algo.is_archived == False,   # never surface archived algos in waiting
             *([] if is_practix is None else [GridEntry.is_practix == is_practix]),
             or_(
                 # 1. Genuinely waiting — entry time not reached yet
@@ -872,15 +881,138 @@ async def get_waiting_algos(
                     "lots":        leg.lots,
                     "strike_type": leg.strike_type,
                     "wt_enabled":  leg.wt_enabled,
+                    "wt_value":    leg.wt_value,
+                    "wt_unit":     leg.wt_unit,
+                    "wt_direction": leg.wt_direction,
                 })
         except Exception as _le:
             logger.warning(f"[waiting] legs fetch failed for algo {a.id}: {_le}")
+
+        # Enrich W&T legs with live ref_price / threshold from WTEvaluator in-memory state
+        _wt_ev = None  # initialise here so display_status block can reference it safely
+        try:
+            from app.engine.algo_runner import algo_runner as _ar_wt
+            _wt_ev = getattr(_ar_wt, '_wt_evaluator', None)
+            if _wt_ev:
+                _window = _wt_ev._windows.get(str(ge.id))
+                if _window and _window.is_ref_set:
+                    for _ld in legs_data:
+                        if _ld.get("wt_enabled"):
+                            _ld["wt_ref_price"] = round(_window.reference_price, 0)
+                            _ld["wt_threshold"] = round(_window.threshold, 0)
+        except Exception as _wte:
+            logger.debug(f"[waiting] wt_evaluator enrich skipped: {_wte}")
 
         _is_missed = (
             _state.status == AlgoRunStatus.NO_TRADE
             and _state.activated_at is not None
             and not _state.error_message
         )
+
+        # Check if any non-error orders have been placed for this grid entry
+        _has_placed_orders = False
+        try:
+            _placed_r = await db.execute(
+                select(Order.id).where(
+                    Order.grid_entry_id == ge.id,
+                    Order.status != OrderStatus.ERROR,
+                ).limit(1)
+            )
+            _has_placed_orders = _placed_r.scalar_one_or_none() is not None
+        except Exception:
+            pass
+
+        # Compute display_status — more precise than algo_state_status for UI display
+        from datetime import time as _time_type
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+        now_time = now_ist.time()
+
+        def _parse_time(t_str):
+            if not t_str:
+                return None
+            try:
+                parts = t_str.split(':')
+                if len(parts) == 2:
+                    return _time_type(int(parts[0]), int(parts[1]))
+                elif len(parts) == 3:
+                    return _time_type(int(parts[0]), int(parts[1]), int(parts[2]))
+            except Exception:
+                return None
+            return None
+
+        entry_time_parsed = _parse_time(a.entry_time)
+
+        # Detect if W&T monitor is armed for this entry
+        _wt_monitor_armed = False
+        if _wt_ev:
+            _window = _wt_ev._windows.get(str(ge.id))
+            if _window is not None and getattr(_window, 'is_ref_set', False):
+                _wt_monitor_armed = True
+
+        # Detect if this entry was explicitly retried by the user within the last 90s.
+        # This suppresses "effectively missed" while the W&T monitor re-arms after RETRY.
+        # Unlike WTWindow.registered_at, this is ONLY set by explicit user action —
+        # not by SmartStream reconnects / rearm_wt_monitors().
+        _just_retried = False
+        _ge_id_str = str(ge.id)
+        _retry_ts = _retry_timestamps.get(_ge_id_str)
+        if _retry_ts is not None:
+            try:
+                _retry_age = (datetime.now(ZoneInfo("Asia/Kolkata")) - _retry_ts).total_seconds()
+                if _retry_age < 90:
+                    _just_retried = True
+                else:
+                    # Expired — clean up
+                    _retry_timestamps.pop(_ge_id_str, None)
+            except Exception:
+                pass
+
+        # Detect ORB active monitoring
+        _is_orb_monitoring = False
+        _is_orb_missed = False
+        if getattr(a, 'entry_type', None) is not None and hasattr(a.entry_type, 'value') and a.entry_type.value == 'orb' and getattr(a, 'orb_end_time', None):
+            orb_end_parsed = _parse_time(a.orb_end_time)
+            if orb_end_parsed:
+                if now_time > orb_end_parsed:
+                    _is_orb_missed = True
+                elif entry_time_parsed and now_time >= entry_time_parsed:
+                    _is_orb_monitoring = True  # within ORB window
+
+        # "Effectively missed": entry time has passed, still WAITING in state machine,
+        # no orders placed, and W&T monitor (if any) is stale from a previous run.
+        # WTWindow has no creation timestamp, so we use a 10-min grace period:
+        # if entry_time + 10min has passed with no fills, the W&T window is stale.
+        # Catches BNF-JRN (09:21 entry, 12:30 now), BNF-TF (09:36), BNF-BTST (12:15).
+        _entry_mins = entry_time_parsed.hour * 60 + entry_time_parsed.minute if entry_time_parsed else None
+        _now_mins   = now_time.hour * 60 + now_time.minute
+        _past_grace = (_entry_mins is not None) and ((_now_mins - _entry_mins) > 10)
+
+        if (
+            not _is_missed
+            and _state.status == AlgoRunStatus.WAITING
+            and entry_time_parsed is not None
+            and now_time > entry_time_parsed
+            and not _has_placed_orders
+            and (_past_grace or not _wt_monitor_armed)   # stale W&T or no monitor at all
+            and not _is_orb_monitoring
+            and not _just_retried                        # user explicitly retried — give W&T time to re-arm
+        ):
+            _is_missed = True
+
+        # Priority order (top = highest priority):
+        if _state.error_message or (hasattr(_state, 'status') and str(_state.status).endswith('error')):
+            _display_status = "ERROR"
+        elif _is_missed or _is_orb_missed:
+            _display_status = "MISSED"
+        elif _wt_monitor_armed or _just_retried:
+            _display_status = "MONITORING"
+        elif _is_orb_monitoring:
+            _display_status = "MONITORING"
+        elif entry_time_parsed and now_time < entry_time_parsed:
+            _display_status = "SCHEDULED"
+        else:
+            _display_status = "WAITING"
+
         waiting.append({
             "grid_entry_id":      str(ge.id),
             "algo_id":            str(a.id),
@@ -897,8 +1029,12 @@ async def get_waiting_algos(
             "algo_state_status":  _state.status.value,
             "error_message":      (_state.error_message or "")[:200] or None,
             "is_missed":          _is_missed,
-            "entry_type":         a.entry_type.value if a.entry_type else "direct",
+            # Override to 'wt' if any leg has wt_enabled — entry_type on Algo is algo-level
+            # (direct/orb), while W&T is a leg-level flag. Leg data takes precedence for display.
+            "entry_type":         "wt" if any(l.get("wt_enabled") for l in legs_data)
+                                  else (a.entry_type.value if a.entry_type else "direct"),
             "orb_end_time":       a.orb_end_time[:5] if a.orb_end_time else None,
+            "display_status":     _display_status,
         })
 
     # Sort combined list by entry_time
@@ -1158,6 +1294,329 @@ async def broker_orderbook(request: Request):
             })
     results.sort(key=lambda x: x["time"], reverse=True)
     return {"orders": results, "count": len(results)}
+
+
+# ── Position reconciliation — MUST be before /{order_id} catch-all ────────────
+
+@router.get("/position-check")
+async def position_check(
+    is_practix: Optional[bool] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Stub reconciliation check.
+    Returns total open orders count and a reconciled flag.
+    reconciled=True when total_open==0 (Phase 2 will compare against broker positions).
+    """
+    conditions = [Order.exit_time == None]  # noqa: E711
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
+
+    result = await db.execute(
+        select(Order).where(and_(*conditions))
+    )
+    open_orders = result.scalars().all()
+    total_open = len(open_orders)
+    reconciled = total_open == 0
+    message = "All positions closed" if reconciled else f"{total_open} open position{'s' if total_open != 1 else ''} found"
+    return {
+        "total_open": total_open,
+        "reconciled": reconciled,
+        "message":    message,
+    }
+
+
+@router.get("/week-summary")
+async def get_week_summary(
+    week_start: Optional[str] = Query(None, description="YYYY-MM-DD Monday of the week, defaults to current week Monday"),
+    is_practix: Optional[bool] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns P&L breakdown per trading date for the given week.
+    Each date returns: {closed_pnl, open_mtm, total}
+      - closed_pnl: sum of realised P&L from closed orders on that date
+      - open_mtm:   sum of unrealised MTM for open orders on that date
+                    (computed from order.ltp, order.fill_price, order.direction, order.quantity)
+      - total:      closed_pnl + open_mtm, or null if no activity on that date
+    Used by frontend day pills to colour-code each trading day.
+    """
+    from datetime import date as _date_type, timedelta
+    IST = ZoneInfo("Asia/Kolkata")
+
+    # Resolve week_start — default to Monday of current IST week
+    if week_start:
+        try:
+            _ws = datetime.strptime(week_start, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD")
+    else:
+        _today = datetime.now(IST).date()
+        _dow = _today.weekday()   # 0=Mon, 6=Sun
+        _ws = _today - timedelta(days=_dow)
+
+    _we = _ws + timedelta(days=6)  # Sunday of that week
+
+    # Find all GridEntries in this date range
+    _ge_result = await db.execute(
+        select(GridEntry.id, GridEntry.trading_date).where(
+            GridEntry.trading_date >= _ws,
+            GridEntry.trading_date <= _we,
+        )
+    )
+    _ge_rows = _ge_result.all()
+    _ge_ids = [r[0] for r in _ge_rows]
+    _ge_date_map = {str(r[0]): r[1] for r in _ge_rows}  # grid_entry_id → trading_date
+
+    if not _ge_ids:
+        # Return null for each weekday — no grid entries means no activity
+        result_map = {}
+        for _i in range(5):
+            result_map[(_ws + timedelta(days=_i)).isoformat()] = None
+        return {"week_start": _ws.isoformat(), "mtm_by_date": result_map}
+
+    # Build base filter conditions (shared for both closed and open queries)
+    _base_conditions = [Order.grid_entry_id.in_(_ge_ids)]
+    if is_practix is not None:
+        _base_conditions.append(Order.is_practix == is_practix)
+
+    # ── 1. Fetch all CLOSED orders for these grid entries ────────────────────
+    _closed_result = await db.execute(
+        select(Order.grid_entry_id, Order.pnl).where(
+            and_(*_base_conditions, Order.status == OrderStatus.CLOSED)
+        )
+    )
+
+    # Aggregate closed_pnl by trading_date; track which dates have closed orders
+    _closed_pnl_by_date: dict = {}   # date_str → float
+    _has_closed_by_date: dict = {}   # date_str → bool
+    for _ge_id, _pnl in _closed_result.all():
+        _td = _ge_date_map.get(str(_ge_id))
+        if _td:
+            _td_str = _td.isoformat()
+            _has_closed_by_date[_td_str] = True
+            if _pnl is not None:
+                _closed_pnl_by_date[_td_str] = _closed_pnl_by_date.get(_td_str, 0.0) + _pnl
+
+    # ── 2. Fetch all OPEN orders for these grid entries ───────────────────────
+    _open_result = await db.execute(
+        select(
+            Order.grid_entry_id,
+            Order.direction,
+            Order.instrument_token,   # use token for live in-memory LTP lookup
+            Order.fill_price,
+            Order.quantity,
+        ).where(
+            and_(*_base_conditions, Order.status == OrderStatus.OPEN)
+        )
+    )
+
+    # Get live LTP consumer from in-memory algo_runner (ltp is NOT persisted to DB in real-time)
+    try:
+        from app.engine.algo_runner import algo_runner as _ar_ws
+        _ltp_cons = getattr(_ar_ws, '_ltp_consumer', None)
+    except Exception:
+        _ltp_cons = None
+
+    # Aggregate open_mtm by trading_date; track which dates have open orders
+    _open_mtm_by_date: dict = {}     # date_str → float
+    _has_open_by_date: dict = {}     # date_str → bool
+    for _ge_id, _direction, _token, _fill_price, _quantity in _open_result.all():
+        _td = _ge_date_map.get(str(_ge_id))
+        if not _td:
+            continue
+        _td_str = _td.isoformat()
+        _has_open_by_date[_td_str] = True
+
+        # Get live LTP from in-memory consumer — get_ltp() returns 0.0 if not in cache
+        _live_ltp = None
+        if _ltp_cons and _token and _token > 0:
+            _raw_ltp = _ltp_cons.get_ltp(int(_token))
+            if _raw_ltp and _raw_ltp > 0:
+                _live_ltp = _raw_ltp
+
+        # Compute unrealized MTM only when live LTP is available and non-zero
+        if _live_ltp and _fill_price and _quantity:
+            _dir = (_direction or "").lower()
+            if _dir == "sell":
+                _mtm = (_fill_price - _live_ltp) * _quantity
+            else:
+                _mtm = (_live_ltp - _fill_price) * _quantity
+            _open_mtm_by_date[_td_str] = _open_mtm_by_date.get(_td_str, 0.0) + _mtm
+        # If live LTP unavailable — skip this order (do NOT count as 0)
+
+    # ── 3. Build result map for Mon–Fri ──────────────────────────────────────
+    result_map = {}
+    for _i in range(5):
+        _d = (_ws + timedelta(days=_i)).isoformat()
+
+        _has_closed  = _has_closed_by_date.get(_d, False)
+        _has_open    = _has_open_by_date.get(_d, False)
+        _closed_pnl  = round(_closed_pnl_by_date.get(_d, 0.0), 2)
+        _open_mtm    = round(_open_mtm_by_date.get(_d, 0.0), 2)
+
+        # Null sentinel: no activity at all on this date
+        if not _has_closed and not _has_open:
+            result_map[_d] = None
+            continue
+
+        # Has some trades — compute total
+        if _closed_pnl == 0.0 and _open_mtm == 0.0:
+            _total = 0.0   # trades exist but all P&L is exactly zero
+        else:
+            _total = round(_closed_pnl + _open_mtm, 2)
+
+        result_map[_d] = {
+            "closed_pnl": _closed_pnl,
+            "open_mtm":   _open_mtm,
+            "total":      _total,
+        }
+
+    return {"week_start": _ws.isoformat(), "mtm_by_date": result_map}
+
+
+async def _run_reconcile_internal(db: AsyncSession, app_state=None) -> dict:
+    """
+    Core reconcile logic — compare open STAAX orders against broker order books.
+    Updates reconcile_status in DB for mismatches found.
+    Returns {"checked": N, "mismatches": [...]} dict.
+    Can be called from the REST endpoint (has app_state) or from the background loop (no app_state).
+    """
+    from app.models.account import Account, BrokerType
+    from app.core.config import settings as _cfg
+
+    # 1. Fetch all open orders with a broker_order_id set
+    open_result = await db.execute(
+        select(Order).where(
+            Order.status == OrderStatus.OPEN,
+            Order.broker_order_id != None,  # noqa: E711
+        )
+    )
+    open_orders = open_result.scalars().all()
+
+    if not open_orders:
+        return {"checked": 0, "mismatches": []}
+
+    # 2. Group by account_id
+    from collections import defaultdict
+    by_account: dict = defaultdict(list)
+    for o in open_orders:
+        by_account[str(o.account_id)].append(o)
+
+    # 3. For each account fetch broker order book and match
+    mismatches = []
+    total_checked = 0
+
+    # Build client_id → broker_key mapping once
+    _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+        (_cfg.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+        (_cfg.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (_cfg.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+    ] if k}
+
+    for account_id, orders_for_acct in by_account.items():
+        # Fetch account to determine broker type
+        acc_result = await db.execute(select(Account).where(Account.id == account_id))
+        account = acc_result.scalar_one_or_none()
+        if not account:
+            continue
+
+        # Resolve broker instance from app_state (None when called from background loop without request)
+        broker = None
+        if app_state is not None:
+            if account.broker == BrokerType.ZERODHA:
+                broker = getattr(app_state, "zerodha", None)
+            elif account.broker == BrokerType.ANGELONE:
+                broker_key = _CLIENT_ID_TO_BROKER_KEY.get(account.client_id)
+                if broker_key:
+                    broker = getattr(app_state, broker_key, None)
+        else:
+            # Background loop: try to import app and get state
+            try:
+                from main import app as _main_app
+                if account.broker == BrokerType.ZERODHA:
+                    broker = getattr(_main_app.state, "zerodha", None)
+                elif account.broker == BrokerType.ANGELONE:
+                    broker_key = _CLIENT_ID_TO_BROKER_KEY.get(account.client_id)
+                    if broker_key:
+                        broker = getattr(_main_app.state, broker_key, None)
+            except Exception:
+                pass
+
+        if not broker:
+            logger.debug(f"[RECONCILE] Broker not connected for account {account_id}, skipping")
+            continue
+
+        # Fetch broker order book
+        try:
+            broker_book = await broker.get_order_book()
+        except Exception as e:
+            logger.warning(f"[RECONCILE] Failed to fetch order book for account {account_id}: {e}")
+            continue
+
+        if not broker_book:
+            broker_book = []
+
+        # Build lookup: broker_order_id → broker order dict
+        broker_map: dict = {}
+        for b_order in broker_book:
+            bid = b_order.get("order_id") or b_order.get("orderid") or b_order.get("norenordno")
+            if bid:
+                broker_map[str(bid)] = b_order
+
+        # Match each open STAAX order
+        for staax_order in orders_for_acct:
+            total_checked += 1
+            bid = str(staax_order.broker_order_id)
+            b_order = broker_map.get(bid)
+
+            if b_order is None:
+                # Not found in broker book — might be too old, skip
+                continue
+
+            broker_status = (b_order.get("status") or "").upper()
+            broker_fill = float(b_order.get("fill_price") or b_order.get("averageprice") or b_order.get("average_price") or 0)
+            staax_fill = float(staax_order.fill_price or 0)
+
+            mismatch_type = None
+            detail = None
+
+            if broker_status in ("COMPLETE", "CANCELLED", "REJECTED"):
+                mismatch_type = "mismatch"
+                detail = f"STAAX=open but broker={broker_status}"
+            elif broker_fill > 0 and staax_fill > 0 and abs(broker_fill - staax_fill) > 0.5:
+                mismatch_type = "price_mismatch"
+                detail = f"STAAX fill={staax_fill} broker fill={broker_fill}"
+
+            if mismatch_type:
+                staax_order.reconcile_status = mismatch_type
+                mismatches.append({
+                    "order_id": str(staax_order.id),
+                    "broker_order_id": bid,
+                    "type": mismatch_type,
+                    "detail": detail,
+                })
+            else:
+                # Matches — clear any previous reconcile_status flag
+                staax_order.reconcile_status = None
+
+    await db.commit()
+    return {"checked": total_checked, "mismatches": mismatches}
+
+
+@router.get("/reconcile")
+async def reconcile_orders(
+    request: Request,
+    is_practix: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    """Compare open STAAX orders against broker order book. Updates reconcile_status."""
+    try:
+        result = await _run_reconcile_internal(db, app_state=request.app.state)
+        return result
+    except Exception as e:
+        logger.warning(f"[RECONCILE] Endpoint error: {e}")
+        return {"checked": 0, "mismatches": [], "error": str(e)}
 
 
 @router.get("/{order_id}")
@@ -1643,6 +2102,11 @@ async def retry_entry(
         algo_state.closed_at = None
     await db.commit()
 
+    # Record explicit retry timestamp — used by /waiting to suppress effectively-missed
+    # for W&T algos for a short grace window while the W&T monitor re-arms.
+    # Unlike registered_at on WTWindow, this is only set by user action, not SmartStream re-arm.
+    _retry_timestamps[grid_entry_id] = datetime.now(IST)
+
     # Log the manual retry
     await _ev_r.info(
         f"[RETRY] {algo.name} manually retried by user",
@@ -1661,12 +2125,19 @@ async def retry_entry(
             _expiry_job.remove()
             logger.info(f"[RETRY] Removed stale expiry job for {grid_entry_id}")
 
+    # Determine if any legs are W&T — if so, do NOT force_direct.
+    # force_direct=True skips W&T logic entirely; W&T algos must go through
+    # _place_leg()'s W&T branch so they capture ref_price and arm the monitor.
+    # force_immediate=True always bypasses the entry_time gate (window already past).
+    _legs_result = await db.execute(select(AlgoLeg).where(AlgoLeg.algo_id == algo.id))
+    _algo_legs   = _legs_result.scalars().all()
+    _has_wt_legs = any(getattr(_l, 'wt_enabled', False) for _l in _algo_legs)
+    _force_direct = not _has_wt_legs  # False for W&T algos → W&T logic runs on retry
+
     # Schedule enter() via APScheduler's AsyncIOExecutor — fires in 2 seconds.
     # This is the ONLY way to get proper SQLAlchemy greenlet context outside of
     # the scheduler's own job runners. Direct await / ensure_future / run_coroutine_threadsafe
     # all fail because they run outside the greenlet bridge that AsyncIOExecutor provides.
-    # force_direct=True: skip W&T deferral, enter immediately at current LTP
-    # force_immediate=True: bypass entry_time gate (entry window is already past)
     if _scheduler:
         from datetime import timedelta
         from apscheduler.triggers.date import DateTrigger
@@ -1681,11 +2152,14 @@ async def retry_entry(
         _scheduler._scheduler.add_job(
             _algo_runner.enter,
             DateTrigger(run_date=_run_at, timezone=IST),
-            kwargs={"grid_entry_id": grid_entry_id, "force_direct": True, "force_immediate": True},
+            kwargs={"grid_entry_id": grid_entry_id, "force_direct": _force_direct, "force_immediate": True},
             id=_retry_job_id,
             replace_existing=False,
         )
-        logger.info(f"[RETRY] Scheduled enter() via APScheduler in 2s for {grid_entry_id}")
+        logger.info(
+            f"[RETRY] Scheduled enter() via APScheduler in 2s for {grid_entry_id} "
+            f"(force_direct={_force_direct}, has_wt_legs={_has_wt_legs})"
+        )
     else:
         logger.error(f"[RETRY] Scheduler not available — cannot schedule retry for {grid_entry_id}")
 
@@ -1772,36 +2246,6 @@ async def retry_specific_legs(
             asyncio.ensure_future(algo_runner.enter_specific_legs(grid_entry_id, leg_id_strs))
 
     return {"status": "queued", "algo_name": algo.name, "leg_count": len(leg_uuids)}
-
-
-# ── Position reconciliation ───────────────────────────────────────────────────
-
-@router.get("/position-check")
-async def position_check(
-    is_practix: Optional[bool] = Query(None),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Stub reconciliation check.
-    Returns total open orders count and a reconciled flag.
-    reconciled=True when total_open==0 (Phase 2 will compare against broker positions).
-    """
-    conditions = [Order.exit_time == None]  # noqa: E711
-    if is_practix is not None:
-        conditions.append(Order.is_practix == is_practix)
-
-    result = await db.execute(
-        select(Order).where(and_(*conditions))
-    )
-    open_orders = result.scalars().all()
-    total_open = len(open_orders)
-    reconciled = total_open == 0
-    message = "All positions closed" if reconciled else f"{total_open} open position{'s' if total_open != 1 else ''} found"
-    return {
-        "total_open": total_open,
-        "reconciled": reconciled,
-        "message":    message,
-    }
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────

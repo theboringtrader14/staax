@@ -142,6 +142,8 @@ export const ordersAPI = {
     api.get('/orders/position-check', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
   brokerOrderbook: () =>
     api.get('/orders/broker-orderbook'),
+  weekSummary: (weekStart?: string, isPractix?: boolean) =>
+    api.get('/orders/week-summary', { params: { ...(weekStart ? { week_start: weekStart } : {}), ...(isPractix !== undefined ? { is_practix: isPractix } : {}) } }),
 }
 
 // ── Services (Dashboard panel) ────────────────────────────────────────────────

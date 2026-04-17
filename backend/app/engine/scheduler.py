@@ -887,10 +887,7 @@ class AlgoScheduler:
                         and_(
                             AlgoState.trading_date == str(today),
                             Algo.strategy_mode.in_([
-                                StrategyMode.INTRADAY,
-                                StrategyMode.BTST,
-                                StrategyMode.STBT,
-                                StrategyMode.POSITIONAL,
+                                StrategyMode.INTRADAY,  # ONLY intraday — overnight modes handled by recover_multiday_jobs()
                             ]),
                             AlgoState.status.in_([
                                 AlgoRunStatus.WAITING,
@@ -983,6 +980,9 @@ class AlgoScheduler:
                         # nothing to do
 
                     # ── Case 3: re-register exit job if still in future ────────
+                    # Skip overnight modes — their exit is TOMORROW, handled by recover_multiday_jobs()
+                    if algo.strategy_mode in (StrategyMode.BTST, StrategyMode.STBT, StrategyMode.POSITIONAL):
+                        continue
                     if not algo.exit_time:
                         continue
                     h, m = map(int, algo.exit_time.split(":")[:2])
@@ -1061,12 +1061,14 @@ class AlgoScheduler:
                 for algo_state, grid_entry, algo in rows:
                     geid = str(grid_entry.id)
 
-                    # Compute exit datetime: next_day_exit_time on today (== next trading day
-                    # relative to the entry day, which is already `today` for the server).
+                    # Compute exit datetime: next_day_exit_time on the next trading day
+                    # after the entry day. Using _next_trading_day(prev_trading_day) instead
+                    # of today ensures weekend/holiday restarts schedule Monday correctly.
+                    exit_date = self._next_trading_day(prev_trading_day)
                     raw_exit = algo.next_day_exit_time or "09:15"
                     h, m = map(int, raw_exit.split(":")[:2])
                     exit_dt = now.replace(
-                        year=today.year, month=today.month, day=today.day,
+                        year=exit_date.year, month=exit_date.month, day=exit_date.day,
                         hour=h, minute=m, second=0, microsecond=0,
                     )
 
@@ -1099,11 +1101,11 @@ class AlgoScheduler:
                                 f"@ {exit_dt.strftime('%Y-%m-%d %H:%M')}"
                             )
 
-                    # Re-register SL check job (entry_time - 2 min on today)
+                    # Re-register SL check job (entry_time - 2 min on exit_date)
                     if algo.entry_time:
                         h2, m2 = map(int, algo.entry_time.split(":")[:2])
                         sl_check_dt = now.replace(
-                            year=today.year, month=today.month, day=today.day,
+                            year=exit_date.year, month=exit_date.month, day=exit_date.day,
                             hour=h2, minute=m2, second=0, microsecond=0,
                         ) - timedelta(minutes=2)
                         if sl_check_dt > now:

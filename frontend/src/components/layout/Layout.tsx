@@ -155,7 +155,7 @@ function CosmicCanvas() {
   }, [])
 
   return (
-    <canvas ref={ref} style={{ position:'fixed', top:0, left:0, width:'100vw', height:'100vh', zIndex:0, pointerEvents:'none' }} />
+    <canvas ref={ref} style={{ position:'fixed', top:0, left:0, width:'100vw', height:'100vh', zIndex:-1, pointerEvents:'none' }} />
   )
 }
 
@@ -164,7 +164,7 @@ export default function Layout() {
   const location = useLocation()
   const isDashboard = location.pathname === '/dashboard' || location.pathname === '/'
   return (
-    <div style={{ display:'flex', minHeight:'100vh', position:'relative', background:'#030308' }}>
+    <div style={{ display:'flex', minHeight:'100vh', position:'relative', background:'transparent' }}>
       {isDashboard && <CosmicCanvas />}
       <div className="sidebar"><Sidebar /></div>
       <div className="main-content" style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', position:'relative', zIndex:1, overflowY:'auto', height:'100vh' }}>

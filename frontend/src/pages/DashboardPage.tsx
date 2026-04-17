@@ -18,7 +18,16 @@ const STATUS_CLR: Record<ServiceStatus, string> = {
 }
 
 
-function PnlCard({ label, value, isPositive, roi }: { label: string; value: number; isPositive: boolean; roi?: string }) {
+function PnlCard({ label, value, isPositive, roi, isLoading }: { label: string; value: number; isPositive: boolean; roi?: string; isLoading?: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="card cloud-fill" style={{ padding: '12px 14px' }}>
+        <div className="card-label">{label}</div>
+        <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '-1.5px', lineHeight: 1 }}>—</div>
+        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)', marginTop: '4px', fontWeight: 600 }}>loading…</div>
+      </div>
+    )
+  }
   const rupee = String.fromCharCode(0x20B9)
   const display = (isPositive ? '+' : '') + rupee + Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })
   const col = isPositive ? 'var(--ox-radiant)' : 'var(--sem-short)'
@@ -74,6 +83,7 @@ export default function DashboardPage() {
   const setAccounts   = useStore(s => s.setAccounts)
   const [services, setServices]          = useState<Service[]>(INIT_SERVICES)
   const [stats, setStats]                = useState<Record<string,number>>({})
+  const [statsLoaded, setStatsLoaded]    = useState(false)
   const [liveMtm, setLiveMtm]            = useState<number>(0)
   const [log, setLog]                    = useState<string[]>(['STAAX Dashboard ready.'])
   const [_zerodhaConnected, setZerodha]   = useState(false)
@@ -122,7 +132,10 @@ export default function DashboardPage() {
       if (z?.token_valid_today) setZerodha(true)
     }).catch(() => {})
   }, [])
-  useEffect(() => { systemAPI.stats(isPractixMode).then(r => setStats(r.data)).catch(() => {}) }, [isPractixMode])
+  useEffect(() => {
+    setStatsLoaded(false)
+    systemAPI.stats(isPractixMode).then(r => { setStats(r.data); setStatsLoaded(true) }).catch(() => { setStatsLoaded(true) })
+  }, [isPractixMode])
 
   // Live MTM for Today P&L — poll /orders/ltp every 2s when open positions exist
   useEffect(() => {
@@ -327,7 +340,6 @@ export default function DashboardPage() {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(22px,2.5vw,34px)', fontWeight: 800, color: 'var(--ox-radiant)', letterSpacing: '-1px', lineHeight: 1.1 }}>Dashboard</h1>
           <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             System status · Start / stop services ·
-            <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>{isPractixMode ? 'PRACTIX' : 'LIVE'}</span>
           </p>
         </div>
         <div className="page-header-actions">
@@ -659,8 +671,8 @@ export default function DashboardPage() {
           <div style={{ fontSize: '28px', fontWeight: 800, color: (stats['error_algos'] ?? 0) > 0 ? 'var(--sem-short)' : 'rgba(255,255,255,0.25)', fontFamily: 'var(--font-mono)', letterSpacing: '-1.5px', lineHeight: 1 }}>{stats['error_algos'] ?? 0}</div>
           <div style={{ fontSize: '10px', color: (stats['error_algos'] ?? 0) > 0 ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.2)', marginTop: '4px', fontWeight: 600 }}>{(stats['error_algos'] ?? 0) > 0 ? 'needs attention' : 'all clear'}</div>
         </div>
-        <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} />
-        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} roi={fyRoi} />
+        <PnlCard label="Today P&L" value={todayPnl} isPositive={todayPnl >= 0} isLoading={!statsLoaded} />
+        <PnlCard label="FY P&L" value={fyPnlReal} isPositive={fyPnlReal >= 0} roi={fyRoi} isLoading={!statsLoaded} />
       </div>
 
       {/* ── SERVICES + SYSTEM LOG ── */}

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import HoneycombBackground from '@/components/HoneycombBackground'
 import Layout from '@/components/layout/Layout'
 import LandingPage from '@/pages/LandingPage'
 import GridPage from '@/pages/GridPage'
@@ -96,6 +97,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <HoneycombBackground />
       <Routes>
         {/* Landing page */}
         <Route path="/" element={<LandingPage />} />

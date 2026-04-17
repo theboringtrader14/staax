@@ -58,6 +58,7 @@ class Order(Base):
     instrument_token = Column(Integer, nullable=True)        # broker token for LTP lookup
     direction        = Column(String(4), nullable=False)     # "buy" or "sell"
     lots             = Column(Integer, nullable=False)
+    lot_size         = Column(Integer, nullable=True, default=1)   # per-lot qty from master contracts
     quantity         = Column(Integer, nullable=False)
 
     # ── Entry ─────────────────────────────────────────────────────────────────
@@ -99,7 +100,8 @@ class Order(Base):
     exit_reason       = Column(Enum(ExitReason, values_callable=lambda x: [e.value for e in x]), nullable=True)
 
     # ── P&L ───────────────────────────────────────────────────────────────────
-    pnl = Column(Float, nullable=True)
+    pnl              = Column(Float, nullable=True)
+    reconcile_status = Column(String(20), nullable=True)  # null | 'mismatch' | 'missing' | 'price_mismatch'
 
     # ── State ─────────────────────────────────────────────────────────────────
     status        = Column(Enum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.PENDING)

@@ -233,11 +233,8 @@ export default function ReportsPage(){
       <div className="page-header">
         <div>
           <h1 style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800,color:'var(--ox-radiant)'}}>Reports</h1>
-          <p style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
-            Performance analytics ·{' '}
-            <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize:'10px', padding:'2px 8px' }}>
-              {isPractixMode ? 'PRACTIX' : 'LIVE'}
-            </span>
+          <p style={{fontSize:'12px',color:'var(--gs-muted)',marginTop:'3px'}}>
+            Performance analytics
           </p>
         </div>
         <div className="page-header-actions">
@@ -259,7 +256,6 @@ export default function ReportsPage(){
         {/* FY P&L */}
         <div className="card card-stat cloud-fill" style={{cursor:'pointer', maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '255,107,0',
-          boxShadow: '0 0 22px rgba(255,107,0,0.22), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties} onClick={()=>setChartModal(true)}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'4px',fontWeight:600}}>FY {fy} Total P&L&nbsp;<span style={{fontSize:'9px',color:'var(--ox-radiant)'}}>↗</span></div>
           <div style={{display:'flex',alignItems:'flex-end',gap:'12px'}}>
@@ -296,7 +292,6 @@ export default function ReportsPage(){
         {/* Total Trades */}
         <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '255,107,0',
-          boxShadow: '0 0 22px rgba(255,107,0,0.22), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Total Trades</div>
           <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:'#FF6B00',fontFamily:'var(--font-mono)'}}>{fyTrades}</div>
@@ -306,7 +301,6 @@ export default function ReportsPage(){
         {/* Win Rate */}
         <div className="card card-stat cloud-fill" style={{maxHeight:'127px', overflow:'hidden',
           '--stat-rgb': '255,107,0',
-          boxShadow: '0 0 22px rgba(255,107,0,0.22), 0 6px 24px rgba(0,0,0,0.5)',
         } as React.CSSProperties}>
           <div style={{fontSize:'10px',color:'rgba(232,232,248,0.5)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px',fontWeight:600}}>Win Rate</div>
           <div style={{fontSize:'26px',fontWeight:700,lineHeight:1,color:fyWins>0?'var(--green)':'rgba(232,232,248,0.35)',fontFamily:'var(--font-mono)'}}>
@@ -377,7 +371,7 @@ export default function ReportsPage(){
       {/* FY Calendar */}
       <div className="card cloud-fill" style={{marginBottom:'12px', overflow:'hidden', padding:'20px 24px 24px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
-          <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
+          <div style={{fontSize:'11px',fontWeight:700,color:'var(--ox-radiant)',textTransform:'uppercase',letterSpacing:'0.08em'}}>FY {fy} — Full Year Calendar</div>
           <div style={{display:'flex',gap:'12px',fontSize:'11px',color:'var(--text-dim)',alignItems:'center'}}>
             <span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'var(--green)',display:'inline-block'}}/> Profit</span>
             <span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'var(--red)',display:'inline-block'}}/> Loss</span>
@@ -392,7 +386,7 @@ export default function ReportsPage(){
       <div className="card cloud-fill" style={{padding:0, overflow:'hidden'}}>
         <div style={{padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-            <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Per-Algo Metrics</div>
+            <div style={{fontSize:'11px',fontWeight:700,color:'var(--ox-radiant)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Per-Algo Metrics</div>
             <span style={{fontSize:'11px',color:'var(--indigo)',background:'rgba(255,107,0,0.12)',padding:'2px 8px',borderRadius:'4px',fontWeight:600}}>{activePeriodLabel}</span>
           </div>
           <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
@@ -421,12 +415,12 @@ export default function ReportsPage(){
           <div style={{flexShrink:0, minWidth:'130px', overflow:'hidden', borderRadius:'8px 0 0 8px'}}>
             <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'130px',tableLayout:'fixed'}}>
               <thead>
-                <tr><th style={{minWidth:'130px',padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',borderRadius:'8px 0 0 0'}}>Key Metrics</th></tr>
+                <tr><th style={{minWidth:'130px',padding:'6px 14px',textAlign:'center',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.15)',borderRadius:'8px 0 0 0'}}>Key Metrics</th></tr>
               </thead>
               <tbody>
                 {METRIC_ROWS.map((row,idx)=>(
                   <tr key={row.key}>
-                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'12px',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px',whiteSpace:'nowrap',borderRadius:idx===METRIC_ROWS.length-1?'0 0 0 8px':undefined}}>{row.label}</td>
+                    <td style={{fontWeight:600,color:'var(--text-muted)',fontSize:'11px',background:'rgba(10,10,11,0.95)',boxShadow:'2px 0 4px rgba(0,0,0,0.1)',padding:'4px 14px',textAlign:'center',height:'30px',whiteSpace:'nowrap',borderRadius:idx===METRIC_ROWS.length-1?'0 0 0 8px':undefined}}>{row.label}</td>
                   </tr>
                 ))}
               </tbody>
@@ -437,7 +431,7 @@ export default function ReportsPage(){
             <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'max-content',minWidth:'100%',tableLayout:'fixed'}}>
               <thead>
                 <tr>
-                  {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'10px 14px',textAlign:'center',cursor:'pointer'}} onClick={()=>setSelectedAlgo(a.name)}>{a.name}</th>)}
+                  {algoMetrics.map((a:any)=><th key={a.algo_id} style={{minWidth:'90px',padding:'6px 14px',textAlign:'center',cursor:'pointer'}} onClick={()=>setSelectedAlgo(a.name)}>{a.name}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -451,7 +445,7 @@ export default function ReportsPage(){
                         const val=(a as any)[row.key]
                         const isNeg=(val||0)<0
                         return(
-                          <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'10px 14px',textAlign:'center',height:'42px'}}>
+                          <td key={a.algo_id} style={{color:isNeg?'var(--red)':'var(--green)',fontWeight:600,padding:'4px 14px',textAlign:'center',height:'30px'}}>
                             {fmt(val)}
                           </td>
                         )
@@ -466,7 +460,7 @@ export default function ReportsPage(){
           <div style={{flexShrink:0, minWidth:'130px', overflow:'hidden', borderRadius:'0 8px 8px 0'}}>
             <table className="staax-table reports-table" style={{borderCollapse:'separate',borderSpacing:0,width:'130px',tableLayout:'fixed'}}>
               <thead>
-                <tr><th style={{padding:'10px 20px',textAlign:'center',background:'rgba(10,10,11,0.95)',color:'var(--indigo)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',borderRadius:'0 8px 0 0'}}>Cumulative</th></tr>
+                <tr><th style={{padding:'6px 14px',textAlign:'center',background:'rgba(10,10,11,0.95)',color:'var(--indigo)',boxShadow:'-2px 0 4px rgba(0,0,0,0.15)',borderRadius:'0 8px 0 0'}}>Cumulative</th></tr>
               </thead>
               <tbody>
                 {METRIC_ROWS.map((row,idx)=>{
@@ -476,7 +470,7 @@ export default function ReportsPage(){
                   const cumFmt=isPct?(algoMetrics.length>0?(cumVal/algoMetrics.length).toFixed(1)+"%":"0%"):isCurrency?((cumVal<0?"-":"")+"₹"+Math.abs(cumVal).toLocaleString("en-IN",{maximumFractionDigits:2})):String(Math.round(Math.abs(cumVal)))
                   return(
                     <tr key={row.key}>
-                      <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',background:'rgba(10,10,11,0.95)',boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'10px 20px',textAlign:'center',height:'42px',borderRadius:idx===METRIC_ROWS.length-1?'0 0 8px 0':undefined}}>{cumFmt}</td>
+                      <td style={{color:'var(--indigo)',fontWeight:700,fontSize:'11px',background:'rgba(10,10,11,0.95)',boxShadow:'-2px 0 4px rgba(0,0,0,0.1)',padding:'4px 14px',textAlign:'center',height:'30px',borderRadius:idx===METRIC_ROWS.length-1?'0 0 8px 0':undefined}}>{cumFmt}</td>
                     </tr>
                   )
                 })}

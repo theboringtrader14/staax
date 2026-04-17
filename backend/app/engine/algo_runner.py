@@ -136,6 +136,17 @@ class AlgoRunner:
         # Prevents duplicate callback registration when multiple legs share the same underlying.
         self._ul_subscribed_tokens: set = set()
 
+        # W&T arming cache — persists across SmartStream reconnects (but not process restarts).
+        # Key: grid_entry_id (str)
+        # Value: {instrument_token, symbol, reference_price, threshold, direction, wt_value, wt_unit, entry_time}
+        # Populated in _place_leg() when W&T is armed; used in rearm_wt_monitors() to restore windows.
+        self._wt_arming_cache: Dict[str, dict] = {}
+
+        # Lot size cache — keyed by "EXCHANGE:SYMBOL".
+        # Populated from Angel One instrument master (lotsize field).
+        # Cleared by daily reset job at midnight.
+        self._lot_size_cache: Dict[str, int] = {}
+
     def wire_engines(
         self,
         strike_selector:   StrikeSelector,
@@ -178,6 +189,127 @@ class AlgoRunner:
         self._execution_manager = execution_manager
 
         logger.info("✅ AlgoRunner engines wired")
+
+    # ── SmartStream reconnect — re-arm W&T monitors ───────────────────────────
+
+    async def rearm_wt_monitors(self):
+        """
+        Called whenever SmartStream reconnects (via AngelOneTickerAdapter._on_open callback).
+        Finds all grid_entries (today) in ALGO_ACTIVE + WAITING state with W&T legs
+        and re-registers their WTWindows with WTEvaluator.
+
+        This handles two cases:
+          1. W&T window was never registered (SmartStream was down at entry time — pre-check
+             returned FEED_INACTIVE → _set_waiting() was called before _place_leg()).
+          2. W&T window was registered but lost (SmartStream disconnected mid-session and
+             WTEvaluator in-memory state was cleared).
+        """
+        if not self._wt_evaluator:
+            return
+
+        from datetime import date as _date
+        from zoneinfo import ZoneInfo as _ZI
+        today = datetime.now(_ZI("Asia/Kolkata")).date()
+
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(AlgoState, GridEntry, Algo)
+                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
+                    .join(Algo,      GridEntry.algo_id == Algo.id)
+                    .where(
+                        GridEntry.trading_date == today,
+                        GridEntry.status        == GridStatus.ALGO_ACTIVE,
+                        AlgoState.status        == AlgoRunStatus.WAITING,
+                    )
+                )
+                rows = result.all()
+
+            if not rows:
+                logger.info("[REARM] No WAITING W&T algos to re-arm today")
+                return
+
+            # Get already-registered grid_entry_ids from WTEvaluator to avoid duplicates
+            already_registered: set = set()
+            if hasattr(self._wt_evaluator, "_windows"):
+                already_registered = {w.grid_entry_id for w in self._wt_evaluator._windows}
+
+            rearmed = 0
+            for _state, ge, algo in rows:
+                ge_id = str(ge.id)
+                if ge_id in already_registered:
+                    logger.debug(f"[REARM] {algo.name} already registered — skip")
+                    continue
+
+                # Load legs for this algo
+                async with AsyncSessionLocal() as db:
+                    legs_result = await db.execute(
+                        select(AlgoLeg)
+                        .where(AlgoLeg.algo_id == algo.id)
+                        .order_by(AlgoLeg.leg_number)
+                    )
+                    legs = legs_result.scalars().all()
+                    # Eagerly read needed attributes before session closes
+                    wt_legs = [
+                        {
+                            "leg_number":   l.leg_number,
+                            "wt_enabled":   l.wt_enabled,
+                            "wt_value":     l.wt_value,
+                            "wt_unit":      l.wt_unit,
+                            "wt_direction": l.wt_direction,
+                            "underlying":   l.underlying,
+                        }
+                        for l in legs
+                        if l.wt_enabled and l.wt_value
+                    ]
+
+                if not wt_legs:
+                    continue
+
+                algo_name      = algo.name or ge_id
+                algo_entry_time = algo.entry_time or "09:16"
+                algo_id_str    = str(algo.id)
+
+                # Use arming cache to restore W&T window with original option token + ref/threshold.
+                # Cache is set in _place_leg() when W&T is first armed this session.
+                _cached = self._wt_arming_cache.get(ge_id)
+                if _cached:
+                    window = WTWindow(
+                        grid_entry_id    = ge_id,
+                        algo_id          = algo_id_str,
+                        direction        = _cached["direction"],
+                        entry_time       = self._parse_time(algo_entry_time),
+                        instrument_token = _cached["instrument_token"],
+                        wt_value         = _cached["wt_value"],
+                        wt_unit          = _cached["wt_unit"],
+                        reference_price  = _cached["reference_price"],
+                        threshold        = _cached["threshold"],
+                        is_ref_set       = True,
+                    )
+                    self._wt_evaluator.register(window, on_entry=self._make_wt_callback(ge_id))
+                    if self._ltp_consumer:
+                        self._ltp_consumer.subscribe([_cached["instrument_token"]])
+                    logger.info(
+                        f"[REARM] ✅ Re-armed W&T for {algo_name} "
+                        f"(grid={ge_id[:8]}, option={_cached['symbol']}, "
+                        f"token={_cached['instrument_token']}, "
+                        f"ref={_cached['reference_price']:.2f} threshold={_cached['threshold']:.2f})"
+                    )
+                    rearmed += 1
+                    already_registered.add(ge_id)
+                else:
+                    # No cache (e.g. process restarted) — log warning; W&T will be re-armed
+                    # on next manual RETRY or if scheduler re-triggers enter() at startup.
+                    logger.warning(
+                        f"[REARM] No arming cache for {algo_name} (grid={ge_id[:8]}) "
+                        f"— W&T window cannot be restored without original option details. "
+                        f"Use RETRY to re-arm."
+                    )
+
+            logger.info(f"[REARM] Done — {rearmed} W&T window(s) re-armed after SmartStream reconnect")
+
+        except Exception as e:
+            logger.error(f"[REARM] rearm_wt_monitors failed: {e}", exc_info=True)
 
     # ── Entry ─────────────────────────────────────────────────────────────────
 
@@ -283,6 +415,10 @@ class AlgoRunner:
 
         # ── Entry-time gate (only for non-immediate, non-reentry calls) ─────────
         if not force_immediate and not reentry:
+            # Capture all ORM attributes INSIDE the session — accessing them after
+            # the context exits may trigger await_only() on a detached object → MissingGreenlet.
+            _gate_entry_time = None
+            _gate_algo_name  = grid_entry_id
             async with AsyncSessionLocal() as _db:
                 _res = await _db.execute(
                     select(AlgoState, GridEntry, Algo)
@@ -291,30 +427,32 @@ class AlgoRunner:
                     .where(AlgoState.grid_entry_id == grid_entry_id)
                 )
                 _row = _res.one_or_none()
-            if _row:
-                _, _, _algo = _row
-                _et = getattr(_algo, "entry_time", None)
-                if _et:
-                    _h, _m = map(int, str(_et).split(":")[:2])
-                    _now = datetime.now(IST_ZONE).time()
-                    _entry_t = datetime.now(IST_ZONE).replace(
-                        hour=_h, minute=_m, second=0, microsecond=0
-                    ).time()
-                    if _now < _entry_t:
-                        logger.info(
-                            f"[enter] {getattr(_algo, 'name', grid_entry_id)} entry_time {_et} "
-                            f"still ahead ({_now} < {_entry_t}) — scheduling job instead of firing now"
-                        )
-                        if self._scheduler:
-                            import asyncio as _aio
-                            _loop = getattr(self._scheduler, "_loop", None)
-                            if _loop and _loop.is_running():
-                                import asyncio
-                                asyncio.run_coroutine_threadsafe(
-                                    self._enter_with_db_wrap(grid_entry_id, force_direct),
-                                    _loop,
-                                )
-                        return
+                if _row:
+                    _, _, _algo = _row
+                    _gate_entry_time = getattr(_algo, "entry_time", None)
+                    _gate_algo_name  = getattr(_algo, "name", grid_entry_id)
+            if _gate_entry_time:
+                _et = _gate_entry_time
+                _h, _m = map(int, str(_et).split(":")[:2])
+                _now = datetime.now(IST_ZONE).time()
+                _entry_t = datetime.now(IST_ZONE).replace(
+                    hour=_h, minute=_m, second=0, microsecond=0
+                ).time()
+                if _now < _entry_t:
+                    logger.info(
+                        f"[enter] {_gate_algo_name} entry_time {_et} "
+                        f"still ahead ({_now} < {_entry_t}) — scheduling job instead of firing now"
+                    )
+                    if self._scheduler:
+                        import asyncio as _aio
+                        _loop = getattr(self._scheduler, "_loop", None)
+                        if _loop and _loop.is_running():
+                            import asyncio
+                            asyncio.run_coroutine_threadsafe(
+                                self._enter_with_db_wrap(grid_entry_id, force_direct),
+                                _loop,
+                            )
+                    return
 
         async with AsyncSessionLocal() as db:
             try:
@@ -345,6 +483,48 @@ class AlgoRunner:
                 await self._mark_error(grid_entry_id, f"{type(e).__name__}: {str(e)[:200]}")
 
     async def _enter_with_db(
+        self,
+        db: AsyncSession,
+        grid_entry_id: str,
+        reentry: bool,
+        original_order: Optional[Order],
+        force_direct: bool = False,
+    ):
+        # Outer safety net: catch any unexpected exception (e.g. MissingGreenlet from
+        # a detached ORM object) that occurs outside the per-leg try/except blocks.
+        # Logs the FULL traceback to the frontend System Log so the exact line is visible,
+        # marks the algo ERROR, and never crashes the server.
+        try:
+            await self._enter_with_db_inner(
+                db, grid_entry_id, reentry, original_order, force_direct
+            )
+        except Exception as _outer_exc:
+            import traceback as _tb
+            _full_tb = _tb.format_exc()
+            logger.error(
+                f"[ENGINE] _enter_with_db unhandled exception for {grid_entry_id}: "
+                f"{type(_outer_exc).__name__}: {_outer_exc}\n{_full_tb}"
+            )
+            # Write full traceback to event log so it surfaces in frontend System Log
+            try:
+                await _ev.error(
+                    f"{grid_entry_id} · {type(_outer_exc).__name__}: {str(_outer_exc)[:300]}\n"
+                    f"(Full traceback in server log)",
+                    source="engine",
+                )
+            except Exception:
+                pass
+            # Mark algo ERROR so it's visible in the UI
+            try:
+                await self._mark_error(
+                    grid_entry_id,
+                    f"{type(_outer_exc).__name__}: {str(_outer_exc)[:200]}",
+                )
+            except Exception:
+                pass
+            raise  # re-raise so enter()'s handler also logs [CRITICAL] with full tb
+
+    async def _enter_with_db_inner(
         self,
         db: AsyncSession,
         grid_entry_id: str,
@@ -600,8 +780,15 @@ class AlgoRunner:
         if placed_orders:
             grid_entry.status = GridStatus.OPEN
         elif not entry_error:
-            # W&T or ORB — waiting for trigger
-            grid_entry.status = GridStatus.ALGO_ACTIVE
+            # W&T or ORB — all legs deferred, waiting for trigger
+            grid_entry.status  = GridStatus.ALGO_ACTIVE
+            # algo_state was set to ACTIVE at line 436 (before leg placement).
+            # Reset to WAITING so the /waiting endpoint can surface these algos.
+            algo_state.status  = AlgoRunStatus.WAITING
+            logger.info(
+                f"[ENTER] {algo.name} — all legs deferred (W&T/ORB), "
+                f"algo_state reset to WAITING"
+            )
 
         await db.commit()
 
@@ -642,15 +829,22 @@ class AlgoRunner:
             if hasattr(algo, "account_id") and algo.account_id:
                 from app.models.account import Account
                 from app.core.database import AsyncSessionLocal
+                # Capture all _acc attributes INSIDE the session — accessing them after
+                # the context exits may trigger await_only() on a detached object → MissingGreenlet.
+                _acc_broker = None
+                _acc_client_id = None
                 async with AsyncSessionLocal() as _db:
                     from sqlalchemy import select as _select
                     _res = await _db.execute(_select(Account).where(Account.id == algo.account_id))
                     _acc = _res.scalar_one_or_none()
-                if _acc and _acc.broker == BrokerType.ANGELONE:
-                    account_broker = self._angel_broker_map.get(_acc.client_id)
+                    if _acc:
+                        _acc_broker    = _acc.broker
+                        _acc_client_id = _acc.client_id
+                if _acc_broker == BrokerType.ANGELONE:
+                    account_broker = self._angel_broker_map.get(_acc_client_id)
                     if account_broker is None:
                         logger.error(
-                            f"[BROKER] No broker found for client_id={getattr(_acc, 'client_id', '?')} "
+                            f"[BROKER] No broker found for client_id={_acc_client_id!r} "
                             f"— order blocked (AO broker not wired)"
                         )
                         return False, ExecutionErrorCode.TOKEN_INVALID, False
@@ -758,86 +952,17 @@ class AlgoRunner:
                 "Complete broker login first."
             )
 
-        # ── W&T: register watcher and defer — order placed when threshold hits ─
-        # force_direct=True (manual RETRY): skip W&T, enter immediately at current LTP
-        if leg.wt_enabled and leg.wt_value and not reentry and not force_direct:
-            # W&T monitors the UNDERLYING INDEX, not the option premium.
-            # Map the underlying name to its spot index token.
-            wt_underlying = (leg.underlying or "").upper()
-            # Primary lookup: _WT_UNDERLYING_TOKENS (canonical AlgoLeg.underlying names)
-            wt_underlying_token = self._WT_UNDERLYING_TOKENS.get(wt_underlying, 0)
-            if not wt_underlying_token:
-                # Secondary: _ORB_UNDERLYING_TOKENS (covers MIDCAPNIFTY alias)
-                wt_underlying_token = self._ORB_UNDERLYING_TOKENS.get(wt_underlying, 0)
-            if not wt_underlying_token:
-                # Fallback: MCX or unknown underlying
-                try:
-                    from app.engine.bot_runner import MCX_TOKENS as _MCX_WT
-                    wt_underlying_token = _MCX_WT.get(wt_underlying, 0)
-                except ImportError:
-                    pass
-            if self._wt_evaluator and wt_underlying_token:
-                window = WTWindow(
-                    grid_entry_id=str(grid_entry.id),
-                    algo_id=str(algo.id),
-                    direction=leg.wt_direction or "up",
-                    entry_time=self._parse_time(algo.entry_time or "09:16"),
-                    instrument_token=wt_underlying_token,
-                    wt_value=leg.wt_value,
-                    wt_unit=leg.wt_unit or "pts",
-                )
-                self._wt_evaluator.register(
-                    window,
-                    on_entry=self._make_wt_callback(str(grid_entry.id)),
-                )
-                # Ensure the underlying index token is subscribed so ticks flow
-                if self._ltp_consumer:
-                    self._ltp_consumer.subscribe([wt_underlying_token])
-                # Check if index LTP is already in Redis; if not, wait up to 5s for first tick
-                if self._ltp_consumer:
-                    _wt_ltp = self._ltp_consumer.get_ltp(wt_underlying_token)
-                    if not _wt_ltp or _wt_ltp <= 0:
-                        logger.warning(
-                            f"[W&T] No LTP for {wt_underlying} (token={wt_underlying_token}) in Redis yet "
-                            f"— waiting up to 5s for first tick before W&T monitoring begins"
-                        )
-                        for _wt_wait in range(5):
-                            await asyncio.sleep(1)
-                            _wt_ltp = self._ltp_consumer.get_ltp(wt_underlying_token)
-                            if _wt_ltp and _wt_ltp > 0:
-                                logger.info(
-                                    f"[W&T] LTP for {wt_underlying} available after {_wt_wait + 1}s "
-                                    f"({_wt_ltp:.2f}) — W&T monitoring active"
-                                )
-                                break
-                        else:
-                            logger.warning(
-                                f"[W&T] No LTP for {wt_underlying} after 5s — W&T will capture "
-                                f"reference on first tick. Algo NOT marked as missed."
-                            )
-                logger.info(
-                    f"W&T registered for leg {leg.leg_number}: {algo.name} | "
-                    f"underlying={wt_underlying} token={wt_underlying_token}"
-                )
-            else:
-                logger.error(
-                    f"[W&T] underlying token not found for '{wt_underlying}' "
-                    f"(leg {leg.leg_number}, {algo.name}) — "
-                    f"add to _WT_UNDERLYING_TOKENS. W&T NOT registered."
-                )
-            return None  # deferred — order placed when W&T fires
-
-        # ── Strike selection ───────────────────────────────────────────────────
+        # ── Strike selection (always first — needed for both W&T and direct entry) ─
         instrument = None
         if leg.instrument == "fu":
             # Futures — use underlying directly
-            symbol        = f"{leg.underlying}FUT"
+            symbol           = f"{leg.underlying}FUT"
             instrument_token = getattr(leg, 'instrument_token', 0) or 0
-            ltp           = 0.0
+            ltp              = 0.0
         else:
             # Options
             if reentry and original_order:
-                # Same strike/expiry as original for these modes
+                # Same strike/expiry as original for re-entries
                 symbol           = original_order.symbol
                 instrument_token = getattr(original_order, "instrument_token", None) or 0
                 ltp              = original_order.fill_price or 0.0
@@ -908,6 +1033,78 @@ class AlgoRunner:
                         except Exception as _e:
                             logger.warning(f"[ALGO RUNNER] LTP fetch failed for {symbol}: {_e}")
 
+        # ── W&T: arm on OPTION token, defer until threshold ─────────────────────
+        # Strike is already selected above — we monitor the option's own LTP, not the index.
+        # force_direct=True (manual RETRY or W&T callback re-entry): skip W&T, place immediately.
+        if leg.wt_enabled and leg.wt_value and not reentry and not force_direct:
+            # Use live LTP from LTP consumer if more current than strike-selection price
+            _wt_option_ltp = ltp
+            if self._ltp_consumer and instrument_token:
+                _live = self._ltp_consumer.get_ltp(int(instrument_token))
+                if _live and _live > 0:
+                    _wt_option_ltp = _live
+
+            if not _wt_option_ltp or _wt_option_ltp <= 0:
+                logger.error(
+                    f"[W&T] No LTP for option {symbol} (token={instrument_token}) — "
+                    f"cannot arm W&T for {algo.name} leg {leg.leg_number}"
+                )
+                raise ValueError(
+                    f"[W&T] Option LTP unavailable for {symbol} — cannot arm W&T monitor"
+                )
+
+            _wt_dir  = leg.wt_direction or "up"
+            _wt_unit = leg.wt_unit or "pts"
+            if _wt_unit == "pct":
+                _wt_threshold = (
+                    _wt_option_ltp * (1 + leg.wt_value / 100) if _wt_dir == "up"
+                    else _wt_option_ltp * (1 - leg.wt_value / 100)
+                )
+            else:
+                _wt_threshold = (
+                    _wt_option_ltp + leg.wt_value if _wt_dir == "up"
+                    else _wt_option_ltp - leg.wt_value
+                )
+
+            if self._wt_evaluator:
+                _ge_id_str = str(grid_entry.id)
+                window = WTWindow(
+                    grid_entry_id    = _ge_id_str,
+                    algo_id          = str(algo.id),
+                    direction        = _wt_dir,
+                    entry_time       = self._parse_time(algo.entry_time or "09:16"),
+                    instrument_token = int(instrument_token),
+                    wt_value         = leg.wt_value,
+                    wt_unit          = _wt_unit,
+                    reference_price  = _wt_option_ltp,
+                    threshold        = _wt_threshold,
+                    is_ref_set       = True,  # reference already captured — skip tick-based capture
+                )
+                self._wt_evaluator.register(window, on_entry=self._make_wt_callback(_ge_id_str))
+                if self._ltp_consumer:
+                    self._ltp_consumer.subscribe([int(instrument_token)])
+
+                # Cache arming details so rearm_wt_monitors() can restore the window after reconnect
+                self._wt_arming_cache[_ge_id_str] = {
+                    "instrument_token": int(instrument_token),
+                    "symbol":           symbol,
+                    "reference_price":  _wt_option_ltp,
+                    "threshold":        _wt_threshold,
+                    "direction":        _wt_dir,
+                    "wt_value":         leg.wt_value,
+                    "wt_unit":          _wt_unit,
+                    "entry_time":       algo.entry_time or "09:16",
+                    "algo_id":          str(algo.id),
+                }
+                logger.info(
+                    f"[W&T] Armed on option {symbol} (token={instrument_token}) "
+                    f"ref={_wt_option_ltp:.2f} threshold={_wt_threshold:.2f} "
+                    f"({leg.wt_value}{_wt_unit} {_wt_dir}) for {algo.name}"
+                )
+            else:
+                logger.error(f"[W&T] WTEvaluator not available — W&T NOT registered for {algo.name}")
+            return None  # deferred — order placed when threshold fires via _make_wt_callback
+
         # ── Entry delay ────────────────────────────────────────────────────────
         delay_secs = getattr(algo, "entry_delay_seconds", 0) or 0
         delay_scope = getattr(algo, "entry_delay_scope", "all") or "all"
@@ -922,7 +1119,10 @@ class AlgoRunner:
                 await asyncio.sleep(delay_secs)
 
         # ── Lot size ───────────────────────────────────────────────────────────
-        lot_size = instrument.get("lot_size", 1) if instrument else 1
+        # Prefer master-contract lookup (accurate for current SEBI lot sizes).
+        # instrument.get("lot_size") is unreliable for Angel One (chain data has no lotsize field).
+        _exch_for_lot = instrument.get("exchange", "NFO") if instrument else "NFO"
+        lot_size = await self._get_lot_size(symbol, _exch_for_lot)
         quantity = leg.lots * lot_size * (algo.base_lot_multiplier or 1) * grid_entry.lot_multiplier
 
         # ── Rate limit (SEBI: max 10/s; we cap at 8) ──────────────────────────
@@ -977,6 +1177,7 @@ class AlgoRunner:
             exchange="NFO",
             direction=direction,
             lots=leg.lots * grid_entry.lot_multiplier,
+            lot_size=lot_size,
             quantity=quantity,
             is_practix=grid_entry.is_practix,
             is_overnight=is_overnight,
@@ -1326,22 +1527,30 @@ class AlgoRunner:
 
         for order in orders:
             try:
-                # Get current LTP — for PRACTIX fetch real market price so exit_price is meaningful
+                # Get current LTP — prefer fresh SmartStream tick, fall back to REST
                 ltp = order.ltp or order.fill_price or 0.0
-
-                if order.is_practix and exit_broker_type == "angelone" and exit_account:
+                ao_broker = None
+                if exit_broker_type == "angelone" and exit_account:
                     ao_broker = self._angel_broker_map.get(exit_account.client_id)
+
+                if exit_broker_type == "angelone" and exit_account:
                     token = getattr(order, "instrument_token", None)
                     if ao_broker and token:
-                        try:
-                            ltp = await ao_broker.get_ltp_by_token(
-                                exchange=order.exchange or "NFO",
-                                symbol=order.symbol,
-                                token=str(token),
-                            )
-                            logger.info(f"[PRACTIX EXIT] Live LTP for {order.symbol}: {ltp}")
-                        except Exception as _e:
-                            logger.warning(f"[PRACTIX EXIT] LTP fetch failed for {order.symbol}: {_e}")
+                        # PRACTIX: always fetch live LTP for meaningful exit price
+                        # LIVE: fetch REST if SmartStream was down (ltp == 0)
+                        if order.is_practix or ltp == 0:
+                            try:
+                                rest_ltp = await ao_broker.get_ltp_by_token(
+                                    exchange=order.exchange or "NFO",
+                                    symbol=order.symbol,
+                                    token=str(token),
+                                )
+                                if rest_ltp and rest_ltp > 0:
+                                    label = "PRACTIX" if order.is_practix else "LIVE (WS stale)"
+                                    logger.info(f"[{label} EXIT] REST LTP for {order.symbol}: {rest_ltp}")
+                                    ltp = rest_ltp
+                            except Exception as _e:
+                                logger.warning(f"[EXIT] LTP REST fetch failed for {order.symbol}: {_e}")
 
                 # Apply exit delay (scoped to BUY/SELL)
                 if exit_delay_secs > 0:
@@ -1390,6 +1599,33 @@ class AlgoRunner:
                         account_id      = str(order.account_id),
                         algo_tag        = order.algo_tag or "",
                     )
+
+                # ── For LIVE exits: fetch actual fill from broker orderbook ──────
+                # Wait up to 5s for Angel One to update the fill (2s + 1 retry after 3s).
+                if not order.is_practix and exit_broker_type == "angelone" and ao_broker:
+                    _broker_oid = getattr(order, "broker_order_id", None)
+                    if _broker_oid:
+                        _actual_fill: Optional[float] = None
+                        for _wait in (2, 3):
+                            await asyncio.sleep(_wait)
+                            try:
+                                _ob = await ao_broker.get_order_book()
+                                for _ob_row in (_ob or []):
+                                    if str(_ob_row.get("orderid", "")) == str(_broker_oid):
+                                        _avg = float(_ob_row.get("averageprice", 0) or 0)
+                                        if _avg > 0:
+                                            _actual_fill = _avg
+                                            break
+                            except Exception as _ob_err:
+                                logger.warning(f"[LIVE EXIT] Orderbook fetch failed: {_ob_err}")
+                            if _actual_fill:
+                                break
+                        if _actual_fill and _actual_fill != ltp:
+                            logger.info(
+                                f"[LIVE EXIT] Corrected exit_price from broker fill: "
+                                f"{order.symbol} {ltp:.2f} → {_actual_fill:.2f}"
+                            )
+                            ltp = _actual_fill
 
                 # F9 — cancel broker SL orders
                 if cancel_broker_sl and not order.is_practix and self._order_placer:
@@ -1665,8 +1901,15 @@ class AlgoRunner:
     def _make_wt_callback(self, grid_entry_id: str):
         """Returns a callback for WTEvaluator on_entry."""
         async def on_wt_entry(eid: str, entry_price: float):
-            logger.info(f"W&T triggered for {eid} @ {entry_price}")
-            await self.enter(eid, reentry=False)
+            logger.info(f"[W&T] Threshold crossed for {eid} @ {entry_price:.2f} — scheduling order")
+            # Clear arming cache — window has fired, rearm should not re-register it
+            self._wt_arming_cache.pop(eid, None)
+            # Break out of the LTP consumer tick-processing chain by scheduling as a new
+            # asyncio Task. Direct await from run_coroutine_threadsafe callback context
+            # loses SQLAlchemy's greenlet bridge (greenlet_spawn / await_only), causing
+            # MissingGreenlet. A fresh top-level Task gets a clean greenlet context.
+            import asyncio as _aio
+            _aio.create_task(self._enter_with_db_wrap(eid, force_direct=True))
 
         return on_wt_entry
 
@@ -2066,6 +2309,60 @@ class AlgoRunner:
         from datetime import time as dtime
         h, m = map(int, time_str.split(":")[:2])
         return dtime(h, m)
+
+    # ── Lot size lookup ───────────────────────────────────────────────────────
+
+    def _get_underlying_from_symbol(self, symbol: str) -> str:
+        """Extract underlying name from a derivative symbol string.
+        e.g. BANKNIFTY24APR26540PE → BANKNIFTY, NIFTY24APR2624000CE → NIFTY
+        """
+        for u in ("BANKNIFTY", "MIDCPNIFTY", "FINNIFTY", "NIFTY", "SENSEX"):
+            if symbol.upper().startswith(u):
+                return u
+        return "NIFTY"
+
+    async def _get_lot_size(self, symbol: str, exchange: str = "NFO") -> int:
+        """Return lot size for a derivative symbol.
+
+        Lookup order:
+          1. In-memory _lot_size_cache (keyed by EXCHANGE:SYMBOL)
+          2. Angel One instrument master (_master_cache, field = 'lotsize')
+          3. Hardcoded fallback table (last resort — never silently wrong for known underlyings)
+
+        Cache is cleared at midnight by the daily reset job.
+        """
+        cache_key = f"{exchange}:{symbol}"
+        if cache_key in self._lot_size_cache:
+            return self._lot_size_cache[cache_key]
+
+        # Angel One instrument master — already in-memory after first download
+        try:
+            from app.brokers.angelone import AngelOneBroker
+            master: list = AngelOneBroker._master_cache or []
+            for item in master:
+                if item.get("symbol") == symbol:
+                    lot_size = int(item.get("lotsize", 1))
+                    if lot_size > 1:  # sanity — master can have 1 for expired contracts
+                        self._lot_size_cache[cache_key] = lot_size
+                        return lot_size
+        except Exception as _e:
+            logger.warning(f"[LOT SIZE] Master lookup failed for {symbol}: {_e}")
+
+        # Fallback — derive from underlying name in the symbol string
+        underlying = self._get_underlying_from_symbol(symbol)
+        fallback = {
+            "NIFTY":       75,
+            "BANKNIFTY":   35,
+            "SENSEX":      20,
+            "MIDCPNIFTY":  120,
+            "FINNIFTY":    65,
+        }.get(underlying, 1)
+        self._lot_size_cache[cache_key] = fallback
+        logger.warning(
+            f"[LOT SIZE] Master miss for {symbol} — using fallback {fallback} "
+            f"(underlying={underlying})"
+        )
+        return fallback
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

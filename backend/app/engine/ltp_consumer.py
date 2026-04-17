@@ -72,6 +72,7 @@ class AngelOneTickerAdapter:
         self._bfo_tokens: Set[str]          = set()   # tokens that need exchangeType=4 (BFO — BSE F&O)
         self._reconnect_count               = 0
         self._last_reconnect_at: Optional[str] = None
+        self._on_reconnect_callbacks: List[Callable] = []  # fired on every _on_open
 
         # Debug: log credential presence at construction time
         ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
@@ -221,6 +222,14 @@ class AngelOneTickerAdapter:
             except Exception as e:
                 logger.error(f"[AO] Subscription error on connect: {e}")
 
+        # Fire reconnect callbacks (e.g. AlgoRunner.rearm_wt_monitors)
+        if self._on_reconnect_callbacks and self._loop and self._loop.is_running():
+            for _cb in self._on_reconnect_callbacks:
+                try:
+                    asyncio.run_coroutine_threadsafe(_cb(), self._loop)
+                except Exception as _cbe:
+                    logger.warning(f"[AO] Reconnect callback {getattr(_cb, '__name__', '?')} failed: {_cbe}")
+
     def _on_data(self, ws, message):
         """Hot path — normalise Angel One tick and dispatch to async loop."""
         logger.debug(f"[AO-DEBUG] _on_data — raw message type={type(message).__name__}, len={len(message) if hasattr(message, '__len__') else 'N/A'}")
@@ -256,6 +265,15 @@ class AngelOneTickerAdapter:
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._reconnect(), self._loop)
 
+    def register_on_reconnect_callback(self, cb: Callable):
+        """
+        Register a callback fired each time the SmartStream WebSocket opens (including reconnects).
+        cb must be an async function (no args). Dispatched via run_coroutine_threadsafe.
+        Used by AlgoRunner.rearm_wt_monitors() to re-register W&T windows after disconnect.
+        """
+        self._on_reconnect_callbacks.append(cb)
+        logger.info(f"[AO] Registered reconnect callback: {cb.__name__}")
+
     def update_feed_token(self, new_token: str):
         """
         Update feed_token in-place on a live adapter.
@@ -266,13 +284,28 @@ class AngelOneTickerAdapter:
             self.feed_token = new_token
             logger.info("[AO] Feed token updated on live adapter")
 
+    # Backoff schedule (seconds) — index = attempt number (0-based, capped at last)
+    _RECONNECT_BACKOFF = [2, 4, 8, 16, 30, 30, 30, 60, 60, 60]
+    _MAX_RECONNECT_ATTEMPTS = 10
+
     async def _reconnect(self):
         """
-        Attempt to reconnect SmartStream after a 10-second delay.
+        Attempt to reconnect SmartStream with exponential backoff.
         Fetches fresh auth_token + feed_token from DB before reconnecting so
         a daily re-login never leaves the adapter with stale credentials.
         """
-        await asyncio.sleep(10)
+        if self._reconnect_count >= self._MAX_RECONNECT_ATTEMPTS:
+            logger.critical(
+                f"[AO] ❌ SmartStream gave up after {self._MAX_RECONNECT_ATTEMPTS} reconnect attempts. "
+                "Manual intervention required — call POST /api/v1/system/smartstream/start"
+            )
+            return
+
+        backoff = self._RECONNECT_BACKOFF[
+            min(self._reconnect_count, len(self._RECONNECT_BACKOFF) - 1)
+        ]
+        logger.info(f"[AO] 🔄 SmartStream reconnect backoff {backoff}s (attempt #{self._reconnect_count + 1})...")
+        await asyncio.sleep(backoff)
         if self._running:
             return   # already reconnected by another path
 
@@ -341,6 +374,8 @@ class LTPConsumer:
         self.last_tick_time: Optional[float]  = None   # monotonic time of last tick — for BrokerReconnectManager
         self._started_at: Optional[float]     = None   # monotonic time feed was started
         self._ltp_map: Dict[int, float]       = {}     # in-memory cache for sync get_ltp()
+        self._ltp_timestamps: Dict[int, float] = {}    # monotonic time of last tick per token
+        self._angel_broker                    = None   # injected via set_angel_broker()
 
     # ── Broker adapter injection ───────────────────────────────────────────────
 
@@ -367,6 +402,11 @@ class LTPConsumer:
         """Inject WebSocket manager for real-time broadcast to frontend."""
         self._ws_manager = manager
         logger.info("[LTP] WebSocket manager wired")
+
+    def set_angel_broker(self, broker):
+        """Inject Angel One broker for REST LTP fallback when SmartStream is stale."""
+        self._angel_broker = broker
+        logger.info("[LTP] Angel One broker wired for REST fallback")
 
     # ── Callback registry ─────────────────────────────────────────────────────
 
@@ -409,6 +449,42 @@ class LTPConsumer:
     def get_ltp(self, token: int) -> float:
         """Synchronous LTP lookup from in-memory tick cache. Returns 0.0 if not yet received."""
         return self._ltp_map.get(int(token), 0.0)
+
+    def is_ltp_fresh(self, token: int, max_age_secs: float = 30.0) -> bool:
+        """True if we received a tick for this token within the last max_age_secs seconds."""
+        import time as _time
+        ts = self._ltp_timestamps.get(int(token))
+        if ts is None:
+            return False
+        return (_time.monotonic() - ts) <= max_age_secs
+
+    async def get_ltp_with_fallback(
+        self, token: int, exchange: str = "NFO", symbol: str = "", max_age_secs: float = 30.0
+    ) -> float:
+        """
+        Get LTP, falling back to Angel One REST when SmartStream tick is stale or missing.
+        Returns 0.0 only if both paths fail.
+        """
+        ltp = self._ltp_map.get(int(token), 0.0)
+        if ltp > 0 and self.is_ltp_fresh(token, max_age_secs):
+            return ltp
+        # SmartStream stale or no tick — try Angel One REST
+        if self._angel_broker and symbol:
+            try:
+                rest_ltp = await self._angel_broker.get_ltp_by_token(exchange, symbol, str(token))
+                if rest_ltp and rest_ltp > 0:
+                    logger.info(
+                        f"[LTP] REST fallback for token={token} ({symbol}): {rest_ltp:.2f} "
+                        f"(WS ltp={ltp:.2f}, fresh={self.is_ltp_fresh(token, max_age_secs)})"
+                    )
+                    # Warm the cache so subsequent sync callers benefit
+                    import time as _time
+                    self._ltp_map[int(token)]        = rest_ltp
+                    self._ltp_timestamps[int(token)] = _time.monotonic()
+                    return rest_ltp
+            except Exception as _e:
+                logger.warning(f"[LTP] REST fallback failed for token={token} ({symbol}): {_e}")
+        return ltp  # best effort — may be 0.0
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -490,8 +566,10 @@ class LTPConsumer:
                 LTP_EXPIRY_SECS,
                 str(tick.get("last_price", 0))
             )
-            # Update in-memory cache for sync get_ltp() callers
-            self._ltp_map[int(tick['instrument_token'])] = float(tick.get('last_price', 0))
+            # Update in-memory cache + staleness timestamps for sync get_ltp() callers
+            _tok = int(tick['instrument_token'])
+            self._ltp_map[_tok]        = float(tick.get('last_price', 0))
+            self._ltp_timestamps[_tok] = self.last_tick_time  # monotonic
         await pipe.execute()
 
         # Broadcast batches — split index tickers from position LTPs

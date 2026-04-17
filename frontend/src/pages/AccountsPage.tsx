@@ -303,7 +303,7 @@ export default function AccountsPage() {
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Accounts</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Broker accounts & API tokens</p>
+          <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '3px' }}>Broker accounts & API tokens</p>
         </div>
         <div className="page-header-actions">
           {addToast && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>{addToast}</span>}

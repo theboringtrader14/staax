@@ -13,6 +13,8 @@ WebSocket channels registered at app level (not under /api/v1):
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncio
+import logging
 
 from app.core.config import settings
 from app.core.database import init_db
@@ -53,6 +55,9 @@ async def lifespan(app: FastAPI):
 
     # Store scheduler on app.state so routes can access it
     app.state.scheduler = scheduler
+
+    # 4. Start background reconcile loop
+    asyncio.create_task(_reconcile_loop())
 
     print("✅ STAAX backend started")
     yield
@@ -97,3 +102,23 @@ app.include_router(ws_router)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "STAAX API", "version": "0.1.0"}
+
+
+async def _reconcile_loop() -> None:
+    """Run reconcile check every 60s during market hours (09:15–15:30 IST Mon-Fri)."""
+    import asyncio as _aio
+    from zoneinfo import ZoneInfo as _ZI
+    _logger = logging.getLogger(__name__)
+    while True:
+        await _aio.sleep(60)
+        try:
+            from datetime import datetime as _dt
+            _now = _dt.now(_ZI("Asia/Kolkata"))
+            _t = _now.hour * 60 + _now.minute
+            if _now.weekday() < 5 and 9*60+15 <= _t <= 15*60+30:
+                from app.core.database import AsyncSessionLocal as _ASL
+                from app.api.v1.orders import _run_reconcile_internal
+                async with _ASL() as _rdb:
+                    await _run_reconcile_internal(_rdb)
+        except Exception as _re:
+            _logger.debug(f"[RECONCILE LOOP] {_re}")

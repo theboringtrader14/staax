@@ -158,13 +158,22 @@ class BotRunner:
             )
             for bo in open_result.scalars().all():
                 bot_id = str(bo.bot_id)
+                # Skip positions with no entry_price to avoid corrupt P&L calculations
+                if not bo.entry_price:
+                    logger.error(
+                        "[BOT] Position %s for bot %s has no entry_price — skipping restore to avoid corrupt P&L",
+                        bo.id, bo.bot_id
+                    )
+                    continue
+                # entry_price is valid
+                entry_price_val = float(bo.entry_price)
                 self._positions[bot_id] = {
                     "order_id":    str(bo.id),
-                    "entry_price": float(bo.entry_price or 0),
+                    "entry_price": entry_price_val,
                 }
                 logger.info(
                     "[BOT] Restored open position for bot %s: entry=%.2f",
-                    bot_id, bo.entry_price or 0,
+                    bot_id, entry_price_val,
                 )
 
         logger.info(f"[BOT] Loaded {len(self._bots)} active bots")
@@ -353,22 +362,42 @@ class BotRunner:
 
         # ── Order decision (entry / exit) ─────────────────────────────────────
         has_position = self._positions.get(bot_id) is not None
-        sig_key      = f"{signal.type}:{signal.direction}"
+        # Include candle timestamp in dedup key so re-entry on a new candle is not suppressed
+        _candle_ts = candle.ts.isoformat() if hasattr(candle, 'ts') and candle.ts else str(getattr(candle, 'close_time', ''))
+        sig_key      = f"{signal.type}:{signal.direction}:{_candle_ts}"
 
         acted = False
         if signal.type == "entry" and signal.direction == "buy" and not has_position:
             # Dedup: skip if we already acted on a buy entry this candle run
             if self._last_signal.get(bot_id) != sig_key:
-                await self._enter_trade(bot, current_price, signal)
-                self._last_signal[bot_id] = sig_key
-                acted = True
+                try:
+                    await self._enter_trade(bot, current_price, signal)
+                    self._last_signal[bot_id] = sig_key
+                    # Only mark signal as fired if order placement succeeded
+                    await self._save_signal(bot, signal, status="fired", candle=candle)
+                    acted = True
+                except Exception as e:
+                    logger.error(
+                        "[BOT] Order placement failed for bot %s: %s — signal will NOT be marked fired",
+                        bot.name, e,
+                    )
+                    await self._save_signal(bot, signal, status="error", candle=candle)
             else:
                 logger.debug("[BOT] Dedup: skipping duplicate %s signal for %s", sig_key, bot.name)
         elif signal.type in ("entry", "exit") and signal.direction == "sell" and has_position:
             if self._last_signal.get(bot_id) != sig_key:
-                await self._exit_trade(bot, current_price)
-                self._last_signal[bot_id] = sig_key
-                acted = True
+                try:
+                    await self._exit_trade(bot, current_price)
+                    self._last_signal[bot_id] = sig_key
+                    # Only mark signal as fired if order placement succeeded
+                    await self._save_signal(bot, signal, status="fired", candle=candle)
+                    acted = True
+                except Exception as e:
+                    logger.error(
+                        "[BOT] Order placement failed for bot %s: %s — signal will NOT be marked fired",
+                        bot.name, e,
+                    )
+                    await self._save_signal(bot, signal, status="error", candle=candle)
             else:
                 logger.debug("[BOT] Dedup: skipping duplicate %s signal for %s", sig_key, bot.name)
         else:
@@ -377,11 +406,7 @@ class BotRunner:
                 "[BOT] Signal %s %s for %s — no action (has_position=%s)",
                 signal.direction.upper(), signal.type, bot.name, has_position,
             )
-
-        # ── Save to bot_signals (only when acted or new unique condition) ─────
-        # "fired" = order action taken; "skipped" = condition met but no position
-        signal_status = "fired" if acted else "skipped"
-        await self._save_signal(bot, signal, status=signal_status, candle=candle)
+            await self._save_signal(bot, signal, status="skipped", candle=candle)
 
         # ── Broadcast to frontend via WebSocket (only if acted) ───────────────
         if acted and self._ws_manager:
@@ -660,8 +685,55 @@ class BotRunner:
                     f"upper={upper:.2f}, lower={lower:.2f}"
                 )
                 loaded += 1
+            else:
+                # Mark strategy as failed so on_candle() logs warnings instead of silently returning None
+                if hasattr(strategy, 'mark_data_failed'):
+                    strategy.mark_data_failed(str(bot.id))
+                # Schedule retry in 5 minutes
+                asyncio.create_task(self._retry_daily_data(str(bot.id), delay=300))
 
         logger.info(f"[DTR] Daily data refreshed for {loaded}/{len(dtr_bots)} bots")
+
+    async def _retry_daily_data(self, bot_id: str, delay: int = 300) -> None:
+        """Retry load_daily_data for a single bot after delay seconds. Doubles delay up to 30min cap."""
+        await asyncio.sleep(delay)
+        logger.info("[DTR] Retrying daily data load for bot %s (delay was %ds)", bot_id, delay)
+        from app.models.bot import IndicatorType
+
+        broker = next(
+            (b for b in self._angel_brokers if b.is_token_set()), None
+        )
+        if not broker:
+            logger.warning("[DTR] _retry_daily_data: no angel broker with token — skipping retry for bot %s", bot_id)
+            next_delay = min(delay * 2, 1800)
+            asyncio.create_task(self._retry_daily_data(bot_id, delay=next_delay))
+            return
+
+        bot = next((b for b in self._bots if str(b.id) == bot_id), None)
+        if not bot:
+            logger.warning("[DTR] _retry_daily_data: bot %s not found in _bots — stopping retry", bot_id)
+            return
+
+        try:
+            data = await self.fetch_daily_candles(bot.instrument, broker)
+            if data:
+                strategy = self._strategies.get(bot_id)
+                if strategy:
+                    strategy.set_daily_data(
+                        day_open=data["day_open"],
+                        prev_high=data["prev_high"],
+                        prev_low=data["prev_low"],
+                        prev_close=data["prev_close"],
+                    )
+                    logger.info("[DTR] Retry successful for bot %s", bot_id)
+            else:
+                logger.error("[DTR] Retry failed for bot %s: no data returned", bot_id)
+                next_delay = min(delay * 2, 1800)  # cap at 30 minutes
+                asyncio.create_task(self._retry_daily_data(bot_id, delay=next_delay))
+        except Exception as e:
+            logger.error("[DTR] Retry failed for bot %s: %s", bot_id, e)
+            next_delay = min(delay * 2, 1800)  # cap at 30 minutes
+            asyncio.create_task(self._retry_daily_data(bot_id, delay=next_delay))
 
     # ── Rollover ──────────────────────────────────────────────────────────────
 

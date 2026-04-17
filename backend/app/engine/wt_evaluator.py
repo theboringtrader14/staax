@@ -11,7 +11,7 @@ Example: ATM CE = 133 at 9:35. W&T Up 10% → entry at 146.3.
 import logging
 from datetime import datetime, time
 from typing import Dict, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ class WTWindow:
     threshold:        float = 0.0
     is_ref_set:       bool  = False
     is_triggered:     bool  = False
+    registered_at:    datetime = field(default_factory=datetime.now)
 
     def compute_threshold(self):
         if self.direction == "up":

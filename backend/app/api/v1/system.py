@@ -128,23 +128,23 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
       fy_pnl          — sum of all closed-order P&L in the current financial year
     """
     from datetime import date as _date, datetime as _dt, timezone as _tz, timedelta as _td
-    from sqlalchemy import func, select as sa_select
+    from sqlalchemy import func, select as sa_select, distinct, or_, and_
     from app.models.order import Order, OrderStatus
     from app.models.algo import Algo
     from app.models.algo_state import AlgoState, AlgoRunStatus
 
-    today = _date.today()
-
-    # IST midnight as UTC — used to scope P&L counts to today only
+    # IST date — used to scope counts to today (handles STBT/BTST correctly)
     _IST = _tz(_td(hours=5, minutes=30))
     today_start_ist = _dt.now(_IST).replace(hour=0, minute=0, second=0, microsecond=0)
-    today_start_utc = today_start_ist.astimezone(_tz.utc)
+    today_ist_date = today_start_ist.date()
+    today_ist_str = str(today_ist_date)
 
-    # ── Active algos: count algos where is_active=True (not archived) ─────────
+    # ── Active algos: distinct algo_ids with OPEN orders today (IST trading_date) ──
     active_result = await db.execute(
-        sa_select(func.count(Algo.id)).where(
-            Algo.is_active == True,
-            Algo.is_archived == False,
+        sa_select(func.count(distinct(Order.algo_id))).where(
+            Order.status == OrderStatus.OPEN,
+            Order.is_practix == is_practix,
+            Order.trading_date == today_ist_str,
         )
     )
     active_algos = active_result.scalar() or 0
@@ -155,11 +155,18 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     )
     total_algos = total_result.scalar() or 0
 
-    # ── Error algos: algo states in ERROR for today ────────────────────────────
+    # ── Error algos: ERROR states OR NO_TRADE with error_message for today ────
     error_result = await db.execute(
         sa_select(func.count(AlgoState.id)).where(
-            AlgoState.status == AlgoRunStatus.ERROR,
-            AlgoState.trading_date == str(today),
+            or_(
+                AlgoState.status == AlgoRunStatus.ERROR,
+                and_(
+                    AlgoState.status == AlgoRunStatus.NO_TRADE,
+                    AlgoState.error_message.isnot(None),
+                    AlgoState.error_message != '',
+                )
+            ),
+            AlgoState.trading_date == today_ist_str,
         )
     )
     error_algos = error_result.scalar() or 0
@@ -174,19 +181,19 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     )
     open_positions = open_result.scalar() or 0
 
-    # ── Today P&L: sum of pnl for closed orders with fill today ───────────────
+    # ── Today P&L: sum of pnl for closed orders with IST trading_date = today ──
     today_pnl_result = await db.execute(
         sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
             Order.status == OrderStatus.CLOSED,
             Order.is_practix == is_practix,
-            func.date(Order.exit_time) == today,
+            Order.trading_date == today_ist_str,
         )
     )
     today_pnl = float(today_pnl_result.scalar() or 0)
 
     # ── FY P&L: April 1 of current financial year to today ────────────────────
     # Indian FY: Apr 1 – Mar 31
-    fy_start_year = today.year if today.month >= 4 else today.year - 1
+    fy_start_year = today_ist_date.year if today_ist_date.month >= 4 else today_ist_date.year - 1
     from datetime import datetime as _dt, timezone as _tz
     fy_start = _dt(fy_start_year, 4, 1, tzinfo=_tz.utc)
 
@@ -199,14 +206,42 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     )
     fy_pnl = float(fy_pnl_result.scalar() or 0)
 
-    # ── MTM total: sum of unrealised P&L for currently OPEN orders ────────────
-    mtm_result = await db.execute(
-        sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
-            Order.status == OrderStatus.OPEN,
-            Order.pnl.isnot(None),
+    # ── MTM total: sum of unrealised P&L for OPEN orders using live in-memory LTP ──
+    # order.pnl is not updated in real-time for open orders — use LTPConsumer instead.
+    try:
+        from app.engine.algo_runner import algo_runner as _ar_sys
+        _ltp_cons_sys = getattr(_ar_sys, '_ltp_consumer', None)
+    except Exception:
+        _ltp_cons_sys = None
+
+    mtm_total = 0.0
+    if _ltp_cons_sys:
+        _open_orders_r = await db.execute(
+            sa_select(Order.instrument_token, Order.fill_price, Order.quantity, Order.direction).where(
+                Order.status == OrderStatus.OPEN,
+                Order.is_practix == is_practix,
+                Order.fill_price.isnot(None),
+            )
         )
-    )
-    mtm_total = float(mtm_result.scalar() or 0)
+        for _tok, _fp, _qty, _dir in _open_orders_r.all():
+            if not _tok or not _fp or not _qty:
+                continue
+            _ltp = _ltp_cons_sys.get_ltp(int(_tok))
+            if _ltp and _ltp > 0:
+                _d = (_dir or "").lower()
+                if _d == "sell":
+                    mtm_total += (_fp - _ltp) * _qty
+                else:
+                    mtm_total += (_ltp - _fp) * _qty
+    else:
+        # Fallback to DB pnl if LTP consumer unavailable (stale/zero but better than nothing)
+        mtm_result = await db.execute(
+            sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
+                Order.status == OrderStatus.OPEN,
+                Order.pnl.isnot(None),
+            )
+        )
+        mtm_total = float(mtm_result.scalar() or 0)
 
     return {
         "active_algos":   active_algos,
@@ -692,3 +727,11 @@ async def daily_system_reset():
                 logger.info("[DAILY RESET] No system state found — nothing to reset")
     except Exception as e:
         logger.error(f"[DAILY RESET] Failed: {e}")
+
+    # Clear lot size cache so fresh master data is used each trading day
+    try:
+        from app.engine.algo_runner import algo_runner as _ar_reset
+        _ar_reset._lot_size_cache.clear()
+        logger.info("[DAILY RESET] Lot size cache cleared")
+    except Exception as _e:
+        logger.warning(f"[DAILY RESET] Lot size cache clear failed: {_e}")

@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
-import { useState, useEffect, useMemo } from 'react'
-import { algosAPI, ordersAPI, openPositionsAPI, holidaysAPI, accountsAPI } from '@/services/api'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { algosAPI, ordersAPI, holidaysAPI, accountsAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
@@ -25,10 +25,12 @@ interface Leg {
   errorMessage?: string
   refPrice?: number; fillPrice?: number; fillTime?: string; ltp?: number
   slOrig?: number; slActual?: number; slType?: string; tslTrailCount?: number; target?: number
-  exitPrice?: number; exitTime?: string; exitReason?: string; pnl?: number
+  exitPrice?: number; exitPriceManual?: number; exitPriceRaw?: number
+  exitTime?: string; exitReason?: string; pnl?: number
   reentryCount?: number;
   reentryTypeUsed?: string;   // "re_entry" | "re_execute"
   wtEnabled?: boolean; wtValue?: number; wtUnit?: string; wtDirection?: string; entryReference?: number
+  reconcileStatus?: string
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
@@ -42,6 +44,8 @@ interface AlgoGroup {
 interface WaitingLeg {
   leg_number: number; direction: string; instrument: string
   underlying: string; lots: number; strike_type?: string; wt_enabled?: boolean
+  wt_value?: number; wt_unit?: string; wt_direction?: string
+  wt_ref_price?: number; wt_threshold?: number
 }
 interface WaitingAlgo {
   grid_entry_id: string; algo_id: string; algo_name: string
@@ -54,13 +58,8 @@ interface WaitingAlgo {
   is_missed?: boolean
   entry_type?: string           // "direct" | "orb"
   orb_end_time?: string | null  // "HH:MM" — null for non-ORB algos
+  display_status?: string       // "MONITORING" | "SCHEDULED" | "WAITING" | "MISSED" | "ERROR"
 }
-interface OpenPosition {
-  algo_id: string; algo_name: string; account: string
-  strategy_mode: string; day_of_week: string; entry_date: string
-  open_count: number; pnl: number
-}
-
 // ── Leg status chip colours ─────────────────────────────────────────────────
 const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
   open:    { color: '#22DD88',              bg: 'rgba(34,221,136,0.12)'  },
@@ -145,6 +144,20 @@ function formatSL(sl_value: number | null, sl_type?: string): string {
   }
 }
 
+function formatSlDef(slType: string | undefined, slValue: number | undefined): string {
+  if (!slType || slValue == null) return '';
+  const val = slValue % 1 === 0 ? slValue.toFixed(0) : slValue.toFixed(1);
+  switch (slType) {
+    case 'pct_instrument':   return `I-${val}%`;
+    case 'pts_instrument':   return `I-${val}pt`;
+    case 'pct_underlying':   return `U-${val}%`;
+    case 'pts_underlying':   return `U-${val}pt`;
+    case 'fixed':            return `₹${val}`;
+    case 'pct_portfolio':    return `P-${val}%`;
+    default:                 return `${val}`;
+  }
+}
+
 // ── LegRow ───────────────────────────────────────────────────────────────────
 function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHigh, orbLow, isOrbAlgo }: {
   leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
@@ -197,6 +210,11 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
           ? <span className="tag" style={{ color: '#F59E0B', background: 'rgba(245,158,11,0.12)', fontSize: '10px' }}>W&amp;T</span>
           : <span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span>
         }
+        {leg.reconcileStatus && (
+          <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+            ⚠ SYNC
+          </div>
+        )}
       </td>
       <td style={{ width: COLS[2] }}>
         <div style={{ fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leg.symbol}</div>
@@ -255,20 +273,63 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
           if (hasTSL && slPrice != null) {
             // TSL has trailed: show original anchor → current level
             const origLevel = leg.slOrig != null ? `O:${formatSL(leg.slOrig, leg.slType)}` : ''
-            return <div style={{ color: 'var(--text-muted)' }}>{origLevel} A:<span style={{ color: 'var(--amber)' }}>{formatSL(slPrice, leg.slType)}</span></div>
+            return (
+              <div style={{ color: 'var(--text-muted)' }}>
+                <div>{origLevel} A:<span style={{ color: 'var(--amber)' }}>{formatSL(slPrice, leg.slType)}</span></div>
+                {leg.slOrig != null && leg.slType && (
+                  <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {formatSlDef(leg.slType, leg.slOrig)}
+                  </div>
+                )}
+              </div>
+            )
           }
-          if (slPrice != null) return <div style={{ color: 'var(--text-muted)' }}>{formatSL(slPrice, leg.slType)}</div>
+          if (slPrice != null) return (
+            <div style={{ color: 'var(--text-muted)' }}>
+              <div>{formatSL(slPrice, leg.slType)}</div>
+              {leg.slOrig != null && leg.slType && (
+                <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  {formatSlDef(leg.slType, leg.slOrig)}
+                </div>
+              )}
+            </div>
+          )
+          // Fallback: show definition (slOrig) for waiting/unfilled legs where engine hasn't set slActual yet
+          if (leg.slOrig != null) return <div style={{ color: 'var(--text-dim)' }}>{formatSL(leg.slOrig, leg.slType)}</div>
           return <>—</>
         })()}
       </td>
       <td style={{ width: COLS[7], ...C, color: 'var(--text-muted)' }}>{leg.target ?? '—'}</td>
       <td style={{ width: COLS[8], fontSize: '11px', ...C }}>
-        {leg.exitPrice != null
-          ? <div style={{ cursor: 'pointer' }} title="Click to correct exit price" onClick={() => leg.exitPrice != null && onEditExit && onEditExit(leg.id, leg.exitPrice)}>
-              <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)' }}>{leg.exitPrice}</div>
-              {leg.status === 'closed' && leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{leg.exitTime}</div>}
-            </div>
-          : '—'}
+        {leg.status === 'closed' ? (
+          <div style={{ cursor: 'pointer' }} title="Click to correct exit price"
+            onClick={() => onEditExit && onEditExit(leg.id, leg.exitPriceRaw ?? leg.exitPrice ?? 0)}>
+            {leg.exitPriceManual != null ? (
+              // Corrected price — amber + "(corrected)" label
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--amber)', borderBottom: '1px dashed var(--amber)' }}>
+                  {leg.exitPriceManual}
+                </div>
+                <div style={{ fontSize: '9px', color: 'var(--amber)', opacity: 0.8 }}>(corrected)</div>
+                {leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{leg.exitTime}</div>}
+              </div>
+            ) : (leg.exitPriceRaw === 0 || (leg.exitPrice == null || leg.exitPrice === 0)) ? (
+              // Missing exit price — show ✏️ prominently
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: 'var(--red)', fontWeight: 700 }}>✏️</span>
+                <span style={{ color: 'var(--red)', fontSize: '10px' }}>missing</span>
+              </div>
+            ) : (
+              // Normal price — dashed underline indicates editable
+              <div>
+                <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)' }}>{leg.exitPrice}</div>
+                {leg.exitTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{leg.exitTime}</div>}
+              </div>
+            )}
+          </div>
+        ) : leg.exitPrice != null ? (
+          <div style={{ fontWeight: 600 }}>{leg.exitPrice}</div>
+        ) : '—'}
       </td>
       <td style={{ width: COLS[9], ...C }}>
         {leg.exitReason
@@ -313,10 +374,16 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, children, onCon
   )
 }
 
-function setInlineStatus(setOrders: React.Dispatch<React.SetStateAction<AlgoGroup[]>>, idx: number, msg: string, color: string, ms = 3000, persistent = false) {
-  setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: msg, inlineColor: color } : g))
+function setInlineStatus(setOrdersByDate: React.Dispatch<React.SetStateAction<Record<string, AlgoGroup[]>>>, date: string, idx: number, msg: string, color: string, ms = 3000, persistent = false) {
+  setOrdersByDate(prev => {
+    const arr = prev[date] ?? []
+    return { ...prev, [date]: arr.map((g, i) => i === idx ? { ...g, inlineStatus: msg, inlineColor: color } : g) }
+  })
   if (!persistent) {
-    setTimeout(() => setOrders(o => o.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g)), ms)
+    setTimeout(() => setOrdersByDate(prev => {
+      const arr = prev[date] ?? []
+      return { ...prev, [date]: arr.map((g, i) => i === idx ? { ...g, inlineStatus: undefined, inlineColor: undefined } : g) }
+    }), ms)
   }
 }
 
@@ -353,6 +420,8 @@ function mapGroup(g: any): AlgoGroup {
       tslTrailCount:   o.tsl_trail_count ?? undefined,
       target:          o.target ?? undefined,
       exitPrice:       o.exit_price ?? undefined,
+      exitPriceManual: o.exit_price_manual ?? undefined,
+      exitPriceRaw:    o.exit_price_raw ?? undefined,
       exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
       exitReason:      o.exit_reason ?? undefined,
       pnl:             o.pnl ?? undefined,
@@ -365,13 +434,6 @@ function mapGroup(g: any): AlgoGroup {
       entryReference:  o.entry_reference ?? undefined,
     })),
   }
-}
-
-const STRATEGY_LABEL: Record<string, { label: string; color: string }> = {
-  intraday:   { label: 'Intraday',   color: '#5A5A61' },
-  btst:       { label: 'BTST',       color: '#FF6B00' },
-  stbt:       { label: 'STBT',       color: '#CC4400' },
-  positional: { label: 'Positional', color: '#F59E0B' },
 }
 
 // ── SmoothedSparkline ─────────────────────────────────────────────────────────
@@ -464,8 +526,13 @@ export default function OrdersPage() {
     } catch {}
     return todayDate
   })
-  const [orders, setOrders]             = useState<AlgoGroup[]>([])
-  const [waitingAlgos, setWaitingAlgos] = useState<WaitingAlgo[]>([])
+  // Ref kept in sync with selectedDate so action handlers (doRetry, doSQ, etc.)
+  // always read the current date even if the closure was captured before a tab change.
+  const selectedDateRef = useRef(selectedDate)
+  useEffect(() => { selectedDateRef.current = selectedDate }, [selectedDate])
+
+  const [ordersByDate, setOrdersByDate]     = useState<Record<string, AlgoGroup[]>>({})
+  const [waitingByDate, setWaitingByDate]   = useState<Record<string, WaitingAlgo[]>>({})
   const [ltpMap, setLtpMap]             = useState<Record<number, number>>({})
   const [modal, setModal]               = useState<{ type: 'sq' | 't'; algoIdx: number } | null>(null)
   const [sqChecked, setSqChecked]       = useState<Record<string, boolean>>({})
@@ -478,11 +545,7 @@ export default function OrdersPage() {
   const [editExit, setEditExit]         = useState<{ orderId: string; value: string } | null>(null)
   const [exitSaving, setExitSaving]     = useState(false)
   const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
-  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([])
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
-  const [brokerViewOn, setBrokerViewOn] = useState(false)
-  const [brokerOrders, setBrokerOrders] = useState<{account: string; time: string; order_id: string; symbol: string; type: string; qty: number|string; price: number|string; status: string; product: string; order_type: string}[]>([])
-  const [brokerLoading, setBrokerLoading] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
   const [showWeekends, setShowWeekends] = useState(false)
@@ -491,11 +554,12 @@ export default function OrdersPage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
   const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
-  const [ordersLoaded, setOrdersLoaded] = useState(false)
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
   const [retryModal, setRetryModal] = useState<{ algoIdx: number; legs: Leg[] } | null>(null)
   const [retryChecked, setRetryChecked] = useState<Record<string, boolean>>({})
-  const [positionCheck, setPositionCheck] = useState<{ total_open: number; reconciled: boolean } | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('staax_status_filter') ?? null } catch { return null }
+  })
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -523,78 +587,58 @@ export default function OrdersPage() {
       .catch(() => {})
   }, [])
 
-  // Fetch open positions + holidays once on mount
+  // Fetch holidays once on mount
   useEffect(() => {
-    openPositionsAPI.list(isPractixMode)
-      .then(res => setOpenPositions(res.data?.open_positions || []))
-      .catch(() => {})
     holidaysAPI.list().then(res => {
       const dates = new Set<string>((res.data || []).map((h: any) => h.date as string))
       setHolidayDates(dates)
     }).catch(() => {})
   }, [isPractixMode])
 
-  // Fetch position reconciliation check on mount
+  // Fetch week P&L summary — single call for all 5 days
   useEffect(() => {
-    ordersAPI.positionCheck(isPractixMode)
-      .then(res => setPositionCheck(res.data))
+    const monDate = weekDates['MON']
+    if (!monDate) return
+    ordersAPI.weekSummary(monDate, isPractixMode)
+      .then((res: any) => {
+        const mtmByDate: Record<string, any> = res.data?.mtm_by_date || {}
+        const map: Record<string, number | null> = {}
+        for (const [dateStr, val] of Object.entries(mtmByDate)) {
+          const day = Object.entries(weekDates).find(([, d]) => d === dateStr)?.[0]
+          if (!day) continue
+          if (val === null || val === undefined) {
+            map[day] = null
+          } else if (typeof val === 'number') {
+            map[day] = val  // backward compat
+          } else if (typeof val === 'object') {
+            // New format: {closed_pnl, open_mtm, total}
+            const total = (val as any).total
+            map[day] = total ?? null
+          }
+        }
+        setWeekPnl(map)
+      })
       .catch(() => {})
-  }, [isPractixMode])
-
-  // Pre-fetch all week P&L on mount
-  useEffect(() => {
-    const days = ['MON','TUE','WED','THU','FRI']
-    Promise.all(days.map(day =>
-      ordersAPI.list(weekDates[day], isPractixMode)
-        .then((res: any) => {
-          const groups: any[] = res.data?.groups || []
-          const hasOrders = groups.some((g: any) => (g.orders || []).length > 0)
-          const pnl = groups.reduce((s: number, g: any) => s + (g.mtm ?? 0), 0)
-          return { day, pnl: hasOrders ? pnl : null }
-        })
-        .catch(() => ({ day, pnl: null as null }))
-    )).then(results => {
-      const map: Record<string, number | null> = {}
-      results.forEach(r => { map[r.day] = r.pnl })
-      setWeekPnl(map)
-    })
   }, [isPractixMode, weekOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load orders + waiting algos for selectedDate
+  // Load orders + waiting algos for selectedDate — skip if already cached
   useEffect(() => {
-    setOrders([])
-    setOrdersLoaded(false)
-    setWaitingAlgos([])
-    ordersAPI.list(selectedDate, isPractixMode)
+    const date = selectedDate
+    if (ordersByDate[date] !== undefined) return  // already cached — no re-fetch, no bleed
+    ordersAPI.list(date, isPractixMode)
       .then(res => {
         const data = res.data
         const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
-        setOrders(raw.map(mapGroup))
-        setOrdersLoaded(true)
-        // Seed weekPnl for this day from loaded data (updated again once ltpData arrives)
-        const dayKey = Object.entries(weekDates).find(([, d]) => d === selectedDate)?.[0]
-        if (dayKey) {
-          const hasOrders = raw.some((g: any) => (g.orders || []).length > 0)
-          const pnl = raw.reduce((s: number, g: any) => s + (g.mtm ?? 0), 0)
-          setWeekPnl(prev => ({ ...prev, [dayKey]: hasOrders ? pnl : null }))
-        }
+        setOrdersByDate(prev => ({ ...prev, [date]: raw.map(mapGroup) }))
       })
-      .catch(() => {})
+      .catch(() => {
+        setOrdersByDate(prev => ({ ...prev, [date]: [] }))  // mark as loaded (empty)
+      })
 
-    ordersAPI.waiting(selectedDate, isPractixMode)
-      .then(res => setWaitingAlgos(res.data?.waiting || []))
-      .catch(() => {})
+    ordersAPI.waiting(date, isPractixMode)
+      .then(res => setWaitingByDate(prev => ({ ...prev, [date]: res.data?.waiting || [] })))
+      .catch(() => { setWaitingByDate(prev => ({ ...prev, [date]: [] })) })
   }, [selectedDate, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Broker orderbook fetch when panel is toggled on
-  useEffect(() => {
-    if (!brokerViewOn) return
-    setBrokerLoading(true)
-    ordersAPI.brokerOrderbook()
-      .then(res => setBrokerOrders(res.data?.orders || []))
-      .catch(() => setBrokerOrders([]))
-      .finally(() => setBrokerLoading(false))
-  }, [brokerViewOn]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live LTP via WebSocket
   useEffect(() => {
@@ -622,7 +666,8 @@ export default function OrdersPage() {
 
   // Live LTP polling every 3 seconds when open orders exist
   useEffect(() => {
-    const hasOpenOrders = orders.some(g => g.legs.some(l => l.status === 'open'))
+    const curOrders = ordersByDate[selectedDate] ?? []
+    const hasOpenOrders = curOrders.some(g => g.legs.some(l => l.status === 'open'))
     if (!hasOpenOrders) return
     const poll = () => {
       ordersAPI.ltp()
@@ -632,7 +677,7 @@ export default function OrdersPage() {
     poll()
     const interval = setInterval(poll, 1000)
     return () => clearInterval(interval)
-  }, [orders])
+  }, [ordersByDate, selectedDate])
 
   // Seed LTP data immediately on mount — prevents ₹0 flash before first poll fires
   useEffect(() => {
@@ -646,8 +691,8 @@ export default function OrdersPage() {
     try { localStorage.setItem(LS_DAY_KEY, selectedDate) } catch {}
   }, [selectedDate])
 
-  const safeOrders = Array.isArray(orders) ? orders : []
-  const totalMTM   = safeOrders.filter(g => !g.terminated).reduce((s, g) => s + g.mtm, 0)
+  const safeOrders  = ordersByDate[selectedDate] ?? []
+  const safeWaiting = waitingByDate[selectedDate] ?? []
 
   // Live MTM strip — computed from polling data
   const ltpDataEntries = Object.values(ltpData)
@@ -655,23 +700,6 @@ export default function OrdersPage() {
   const liveTotalMtm   = hasLiveData
     ? ltpDataEntries.reduce((sum, e) => sum + (e?.pnl ?? 0), 0)
     : 0
-
-  // Keep selected day's weekPnl current as live ltpData arrives
-  useEffect(() => {
-    if (!ordersLoaded) return
-    const dayKey = Object.entries(weekDates).find(([, d]) => d === selectedDate)?.[0]
-    if (!dayKey) return
-    const closedPnl = safeOrders.reduce((s, g) => {
-      const closed = g.legs.filter(l => l.status === 'closed' && l.pnl != null)
-      return s + closed.reduce((cs, l) => cs + (l.pnl ?? 0), 0)
-    }, 0)
-    const openPnl = hasLiveData ? liveTotalMtm : safeOrders.reduce((s, g) => {
-      const open = g.legs.filter(l => l.status === 'open')
-      return s + (open.length > 0 ? g.mtm : 0)
-    }, 0)
-    const hasOrders = safeOrders.some(g => g.legs.length > 0)
-    setWeekPnl(prev => ({ ...prev, [dayKey]: hasOrders ? closedPnl + openPnl : null }))
-  }, [ltpData, ordersLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
@@ -682,31 +710,33 @@ export default function OrdersPage() {
     return r
   }
 
-  const openLegs = (idx: number) => (orders[idx]?.legs || []).filter(l => l.status === 'open')
+  const openLegs = (idx: number) => (safeOrders[idx]?.legs || []).filter(l => l.status === 'open')
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const doRetry = async (idx: number) => {
-    const gridEntryId = orders[idx]?.gridEntryId
+    const gridEntryId = safeOrders[idx]?.gridEntryId
     if (!gridEntryId) return
+    const dateAtCall = selectedDateRef.current
     setLoading(l => ({ ...l, [`retry-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '↻ Running...', 'var(--accent-amber)', 30000)
+    setInlineStatus(setOrdersByDate, dateAtCall, idx, '↻ Running...', 'var(--accent-amber)', 30000)
     try {
       await ordersAPI.retryEntry(gridEntryId)
       // Wait for backend to process before refreshing
       await new Promise(r => setTimeout(r, 800))
-      setInlineStatus(setOrders, idx, '✅ Done', 'var(--green)', 3000)
-      ordersAPI.list(selectedDate, isPractixMode)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, '✅ Done', 'var(--green)', 3000)
+      ordersAPI.list(dateAtCall, isPractixMode)
         .then(r => {
+          if (selectedDateRef.current !== dateAtCall) return
           const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
-          setOrders(raw.map(mapGroup))
+          setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
         })
         .catch(() => {})
-      ordersAPI.waiting(selectedDate, isPractixMode)
-        .then(res => setWaitingAlgos(res.data?.waiting || []))
+      ordersAPI.waiting(dateAtCall, isPractixMode)
+        .then(res => { if (selectedDateRef.current === dateAtCall) setWaitingByDate(prev => ({ ...prev, [dateAtCall]: res.data?.waiting || [] })) })
         .catch(() => {})
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
-      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
     }
@@ -714,22 +744,23 @@ export default function OrdersPage() {
 
   // Retry specific errored legs (partial failure — some legs succeeded)
   const doRetryLegs = async (idx: number) => {
-    const gridEntryId = orders[idx]?.gridEntryId
+    const gridEntryId = safeOrders[idx]?.gridEntryId
     if (!gridEntryId) return
     const selectedLegIds = Object.keys(retryChecked).filter(k => retryChecked[k])
     if (selectedLegIds.length === 0) return
+    const dateAtCall = selectedDateRef.current
     setLoading(l => ({ ...l, [`retry-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '↻ Retrying legs...', 'var(--accent-amber)', 30000)
+    setInlineStatus(setOrdersByDate, dateAtCall, idx, '↻ Retrying legs...', 'var(--accent-amber)', 30000)
     try {
       await ordersAPI.retryLegs(gridEntryId, selectedLegIds)
       await new Promise(r => setTimeout(r, 800))
-      setInlineStatus(setOrders, idx, '✅ Done', 'var(--green)', 3000)
-      ordersAPI.list(selectedDate, isPractixMode)
-        .then(r => { const raw: any[] = r.data?.groups || []; setOrders(raw.map(mapGroup)) })
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, '✅ Done', 'var(--green)', 3000)
+      ordersAPI.list(dateAtCall, isPractixMode)
+        .then(r => { if (selectedDateRef.current !== dateAtCall) return; const raw: any[] = r.data?.groups || []; setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) })) })
         .catch(() => {})
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Retry legs failed'
-      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
       setRetryModal(null)
@@ -737,11 +768,12 @@ export default function OrdersPage() {
   }
 
   const doSQ = async (idx: number) => {
-    const algoId   = orders[idx].algoId
+    const algoId   = safeOrders[idx].algoId
     const selected = Object.keys(sqChecked).filter(k => sqChecked[k])
     if (selected.length === 0) { setModal(null); return }
+    const dateAtCall = selectedDateRef.current
     setLoading(l => ({ ...l, [`sq-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '↻ Running...', 'var(--accent-amber)', 30000)
+    setInlineStatus(setOrdersByDate, dateAtCall, idx, '↻ Running...', 'var(--accent-amber)', 30000)
     setSqResults(null)
     setSqError(null)
     try {
@@ -750,36 +782,38 @@ export default function OrdersPage() {
       setSqResults({ squared_off: data.squared_off || [], failed: data.failed || [] })
 
       // Refetch orders from server so UI reflects real DB state
-      ordersAPI.list(selectedDate, isPractixMode)
+      ordersAPI.list(dateAtCall, isPractixMode)
         .then(r => {
+          if (selectedDateRef.current !== dateAtCall) return
           const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
-          setOrders(raw.map(mapGroup))
+          setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
         })
         .catch(() => {})
 
       const nOk   = (data.squared_off || []).length
       const nFail = (data.failed || []).length
       if (nFail === 0) {
-        setInlineStatus(setOrders, idx, `✅ ${nOk} leg${nOk !== 1 ? 's' : ''} squared off`, 'var(--green)')
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, `✅ ${nOk} leg${nOk !== 1 ? 's' : ''} squared off`, 'var(--green)')
         setSqChecked({})
         setModal(null)
       } else {
         // Keep modal open to show per-leg results
-        setInlineStatus(setOrders, idx, `⚠️ ${nOk} squared off, ${nFail} failed`, 'var(--amber)')
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${nOk} squared off, ${nFail} failed`, 'var(--amber)')
       }
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'SQ failed'
       setSqError(msg)
-      setInlineStatus(setOrders, idx, '⚠️ SQ failed', 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, '⚠️ SQ failed', 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`sq-${idx}`]: false }))
     }
   }
 
   const doTerminate = async (idx: number) => {
-    const algoId = orders[idx].algoId
+    const algoId = safeOrders[idx].algoId
+    const dateAtCall = selectedDateRef.current
     setLoading(l => ({ ...l, [`t-${idx}`]: true }))
-    setInlineStatus(setOrders, idx, '↻ Running...', 'var(--accent-amber)', 30000)
+    setInlineStatus(setOrdersByDate, dateAtCall, idx, '↻ Running...', 'var(--accent-amber)', 30000)
     try {
       const res = await algosAPI.terminate(algoId)
       const data = res.data as {
@@ -789,24 +823,25 @@ export default function OrdersPage() {
       }
 
       // Trigger a full orders refetch — do NOT do optimistic update
-      ordersAPI.list(selectedDate, isPractixMode)
+      ordersAPI.list(dateAtCall, isPractixMode)
         .then(r => {
+          if (selectedDateRef.current !== dateAtCall) return
           const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
-          setOrders(raw.map(mapGroup))
+          setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
         })
         .catch(() => {})
 
       const nFailed = (data.failed || []).length
       if (nFailed > 0) {
-        setInlineStatus(setOrders, idx, `⛔ Terminated — ${nFailed} order${nFailed !== 1 ? 's' : ''} may still be open at broker`, 'var(--amber)', 8000)
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, `⛔ Terminated — ${nFailed} order${nFailed !== 1 ? 's' : ''} may still be open at broker`, 'var(--amber)', 8000)
       } else {
-        setInlineStatus(setOrders, idx, '⛔ Algo terminated', 'var(--red)', 5000)
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, '⛔ Algo terminated', 'var(--red)', 5000)
       }
       setModal(null)
     } catch (err: any) {
       // Backend error — do NOT mark algo as terminated locally
       const msg = err?.response?.data?.detail || err?.message || 'Terminate failed'
-      setInlineStatus(setOrders, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`t-${idx}`]: false }))
     }
@@ -822,7 +857,7 @@ export default function OrdersPage() {
   const getModalContent = () => {
     if (!modal) return null
     const { type, algoIdx } = modal
-    const name = orders[algoIdx].algoName
+    const name = safeOrders[algoIdx]?.algoName ?? ''
     if (type === 't')   return { title: `Terminate ${name}?`, desc: `Square off ALL open positions, cancel pending + SL orders at broker, and terminate ${name}. Cannot be undone.`, confirmLabel: 'Terminate', confirmColor: 'var(--red)', children: undefined }
     if (type === 'sq')  return {
       title: `Square Off — ${name}`, desc: sqResults ? 'SQ result:' : 'Select open legs to square off:',
@@ -873,7 +908,7 @@ export default function OrdersPage() {
   }
 
   const doSync = async (algoIdx: number) => {
-    const algoId = orders[algoIdx].algoId
+    const algoId = safeOrders[algoIdx].algoId
     if (!syncForm.broker_order_id.trim()) { alert('Broker Order ID is required'); return }
     if (!syncForm.account_id) { alert('Please select an account'); return }
     const ids = syncForm.broker_order_id.split(',').map(s => s.trim()).filter(Boolean)
@@ -887,7 +922,7 @@ export default function OrdersPage() {
     setShowSync(null)
     setSyncForm({ broker_order_id: '', account_id: '' })
     const msg = failed === 0 ? `✅ ${succeeded} order${succeeded > 1 ? 's' : ''} synced` : `⚠️ ${succeeded} synced, ${failed} failed`
-    setInlineStatus(setOrders, algoIdx, msg, failed === 0 ? 'var(--green)' : 'var(--amber)', 5000)
+    setInlineStatus(setOrdersByDate, selectedDateRef.current, algoIdx, msg, failed === 0 ? 'var(--green)' : 'var(--amber)', 5000)
   }
 
   const doCorrectExit = async () => {
@@ -895,7 +930,15 @@ export default function OrdersPage() {
     const price = parseFloat(editExit.value)
     if (isNaN(price) || price <= 0) return
     setExitSaving(true)
-    try { await ordersAPI.correctExitPrice(editExit.orderId, price); setEditExit(null) }
+    try {
+      await ordersAPI.correctExitPrice(editExit.orderId, price)
+      setEditExit(null)
+      // Refresh orders so corrected price + recalculated P&L are shown
+      const _date = selectedDateRef.current
+      const res = await ordersAPI.list(_date, isPractixMode)
+      const raw: any[] = Array.isArray(res.data) ? [] : (res.data?.groups || [])
+      setOrdersByDate(prev => ({ ...prev, [_date]: raw.map(mapGroup) }))
+    }
     catch { alert('Failed to save exit price') }
     finally { setExitSaving(false) }
   }
@@ -904,11 +947,19 @@ export default function OrdersPage() {
   const activeAccountNickname = activeAccount
     ? (storeAccounts as any[]).find((a: any) => String(a.id) === activeAccount)?.nickname ?? null
     : null
-  const filteredOrders  = activeAccountNickname ? orders.filter(g => g.account === activeAccountNickname) : orders
-  const filteredWaiting = activeAccountNickname ? waitingAlgos.filter(w => w.account_name === activeAccountNickname) : waitingAlgos
+  const filteredOrders  = activeAccountNickname ? safeOrders.filter(g => g.account === activeAccountNickname) : safeOrders
+  const filteredWaiting = activeAccountNickname ? safeWaiting.filter(w => w.account_name === activeAccountNickname) : safeWaiting
 
   // Past-day detection — ISO date string compare is safe (both are YYYY-MM-DD)
   const isPastDay = selectedDate < todayDate
+
+  // Live net P&L for the active day tab — mirrors NET P&L card computation exactly
+  const _tabRealized = (accountFilter === 'all'
+    ? (ordersByDate[selectedDate] ?? [])
+    : (ordersByDate[selectedDate] ?? []).filter(g => g.account === accountFilter)
+  ).flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
+   .reduce((s, l) => s + (l.pnl ?? 0), 0)
+  const liveNetPnlForTab = _tabRealized + (isPastDay ? 0 : liveTotalMtm)
 
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
@@ -918,8 +969,19 @@ export default function OrdersPage() {
   // Past days: never show the waiting/error section (nothing actionable about yesterday's errors)
   const localFilteredWaiting = isPastDay ? [] : (accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter))
 
+  // Apply status filter from stat cards
+  const displayOrders = statusFilter === 'open'    ? localFilteredOrders.filter(g => ['open','pending'].includes(getAlgoStatus(g)))
+                      : statusFilter === 'closed'   ? localFilteredOrders.filter(g => getAlgoStatus(g) === 'closed')
+                      : statusFilter === 'missed' || statusFilter === 'error' || statusFilter === 'waiting' ? []
+                      : localFilteredOrders
+  const displayWaiting = statusFilter === 'missed'  ? localFilteredWaiting.filter(w => w.is_missed)
+                       : statusFilter === 'error'   ? localFilteredWaiting.filter(w => !w.is_missed && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message)))
+                       : statusFilter === 'waiting' ? localFilteredWaiting.filter(w => !w.is_missed && w.algo_state_status !== 'error' && !(w.algo_state_status === 'no_trade' && !!w.error_message))
+                       : statusFilter === 'open' || statusFilter === 'closed' ? []
+                       : localFilteredWaiting
+
   const groupedByInstrument: Record<string, AlgoGroup[]> = {}
-  for (const group of localFilteredOrders) {
+  for (const group of displayOrders) {
     const inst = getInstrumentFromGroup(group)
     if (!groupedByInstrument[inst]) groupedByInstrument[inst] = []
     groupedByInstrument[inst].push(group)
@@ -947,62 +1009,35 @@ export default function OrdersPage() {
         <div className="page-header">
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Orders</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '3px', justifyContent: 'space-between', flexWrap: 'wrap' as const }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--gs-muted)' }}>Trade history · P&amp;L by week</span>
-                <span className={'chip ' + (isPractixMode ? 'chip-warn' : 'chip-success')} style={{ fontSize: '10px', padding: '1px 8px' }}>
-                  {isPractixMode ? 'PRACTIX' : 'LIVE'}
-                </span>
-                {positionCheck !== null && (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                    fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                    fontFamily: 'var(--font-mono)', fontWeight: 600, lineHeight: 1.4,
-                    color:      positionCheck.reconciled ? '#22DD88' : '#F59E0B',
-                    background: positionCheck.reconciled ? 'rgba(34,221,136,0.12)' : 'rgba(245,158,11,0.12)',
-                    border:     `1px solid ${positionCheck.reconciled ? 'rgba(34,221,136,0.25)' : 'rgba(245,158,11,0.25)'}`,
-                  }}>
-                    {positionCheck.reconciled ? '✓ Synced' : `⚠ ${positionCheck.total_open} open`}
-                  </span>
-                )}
-              </div>
-              {/* Week navigation */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                <button
-                  onClick={() => setWeekOffset(o => o - 1)}
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
-                  title="Previous week"
-                >‹</button>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', minWidth: '110px', textAlign: 'center' as const }}>
-                  Week of {weekLabel}
-                </span>
-                <button
-                  onClick={() => setWeekOffset(o => Math.min(0, o + 1))}
-                  disabled={weekOffset === 0}
-                  style={{ background: 'none', border: 'none', color: weekOffset === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.4)', cursor: weekOffset === 0 ? 'default' : 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
-                  title="Next week"
-                >›</button>
-              </div>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                MTM: <b style={{ color: (!ordersLoaded && !hasLiveData) ? 'var(--text-muted)' : (hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '#22DD88' : '#FF4444' }}>
-                  {(!ordersLoaded && !hasLiveData) ? '—' : `${(hasLiveData ? liveTotalMtm : totalMTM) >= 0 ? '+' : ''}₹${(hasLiveData ? liveTotalMtm : totalMTM).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}
-                </b>
-                {hasLiveData && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22DD88', display: 'inline-block', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />}
-              </span>
-            </div>
+            <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
           </div>
           <div className="page-header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              onClick={() => setBrokerViewOn(v => !v)}
-              style={{
-                padding: '5px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'var(--font-display)',
-                background: brokerViewOn ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.04)',
-                border: brokerViewOn ? '0.5px solid rgba(255,107,0,0.5)' : '0.5px solid rgba(255,255,255,0.12)',
-                color: brokerViewOn ? 'var(--ox-glow)' : 'rgba(255,255,255,0.4)',
-                transition: 'all 0.15s',
-              }}
-            >Broker View</button>
+            {/* Week navigation */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                onClick={() => setWeekOffset(o => o - 1)}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
+                title="Previous week"
+              >‹</button>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', minWidth: '110px', textAlign: 'center' as const }}>
+                Week of {weekLabel}
+              </span>
+              <button
+                onClick={() => setWeekOffset(o => Math.min(0, o + 1))}
+                disabled={weekOffset === 0}
+                style={{ background: 'none', border: 'none', color: weekOffset === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.4)', cursor: weekOffset === 0 ? 'default' : 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
+                title="Next week"
+              >›</button>
+            </div>
+            {statusFilter !== null && (
+              <button
+                className="btn btn-ghost"
+                style={{ height: '32px', fontSize: '11px', padding: '0 10px' }}
+                onClick={() => { setStatusFilter(null); try { sessionStorage.removeItem('staax_status_filter') } catch {} }}
+              >
+                ✕ Reset Filter
+              </button>
+            )}
             <StaaxSelect
               value={accountFilter}
               onChange={setAccountFilter}
@@ -1015,38 +1050,133 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Open Positions Panel */}
-        {openPositions.length > 0 && (
-          <div style={{ padding: '0 0 16px' }}>
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', paddingLeft: '2px' }}>
-              Open Positions · {openPositions.length}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {openPositions.map(pos => {
-                const strat    = STRATEGY_LABEL[pos.strategy_mode] || { label: pos.strategy_mode, color: '#6B7280' }
-                const pnlColor = pos.pnl >= 0 ? 'var(--green)' : 'var(--red)'
-                return (
-                  <div key={pos.algo_id} style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    background: 'var(--glass-bg)', border: 'var(--glass-border)',
-                    borderRadius: '8px', padding: '6px 12px', cursor: 'default',
-                    backdropFilter: 'blur(12px)', minWidth: 0,
-                  }}>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.entry_date}</span>
-                    <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '100px', background: `${strat.color}18`, color: strat.color, border: `1px solid ${strat.color}40`, whiteSpace: 'nowrap' }}>{strat.label}</span>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{pos.algo_name}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'var(--bg-surface)', padding: '1px 6px', borderRadius: '100px', border: '1px solid var(--bg-border)', whiteSpace: 'nowrap' }}>{pos.account}</span>
-                    {pos.open_count > 0 && <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pos.open_count} open</span>}
-                    {pos.pnl !== 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: pnlColor, whiteSpace: 'nowrap' }}>{pos.pnl >= 0 ? '+' : ''}₹{Math.abs(pos.pnl).toLocaleString('en-IN')}</span>}
+        {/* ── 11 Stat Cards — above day tabs ── */}
+        {(() => {
+          // ── Row 1 computed values ──
+          // Use live value for today instead of stale backend weekPnl
+          const weekTotalRaw   = Object.entries(weekPnl).filter(([, v]) => v != null).reduce((s, [day, v]) => {
+            const isToday = weekDates[day] === todayDate
+            return s + (isToday ? liveNetPnlForTab : (v ?? 0))
+          }, 0)
+          const weekTotal      = weekTotalRaw
+          const hasWeekData    = Object.values(weekPnl).some(v => v != null) || liveNetPnlForTab !== 0
+          const todayRealized  = localFilteredOrders.flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null)).reduce((s, l) => s + (l.pnl ?? 0), 0)
+          const hasTodayTrades = localFilteredOrders.some(g => g.legs.some(l => l.status === 'closed'))
+          // Past days have no live unrealized — zero it out so THU/WED etc. show realized only
+          const effectiveLiveMtm   = isPastDay ? 0 : liveTotalMtm
+          const effectiveHasLive   = isPastDay ? false : hasLiveData
+          const netPnl         = todayRealized + effectiveLiveMtm
+          const hasNet         = hasTodayTrades || effectiveHasLive
+
+          // ── Row 2 counts ──
+          const openAlgosCount   = localFilteredOrders.filter(g => ['open','pending'].includes(getAlgoStatus(g))).length
+          const closedAlgosCount = localFilteredOrders.filter(g => getAlgoStatus(g) === 'closed').length
+          const openLegsCount    = localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'open').length, 0)
+          const closedLegsCount  = localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'closed').length, 0)
+          const missedCount      = safeWaiting.filter(w => w.is_missed).length
+          const isWaitingError   = (w: WaitingAlgo) => !w.is_missed && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message))
+          const errorCount       = safeWaiting.filter(isWaitingError).length
+          const waitingCount     = safeWaiting.filter(w => !w.is_missed && !isWaitingError(w)).length
+
+          const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+          const pnlColor = (v: number) => v >= 0 ? 'var(--green)' : 'var(--red)'
+
+          // Day label for Realized / Unrealized / Net P&L cards
+          const dayLabel = selectedDate
+            ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase()
+            : ''
+          const daySpan = dayLabel
+            ? <span style={{ fontSize: 8, fontWeight: 500, color: 'rgba(255,107,0,0.55)', letterSpacing: '0.04em', marginLeft: 3 }}>({dayLabel})</span>
+            : null
+
+          const valStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)' }
+
+          const toggleFilter = (f: string) => {
+            const next = statusFilter === f ? null : f
+            setStatusFilter(next)
+            try { if (next) sessionStorage.setItem('staax_status_filter', next); else sessionStorage.removeItem('staax_status_filter') } catch {}
+          }
+
+          // active filter card gets a neon border override; inactive is plain card cloud-fill
+          const filterActiveStyle: React.CSSProperties = { borderColor: 'rgba(255,107,0,0.55)', background: 'rgba(255,107,0,0.10)' }
+
+          return (
+            <div style={{ padding: '8px 0 6px' }}>
+              {/* Row 1 — P&L */}
+              <div style={{ display: 'flex', gap: 6, padding: '0 0 6px' }}>
+                {/* Week P&L */}
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Week P&L</div>
+                  <div style={{ ...valStyle, color: hasWeekData ? pnlColor(weekTotal) : 'var(--text-dim)' }}>
+                    {hasWeekData ? fmtPnl(weekTotal) : '—'}
                   </div>
-                )
-              })}
+                </div>
+                {/* Realized */}
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
+                  <div className="card-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center' }}>
+                    Realized{daySpan}
+                  </div>
+                  <div style={{ ...valStyle, color: hasTodayTrades ? pnlColor(todayRealized) : 'var(--text-dim)' }}>
+                    {hasTodayTrades ? fmtPnl(todayRealized) : '—'}
+                  </div>
+                </div>
+                {/* Unrealized */}
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
+                  <div className="card-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center' }}>
+                    Unrealized{daySpan}
+                  </div>
+                  <div style={{ ...valStyle, color: effectiveHasLive ? pnlColor(effectiveLiveMtm) : (isPastDay && hasTodayTrades) ? pnlColor(0) : 'var(--text-dim)' }}>
+                    {effectiveHasLive ? fmtPnl(effectiveLiveMtm) : (isPastDay && hasTodayTrades) ? fmtPnl(0) : '—'}
+                  </div>
+                </div>
+                {/* Net P&L */}
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
+                  <div className="card-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center' }}>
+                    Net P&L{daySpan}
+                  </div>
+                  <div style={{ ...valStyle, color: hasNet ? pnlColor(netPnl) : 'var(--text-dim)' }}>
+                    {hasNet ? fmtPnl(netPnl) : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2 — Filter chips */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'open' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('open')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Open Algos</div>
+                  <div style={{ ...valStyle, color: openAlgosCount > 0 ? '#22DD88' : 'var(--text-dim)' }}>{openAlgosCount}</div>
+                </div>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'closed' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('closed')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Closed Algos</div>
+                  <div style={{ ...valStyle, color: closedAlgosCount > 0 ? 'rgba(34,221,136,0.6)' : 'var(--text-dim)' }}>{closedAlgosCount}</div>
+                </div>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'open' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('open')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Open Pos</div>
+                  <div style={{ ...valStyle, color: openLegsCount > 0 ? '#22DD88' : 'var(--text-dim)' }}>{openLegsCount}</div>
+                </div>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'closed' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('closed')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Closed Pos</div>
+                  <div style={{ ...valStyle, color: closedLegsCount > 0 ? 'rgba(34,221,136,0.6)' : 'var(--text-dim)' }}>{closedLegsCount}</div>
+                </div>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'missed' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('missed')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Missed</div>
+                  <div style={{ ...valStyle, color: missedCount > 0 ? '#F59E0B' : 'var(--text-dim)' }}>{missedCount}</div>
+                </div>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'error' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('error')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Error</div>
+                  <div style={{ ...valStyle, color: errorCount > 0 ? '#FF4444' : 'var(--text-dim)' }}>{errorCount}</div>
+                </div>
+                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'waiting' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('waiting')}>
+                  <div className="card-label" style={{ marginBottom: 4 }}>Waiting</div>
+                  <div style={{ ...valStyle, color: waitingCount > 0 ? '#FFD700' : 'var(--text-dim)' }}>{waitingCount}</div>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Date navigation + MTM summary bar */}
-        <div style={{ borderBottom: '0.5px solid var(--ox-border)' }}>
+        <div style={{ borderBottom: '0.5px solid var(--ox-border)', borderTop: '0.5px solid var(--ox-border)', marginTop: 12 }}>
           {/* Day tabs — full width */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0' }}>
             <div style={{ display: 'flex', flex: 1 }}>
@@ -1054,7 +1184,7 @@ export default function OrdersPage() {
                 const date      = weekDates[day]
                 const isActive  = selectedDate === date
                 const isHoliday = date ? holidayDates.has(date) : false
-                const pnl       = weekPnl[day]
+                const pnl       = isActive ? liveNetPnlForTab : (weekPnl[day] ?? null)
                 const rupee     = '\u20B9'
                 return (
                   <button
@@ -1092,6 +1222,7 @@ export default function OrdersPage() {
               style={{
                 padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
                 fontSize: 11, fontFamily: 'var(--font-display)',
+                marginLeft: 12, flexShrink: 0,
                 background: showWeekends ? 'rgba(255,107,0,0.15)' : 'transparent',
                 border: showWeekends ? '0.5px solid rgba(255,107,0,0.5)' : '0.5px solid rgba(255,255,255,0.15)',
                 color: showWeekends ? '#FF6B00' : 'rgba(255,255,255,0.4)',
@@ -1102,81 +1233,11 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Stats banner */}
-        <div style={{
-          display: 'flex', gap: 32, padding: '10px 24px',
-          background: 'rgba(255,107,0,0.04)',
-          borderBottom: '0.5px solid rgba(255,107,0,0.10)',
-          borderTop: '0.5px solid rgba(255,107,0,0.10)',
-          fontFamily: 'var(--font-mono)', fontSize: 12, flexWrap: 'wrap' as const,
-        }}>
-          <span style={{ color: 'var(--text-muted)' }}>ALGOS <b style={{ color: 'var(--text)' }}>{localFilteredOrders.filter(g => g.legs.length > 0).length}/{localFilteredOrders.length}</b></span>
-          <span style={{ color: 'var(--text-muted)' }}>TRADES <b style={{ color: 'var(--text)' }}>{localFilteredOrders.reduce((s, g) => s + g.legs.length, 0)}</b></span>
-          <span style={{ color: 'var(--text-muted)' }}>OPEN <b style={{ color: '#22DD88' }}>{localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'open').length, 0)}</b></span>
-          <span style={{ color: 'var(--text-muted)' }}>CLOSED <b style={{ color: 'rgba(255,255,255,0.5)' }}>{localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'closed').length, 0)}</b></span>
-        </div>
-
       </div>{/* end fixed zone */}
 
       {/* ── Scroll zone ── */}
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ height: '6px' }} />
-
-        {/* Broker Orderbook Panel */}
-        {brokerViewOn && (
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--ox-glow)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Broker Orderbook · {brokerOrders.length} orders
-              </div>
-              <button
-                onClick={() => {
-                  setBrokerLoading(true)
-                  ordersAPI.brokerOrderbook()
-                    .then(res => setBrokerOrders(res.data?.orders || []))
-                    .catch(() => setBrokerOrders([]))
-                    .finally(() => setBrokerLoading(false))
-                }}
-                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '11px', padding: '0' }}
-              >↻ Refresh</button>
-            </div>
-            <div className="card cloud-fill" style={{ padding: '0', overflow: 'hidden', border: '0.5px solid rgba(255,107,0,0.18)' }}>
-              {brokerLoading ? (
-                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>Loading…</div>
-              ) : brokerOrders.length === 0 ? (
-                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>No orders returned from broker.</div>
-              ) : (
-                <table className="staax-table" style={{ width: '100%' }}>
-                  <thead>
-                    <tr>
-                      {(['Account', 'Time', 'Symbol', 'Type', 'Qty', 'Price', 'Product', 'Status'] as const).map(h => (
-                        <th key={h} style={{ textAlign: h === 'Symbol' ? 'left' : 'center', padding: '8px 10px', fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {brokerOrders.map((o, i) => {
-                      const sColor = o.status === 'COMPLETE' ? 'var(--green)' : o.status === 'REJECTED' || o.status === 'CANCELLED' ? 'var(--red)' : o.status === 'OPEN' ? 'var(--accent-amber)' : 'rgba(232,232,248,0.5)'
-                      const tColor = o.type === 'BUY' ? '#22DD88' : '#FF4444'
-                      return (
-                        <tr key={i}>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', color: 'var(--ox-glow)', fontWeight: 600, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.account}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', color: 'rgba(232,232,248,0.4)', fontFamily: 'var(--font-mono)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.time}</td>
-                          <td style={{ textAlign: 'left',   padding: '6px 10px', fontSize: '11px', fontWeight: 600, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.symbol}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', fontWeight: 700, color: tColor, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.type}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', fontFamily: 'var(--font-mono)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.qty}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '11px', fontFamily: 'var(--font-mono)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.price}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '10px', color: 'rgba(232,232,248,0.5)', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.product}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 10px', fontSize: '10px', fontWeight: 700, color: sColor, borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>{o.status}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Live MTM wired to header — strip removed */}
 
@@ -1190,9 +1251,9 @@ export default function OrdersPage() {
         )}
 
         {/* Waiting algos — full algo cards */}
-        {localFilteredWaiting.length > 0 && !isHolidayToday && (
+        {displayWaiting.length > 0 && !isHolidayToday && (
           <div style={{ marginBottom: '16px' }}>
-            {localFilteredWaiting.map(w => {
+            {displayWaiting.map(w => {
               // isError: algo_state ERROR, or NO_TRADE caused by engine failure (has error_message)
               const isError   = w.algo_state_status === 'error' ||
                                 (w.algo_state_status === 'no_trade' && !!w.error_message)
@@ -1214,36 +1275,72 @@ export default function OrdersPage() {
               // Card accent colours — red for ERROR, amber for WAITING/MISSED
               const legStatusChip = isMissed
                 ? { label: 'MISSED',  color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' }
+                : w.display_status === 'MONITORING'
+                ? { label: 'W&T',     color: '#2dd4bf',               bg: 'rgba(45,212,191,0.10)'  }
+                : w.display_status === 'SCHEDULED'
+                ? { label: 'SCHED',   color: '#4488FF',               bg: 'rgba(68,136,255,0.10)'  }
                 : { label: isError ? 'ERROR' : 'WAITING', color: isError ? '#FF4444' : '#FFD700', bg: isError ? 'rgba(255,68,68,0.10)' : 'rgba(255,215,0,0.10)' }
               const accentHex  = isError ? '#FF4444'               : '#FFE600'
               void accentHex
               const accentRgba = isError ? 'rgba(255,68,68,0.20)'  : 'rgba(255,215,0,0.20)'
               const accentHover= isError ? 'rgba(255,68,68,0.45)'  : 'rgba(255,215,0,0.45)'
-              const stripBg    = isError ? '#FF4444'               : (isMissed ? 'rgba(255,215,0,0.35)' : '#FFE600')
-              const stripGlow  = isError ? 'rgba(255,68,68,0.5)'   : 'rgba(255,215,0,0.5)'
+              const displayStatus = w.display_status  // 'MONITORING' | 'SCHEDULED' | 'WAITING' | 'MISSED' | 'ERROR'
+              const stripBg =
+                displayStatus === 'MONITORING' ? '#2dd4bf' :
+                displayStatus === 'SCHEDULED'  ? '#4488FF' :
+                displayStatus === 'ERROR'      ? '#FF4444' :
+                displayStatus === 'MISSED'     ? '#F59E0B' :
+                isError ? '#FF4444' :
+                isMissed ? 'rgba(255,215,0,0.35)' :
+                '#FFE600'  // WAITING default
+              const stripGlow =
+                displayStatus === 'MONITORING' ? 'rgba(45,212,191,0.5)' :
+                displayStatus === 'SCHEDULED'  ? 'rgba(68,136,255,0.5)' :
+                displayStatus === 'ERROR'      ? 'rgba(255,34,68,0.5)'  :
+                displayStatus === 'MISSED'     ? 'rgba(245,158,11,0.5)' :
+                isError ? 'rgba(255,68,68,0.5)' :
+                'rgba(255,230,0,0.5)'  // WAITING default
 
               const doWaitingRE = async () => {
-                // Disable immediately to prevent double-click before React re-renders
                 if (waitingRetryLoading[w.grid_entry_id]) return
-                setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: true }))
+                const _geid   = w.grid_entry_id
+                const _algoid = w.algo_id
+                const _date   = selectedDateRef.current
+                setWaitingRetryLoading(prev => ({ ...prev, [_geid]: true }))
                 try {
-                  await ordersAPI.retryEntry(w.grid_entry_id)
-                  // Keep disabled for 5s after RETRY — scheduler fires in 2s, give it time
-                  await new Promise(r => setTimeout(r, 5000))
-                  ordersAPI.waiting(selectedDate, isPractixMode)
-                    .then(res => setWaitingAlgos(res.data?.waiting || []))
-                    .catch(() => {})
+                  await ordersAPI.retryEntry(_geid)
+                  // Poll every 1.5s for up to 10.5s (7 attempts) until algo moves to orders
+                  for (let _i = 0; _i < 7; _i++) {
+                    await new Promise(r => setTimeout(r, 1500))
+                    if (selectedDateRef.current !== _date) break  // user switched tab — abort
+                    const [_wRes, _oRes] = await Promise.all([
+                      ordersAPI.waiting(_date, isPractixMode).catch(() => null),
+                      ordersAPI.list(_date, isPractixMode).catch(() => null),
+                    ])
+                    const _stillWaiting = (_wRes?.data?.waiting || []).some((x: any) => x.grid_entry_id === _geid)
+                    if (_wRes) setWaitingByDate(prev => ({ ...prev, [_date]: _wRes.data?.waiting || [] }))
+                    if (_oRes) setOrdersByDate(prev => ({ ...prev, [_date]: (_oRes.data?.groups || []).map(mapGroup) }))
+                    if (!_stillWaiting) {
+                      // Scroll to the algo card that just appeared in orders
+                      setTimeout(() => {
+                        document.getElementById(`algo-card-${_algoid}`)
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      }, 200)
+                      break
+                    }
+                  }
                 } catch { /* silent — entry may already be queued */ }
-                finally { setWaitingRetryLoading(prev => ({ ...prev, [w.grid_entry_id]: false })) }
+                finally { setWaitingRetryLoading(prev => ({ ...prev, [_geid]: false })) }
               }
 
               // All entries in the waiting list are retryable — they haven't entered yet.
               // Only block for ORB window past or already retrying.
-              const canRetry  = !isRetrying && !isOrbWindowPast
-              const retryLabel = isRetrying ? '↻' : isOrbWindowPast ? 'ORB ✕' : 'RETRY'
-              const retryCol   = isOrbWindowPast ? 'rgba(255,255,255,0.2)' : '#F59E0B'
-              const retryBg    = isOrbWindowPast ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.05)'
-              const retryHBg   = isOrbWindowPast ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.14)'
+              const isOrbRetryBlocked = isOrbWindowPast || (isOrbAlgo && isMissed)
+              const canRetry  = !isRetrying && !isOrbRetryBlocked
+              const retryLabel = isOrbRetryBlocked ? 'ORB ✕' : 'RETRY'
+              const retryCol   = isOrbRetryBlocked ? 'rgba(255,255,255,0.2)' : '#F59E0B'
+              const retryBg    = isOrbRetryBlocked ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.05)'
+              const retryHBg   = isOrbRetryBlocked ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.14)'
               const missedBtns = [
                 { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
                 { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
@@ -1285,12 +1382,24 @@ export default function OrdersPage() {
                           </span>
                         )}
 
-                        {/* Status chip — ERROR (red) | MISSED (grey) | WAITING (amber) */}
-                        {isError ? (
-                          <span className="tag" style={{ color: '#FF4444', background: 'rgba(255,68,68,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>ERROR</span>
-                        ) : (
-                          <span className="tag" style={{ color: '#FFD700', background: 'rgba(255,215,0,0.12)', fontSize: '10px', whiteSpace: 'nowrap' as const }}>
-                            {isMissed ? 'MISSED' : 'WAITING'}
+                        {/* Status chip — driven by display_status from backend */}
+                        {(() => {
+                          const ds = w.display_status || (isError ? 'ERROR' : isMissed ? 'MISSED' : 'WAITING')
+                          const chipStyles: Record<string, { color: string; bg: string; label: string }> = {
+                            MONITORING: { color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)', label: 'MONITORING' },
+                            SCHEDULED:  { color: '#4488FF', bg: 'rgba(68,136,255,0.12)', label: '⏰ SCHEDULED'  },
+                            WAITING:    { color: '#FFD700', bg: 'rgba(255,215,0,0.12)',  label: '⏳ WAITING'    },
+                            MISSED:     { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', label: '⏭ MISSED'     },
+                            ERROR:      { color: '#FF4444', bg: 'rgba(255,68,68,0.12)',  label: '⛔ ERROR'      },
+                          }
+                          const c = chipStyles[ds] || chipStyles['WAITING']
+                          return <span className="tag" style={{ color: c.color, background: c.bg, fontSize: '10px', whiteSpace: 'nowrap' as const }}>{c.label}</span>
+                        })()}
+
+                        {/* Retrying badge — shown while polling for result */}
+                        {isRetrying && (
+                          <span style={{ fontSize: '11px', color: '#06B6D4' }}>
+                            Retrying…
                           </span>
                         )}
 
@@ -1305,16 +1414,11 @@ export default function OrdersPage() {
                       </div>
 
                       {/* Row 2: full error / missed / status detail (hidden when nothing to show) */}
-                      {(isError || isMissed || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error)) && (
+                      {(isError || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error)) && (
                         <div style={{ padding: '0 14px 10px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {isError && (w.error_message || w.latest_error?.reason) && (
                             <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const }}>
                               ⛔ {w.error_message || w.latest_error?.reason}
-                            </span>
-                          )}
-                          {isMissed && (
-                            <span style={{ fontSize: '11px', color: '#D77B12' }}>
-                              ⏭ Missed entry at {w.entry_time?.slice(0, 5) || '—'}
                             </span>
                           )}
                           {!isError && !isMissed && isFeedErr && (
@@ -1331,11 +1435,6 @@ export default function OrdersPage() {
                           {isOrbWindowPast && (
                             <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
                               ORB window passed ({w.orb_end_time}) — RETRY disabled
-                            </span>
-                          )}
-                          {(isMissed || isError) && (w.legs || []).some(l => l.wt_enabled) && !isOrbWindowPast && (
-                            <span style={{ fontSize: '11px', color: 'rgba(100,180,255,0.7)' }}>
-                              ⚡ Will re-capture strike and ref price at current market levels
                             </span>
                           )}
                         </div>
@@ -1367,7 +1466,8 @@ export default function OrdersPage() {
 
                   {/* ── Leg table ── */}
                   {(w.legs || []).length > 0 && (
-                    <div style={{ borderTop: '0.5px solid var(--bg-border)' }}>
+                    <div style={{ background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: '0.5px solid var(--bg-border)', borderRadius: '0 0 10px 10px' }}>
+                    <div className="cloud-fill" style={{ borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
@@ -1391,13 +1491,32 @@ export default function OrdersPage() {
                                 <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
                               </td>
                               <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.lots}</td>
-                              {['Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(col => (
+                              {/* Fill/Ref: show W&T ref+trigger only for actively MONITORING legs */}
+                              <td style={{ textAlign: 'center', padding: '6px 6px', fontSize: 10, verticalAlign: 'middle' }}>
+                                {(() => {
+                                  const showRefTrigger = w.display_status === 'MONITORING' && leg.wt_enabled && leg.wt_ref_price != null
+                                  if (showRefTrigger) {
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>Ref: {leg.wt_ref_price!.toLocaleString('en-IN')}</span>
+                                        <span style={{ color: '#06B6D4', fontWeight: 600 }}>→ {leg.wt_threshold?.toLocaleString('en-IN')}</span>
+                                      </div>
+                                    )
+                                  }
+                                  if (w.display_status === 'MONITORING' && leg.wt_enabled) {
+                                    return <span style={{ color: '#F59E0B', fontSize: 9 }}>W&amp;T waiting ref…</span>
+                                  }
+                                  return <span style={{ color: 'var(--text-dim)' }}>—</span>
+                                })()}
+                              </td>
+                              {['LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(col => (
                                 <td key={col} style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
                               ))}
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                    </div>
                     </div>
                   )}
                 </div>
@@ -1407,7 +1526,8 @@ export default function OrdersPage() {
         )}
 
         {/* Empty state */}
-        {localFilteredOrders.length === 0 && localFilteredWaiting.length === 0 && (
+
+        {displayOrders.length === 0 && displayWaiting.length === 0 && (
           <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
             {isPastDay
             ? `No trades executed on ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}.`
@@ -1449,8 +1569,8 @@ export default function OrdersPage() {
               {!isCollapsed && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '4px' }}>
                   {groupAlgos.map(group => {
-                    // gi = global index into orders[] — needed by all action handlers
-                    const gi       = orders.findIndex(g => g.algoId === group.algoId)
+                    // gi = global index into safeOrders[] — needed by all action handlers
+                    const gi       = safeOrders.findIndex(g => g.algoId === group.algoId)
                     const algoSt   = getAlgoStatus(group)
                     const bar      = ALGO_STATUS_BAR[algoSt]
                     const chip     = ALGO_STATUS_CHIP[algoSt]
@@ -1496,6 +1616,7 @@ export default function OrdersPage() {
 
                     return (
                       <div key={group.algoId}
+                        id={`algo-card-${group.algoId}`}
                         onMouseEnter={() => setHoveredCard(group.algoId)}
                         onMouseLeave={() => setHoveredCard(null)}
                         style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '10px', overflow: 'hidden', border: `0.5px solid ${hoveredCard === group.algoId ? 'rgba(255,107,0,0.45)' : 'rgba(255,107,0,0.22)'}` }}>
@@ -1688,7 +1809,7 @@ export default function OrdersPage() {
       {showSync !== null && (
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '380px' }}>
-            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>🔗 Sync Order — {orders[showSync]?.algoName}</div>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>🔗 Sync Order — {safeOrders[showSync]?.algoName}</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
               Re-link an order that got delinked from STAAX.<br/>
               Find the <b>Order ID</b> in your broker platform (Zerodha: Order Book → Order ID · Angel One: Order Book → Broker Order No.)
@@ -1699,7 +1820,7 @@ export default function OrdersPage() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>
                 Legs needing sync
               </div>
-              {(orders[showSync]?.legs ?? [])
+              {(safeOrders[showSync]?.legs ?? [])
                 .filter((l: Leg) => l.status === 'error' || l.status === 'pending')
                 .map((l: Leg) => (
                   <div key={l.id} style={{
@@ -1716,7 +1837,7 @@ export default function OrdersPage() {
                   </div>
                 ))
               }
-              {(orders[showSync]?.legs ?? []).filter((l: Leg) => l.status === 'error' || l.status === 'pending').length === 0 && (
+              {(safeOrders[showSync]?.legs ?? []).filter((l: Leg) => l.status === 'error' || l.status === 'pending').length === 0 && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No legs in error state</div>
               )}
             </div>
@@ -1737,7 +1858,7 @@ export default function OrdersPage() {
                   value={syncForm.account_id}
                   onChange={e => setSyncForm(s => ({ ...s, account_id: e.target.value }))}>
                   <option value="">Select account...</option>
-                  {orders[showSync]?.account && <option value={orders[showSync].account}>{orders[showSync].account}</option>}
+                  {safeOrders[showSync]?.account && <option value={safeOrders[showSync].account}>{safeOrders[showSync].account}</option>}
                 </select>
               </div>
             </div>
@@ -1778,7 +1899,7 @@ export default function OrdersPage() {
       {retryModal && (
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '420px' }}>
-            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>↻ Retry Failed Legs — {orders[retryModal.algoIdx]?.algoName}</div>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>↻ Retry Failed Legs — {safeOrders[retryModal.algoIdx]?.algoName}</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
               Select which failed legs to retry at broker level.
             </div>

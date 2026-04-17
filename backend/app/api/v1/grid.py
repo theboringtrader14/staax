@@ -84,6 +84,61 @@ def _day_of_week(d: date) -> str:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+def _compute_is_monitoring(ge, algo_legs, now_ist) -> bool:
+    """
+    Returns True when:
+      - algo_state.status == WAITING (checked by caller)
+      - W&T: any leg has wt_enabled=True AND WTEvaluator has an armed window (is_ref_set)
+      - ORB: entry_type == 'orb' AND current time is within the ORB window
+    """
+    from datetime import time as _time_type
+
+    def _parse_t(s):
+        if not s:
+            return None
+        try:
+            p = s.split(':')
+            return _time_type(int(p[0]), int(p[1]))
+        except Exception:
+            return None
+
+    now_time = now_ist.time()
+    grid_entry_id = str(ge.id)
+
+    # W&T monitoring: WTEvaluator has armed window
+    has_wt_legs = any(getattr(leg, 'wt_enabled', False) for leg in algo_legs)
+    if has_wt_legs:
+        try:
+            from app.engine.algo_runner import algo_runner as _ar
+            _wt_ev = getattr(_ar, '_wt_evaluator', None)
+            if _wt_ev is not None:
+                window = _wt_ev._windows.get(grid_entry_id)
+                if window is not None and getattr(window, 'is_ref_set', False):
+                    return True
+        except Exception:
+            pass
+
+    # ORB monitoring: within ORB window
+    algo = getattr(ge, '_algo_ref', None)  # injected below at call site if available
+    _entry_type_val = None
+    _orb_end_time_val = None
+    _entry_time_val = None
+    if algo is not None:
+        _et = getattr(algo, 'entry_type', None)
+        _entry_type_val = _et.value if hasattr(_et, 'value') else str(_et or '')
+        _orb_end_time_val = getattr(algo, 'orb_end_time', None)
+        _entry_time_val = getattr(algo, 'entry_time', None)
+
+    if _entry_type_val == 'orb' and _orb_end_time_val:
+        entry_t = _parse_t(_entry_time_val)
+        orb_end_t = _parse_t(_orb_end_time_val)
+        if entry_t and orb_end_t:
+            if entry_t <= now_time <= orb_end_t:
+                return True
+
+    return False
+
+
 @router.get("/")
 async def get_week_grid(
     week_start:  Optional[str] = None,
@@ -91,6 +146,8 @@ async def get_week_grid(
     is_practix:  Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.algo import AlgoLeg
+
     monday = _get_week_monday(week_start)
     if week_end:
         try:
@@ -111,6 +168,7 @@ async def get_week_grid(
     rows = result.all()
     entries = [r[0] for r in rows]
     algo_names: dict = {str(r[0].id): r[1].name for r in rows}
+    algos_by_entry: dict = {str(r[0].id): r[1] for r in rows}  # entry_id → Algo
 
     # Bulk-fetch AlgoStates for all entries in range
     states: dict = {}
@@ -133,9 +191,43 @@ async def get_week_grid(
         )
         error_entry_ids = {str(r) for r in err_result.scalars().all()}
 
+    # Bulk-fetch AlgoLegs for all algos in this set — used for is_monitoring computation
+    algo_ids_in_set = list({str(e.algo_id) for e in entries})
+    legs_by_algo: dict = {}
+    if algo_ids_in_set:
+        import uuid as _uuid_lib
+        try:
+            _algo_uuids = [_uuid_lib.UUID(aid) for aid in algo_ids_in_set]
+            legs_result = await db.execute(
+                select(AlgoLeg).where(AlgoLeg.algo_id.in_(_algo_uuids))
+            )
+            for leg in legs_result.scalars().all():
+                aid_str = str(leg.algo_id)
+                if aid_str not in legs_by_algo:
+                    legs_by_algo[aid_str] = []
+                legs_by_algo[aid_str].append(leg)
+        except Exception:
+            pass
+
+    _now_ist = datetime.now(IST)
+
     def _to_dict(e: GridEntry) -> dict:
         eid = str(e.id)
-        return _entry_to_dict(e, states.get(eid), algo_names.get(eid), eid in error_entry_ids)
+        d = _entry_to_dict(e, states.get(eid), algo_names.get(eid), eid in error_entry_ids)
+        # Add is_monitoring: True only for WAITING entries with an armed W&T window or ORB window
+        algo_state = states.get(eid)
+        is_waiting = (
+            algo_state is not None
+            and algo_state.status == AlgoRunStatus.WAITING
+        )
+        if is_waiting:
+            algo_legs = legs_by_algo.get(str(e.algo_id), [])
+            # Inject algo reference so _compute_is_monitoring can check entry_type/orb_end_time
+            e._algo_ref = algos_by_entry.get(eid)
+            d["is_monitoring"] = _compute_is_monitoring(e, algo_legs, _now_ist)
+        else:
+            d["is_monitoring"] = False
+        return d
 
     by_algo: dict = {}
     for entry in entries:

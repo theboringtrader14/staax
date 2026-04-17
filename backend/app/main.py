@@ -324,6 +324,13 @@ async def lifespan(app: FastAPI):
     # ── 15. Print account status summary ─────────────────────────────────────
     await _print_account_status_summary(app)
 
+    # ── 16. DB schema migrations (ADD COLUMN IF NOT EXISTS — idempotent) ──────
+    await _run_startup_migrations()
+
+    # ── 17. Fix today's open orders that have quantity=1 (lot size not applied) ─
+    import asyncio as _aio
+    _aio.create_task(_fix_today_order_quantities())
+
     logger.info("✅ STAAX engine operational — awaiting broker login to start LTP feed")
 
     yield  # ── Application running ─────────────────────────────────────────
@@ -945,6 +952,9 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
                     )
                     logger.info("[AO-CONNECT] Calling set_angel_adapter...")
                     ltp_consumer.set_angel_adapter(adapter)
+                    ltp_consumer.set_angel_broker(ao_broker)   # REST fallback for stale ticks
+                    # Re-arm W&T monitors on every SmartStream reconnect
+                    adapter.register_on_reconnect_callback(algo_runner.rearm_wt_monitors)
                     logger.info("[AO-CONNECT] Adapter set OK")
 
                     # Collect all tokens to subscribe
@@ -1128,3 +1138,67 @@ app.include_router(ws_routes.router, tags=["websocket"])
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "STAAX"}
+
+
+# ── Startup helpers ────────────────────────────────────────────────────────────
+
+async def _run_startup_migrations() -> None:
+    """Idempotent ALTER TABLE statements — safe to run on every startup."""
+    from sqlalchemy import text
+    from app.core.database import AsyncSessionLocal
+    migrations = [
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS lot_size INTEGER DEFAULT 1",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconcile_status VARCHAR(20) DEFAULT NULL",
+    ]
+    try:
+        async with AsyncSessionLocal() as db:
+            for stmt in migrations:
+                await db.execute(text(stmt))
+            await db.commit()
+        logger.info(f"[STARTUP] DB migrations complete ({len(migrations)} statements)")
+    except Exception as _e:
+        logger.warning(f"[STARTUP] DB migration failed (non-fatal): {_e}")
+
+
+async def _fix_today_order_quantities() -> None:
+    """Fix lot_size + quantity for orders in last 7 days where lot_size=1 (incorrect default)."""
+    await asyncio.sleep(5)  # wait for broker connections to stabilize
+    from app.core.database import AsyncSessionLocal
+    from app.models.order import Order, OrderStatus
+    from app.engine.algo_runner import algo_runner as _ar
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    _logger = logging.getLogger(__name__)
+    try:
+        from sqlalchemy import select as _sel
+        async with AsyncSessionLocal() as db:
+            cutoff_dt = datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=7)
+            result = await db.execute(
+                _sel(Order).where(
+                    Order.lot_size == 1,
+                    Order.lots >= 1,
+                    Order.created_at >= cutoff_dt,
+                )
+            )
+            orders = result.scalars().all()
+            fixed = 0
+            for order in orders:
+                lot_size = await _ar._get_lot_size(order.symbol, order.exchange or 'NFO')
+                if lot_size <= 1:
+                    continue
+                order.lot_size = lot_size
+                order.quantity = (order.lots or 1) * lot_size
+                # Recalculate P&L for closed orders
+                if order.status == OrderStatus.CLOSED and order.fill_price:
+                    eff_exit = order.exit_price_manual or order.exit_price
+                    if eff_exit:
+                        direction = (order.direction or '').lower()
+                        if direction == 'sell':
+                            order.pnl = round((order.fill_price - eff_exit) * order.quantity, 2)
+                        else:
+                            order.pnl = round((eff_exit - order.fill_price) * order.quantity, 2)
+                fixed += 1
+            await db.commit()
+            _logger.info(f"[STARTUP] Fixed lot_size+quantity+pnl for {fixed} orders (last 7 days)")
+    except Exception as e:
+        _logger.error(f"[STARTUP] _fix_today_order_quantities failed: {e}")
