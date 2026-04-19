@@ -299,3 +299,187 @@ UI Revamp: New BotCard (colored left bar, status chip, levels row, position/P&L 
 7. **TRAVEX DNS** — A records + certbot SSL
 8. **Android EAS build**
 - TRAVEX Phase 2: Gmail sync (travel confirmation emails → auto-create trips), IRCTC SMS parsing, FlightAware flight status
+
+---
+
+## Session — 18 April 2026 (v8.7)
+
+### LIFEX Commercial Architecture
+- Created `~/STAXX/LIFEX_COMMERCIAL_ARCHITECTURE.md` (413 lines, 9 sections)
+- Tenancy model: Hybrid C+D — shared `lifex_core` DB + per-user schemas per module
+- Domain strategy: `lifexos.co.in` (landing) + `app.lifexos.co.in` (dashboard) + per-module subdomains
+- Pricing matrix documented:
+  - Module tiers: STAAX 999/2499/4999, INVEX 299/799/1499, BUDGEX 199/499, FINEX 799/1499, TRAVEX 149/399
+  - Add-ons: AI Layer +299, Mobile App +199, BYOK discount −99
+  - Bundles: Premium 7999, Starter 4999, Trader 3299, Money 1799
+- STAAX white-label path: users bring own broker credentials, no SEBI empanelment needed
+- 7-phase migration roadmap documented
+
+### lifex-landing repo (NEW)
+
+- Repo: `~/STAXX/lifex-landing/`
+- Stack: Vite + React 18 + TypeScript + Framer Motion, vanilla CSS tokens
+- Design: variation-1 neumorphic (light default, dark toggle)
+- Tokens: `--bg #1a1d25`, `--neu-raised/-sm/-lg/-inset/-pressed` shadow system, all module brand colours
+
+#### Components built / polished this session
+
+| Component | What changed |
+|---|---|
+| `Nav.tsx` | Center links absolutely positioned (true center), `scrollToSection` for all 3 links (80px offset + midpoint), ThemeToggle 34×34 |
+| `Hero.tsx` | Stats → inset, "₹46.8L/Assets" → "1/Life", `hero-heading` CSS class (theme-aware gradient), "See modules" button removed, CTA centered |
+| `ModuleCard.tsx` | Footer strip (Details+price) removed, price below name, glow 300×300 @ 25% opacity, neumorphic inset bullet dots |
+| `ModuleModal.tsx` | TRAVEX icon box fixed — was using opaque gradient, now glassmorphic `color1a` |
+| `BundleToggle.tsx` | Full rewrite — single persistent pill div, CSS `left` transition, `offsetLeft` measurement — no mount/unmount jank |
+| `PricingSection.tsx` | IndividualView: HTML table → single neumorphic container + dividers; Add-ons: inset 3-col container + vertical "Add-ons" label; gaps tightened |
+| `PricingCard.tsx` | "Most popular" → diagonal corner ribbon (rotate 45°), neumorphic inset bg + gradient text; `overflow:hidden` on card |
+| `FAQ.tsx` | All items in single container (1200px wide); collapsed by default; accent label; tighter padding |
+| `Footer.tsx` | Padding: top 60→45px, bottom margin 48→36px |
+| `ThemeToggle.tsx` | Default → light mode |
+| `App.tsx` | JS wheel-based section snap: jumps to next section at bottom boundary, previous at top boundary; 400ms cooldown + 750ms animation lock |
+
+#### Animated SVG icons (ModuleIcons.tsx)
+
+All icons redesigned to HEALTHEX quality bar (HEALTHEX unchanged):
+
+| Icon | Visual | Animation |
+|---|---|---|
+| STAAX | Stock trend line, cubic-bezier ups/downs, area fill | Continuous draw L→R, `calcMode=linear` |
+| INVEX | 3-bar portfolio chart | Bars grow from baseline staggered, quick reset |
+| BUDGEX | Expense receipt, torn zigzag bottom | 3 line items appear staggered, 4s loop |
+| FINEX | CFO silhouette + AI neural crown (3 nodes) | Data-flow dots travel from AI nodes → head |
+| TRAVEX | Globe + Indian subcontinent (orthographic 82°E 22°N) + airplane | Plane on arc Gulf→SE Asia, destination pin pulse |
+| HISTEX | Analog clock, 12 tick marks (4 major + 8 minor) | Counterclockwise rotation (history = rewind) |
+
+Animation principle: all draw animations use `calcMode="linear" from="N" to="0"` — no hold/fade/reverse.
+
+#### CSS / Tokens
+
+| File | Change |
+|---|---|
+| `global.css` | Scrollbar hidden (`scrollbar-width:none`, `::-webkit-scrollbar display:none`); `overflow-y:scroll`; `.hero-heading` theme-aware gradient |
+| `tokens.css` | Light mode `--status-live`: `#047857` → `#059669` (brighter emerald) |
+
+### TRAVEX Globe upgrade
+- Installed `react-globe.gl` — `NetworkGlobe.tsx` created (dotted hex continents, dashed arcs, pulse rings)
+- User rejected dotted hex — needs proper admin boundaries
+- Installed `mapbox-gl` — `MapboxGlobe.tsx` created
+  - dark-v11 style, globe projection, frosted-white land fill (3.5% opacity)
+  - Country borders 35%, state borders 18%, district borders 10% (minzoom 5)
+  - Teal city pulse dots + labels, teal travel arcs with glow, RAF-based auto-rotation
+  - India districts: datameet CDN 404 — layer skipped gracefully
+  - Feature flag: `?globe=mapbox` URL param activates MapboxGlobe
+  - Requires `VITE_MAPBOX_TOKEN` in `~/STAXX/travex/frontend/.env`
+- `Globe3D.tsx` preserved as fallback
+
+#### Platform Module Table (v8.7)
+
+| Module | Purpose | Port (local) | Domain | Status |
+|---|---|---|---|---|
+| STAAX | Algo trading | FE:3000 BE:8000 | staax.lifexos.co.in | ✅ LIVE |
+| INVEX | Investments | FE:3001 BE:8001 | invex.lifexos.co.in | ✅ LIVE |
+| BUDGEX | Expense tracking | FE:3002 BE:8002 | budgex.lifexos.co.in | ✅ LIVE |
+| TRAVEX | Travel tracker | FE:3004 BE:8004 | travex.lifexos.co.in | ✅ LIVE (DNS pending) |
+| lifex-landing | Marketing site | :5173 | lifexos.co.in | 🔨 Local only |
+| MT5 Bridge | MT5 broker adapter | 8765 | — | 🔨 Scaffolded |
+| lifex-mobile | React Native | Expo | — | ✅ Published |
+
+#### Pending — Monday 21 April 2026
+
+1. **TRAVEX**: create `~/STAXX/travex/frontend/.env` with `VITE_MAPBOX_TOKEN`, verify Mapbox globe at `localhost:3004/?globe=mapbox`
+2. **TRAVEX**: India districts alternative source (Natural Earth or similar)
+3. **TRAVEX**: make MapboxGlobe default after approval, delete NetworkGlobe + Globe3D
+4. **TRAVEX**: DNS A records + certbot SSL (`travex.lifexos.co.in`)
+5. **STAAX**: MissingGreenlet permanent fix (W&T RETRY)
+6. **STAAX**: W&T architecture fix (monitor option premium not underlying index)
+7. **STAAX**: EC2 deploy (all 17+18 Apr changes)
+8. **STAAX**: Orders page remaining revamp items
+9. **lifex-landing**: GitHub repo + EC2 deploy under `lifexos.co.in`
+10. **lifex-landing**: Phase 3 — `lifex-shared-ui` repo (navbar + tokens)
+11. **lifex-landing**: Phase 4 — auth flow (`lifex-auth` repo)
+12. **Android EAS build**
+  12. **Android EAS build**
+
+---
+
+## Session — 19 April 2026 (v8.8)
+
+### LIFEX Commercial Architecture
+- LIFEX_COMMERCIAL_ARCHITECTURE.md reviewed and confirmed
+- Pricing simplified: no Starter/Pro/Premium tiers — single flat price per module
+- Module prices: STAAX ₹1,000/mo display (₹1,500 Lite / ₹4,000 Pro in modal), INVEX ₹800, BUDGEX ₹500, FINEX ₹800, TRAVEX ₹400
+- Add-ons rounded: AI Layer +₹300, Mobile App +₹200, BYOK −₹100
+- Bundles: LIFEX Premium ₹6,500, LIFEX Trader ₹4,750, LIFEX Money ₹2,150 (LIFEX Starter removed)
+- STAAX modal: 2-plan selector (Lite ₹1,500/10 algos, Pro ₹4,000/30 algos)
+
+### lifex-landing — Onboarding Flow (/start page)
+- React Router installed, /start route added
+- StartPage.tsx created: full 6-step onboarding page
+- Stepper: fixed left-column SVG pipe (wavy S-curve, 5-layer inset groove effect)
+- Steel ball rolls along pipe path using requestAnimationFrame + getPointAtLength
+- Ball animation: 2200ms ease-in-out cubic, clockwise/counter-clockwise rotation for forward/back
+- 6 step nodes: upcoming (inset, muted) / active (dark, pulsing glow ring) / completed (purple, ✓)
+- Purple gradient fluid fill grows with progress (stroke-dashoffset)
+- 6 steps: Choose Plan → Sign Up → Verify (OTP) → Review → Payment → Welcome
+- Step content expand/collapse: max-height 600ms, content expands 400ms after ball arrives
+- Scroll lock: non-passive wheel handler blocks manual scroll past current step
+- Cart state lifted at page level: selectedModules, selectedBundle, selectedAddons, staaxPlan
+- Sticky bottom bar: cost + module names + "3-day free trial" badge
+- Mobile: pipe hidden, horizontal dot stepper instead
+- StartPage.v1.tsx backed up before pipe redesign
+- All landing page CTAs (Get Started, Start free trial) → Link to /start
+- Nav, Hero, PricingCard, PricingSection CTAs updated
+
+### lifex-landing — Pricing section
+- PricingSection: Individual view restored to clean 2-column list (no card deck experiment)
+- Bundle cards equal height (alignItems:stretch)
+- Bundle selection: purple tint + inset shadow (no outline)
+- Bundles view shows only BYOK add-on
+- PricingCard: added selected, hideCta props
+
+### lifex-landing — Design system
+- Dark neumorphic tokens confirmed:
+  NEU_RAISED: -8px -8px 16px rgba(255,255,255,0.03), 8px 8px 16px rgba(0,0,0,0.5)
+  NEU_RAISED_SM: -4px -4px 8px rgba(255,255,255,0.03), 4px 4px 8px rgba(0,0,0,0.5)
+  NEU_INSET: inset -4px -4px 8px rgba(255,255,255,0.03), inset 4px 4px 8px rgba(0,0,0,0.5)
+
+### TRAVEX
+- MapboxGlobe.tsx created with admin boundaries (country/state/district)
+- Requires VITE_MAPBOX_TOKEN in ~/STAXX/travex/frontend/.env
+- Feature flag: ?globe=mapbox activates MapboxGlobe (NetworkGlobe is default)
+- Token issue: .env not persisting — recreate on Monday
+
+### Design exploration
+- 5 neumorphic variations created in design-references/
+- Variation 1 (classic dark) selected as winning design
+- Variation 6 (v1 + starfield) also created
+- Card deck POC (card-deck-poc.html) built but not integrated — saved as reference
+- Onboarding POC (onboarding-poc.html) built as reference — superseded by StartPage.tsx
+
+#### Platform Module Table (v8.8)
+
+| Module | Purpose | Port (local) | Domain | Status |
+|---|---|---|---|---|
+| STAAX | Algo trading | FE:3000 BE:8000 | staax.lifexos.co.in | ✅ LIVE |
+| INVEX | Investments | FE:3001 BE:8001 | invex.lifexos.co.in | ✅ LIVE |
+| BUDGEX | Expense tracking | FE:3002 BE:8002 | budgex.lifexos.co.in | ✅ LIVE |
+| TRAVEX | Travel tracker | FE:3004 BE:8004 | travex.lifexos.co.in | ✅ LIVE (DNS pending) |
+| lifex-landing | Marketing site | :5173 | lifexos.co.in | 🔨 Local only |
+| MT5 Bridge | MT5 broker adapter | 8765 | — | 🔨 Scaffolded |
+| lifex-mobile | React Native | Expo | — | ✅ Published |
+
+#### Pending — Monday 21 April 2026
+
+1. **STAAX**: Watch overnight exits (NF-STBT1, NF-STBT2, NF-TF, NF-BTST, SX-STBT) — `grep 'RECOVERY-BTST' ~/STAXX/logs/staax.log`
+2. **STAAX**: MissingGreenlet permanent fix (W&T RETRY) — P0
+3. **STAAX**: W&T architecture fix (monitor option premium not underlying index)
+4. **STAAX**: EC2 deploy
+5. **TRAVEX**: `echo 'VITE_MAPBOX_TOKEN=pk.eyJ...' > ~/STAXX/travex/frontend/.env`, verify globe
+6. **TRAVEX**: DNS A records + certbot SSL (`travex.lifexos.co.in`)
+7. **lifex-landing**: /start page — pipe redesign (straight vertical + rectangular connector bulges + liquid fill, no ball) — StartPage.v1.tsx backed up
+8. **lifex-landing**: /start page — neumorphic shadows polish
+9. **lifex-landing**: GitHub repo + EC2 deploy under `lifexos.co.in`
+10. **lifex-landing**: Phase 3 — `lifex-shared-ui` repo
+11. **lifex-landing**: Phase 4 — auth flow (`lifex-auth` repo)
+12. **Claude Code**: `brew upgrade` once cask updates to v2.1.111+
+13. **Android EAS build**
