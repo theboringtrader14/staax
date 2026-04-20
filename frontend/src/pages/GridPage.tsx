@@ -547,7 +547,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                 {/* ── Group cards ── */}
                 {!isCollapsed && (
-                  <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'4px' }}>
+                  <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px' }}>
                     {groupAlgos.map(algo => {
                       const mult        = cardMults[algo.id] || 1
                       const isExpanded  = expandedId === algo.id
@@ -558,7 +558,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                         <div key={algo.id}
                           onClick={() => setExpandedId(expandedId === algo.id ? null : algo.id)}
                           style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:20, cursor:'pointer',
-                            background:'var(--bg-surface)', border:'1px solid var(--border)',
+                            background:'var(--bg)', border:'none',
                             boxShadow:'var(--neu-raised)',
                             transition:'transform 0.18s ease, box-shadow 0.18s ease',
                           }}
@@ -575,19 +575,19 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               {/* ── Name + account ── */}
                               <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'120px', flexShrink:0 }}>
                                 <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
-                                  style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'#F0F0FF',
+                                  style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'var(--accent)',
                                     cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                                    textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(255,107,0,0.35)' }}>
+                                    textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'var(--border-accent)' }}>
                                   {algo.name}
                                 </span>
-                                <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.38)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                <span style={{ fontSize:'10px', color:'var(--text-mute)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                                   {algo.account || '—'}
                                 </span>
                               </div>
 
                               {/* ── Strategy + instrument chip ── */}
                               <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'100px', flexShrink:0 }}>
-                                <span style={{ fontSize:'10px', color:'rgba(232,232,248,0.45)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
+                                <span style={{ fontSize:'10px', color:'var(--text-dim)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
                                   {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
                                 </span>
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
@@ -620,8 +620,8 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
                                   </div>
                                   <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                                    <span style={{ color:'var(--text-muted)', fontSize:'10px' }}>⏹</span>
-                                    <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-muted)' }}>{algo.xt}</span>
+                                    <span style={{ color:'var(--text-dim)', fontSize:'10px' }}>⏹</span>
+                                    <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-dim)' }}>{algo.xt}</span>
                                     {(['stbt','btst'].includes(algo.strategy_mode||'')) && (
                                       <span title="Next-day exit time" style={{ fontSize:'9px', color:'var(--accent-amber)', cursor:'help' }}>⚠</span>
                                     )}
@@ -632,16 +632,18 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                               <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'12px' }}
                                 onClick={e => e.stopPropagation()}>
                                   <button onClick={() => changeCardMult(algo.id, mult - 1)}
-                                    style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
-                                    onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
-                                    onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>−</button>
-                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'#F0F0FF', minWidth:28, textAlign:'center', fontWeight:700 }}>
+                                    style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
+                                    onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                    onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                    onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>−</button>
+                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--text)', minWidth:28, textAlign:'center', fontWeight:700 }}>
                                     {mult}×
                                   </span>
                                   <button onClick={() => changeCardMult(algo.id, mult + 1)}
-                                    style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,0.06)', border:'0.5px solid rgba(255,255,255,0.15)', color:'#F0F0FF', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'all 0.12s' }}
-                                    onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.30)' }}
-                                    onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)' }}>+</button>
+                                    style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
+                                    onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                    onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                    onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>+</button>
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
@@ -650,12 +652,12 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                   const isInRecurring = algo.recurringDays.includes(day)
                                   const cell = grid[algo.id]?.[day]
 
-                                  // Simple 2-state: selected (in recurring) = accent, unselected = neumorphic inset
-                                  const pillBg     = isInRecurring ? 'var(--accent-dim)' : 'var(--bg)'
-                                  const pillBorder = isInRecurring ? '1px solid var(--border-accent)' : 'none'
+                                  // unselected = neu-raised, selected = neu-inset
+                                  const pillBg     = isInRecurring ? 'var(--bg)' : 'var(--bg)'
+                                  const pillBorder = 'none'
                                   const pillColor  = isInRecurring ? 'var(--accent)' : 'var(--text-mute)'
-                                  const pillWeight = isInRecurring ? 600 : 400
-                                  const pillShadow = isInRecurring ? 'none' : 'var(--neu-inset)'
+                                  const pillWeight = isInRecurring ? 700 : 400
+                                  const pillShadow = isInRecurring ? 'var(--neu-inset)' : 'var(--neu-raised-sm)'
                                   const showDot    = false
                                   const dotColor   = 'transparent'
                                   const dotAnim    = false
@@ -740,30 +742,31 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                             </div>{/* end card row body */}
 
-                            {/* ── Right panel — tall action buttons ── */}
+                            {/* ── Right panel — neumorphic action buttons ── */}
                             <div className="algo-card-actions" onClick={e => e.stopPropagation()} style={{
-                              display:'flex', alignSelf:'stretch',
-                              borderLeft:'0.5px solid rgba(255,255,255,0.06)',
+                              display:'flex', alignSelf:'stretch', gap:8, alignItems:'center',
+                              padding:'0 16px', borderLeft:'1px solid var(--border)',
                             }}>
-                              {/* Promote / Demote */}
+                              {/* GO LIVE / DEMOTE */}
                               <button
                                 onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 16px', background:'rgba(34,221,136,0.05)', border:'none',
-                                  borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
-                                  color: isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)',
-                                  minWidth:64, transition:'all 150ms',
+                                  gap:3, width:52, height:44, borderRadius:12,
+                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
+                                  cursor:'pointer', color: isPractixMode ? '#22DD88' : 'var(--text-dim)',
+                                  transition:'box-shadow 0.12s, color 0.12s',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color = isPractixMode ? '#22DD88' : '#F0F0FF'; e.currentTarget.style.background = 'rgba(34,221,136,0.12)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color = isPractixMode ? 'rgba(34,221,136,0.65)' : 'rgba(255,255,255,0.32)'; e.currentTarget.style.background = 'rgba(34,221,136,0.05)' }}>
+                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                                   {isPractixMode
                                     ? <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                                     : <path d="M12 7H2M6 3L2 7l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                                   }
                                 </svg>
-                                <span style={{ fontSize:9, letterSpacing:'0.5px', fontFamily:'var(--font-display)', fontWeight:600 }}>
+                                <span style={{ fontSize:8, letterSpacing:'0.5px', fontFamily:'var(--font-display)', fontWeight:700 }}>
                                   {isPractixMode ? 'GO LIVE' : 'DEMOTE'}
                                 </span>
                               </button>
@@ -773,14 +776,15 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                 onClick={() => setArchConfirm(algo.id)}
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 14px', background:'rgba(96,165,250,0.05)', border:'none',
-                                  borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
-                                  color:'rgba(96,165,250,0.6)', minWidth:52, transition:'all 150ms',
+                                  gap:3, width:52, height:44, borderRadius:12,
+                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
+                                  cursor:'pointer', color:'#60A5FA', transition:'box-shadow 0.12s',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color='#60A5FA'; e.currentTarget.style.background='rgba(96,165,250,0.12)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color='rgba(96,165,250,0.6)'; e.currentTarget.style.background='rgba(96,165,250,0.05)' }}>
+                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
                                 <ArchiveIcon/>
-                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>ARCHIVE</span>
+                                <span style={{ fontSize:8, fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.5px' }}>ARCHIVE</span>
                               </button>
 
                               {/* Duplicate */}
@@ -789,32 +793,35 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                 title="Create a copy of this algo (no recurring days, practix mode)"
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 14px', background:'rgba(255,107,0,0.05)', border:'none',
-                                  borderRight:'0.5px solid rgba(255,255,255,0.06)', cursor:'pointer',
-                                  color:'rgba(255,107,0,0.6)', minWidth:52, transition:'all 150ms',
+                                  gap:3, width:52, height:44, borderRadius:12,
+                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
+                                  cursor:'pointer', color:'var(--accent)', transition:'box-shadow 0.12s',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color='#FF6B00'; e.currentTarget.style.background='rgba(255,107,0,0.12)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color='rgba(255,107,0,0.6)'; e.currentTarget.style.background='rgba(255,107,0,0.05)' }}>
+                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
                                   <rect x="4.667" y="4.667" width="7.583" height="7.583" rx="0.583" stroke="currentColor" strokeWidth="1.2"/>
                                   <path d="M2.333 9.333V1.75h7.584" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
                                 </svg>
-                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>COPY</span>
+                                <span style={{ fontSize:8, fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.5px' }}>COPY</span>
                               </button>
 
-                              {/* Delete (soft-archive) */}
+                              {/* Remove */}
                               <button
                                 onClick={() => setArchConfirm(algo.id)}
                                 title="Algo will be archived. All historical data preserved."
                                 style={{
                                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:4, padding:'0 14px', background:'rgba(255,68,68,0.05)', border:'none',
-                                  cursor:'pointer', color:'rgba(255,68,68,0.6)', minWidth:52, transition:'all 150ms',
+                                  gap:3, width:52, height:44, borderRadius:12,
+                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
+                                  cursor:'pointer', color:'#FF4444', transition:'box-shadow 0.12s',
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.color='#FF4444'; e.currentTarget.style.background='rgba(255,68,68,0.12)' }}
-                                onMouseLeave={e => { e.currentTarget.style.color='rgba(255,68,68,0.6)'; e.currentTarget.style.background='rgba(255,68,68,0.05)' }}>
+                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
                                 <TrashIcon/>
-                                <span style={{ fontSize:9, fontFamily:'var(--font-display)', fontWeight:600, letterSpacing:'0.5px' }}>REMOVE</span>
+                                <span style={{ fontSize:8, fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.5px' }}>REMOVE</span>
                               </button>
                             </div>
 

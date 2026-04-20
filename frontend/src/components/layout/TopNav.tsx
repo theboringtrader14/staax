@@ -80,7 +80,7 @@ export default function TopNav() {
 
           {/* LEFT — Wordmark */}
           <NavLink to="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <span style={{ fontFamily: 'Syne, sans-serif', fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '-0.03em' }}>
               <span style={{
                 background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
                 WebkitBackgroundClip: 'text',
@@ -89,8 +89,8 @@ export default function TopNav() {
               }}>
                 LIFEX OS
               </span>
-              <span style={{ color: 'var(--text-dim)' }}>{' · '}</span>
-              <span style={{ color: 'var(--accent)' }}>STAAX</span>
+              <span style={{ color: 'var(--text-dim)', WebkitTextFillColor: 'var(--text-dim)' }}>{' · '}</span>
+              <span style={{ color: 'var(--accent)', WebkitTextFillColor: 'var(--accent)' }}>STAAX</span>
             </span>
           </NavLink>
 
