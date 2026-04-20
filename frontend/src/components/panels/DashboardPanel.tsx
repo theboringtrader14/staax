@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ArrowClockwise } from '@phosphor-icons/react'
+import { X, ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
@@ -319,7 +319,9 @@ export default function DashboardPanel() {
           {lateWarning && (
             <div style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--border)' }}>
               <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px', boxShadow: 'var(--neu-inset)' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#FF4444', marginBottom: 4 }}>⚠️ After 9:00 AM</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Warning size={14} weight="fill" color="#b45309" /> After 9:00 AM
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10 }}>Some algos may have passed entry time. Start anyway?</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <NeuBtn onClick={() => setLateWarning(false)} style={{ flex: 1, height: 28 }}>Cancel</NeuBtn>
