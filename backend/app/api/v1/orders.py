@@ -2236,19 +2236,35 @@ async def retry_specific_legs(
     grid_entry.status = GridStatus.OPEN
     await db.commit()
 
-    # Fire enter_specific_legs in background via run_coroutine_threadsafe
+    # Fire enter_specific_legs via APScheduler — the ONLY greenlet-safe path.
+    # run_coroutine_threadsafe() and ensure_future() lack SQLAlchemy's greenlet bridge
+    # and cause MissingGreenlet. APScheduler's AsyncIOExecutor provides it automatically.
     algo_runner = getattr(request.app.state, "algo_runner", None)
     _scheduler  = getattr(request.app.state, "scheduler", None)
-    if algo_runner:
-        import asyncio
-        _loop = getattr(_scheduler, "_loop", None) if _scheduler else None
+    if _scheduler and algo_runner:
+        from apscheduler.triggers.date import DateTrigger as _DateTriggerRL
         leg_id_strs = [str(lid) for lid in leg_uuids]
-        if _loop and _loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                algo_runner.enter_specific_legs(grid_entry_id, leg_id_strs), _loop
-            )
-        else:
-            asyncio.ensure_future(algo_runner.enter_specific_legs(grid_entry_id, leg_id_strs))
+        _rl_job_id  = f"retry_legs_{grid_entry_id}"
+        _scheduler._scheduler.add_job(
+            algo_runner.enter_specific_legs,
+            _DateTriggerRL(
+                run_date=datetime.now(ZoneInfo("Asia/Kolkata")) + timedelta(seconds=2),
+                timezone=ZoneInfo("Asia/Kolkata"),
+            ),
+            args=[grid_entry_id, leg_id_strs],
+            id=_rl_job_id,
+            replace_existing=True,
+            misfire_grace_time=60,
+        )
+        logger.info(
+            f"[RETRY-LEGS] Scheduled enter_specific_legs via APScheduler for {grid_entry_id} "
+            f"({len(leg_uuids)} legs)"
+        )
+    else:
+        logger.error(
+            f"[RETRY-LEGS] Scheduler or algo_runner not available — "
+            f"cannot safely schedule retry-legs for {grid_entry_id}"
+        )
 
     return {"status": "queued", "algo_name": algo.name, "leg_count": len(leg_uuids)}
 

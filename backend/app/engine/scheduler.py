@@ -288,6 +288,45 @@ class AlgoScheduler:
 
         self._per_algo_jobs[grid_entry_id] = jobs
 
+    def schedule_immediate_entry(
+        self,
+        grid_entry_id: str,
+        force_direct: bool = True,
+        force_immediate: bool = True,
+    ) -> None:
+        """
+        Schedule an entry to fire in 2 seconds via APScheduler's AsyncIOExecutor.
+        This is the ONLY safe way to call enter() outside of a scheduler job —
+        AsyncIOExecutor provides the greenlet bridge that SQLAlchemy 2.0 async requires.
+
+        Never use asyncio.create_task(), ensure_future(), or run_coroutine_threadsafe()
+        to call enter() — they all lack the greenlet context and cause MissingGreenlet.
+        """
+        if not self._algo_runner:
+            logger.error(
+                f"[SCHEDULER] schedule_immediate_entry called but _algo_runner not wired "
+                f"— cannot schedule grid_entry_id={grid_entry_id}"
+            )
+            return
+
+        job_id = f"immediate_{grid_entry_id}_{int(datetime.now().timestamp())}"
+        self._scheduler.add_job(
+            self._algo_runner.enter,
+            DateTrigger(run_date=datetime.now(IST) + timedelta(seconds=2), timezone=IST),
+            kwargs={
+                "grid_entry_id": grid_entry_id,
+                "force_direct":  force_direct,
+                "force_immediate": force_immediate,
+            },
+            id=job_id,
+            replace_existing=True,
+            misfire_grace_time=60,
+        )
+        logger.info(
+            f"[ENGINE] Immediate entry scheduled via APScheduler "
+            f"grid_entry_id={grid_entry_id[:8]} force_direct={force_direct} job_id={job_id}"
+        )
+
     def add_daily_reset_job(self, reset_fn):
         """Run daily system reset at 08:00 IST — clears kill switch and killed accounts."""
         self._scheduler.add_job(

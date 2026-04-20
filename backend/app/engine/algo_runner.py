@@ -443,15 +443,18 @@ class AlgoRunner:
                         f"[enter] {_gate_algo_name} entry_time {_et} "
                         f"still ahead ({_now} < {_entry_t}) — scheduling job instead of firing now"
                     )
-                    if self._scheduler:
-                        import asyncio as _aio
-                        _loop = getattr(self._scheduler, "_loop", None)
-                        if _loop and _loop.is_running():
-                            import asyncio
-                            asyncio.run_coroutine_threadsafe(
-                                self._enter_with_db_wrap(grid_entry_id, force_direct),
-                                _loop,
-                            )
+                    from app.engine.scheduler import get_scheduler as _get_sched_gate
+                    _sched_gate = _get_sched_gate()
+                    if _sched_gate:
+                        _sched_gate.schedule_immediate_entry(
+                            grid_entry_id,
+                            force_direct=force_direct,
+                            force_immediate=True,
+                        )
+                    else:
+                        logger.error(
+                            f"[enter] Scheduler not available — cannot reschedule {grid_entry_id} safely"
+                        )
                     return
 
         async with AsyncSessionLocal() as db:
@@ -1904,12 +1907,19 @@ class AlgoRunner:
             logger.info(f"[W&T] Threshold crossed for {eid} @ {entry_price:.2f} — scheduling order")
             # Clear arming cache — window has fired, rearm should not re-register it
             self._wt_arming_cache.pop(eid, None)
-            # Break out of the LTP consumer tick-processing chain by scheduling as a new
-            # asyncio Task. Direct await from run_coroutine_threadsafe callback context
-            # loses SQLAlchemy's greenlet bridge (greenlet_spawn / await_only), causing
-            # MissingGreenlet. A fresh top-level Task gets a clean greenlet context.
-            import asyncio as _aio
-            _aio.create_task(self._enter_with_db_wrap(eid, force_direct=True))
+            # Schedule via APScheduler's AsyncIOExecutor — this is the ONLY safe path.
+            # asyncio.create_task() / ensure_future() / run_coroutine_threadsafe() all
+            # lack SQLAlchemy's greenlet bridge and cause MissingGreenlet.
+            # APScheduler's executor provides the greenlet context automatically.
+            from app.engine.scheduler import get_scheduler as _get_sched
+            _sched = _get_sched()
+            if _sched:
+                _sched.schedule_immediate_entry(eid, force_direct=True, force_immediate=True)
+            else:
+                logger.error(
+                    f"[W&T] Scheduler not available for {eid} — entry cannot be placed safely. "
+                    f"Check scheduler initialisation order in main.py."
+                )
 
         return on_wt_entry
 
