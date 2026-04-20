@@ -469,23 +469,29 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
       {/* ── Archive panel ──────────────────────────────────────────────────── */}
       {showArch && (
-        <div className="cloud-fill" style={{ flexShrink:0, background:'rgba(245,158,11,0.07)', border:'0.5px solid rgba(245,158,11,0.22)', borderRadius:'10px', padding:'14px 16px', marginBottom:'10px' }}>
-          <div style={{ fontSize:'10px', fontWeight:700, color:'var(--accent-amber)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-display)' }}>Archived Algos</div>
+        <div style={{ flexShrink:0, marginLeft:'16px', marginRight:'16px', marginBottom:'12px' }}>
+          <div style={{ background:'var(--bg)', borderRadius:16, boxShadow:'var(--neu-inset)', padding:'14px 16px' }}>
+            <div style={{ fontSize:'10px', fontWeight:700, color:'var(--text-mute)', marginBottom:'12px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'Inter, sans-serif' }}>Archived</div>
           {loading
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Loading…</span>
             : archived.length === 0
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>No archived algos.</span>
             : <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
                 {archived.map(a => (
-                  <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'var(--glass-bg)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', borderRadius:'8px', padding:'8px 12px', border:'0.5px solid rgba(255,107,0,0.18)' }}>
+                  <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'var(--bg)', borderRadius:12, padding:'8px 12px', boxShadow:'var(--neu-raised-sm)' }}>
                     <div>
-                      <div style={{ fontSize:'12px', fontWeight:600 }}>{a.name}</div>
-                      <div style={{ fontSize:'10px', color:'var(--text-dim)' }}>{a.account}</div>
+                      <div style={{ fontSize:'12px', fontWeight:600, color:'var(--text)' }}>{a.name}</div>
+                      <div style={{ fontSize:'10px', color:'var(--text-mute)' }}>{a.account}</div>
                     </div>
-                    <button className="btn btn-ghost" style={{ fontSize:'11px', height:'26px', padding:'0 10px' }} onClick={() => unarch(a.id)}>Reactivate</button>
+                    <button style={{ fontSize:'11px', height:'26px', padding:'0 10px', borderRadius:100, background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--accent)', fontWeight:600, cursor:'pointer', transition:'box-shadow 0.12s' }}
+                      onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                      onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                      onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                      onClick={() => unarch(a.id)}>Reactivate</button>
                   </div>
                 ))}
               </div>}
+          </div>
         </div>
       )}
 

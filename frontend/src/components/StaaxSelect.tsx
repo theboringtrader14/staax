@@ -92,7 +92,7 @@ export function StaaxSelect({ value, onChange, options, width }: {
               }}
               onMouseEnter={e => {
                 const el = e.currentTarget as HTMLDivElement
-                el.style.background = o.value === value ? 'var(--accent-dim)' : 'var(--bg-surface)'
+                el.style.background = o.value === value ? 'var(--accent-dim)' : 'rgba(128,128,128,0.1)'
                 el.style.color = o.value === value ? 'var(--accent)' : 'var(--text)'
               }}
               onMouseLeave={e => {
