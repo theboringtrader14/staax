@@ -295,7 +295,7 @@ export default function DashboardPanel() {
           <NeuBtn onClick={stopAll} disabled={allStopped} style={{ flex: 1 }}>
             Stop All
           </NeuBtn>
-          <NeuBtn accent onClick={startAll} disabled={allRunning} style={{ flex: 1 }}>
+          <NeuBtn onClick={startAll} disabled={allRunning} style={{ flex: 1, color: 'var(--accent)', fontWeight: 600 }}>
             Start
           </NeuBtn>
         </div>
