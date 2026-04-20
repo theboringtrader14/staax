@@ -519,7 +519,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                   <span style={{ fontFamily:'var(--font-display)', fontSize:'13px', fontWeight:700, color:'#FF6B00', letterSpacing:'1px' }}>
                     {instrument}
                   </span>
-                  <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.38)' }}>
+                  <span style={{ fontSize:'11px', color:'var(--text-mute)' }}>
                     {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
                   </span>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"
