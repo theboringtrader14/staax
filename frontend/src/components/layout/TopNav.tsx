@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Pulse, Sun, Moon } from '@phosphor-icons/react'
+import { Pulse, Sun, Moon, User } from '@phosphor-icons/react'
 
 const NAV_TABS = [
   { path: '/grid',       label: 'Algos'     },
@@ -10,6 +10,22 @@ const NAV_TABS = [
   { path: '/analytics',  label: 'Analytics' },
   { path: '/indicators', label: 'Bots'      },
 ]
+
+const iconBtnStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 32,
+  height: 32,
+  borderRadius: '50%',
+  background: 'var(--bg)',
+  boxShadow: 'var(--neu-raised-sm)',
+  border: 'none',
+  color: 'var(--text-dim)',
+  cursor: 'pointer',
+  flexShrink: 0,
+  transition: 'color 0.18s ease',
+}
 
 export default function TopNav() {
   const navigate          = useNavigate()
@@ -34,18 +50,19 @@ export default function TopNav() {
   }
 
   const isDark = theme === 'dark'
-
   const tabInactive = 'var(--text-dim)'
+
+  const onEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.color = 'var(--accent)'
+  }
+  const onLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.color = 'var(--text-dim)'
+  }
 
   return (
     <>
-      {/* Sticky wrapper — occupies space in flow, sticks on scroll */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        padding: '20px 24px 0',
-      }}>
+      {/* Sticky wrapper */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 100, padding: '20px 24px 0' }}>
         <header style={{
           maxWidth: 1200,
           margin: '0 auto',
@@ -61,31 +78,24 @@ export default function TopNav() {
           padding: '0 24px',
         }}>
 
-          {/* LEFT — Wordmark (links to /dashboard) */}
-          <NavLink
-            to="/dashboard"
-            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', flexShrink: 0 }}
-          >
-            <span style={{
-              fontFamily: 'Syne, sans-serif',
-              fontSize: 15,
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-            }}>
-              <span style={{ color: 'var(--text-dim)' }}>
-                LIFEX OS ·{' '}
+          {/* LEFT — Wordmark */}
+          <NavLink to="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <span style={{ fontFamily: 'Syne, sans-serif', fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              <span style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>
+                LIFEX OS
               </span>
+              <span style={{ color: 'var(--text-dim)' }}>{' · '}</span>
               <span style={{ color: 'var(--accent)' }}>STAAX</span>
             </span>
           </NavLink>
 
-          {/* CENTER — Nav tabs, text only */}
-          <nav style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 32,
-            height: '100%',
-          }}>
+          {/* CENTER — Nav tabs */}
+          <nav style={{ display: 'flex', alignItems: 'center', gap: 32, height: '100%' }}>
             {NAV_TABS.map(({ path, label }) => (
               <NavLink
                 key={path}
@@ -100,7 +110,7 @@ export default function TopNav() {
                   fontSize: 14,
                   fontWeight: 500,
                   fontFamily: 'Inter, var(--font-body), sans-serif',
-                  color: isActive ? '#FF6B00' : tabInactive,
+                  color: isActive ? 'var(--accent)' : tabInactive,
                   whiteSpace: 'nowrap',
                   transition: 'color 0.18s ease',
                 })}
@@ -111,86 +121,24 @@ export default function TopNav() {
           </nav>
 
           {/* RIGHT — Controls */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexShrink: 0,
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
 
-            {/* Activity — triggers dashboard panel */}
-            <button
-              onClick={() => setIsDashboardOpen(true)}
-              title="System Monitor"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: 'var(--bg-surface)',
-                boxShadow: 'var(--neu-raised-sm)',
-                border: 'none',
-                color: 'var(--text-dim)',
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'color 0.18s ease',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)' }}
-            >
+            {/* Activity */}
+            <button onClick={() => setIsDashboardOpen(true)} title="System Monitor"
+              style={iconBtnStyle} onMouseEnter={onEnter} onMouseLeave={onLeave}>
               <Pulse size={16} weight="regular" />
             </button>
 
             {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              title={isDark ? 'Light mode' : 'Dark mode'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: 'var(--bg-surface)',
-                boxShadow: 'var(--neu-raised-sm)',
-                border: 'none',
-                color: 'var(--text-dim)',
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'color 0.18s ease',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)' }}
-            >
+            <button onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'}
+              style={iconBtnStyle} onMouseEnter={onEnter} onMouseLeave={onLeave}>
               {isDark ? <Sun size={16} weight="regular" /> : <Moon size={16} weight="regular" />}
             </button>
 
-            {/* Avatar — KA initials */}
-            <button
-              onClick={() => setIsProfileOpen(true)}
-              title="Profile"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: 'var(--accent-dim)',
-                border: '1px solid var(--border-accent)',
-                color: 'var(--accent)',
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: 'pointer',
-                flexShrink: 0,
-                letterSpacing: '0.02em',
-              }}
-            >
-              KA
+            {/* Profile */}
+            <button onClick={() => setIsProfileOpen(true)} title="Profile"
+              style={iconBtnStyle} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+              <User size={16} weight="regular" />
             </button>
           </div>
         </header>
