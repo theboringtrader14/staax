@@ -923,3 +923,18 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
     grid-template-columns: 1fr !important;
   }
 }
+
+[data-theme='light'] {
+  --bg-void:     #e8e4df;
+  --bg-deep:     #ddd9d4;
+  --bg-surface:  #d4d0cb;
+  --bg-primary:  #e8e4df;
+  --bg-secondary:#ddd9d4;
+  --bg-elevated: #d4d0cb;
+  --text:        #1A1A1E;
+  --text-muted:  #4a4a52;
+  --text-dim:    #6E6E78;
+  --gs-border:   rgba(0,0,0,0.08);
+  --glass-bg:    rgba(212,208,203,0.80);
+  color-scheme: light;
+}

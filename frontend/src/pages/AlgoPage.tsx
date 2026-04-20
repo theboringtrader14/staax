@@ -962,7 +962,7 @@ export default function AlgoPage() {
         <div className="page-header">
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>{algoName || 'Edit Algo'}</h1>
           <div className="page-header-actions">
-            <button className="btn btn-ghost" onClick={() => navigate('/grid')}>← Back to Grid</button>
+            <button className="btn btn-ghost" onClick={() => navigate('/grid')}>← Back to Algos</button>
           </div>
         </div>
         <div style={{ background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: '8px', padding: '20px 24px', textAlign: 'center' }}>

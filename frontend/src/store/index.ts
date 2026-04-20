@@ -56,6 +56,10 @@ interface STAAXStore {
   setIsPractixMode: (v: boolean) => void
   showWeekends:     boolean
   setShowWeekends:  (v: boolean) => void
+  isDashboardOpen:  boolean
+  setIsDashboardOpen: (v: boolean) => void
+  isProfileOpen:    boolean
+  setIsProfileOpen: (v: boolean) => void
 }
 
 export const useStore = create<STAAXStore>((set, get) => ({
@@ -131,4 +135,8 @@ export const useStore = create<STAAXStore>((set, get) => ({
   setIsPractixMode: (v) => { localStorage.setItem('staax_practix_mode', String(v)); set({ isPractixMode: v }) },
   showWeekends: false,
   setShowWeekends: (v) => set({ showWeekends: v }),
+  isDashboardOpen: false,
+  setIsDashboardOpen: (v) => set({ isDashboardOpen: v }),
+  isProfileOpen: false,
+  setIsProfileOpen: (v) => set({ isProfileOpen: v }),
 }))

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import HoneycombBackground from '@/components/HoneycombBackground'
+import NotificationSystem from '@/components/notifications/NotificationSystem'
 import Layout from '@/components/layout/Layout'
 import LandingPage from '@/pages/LandingPage'
 import GridPage from '@/pages/GridPage'
@@ -7,17 +8,21 @@ import OrdersPage from '@/pages/OrdersPage'
 import AlgoPage from '@/pages/AlgoPage'
 import ReportsPage from '@/pages/ReportsPage'
 import AccountsPage from '@/pages/AccountsPage'
-import DashboardPage from '@/pages/DashboardPage'
 import IndicatorsPage from '@/pages/IndicatorsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import { useStore } from '@/store'
 import { useEffect, useState } from 'react'
 import { accountsAPI } from '@/services/api'
+import DashboardPanel from '@/components/panels/DashboardPanel'
+import UserProfilePopup from '@/components/profile/UserProfilePopup'
 
 export default function App() {
-  // Force dark theme always — LIFEX is dark-only
-  document.documentElement.setAttribute('data-theme', 'dark')
   const setAccounts = useStore(s => s.setAccounts)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('staax_theme') ?? 'dark'
+    document.documentElement.setAttribute('data-theme', saved)
+  }, [])
 
   // Global Zerodha OAuth popup handler
   const [zerodhaStatus, setZerodhaStatus] = useState<'connecting' | 'success' | 'error' | null>(null)
@@ -98,13 +103,16 @@ export default function App() {
   return (
     <BrowserRouter>
       <HoneycombBackground />
+      <NotificationSystem />
+      <DashboardPanel />
+      <UserProfilePopup />
       <Routes>
         {/* Landing page */}
         <Route path="/" element={<LandingPage />} />
 
         {/* App routes — Layout is a pathless wrapper */}
         <Route element={<Layout />}>
-          <Route path="/dashboard"  element={<DashboardPage />} />
+          <Route path="/dashboard"  element={<Navigate to="/grid" replace />} />
           <Route path="/grid"       element={<GridPage />} />
           <Route path="/orders"     element={<OrdersPage />} />
           <Route path="/algo/new"   element={<AlgoPage />} />

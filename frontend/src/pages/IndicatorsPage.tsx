@@ -37,10 +37,7 @@ const TIMEFRAMES = [
 ]
 const CHANNEL_TFS = ['1', '3', '5', '15', '30', '60', '120', '240', 'D']
 
-const indicatorShortLabel = (ind: string) => {
-  const found = INDICATORS.find(i => i.value === ind)
-  return found ? found.label.replace(' Strategy', '').replace(' Bands Strategy', ' Bands') : ind
-}
+
 
 type Bot = {
   id: string; name: string; account_id: string; instrument: string
@@ -827,7 +824,7 @@ export default function IndicatorsPage() {
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>
-            Indicator Bots
+            Bots
           </h1>
           <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '3px' }}>
             {loading ? 'Loading...' : `${activeBots.filter(b => b.status === 'live').length} running · ${activeBots.length} total`}
