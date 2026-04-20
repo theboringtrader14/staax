@@ -51,7 +51,7 @@ export function StaaxSelect({ value, onChange, options, width }: {
         boxShadow: open ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
         transition: 'box-shadow 0.15s',
       }}>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{label}</span>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-dim)' }}>{label}</span>
         <CaretDown
           size={12}
           weight="bold"
