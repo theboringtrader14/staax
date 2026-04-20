@@ -230,7 +230,7 @@ export default function DashboardPanel() {
       <div
         onClick={() => setIsDashboardOpen(false)}
         style={{
-          position: 'fixed', top: 82, left: 0, right: 0, bottom: 0, zIndex: 199,
+          position: 'fixed', inset: 0, zIndex: 199,
           backdropFilter: isDashboardOpen ? 'blur(8px)' : 'blur(0px)',
           WebkitBackdropFilter: isDashboardOpen ? 'blur(8px)' : 'blur(0px)',
           background: isDashboardOpen ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0)',

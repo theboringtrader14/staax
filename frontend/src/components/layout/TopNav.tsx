@@ -62,7 +62,7 @@ export default function TopNav() {
   return (
     <>
       {/* Sticky wrapper — matches landing page: 20px top, 20px side margins */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 100, padding: '20px 20px 0' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 210, padding: '20px 20px 0' }}>
         <header style={{
           maxWidth: 1200,
           margin: '0 auto',
