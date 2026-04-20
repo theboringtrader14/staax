@@ -430,7 +430,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 92px)' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ flexShrink:0, paddingBottom:'4px' }}>
+      <div style={{ flexShrink:0, paddingBottom:'4px', paddingLeft:'16px', paddingRight:'16px' }}>
         <div className="page-header">
           <div>
             <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--ox-radiant)' }}>Algos</h1>
@@ -493,7 +493,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
       )}
 
       {/* ── Status legend ───────────────────────────────────────────────── */}
-      <div style={{ flexShrink:0, display:'flex', gap:'18px', alignItems:'center', paddingLeft:'2px', marginBottom:'8px', flexWrap:'wrap' }}>
+      <div style={{ flexShrink:0, display:'flex', gap:'18px', alignItems:'center', paddingLeft:'16px', paddingRight:'16px', marginBottom:'8px', flexWrap:'wrap' }}>
         {([
           ['#FF6B00','Active'], ['#00FF88','Open'], ['#FFE600','Waiting'],
           ['#FF8C00','Pending'], ['#FF2244','Error'],
@@ -501,7 +501,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
         ] as [string,string][]).map(([color, label]) => (
           <div key={label} style={{ display:'flex', alignItems:'center', gap:'5px' }}>
             <div style={{ width:'7px', height:'7px', borderRadius:'50%', background:color, boxShadow:`0 0 6px ${color}`, flexShrink:0 }}/>
-            <span style={{ fontSize:'10px', color:'rgba(255,255,255,0.40)', fontFamily:'var(--font-display)', letterSpacing:'0.5px' }}>{label}</span>
+            <span style={{ fontSize:'10px', color:'var(--text-mute)', fontFamily:'var(--font-display)', letterSpacing:'0.5px' }}>{label}</span>
           </div>
         ))}
       </div>
