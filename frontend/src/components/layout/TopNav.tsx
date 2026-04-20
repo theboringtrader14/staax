@@ -105,23 +105,7 @@ export default function TopNav() {
                   transition: 'color 0.18s ease',
                 })}
               >
-                {({ isActive }) => (
-                  <>
-                    {label}
-                    {isActive && (
-                      <span style={{
-                        position: 'absolute',
-                        bottom: 8,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: '100%',
-                        height: 2,
-                        background: '#FF6B00',
-                        borderRadius: 2,
-                      }} />
-                    )}
-                  </>
-                )}
+                {label}
               </NavLink>
             ))}
           </nav>

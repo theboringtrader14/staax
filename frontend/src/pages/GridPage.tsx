@@ -507,8 +507,8 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
       </div>
 
       {/* ── Algo cards outer container ─────── */}
-      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', padding:'14px 14px 0', borderRadius:'16px' }}>
-        <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', paddingBottom:'14px', paddingLeft:'8px', paddingRight:'8px', marginLeft:'-8px', marginRight:'-8px' }}>
+      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column' }}>
+        <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', padding:'16px 16px 24px' }}>
 
           {visibleAlgos.length === 0 && (
             <div style={{ padding:'64px 24px', textAlign:'center', color:'var(--text-dim)', fontSize:'13px' }}>
