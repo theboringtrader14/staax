@@ -244,7 +244,7 @@ export default function DashboardPanel() {
         position: 'fixed',
         top: 82,       /* below the sticky nav pill (20px wrapper + ~48px pill + 14px gap) */
         right: 20,     /* matches TopNav side margin */
-        width: 380,
+        width: 475,
         maxHeight: 'calc(100vh - 110px)', /* clip before the bottom */
         zIndex: 200,
         borderRadius: 20,
@@ -301,33 +301,37 @@ export default function DashboardPanel() {
         </div>
 
         {/* ── Scrollable body ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
           {/* Kill result banner */}
           {killActivated && killResult && (
-            <div style={{ background: 'rgba(255,68,68,0.08)', borderRadius: 12, padding: '10px 12px', boxShadow: 'var(--neu-inset)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#FF4444', marginBottom: 2 }}>⛔ Kill Switch Activated</div>
-              <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
-                {killResult.positions_squared} pos squared · {killResult.orders_cancelled} orders cancelled
+            <div style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--border)' }}>
+              <div style={{ background: 'rgba(255,68,68,0.08)', borderRadius: 12, padding: '10px 12px', boxShadow: 'var(--neu-inset)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#FF4444', marginBottom: 2 }}>⛔ Kill Switch Activated</div>
+                <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
+                  {killResult.positions_squared} pos squared · {killResult.orders_cancelled} orders cancelled
+                </div>
               </div>
             </div>
           )}
 
           {/* Late warning */}
           {lateWarning && (
-            <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px', boxShadow: 'var(--neu-inset)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#FF4444', marginBottom: 4 }}>⚠️ After 9:00 AM</div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10 }}>Some algos may have passed entry time. Start anyway?</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <NeuBtn onClick={() => setLateWarning(false)} style={{ flex: 1, height: 28 }}>Cancel</NeuBtn>
-                <NeuBtn danger onClick={doStartAll} style={{ flex: 1, height: 28 }}>Start Anyway</NeuBtn>
+            <div style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--border)' }}>
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px', boxShadow: 'var(--neu-inset)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#FF4444', marginBottom: 4 }}>⚠️ After 9:00 AM</div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10 }}>Some algos may have passed entry time. Start anyway?</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <NeuBtn onClick={() => setLateWarning(false)} style={{ flex: 1, height: 28 }}>Cancel</NeuBtn>
+                  <NeuBtn danger onClick={doStartAll} style={{ flex: 1, height: 28 }}>Start Anyway</NeuBtn>
+                </div>
               </div>
             </div>
           )}
 
           {/* ── System Health ── */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' }}>
                 System Health
               </div>
@@ -399,7 +403,7 @@ export default function DashboardPanel() {
           </div>
 
           {/* ── Account Status ── */}
-          <div>
+          <div style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--border)' }}>
             {sectionLabel('Account Status')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {dashboardAccounts.map((acc: any) => {
@@ -442,7 +446,7 @@ export default function DashboardPanel() {
           </div>
 
           {/* ── Services ── */}
-          <div>
+          <div style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--border)' }}>
             {sectionLabel('Services')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {services.map(svc => (
@@ -471,10 +475,10 @@ export default function DashboardPanel() {
           </div>
 
           {/* ── Engine Log ── */}
-          <div>
+          <div style={{ padding: '14px 16px 16px' }}>
             {sectionLabel('Engine Log')}
-            <div style={{ borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '10px 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', color: 'var(--text-dim)' }}>
+            <div style={{ borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden', padding: '10px 0' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '0 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', color: 'var(--text-dim)' }}>
                 {dedupeLog(log).map((line, i) => {
                   const isSep = line.startsWith('──')
                   if (isSep) return (
