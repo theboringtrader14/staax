@@ -402,10 +402,10 @@ export default function DashboardPanel() {
 
           </div>
 
-          {/* ── Account Status ── */}
+          {/* ── Account Status — single row ── */}
           <div style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--border)' }}>
             {sectionLabel('Account Status')}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               {dashboardAccounts.map((acc: any) => {
                 const isZerodha = acc.broker === 'zerodha'
                 const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
@@ -413,20 +413,17 @@ export default function DashboardPanel() {
                 const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
                 const succeeded = loginSucceeded[acc.id] ?? false
                 return (
-                  <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: isLive ? '#22DD88' : 'var(--text-mute)', boxShadow: isLive ? '0 0 6px #22DD8888' : 'none' }} />
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{acc.nickname || acc.name}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {isLive && (
-                        <span style={{ padding: '3px 9px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#22DD88' }}>Live</span>
-                      )}
-                      {!isLive && (
-                        <NeuBtn accent onClick={async () => {
+                  <div key={acc.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 8px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
+                    {/* Status dot */}
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLive ? '#22DD88' : 'var(--text-mute)', boxShadow: isLive ? '0 0 6px #22DD8888' : 'none' }} />
+                    {/* Name */}
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textAlign: 'center' }}>{acc.nickname || acc.name}</div>
+                    {/* Broker */}
+                    <div style={{ fontSize: 9, color: 'var(--text-mute)', textAlign: 'center' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
+                    {/* Status / action */}
+                    {isLive
+                      ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#22DD88' }}>Live</span>
+                      : <NeuBtn accent onClick={async () => {
                           if (isZerodha) {
                             const w = 520, h = 640, left = window.screenX + (window.outerWidth - w) / 2, top = window.screenY + (window.outerHeight - h) / 2
                             window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
@@ -434,11 +431,10 @@ export default function DashboardPanel() {
                             const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
                             if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
                           }
-                        }} style={{ height: 26, fontSize: 10, padding: '0 10px', flexShrink: 0 }}>
+                        }} style={{ height: 24, fontSize: 9, padding: '0 8px' }}>
                           {succeeded ? 'Re-Login' : 'Login'}
                         </NeuBtn>
-                      )}
-                    </div>
+                    }
                   </div>
                 )
               })}
