@@ -19,22 +19,12 @@ export default function TopNav() {
   const setIsDashboardOpen = useStore(s => s.setIsDashboardOpen)
   const livePnl           = useStore(s => s.livePnl)
 
-  const [istTime, setIstTime] = useState('')
   const [pendingPath, setPendingPath] = useState<string | null>(null)
 
   useEffect(() => {
     const rupee = '₹'
     document.title = `STAAX ${livePnl >= 0 ? '+' : ''}${rupee}${livePnl.toLocaleString('en-IN')}`
   }, [livePnl])
-
-  useEffect(() => {
-    const tick = () => setIstTime(
-      new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })
-    )
-    tick()
-    const t = setInterval(tick, 1000)
-    return () => clearInterval(t)
-  }, [])
 
   const handleNavClick = (e: React.MouseEvent, to: string) => {
     if ((window as any).__staaxDirty) {
@@ -45,11 +35,7 @@ export default function TopNav() {
 
   const isDark = theme === 'dark'
 
-  const pillBg     = isDark ? 'rgba(10,10,11,0.85)' : 'rgb(228,231,239)'
-  const pillShadow = isDark
-    ? '-8px -8px 16px rgba(255,255,255,0.025), 8px 8px 16px rgba(0,0,0,0.7)'
-    : '-8px -8px 16px rgba(255,255,255,1), 8px 8px 16px rgba(163,177,198,0.55)'
-  const tabInactive = isDark ? 'rgba(229,231,235,0.55)' : 'rgba(26,29,37,0.68)'
+  const tabInactive = 'var(--text-dim)'
 
   return (
     <>
@@ -65,10 +51,10 @@ export default function TopNav() {
           margin: '0 auto',
           height: 62,
           borderRadius: 100,
-          background: pillBg,
+          background: 'var(--bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: pillShadow,
+          boxShadow: 'var(--neu-raised)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -86,10 +72,10 @@ export default function TopNav() {
               fontWeight: 700,
               whiteSpace: 'nowrap',
             }}>
-              <span style={{ color: isDark ? 'rgba(240,237,232,0.42)' : 'rgba(26,29,37,0.50)' }}>
+              <span style={{ color: 'var(--text-dim)' }}>
                 LIFEX OS ·{' '}
               </span>
-              <span style={{ color: '#FF6B00' }}>STAAX</span>
+              <span style={{ color: 'var(--accent)' }}>STAAX</span>
             </span>
           </NavLink>
 
@@ -148,39 +134,6 @@ export default function TopNav() {
             flexShrink: 0,
           }}>
 
-            {/* IST Clock */}
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              color: isDark ? 'var(--ox-radiant)' : 'rgba(26,29,37,0.55)',
-              letterSpacing: '0.04em',
-              whiteSpace: 'nowrap',
-              marginRight: 4,
-            }}>
-              {istTime}
-            </span>
-
-            {/* Kill Switch — small pill */}
-            <button
-              onClick={() => console.log('KILL SWITCH')}
-              style={{
-                height: 28,
-                padding: '0 12px',
-                borderRadius: 100,
-                background: 'rgba(239,68,68,0.10)',
-                border: '0.5px solid rgba(239,68,68,0.40)',
-                color: '#ef4444',
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: '0.06em',
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'all 0.18s ease',
-              }}
-            >
-              Kill
-            </button>
-
             {/* Activity — triggers dashboard panel */}
             <button
               onClick={() => setIsDashboardOpen(true)}
@@ -191,16 +144,17 @@ export default function TopNav() {
                 justifyContent: 'center',
                 width: 32,
                 height: 32,
-                borderRadius: 8,
-                background: 'transparent',
-                border: '0.5px solid transparent',
-                color: isDark ? 'rgba(240,237,232,0.45)' : 'rgba(26,29,37,0.45)',
+                borderRadius: '50%',
+                background: 'var(--bg-surface)',
+                boxShadow: 'var(--neu-raised-sm)',
+                border: 'none',
+                color: 'var(--text-dim)',
                 cursor: 'pointer',
                 flexShrink: 0,
                 transition: 'color 0.18s ease',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF6B00' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = isDark ? 'rgba(240,237,232,0.45)' : 'rgba(26,29,37,0.45)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)' }}
             >
               <Pulse size={16} weight="regular" />
             </button>
@@ -215,16 +169,17 @@ export default function TopNav() {
                 justifyContent: 'center',
                 width: 32,
                 height: 32,
-                borderRadius: 8,
-                background: 'transparent',
-                border: '0.5px solid transparent',
-                color: isDark ? 'rgba(240,237,232,0.45)' : 'rgba(26,29,37,0.45)',
+                borderRadius: '50%',
+                background: 'var(--bg-surface)',
+                boxShadow: 'var(--neu-raised-sm)',
+                border: 'none',
+                color: 'var(--text-dim)',
                 cursor: 'pointer',
                 flexShrink: 0,
                 transition: 'color 0.18s ease',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF6B00' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = isDark ? 'rgba(240,237,232,0.45)' : 'rgba(26,29,37,0.45)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)' }}
             >
               {isDark ? <Sun size={16} weight="regular" /> : <Moon size={16} weight="regular" />}
             </button>
@@ -240,12 +195,12 @@ export default function TopNav() {
                 width: 32,
                 height: 32,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg,#FF6B00,#CC4400)',
-                border: 'none',
-                color: '#fff',
-                fontFamily: 'Syne, var(--font-display), sans-serif',
+                background: 'var(--accent-dim)',
+                border: '1px solid var(--border-accent)',
+                color: 'var(--accent)',
+                fontFamily: 'JetBrains Mono, monospace',
                 fontSize: 11,
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
                 flexShrink: 0,
                 letterSpacing: '0.02em',

@@ -1,4 +1,5 @@
 /* STAAX Brand Design System v2.0 — Orange / Void / Glass */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap');
 
 /* ── Design Tokens ──────────────────────────────────────── */
 :root {
@@ -81,17 +82,59 @@
   color-scheme:dark;
 }
 
-*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-html { background:var(--bg-void); }
-body {
-  background:var(--bg-primary); color:var(--text);
-  font-family:var(--font-body); font-size:13px; line-height:1.6;
-  -webkit-font-smoothing:antialiased;
+/* ── Neumorphic token layers (theme-scoped) ─────────────── */
+[data-theme="dark"] {
+  --bg:          #0A0A0B;
+  --bg-surface:  #111114;
+  --bg-elevated: #18181c;
+  --shadow-dark: rgba(0,0,0,0.7);
+  --shadow-light: rgba(255,255,255,0.025);
+  --neu-raised:    -6px -6px 12px rgba(255,255,255,0.025), 6px 6px 12px rgba(0,0,0,0.7);
+  --neu-raised-sm: -3px -3px 6px rgba(255,255,255,0.025), 3px 3px 6px rgba(0,0,0,0.7);
+  --neu-raised-lg: -10px -10px 20px rgba(255,255,255,0.025), 10px 10px 20px rgba(0,0,0,0.7);
+  --neu-inset:     inset -3px -3px 6px rgba(255,255,255,0.025), inset 3px 3px 6px rgba(0,0,0,0.7);
+  --accent:        #FF6B00;
+  --accent-dim:    rgba(255,107,0,0.15);
+  --accent-glow:   rgba(255,107,0,0.3);
+  --text:          #e5e7eb;
+  --text-dim:      rgba(229,231,235,0.55);
+  --text-mute:     rgba(229,231,235,0.3);
+  --border:        rgba(255,255,255,0.06);
+  --border-accent: rgba(255,107,0,0.3);
 }
-body::before {
-  content:''; position:fixed; inset:0;
-  background-image:radial-gradient(rgba(255,107,0,0.06) 1px,transparent 1px);
-  background-size:28px 28px; pointer-events:none; z-index:0;
+
+[data-theme="light"] {
+  --bg:          #e8e4df;
+  --bg-surface:  #ede9e4;
+  --bg-elevated: #f5f2ef;
+  --shadow-dark: rgba(180,160,140,0.5);
+  --shadow-light: rgba(255,255,255,0.95);
+  --neu-raised:    -6px -6px 12px rgba(255,255,255,0.95), 6px 6px 12px rgba(180,160,140,0.5);
+  --neu-raised-sm: -3px -3px 6px rgba(255,255,255,0.95), 3px 3px 6px rgba(180,160,140,0.5);
+  --neu-raised-lg: -10px -10px 20px rgba(255,255,255,0.95), 10px 10px 20px rgba(180,160,140,0.5);
+  --neu-inset:     inset -3px -3px 6px rgba(255,255,255,0.95), inset 3px 3px 6px rgba(180,160,140,0.5);
+  --accent:        #e55a00;
+  --accent-dim:    rgba(229,90,0,0.12);
+  --accent-glow:   rgba(229,90,0,0.25);
+  --text:          #1a1410;
+  --text-dim:      rgba(26,20,16,0.65);
+  --text-mute:     rgba(26,20,16,0.4);
+  --border:        rgba(0,0,0,0.08);
+  --border-accent: rgba(229,90,0,0.3);
+  --bg-primary:    #e8e4df;
+  --bg-void:       #e8e4df;
+  --bg-secondary:  #ddd9d4;
+  --gs-border:     rgba(0,0,0,0.08);
+  --glass-bg:      rgba(212,208,203,0.80);
+  color-scheme: light;
+}
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html { background:var(--bg,#0A0A0B); }
+body {
+  background:var(--bg,var(--bg-primary)); color:var(--text,#F0EDE8);
+  font-family:'Inter','DM Sans','Calibri',sans-serif; font-size:13px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
 }
 
 ::-webkit-scrollbar { display:none; }

@@ -433,7 +433,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
       <div style={{ flexShrink:0, paddingBottom:'4px' }}>
         <div className="page-header">
           <div>
-            <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--ox-radiant)' }}>Smart Cards</h1>
+            <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--ox-radiant)' }}>Algos</h1>
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'3px' }}>
               <span style={{ fontSize:'12px', color:'var(--gs-muted)' }}>
                 Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })}
@@ -449,6 +449,22 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
             <button className="btn btn-ghost" style={{ fontSize:'11px', position:'relative', height:'32px', padding:'0 12px' }} onClick={() => setShowArch(v => { const next = !v; localStorage.setItem('showArch', String(next)); return next })}>
               Archive
               {archived.length > 0 && <span style={{ position:'absolute', top:'5px', right:'5px', width:'5px', height:'5px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
+            </button>
+
+            <button
+              onClick={() => nav('/algo/new')}
+              style={{
+                height: 32, padding: '0 16px', borderRadius: 100,
+                background: 'var(--accent-dim)', border: '1px solid var(--border-accent)',
+                color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+                fontFamily: 'Inter, sans-serif', cursor: 'pointer',
+                boxShadow: 'var(--neu-raised-sm)', transition: 'all 0.18s ease',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,0,0.25)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-dim)' }}
+            >
+              + New Algo
             </button>
           </div>
         </div>
@@ -490,8 +506,8 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
         ))}
       </div>
 
-      {/* ── Algo cards outer container (cloud-fill glassmorphic) ─────── */}
-      <div className="card cloud-fill" style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', padding:'14px 14px 0', overflow:'hidden', borderRadius:'16px' }}>
+      {/* ── Algo cards outer container ─────── */}
+      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', padding:'14px 14px 0', overflow:'hidden', borderRadius:'16px' }}>
         <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', paddingBottom:'14px' }}>
 
           {visibleAlgos.length === 0 && (
@@ -541,12 +557,13 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                       return (
                         <div key={algo.id}
                           onClick={() => setExpandedId(expandedId === algo.id ? null : algo.id)}
-                          style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:'10px', cursor:'pointer',
-                            background:'rgba(14,14,18,0.90)', border:'0.5px solid rgba(255,255,255,0.07)',
-                            transition:'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+                          style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:20, cursor:'pointer',
+                            background:'var(--bg-surface)', border:'1px solid var(--border)',
+                            boxShadow:'var(--neu-raised)',
+                            transition:'transform 0.18s ease, box-shadow 0.18s ease',
                           }}
-                          onMouseEnter={e => { const d=e.currentTarget; d.style.transform='translateY(-2px)'; d.style.boxShadow='0 8px 28px rgba(255,107,0,0.13)'; d.style.borderColor='rgba(255,107,0,0.28)' }}
-                          onMouseLeave={e => { const d=e.currentTarget; d.style.transform='none'; d.style.boxShadow='none'; d.style.borderColor='rgba(255,255,255,0.07)' }}>
+                          onMouseEnter={e => { const d=e.currentTarget; d.style.transform='translateY(-2px)'; d.style.boxShadow='var(--neu-raised-lg)' }}
+                          onMouseLeave={e => { const d=e.currentTarget; d.style.transform='none'; d.style.boxShadow='var(--neu-raised)' }}>
 
                           {/* ── Main row ── */}
                           <div className="algo-card" style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
@@ -633,11 +650,12 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                   const isInRecurring = algo.recurringDays.includes(day)
                                   const cell = grid[algo.id]?.[day]
 
-                                  // Simple 2-state: selected (in recurring) = orange, unselected = grey
-                                  const pillBg     = isInRecurring ? 'rgba(255,107,0,0.20)' : 'rgba(255,255,255,0.06)'
-                                  const pillBorder = isInRecurring ? '0.5px solid rgba(255,107,0,0.60)' : '0.5px solid rgba(255,255,255,0.12)'
-                                  const pillColor  = isInRecurring ? '#FF6B00' : 'rgba(255,255,255,0.25)'
-                                  const pillWeight = isInRecurring ? 700 : 400
+                                  // Simple 2-state: selected (in recurring) = accent, unselected = neumorphic inset
+                                  const pillBg     = isInRecurring ? 'var(--accent-dim)' : 'var(--bg)'
+                                  const pillBorder = isInRecurring ? '1px solid var(--border-accent)' : 'none'
+                                  const pillColor  = isInRecurring ? 'var(--accent)' : 'var(--text-mute)'
+                                  const pillWeight = isInRecurring ? 600 : 400
+                                  const pillShadow = isInRecurring ? 'none' : 'var(--neu-inset)'
                                   const showDot    = false
                                   const dotColor   = 'transparent'
                                   const dotAnim    = false
@@ -657,7 +675,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                       title={canCancel ? `${day} · hover for cancel` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
                                       style={{
                                         width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
-                                        fontFamily:'var(--font-display)', fontSize:'10px',
+                                        fontFamily:'JetBrains Mono, monospace', fontSize:'10px',
                                         display:'flex', alignItems:'center', justifyContent:'center',
                                         position:'relative',
                                         transition:'all 0.15s ease', flexShrink:0,
@@ -665,7 +683,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                         background: pillBg,
                                         color: pillColor,
                                         fontWeight: pillWeight,
-                                        boxShadow: 'none',
+                                        boxShadow: pillShadow,
                                       }}>
                                       {isMonitoring && !isPillHovered ? (
                                         <>
