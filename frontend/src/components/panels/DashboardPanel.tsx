@@ -226,21 +226,36 @@ export default function DashboardPanel() {
   // ── Render ────────────────────────────────────────────────────
   return (
     <>
-      {/* Backdrop */}
-      {isDashboardOpen && (
-        <div onClick={() => setIsDashboardOpen(false)}
-          style={{ position: 'fixed', top: 98, left: 0, right: 380, bottom: 0, background: 'rgba(0,0,0,0.2)', zIndex: 199 }}
-        />
-      )}
+      {/* Blur backdrop — covers full page */}
+      <div
+        onClick={() => setIsDashboardOpen(false)}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 199,
+          backdropFilter: isDashboardOpen ? 'blur(6px)' : 'blur(0px)',
+          WebkitBackdropFilter: isDashboardOpen ? 'blur(6px)' : 'blur(0px)',
+          background: isDashboardOpen ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0)',
+          pointerEvents: isDashboardOpen ? 'auto' : 'none',
+          transition: 'backdrop-filter 0.25s ease, background 0.25s ease',
+        }}
+      />
 
-      {/* Panel */}
+      {/* Panel — drops from below the TopNav, clipped at bottom with margin */}
       <div style={{
-        position: 'fixed', top: 98, right: 0, bottom: 0, width: 380, zIndex: 200,
-        transform: isDashboardOpen ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 300ms cubic-bezier(0.4,0,0.2,1)',
+        position: 'fixed',
+        top: 82,       /* below the sticky nav pill (20px wrapper + ~48px pill + 14px gap) */
+        right: 20,     /* matches TopNav side margin */
+        width: 380,
+        maxHeight: 'calc(100vh - 110px)', /* clip before the bottom */
+        zIndex: 200,
+        borderRadius: 20,
         background: 'var(--bg)',
         boxShadow: 'var(--neu-raised-lg)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        opacity: isDashboardOpen ? 1 : 0,
+        transform: isDashboardOpen ? 'translateY(0) scale(1)' : 'translateY(-12px) scale(0.97)',
+        pointerEvents: isDashboardOpen ? 'auto' : 'none',
+        transition: 'opacity 0.22s ease, transform 0.22s ease',
+        transformOrigin: 'top right',
       }}>
 
         {/* ── Header ── */}
