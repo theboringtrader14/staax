@@ -87,12 +87,12 @@
   --bg:          #1a1d25;
   --bg-surface:  #1e2128;
   --bg-elevated: #222631;
-  --shadow-dark: rgba(0,0,0,0.7);
-  --shadow-light: rgba(255,255,255,0.025);
-  --neu-raised:    -6px -6px 12px rgba(255,255,255,0.025), 6px 6px 12px rgba(0,0,0,0.7);
-  --neu-raised-sm: -3px -3px 6px rgba(255,255,255,0.025), 3px 3px 6px rgba(0,0,0,0.7);
-  --neu-raised-lg: -10px -10px 20px rgba(255,255,255,0.025), 10px 10px 20px rgba(0,0,0,0.7);
-  --neu-inset:     inset -3px -3px 6px rgba(255,255,255,0.025), inset 3px 3px 6px rgba(0,0,0,0.7);
+  --shadow-dark:   rgba(0,0,0,0.5);
+  --shadow-light:  rgba(255,255,255,0.03);
+  --neu-raised:    -8px -8px 16px rgba(255,255,255,0.03), 8px 8px 16px rgba(0,0,0,0.5);
+  --neu-raised-sm: -4px -4px 8px rgba(255,255,255,0.03), 4px 4px 8px rgba(0,0,0,0.5);
+  --neu-raised-lg: -14px -14px 28px rgba(255,255,255,0.03), 14px 14px 28px rgba(0,0,0,0.5);
+  --neu-inset:     inset -4px -4px 8px rgba(255,255,255,0.03), inset 4px 4px 8px rgba(0,0,0,0.5);
   --accent:        #FF6B00;
   --accent-dim:    rgba(255,107,0,0.15);
   --accent-glow:   rgba(255,107,0,0.3);
