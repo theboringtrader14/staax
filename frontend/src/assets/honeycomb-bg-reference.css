@@ -1,0 +1,24 @@
+/* HONEYCOMB BACKGROUND — archived 20 Apr 2026
+   Re-enable by applying .honeycomb-bg class to the relevant element
+   or importing and rendering the component
+
+   COMPONENT: frontend/src/components/HoneycombBackground.tsx
+   SVG FILE:  frontend/src/assets/honeycomb-bg-reference.svg  (copy back to /public/honeycomb-bg.svg)
+
+   To re-enable:
+   1. Copy honeycomb-bg-reference.svg → frontend/public/honeycomb-bg.svg
+   2. In App.tsx, add: import HoneycombBackground from '@/components/HoneycombBackground'
+   3. Render <HoneycombBackground /> as the first child inside <BrowserRouter>
+*/
+
+.honeycomb-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-image: url('/honeycomb-bg.svg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.55;
+}

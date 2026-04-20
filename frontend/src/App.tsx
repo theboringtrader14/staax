@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import HoneycombBackground from '@/components/HoneycombBackground'
 import NotificationSystem from '@/components/notifications/NotificationSystem'
 import Layout from '@/components/layout/Layout'
 import LandingPage from '@/pages/LandingPage'
@@ -102,7 +101,6 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <HoneycombBackground />
       <NotificationSystem />
       <DashboardPanel />
       <UserProfilePopup />
