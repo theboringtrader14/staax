@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { CaretDown } from '@phosphor-icons/react'
 
 export function StaaxSelect({ value, onChange, options, width }: {
   value: string
@@ -16,11 +17,7 @@ export function StaaxSelect({ value, onChange, options, width }: {
   const openDropdown = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      setDropPos({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-      })
+      setDropPos({ top: rect.bottom + 6, left: rect.left, width: rect.width })
     }
     setOpen(v => !v)
   }
@@ -40,19 +37,31 @@ export function StaaxSelect({ value, onChange, options, width }: {
     <div ref={triggerRef} style={{ position: 'relative', width: width || '130px', flexShrink: 0 }}>
       <button onClick={openDropdown} style={{
         width: '100%', height: '32px', padding: '0 28px 0 12px',
-        background: 'rgba(10,10,11,0.80)',
-        border: open ? '0.5px solid rgba(255,107,0,0.55)' : '0.5px solid rgba(255,107,0,0.25)',
-        borderRadius: '8px', color: '#F0F0FF', fontSize: '11px',
-        fontFamily: 'var(--font-display)', cursor: 'pointer', textAlign: 'left',
-        display: 'flex', alignItems: 'center',
-        boxShadow: open ? '0 0 0 2px rgba(255,107,0,0.10)' : 'none',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
+        background: 'var(--bg)',
+        border: 'none',
+        borderRadius: '100px',
+        color: 'var(--text-dim)',
+        fontSize: '12px',
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 500,
+        cursor: 'pointer',
+        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        boxShadow: open ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+        transition: 'box-shadow 0.15s',
       }}>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" strokeWidth="2.5"
-          style={{ position: 'absolute', right: '8px', flexShrink: 0, transition: 'transform 0.15s', transform: open ? 'rotate(180deg)' : 'none' }}>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{label}</span>
+        <CaretDown
+          size={12}
+          weight="bold"
+          style={{
+            position: 'absolute', right: 10, color: 'var(--text-dim)',
+            transition: 'transform 0.15s',
+            transform: open ? 'rotate(180deg)' : 'none',
+            flexShrink: 0,
+          }}
+        />
       </button>
 
       {open && createPortal(
@@ -62,26 +71,26 @@ export function StaaxSelect({ value, onChange, options, width }: {
           left: dropPos.left,
           width: dropPos.width,
           zIndex: 9999,
-          background: 'rgba(10,10,11,0.98)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          border: '0.5px solid rgba(255,107,0,0.35)',
-          borderRadius: '8px',
+          background: 'var(--bg-elevated)',
+          border: 'none',
+          borderRadius: '14px',
           overflow: 'hidden',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          boxShadow: 'var(--neu-raised)',
           maxHeight: '240px',
           overflowY: 'auto',
         }}>
           {options.map(o => (
             <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
               style={{
-                padding: '8px 12px', fontSize: '11px', fontFamily: 'var(--font-display)', cursor: 'pointer',
-                color: o.value === value ? '#FF6B00' : '#F0F0FF',
-                background: o.value === value ? 'rgba(255,107,0,0.12)' : 'transparent',
-                borderLeft: o.value === value ? '2px solid #FF6B00' : '2px solid transparent',
+                padding: '9px 14px', fontSize: '12px',
+                fontFamily: 'Inter, sans-serif', fontWeight: 500,
+                cursor: 'pointer',
+                color: o.value === value ? 'var(--accent)' : 'var(--text)',
+                background: o.value === value ? 'var(--accent-dim)' : 'transparent',
+                transition: 'background 0.1s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,107,0,0.08)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = o.value === value ? 'rgba(255,107,0,0.12)' : 'transparent' }}>
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent-dim)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = o.value === value ? 'var(--accent-dim)' : 'transparent' }}>
               {o.label}
             </div>
           ))}

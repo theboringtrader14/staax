@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, algosAPI, gridAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
+import { Lightning, LightningSlash, Archive, Copy, Trash } from '@phosphor-icons/react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
@@ -385,25 +386,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
       await loadData()
     } catch { flashError('Duplicate failed') }
   }
-  // ── SVG Icons ─────────────────────────────────────────────────────────────────
-  const TrashIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1.75 3.5h10.5M5.25 3.5V2.333A.583.583 0 015.833 1.75h2.334a.583.583 0 01.583.583V3.5M11.083 3.5l-.583 8.167a.583.583 0 01-.583.583H4.083a.583.583 0 01-.583-.583L2.917 3.5"
-        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M5.833 6.417v3.5M8.167 6.417v3.5"
-        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  )
-  const ArchiveIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1.167" y="1.75" width="11.666" height="2.917" rx="0.583" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M2.333 4.667v6.416a.583.583 0 00.584.584h8.166a.583.583 0 00.584-.584V4.667"
-        stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M7 6.417v3.5M5.25 8.167L7 9.917l1.75-1.75"
-        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-
 
   const active   = algos.filter(a => !a.arch)
   const archived = algos.filter(a => a.arch)
@@ -446,23 +428,38 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
             {/* Account filter */}
             <StaaxSelect value={filterAccount} onChange={setFilterAccount} options={accountOptions} width="130px"/>
 
-            <button className="btn btn-ghost" style={{ fontSize:'11px', position:'relative', height:'32px', padding:'0 12px' }} onClick={() => setShowArch(v => { const next = !v; localStorage.setItem('showArch', String(next)); return next })}>
+            {/* Archive toggle — inset when active, raised when inactive */}
+            <button
+              onClick={() => setShowArch(v => { const next = !v; localStorage.setItem('showArch', String(next)); return next })}
+              style={{
+                position:'relative', height:32, padding:'0 14px', borderRadius:100,
+                background:'var(--bg)', border:'none',
+                boxShadow: showArch ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                color: showArch ? 'var(--accent)' : 'var(--text-dim)',
+                fontSize:12, fontWeight:500, fontFamily:'Inter, sans-serif',
+                cursor:'pointer', flexShrink:0, transition:'box-shadow 0.15s, color 0.15s',
+              }}
+            >
               Archive
-              {archived.length > 0 && <span style={{ position:'absolute', top:'5px', right:'5px', width:'5px', height:'5px', borderRadius:'50%', background:'var(--accent-amber)' }}/>}
+              {archived.length > 0 && (
+                <span style={{ position:'absolute', top:6, right:6, width:5, height:5, borderRadius:'50%', background:'var(--accent)' }}/>
+              )}
             </button>
 
+            {/* New Algo */}
             <button
               onClick={() => nav('/algo/new')}
               style={{
-                height: 32, padding: '0 16px', borderRadius: 100,
-                background: 'var(--accent-dim)', border: '1px solid var(--border-accent)',
-                color: 'var(--accent)', fontSize: 12, fontWeight: 600,
-                fontFamily: 'Inter, sans-serif', cursor: 'pointer',
-                boxShadow: 'var(--neu-raised-sm)', transition: 'all 0.18s ease',
-                flexShrink: 0,
+                height:32, padding:'0 16px', borderRadius:100,
+                background:'var(--bg)', border:'none',
+                color:'var(--accent)', fontSize:12, fontWeight:600,
+                fontFamily:'Inter, sans-serif', cursor:'pointer',
+                boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
+                flexShrink:0,
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,0,0.25)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-dim)' }}
+              onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+              onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
             >
               + New Algo
             </button>
@@ -742,86 +739,76 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                             </div>{/* end card row body */}
 
-                            {/* ── Right panel — neumorphic action buttons ── */}
+                            {/* ── Right panel — neumorphic icon buttons ── */}
                             <div className="algo-card-actions" onClick={e => e.stopPropagation()} style={{
                               display:'flex', alignSelf:'stretch', gap:8, alignItems:'center',
-                              padding:'0 16px', borderLeft:'1px solid var(--border)',
+                              padding:'0 16px',
                             }}>
                               {/* GO LIVE / DEMOTE */}
                               <button
                                 onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
+                                title={isPractixMode ? 'Go Live' : 'Demote to Practix'}
                                 style={{
-                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:3, width:52, height:44, borderRadius:12,
+                                  display:'flex', alignItems:'center', justifyContent:'center',
+                                  width:40, height:40, borderRadius:12,
                                   background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
                                   cursor:'pointer', color: isPractixMode ? '#22DD88' : 'var(--text-dim)',
-                                  transition:'box-shadow 0.12s, color 0.12s',
+                                  transition:'box-shadow 0.12s',
                                 }}
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                  {isPractixMode
-                                    ? <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                                    : <path d="M12 7H2M6 3L2 7l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                                  }
-                                </svg>
-                                <span style={{ fontSize:8, letterSpacing:'0.5px', fontFamily:'var(--font-display)', fontWeight:700 }}>
-                                  {isPractixMode ? 'GO LIVE' : 'DEMOTE'}
-                                </span>
+                                {isPractixMode
+                                  ? <Lightning size={18} weight="fill" />
+                                  : <LightningSlash size={18} weight="regular" />}
                               </button>
 
                               {/* Archive */}
                               <button
                                 onClick={() => setArchConfirm(algo.id)}
+                                title="Archive"
                                 style={{
-                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:3, width:52, height:44, borderRadius:12,
+                                  display:'flex', alignItems:'center', justifyContent:'center',
+                                  width:40, height:40, borderRadius:12,
                                   background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
                                   cursor:'pointer', color:'#60A5FA', transition:'box-shadow 0.12s',
                                 }}
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <ArchiveIcon/>
-                                <span style={{ fontSize:8, fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.5px' }}>ARCHIVE</span>
+                                <Archive size={18} weight="regular" />
                               </button>
 
-                              {/* Duplicate */}
+                              {/* Copy */}
                               <button
                                 onClick={() => duplicateAlgo(algo.id)}
-                                title="Create a copy of this algo (no recurring days, practix mode)"
+                                title="Duplicate algo"
                                 style={{
-                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:3, width:52, height:44, borderRadius:12,
+                                  display:'flex', alignItems:'center', justifyContent:'center',
+                                  width:40, height:40, borderRadius:12,
                                   background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
                                   cursor:'pointer', color:'var(--accent)', transition:'box-shadow 0.12s',
                                 }}
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect x="4.667" y="4.667" width="7.583" height="7.583" rx="0.583" stroke="currentColor" strokeWidth="1.2"/>
-                                  <path d="M2.333 9.333V1.75h7.584" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                                </svg>
-                                <span style={{ fontSize:8, fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.5px' }}>COPY</span>
+                                <Copy size={18} weight="regular" />
                               </button>
 
                               {/* Remove */}
                               <button
                                 onClick={() => setArchConfirm(algo.id)}
-                                title="Algo will be archived. All historical data preserved."
+                                title="Remove (archive)"
                                 style={{
-                                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                                  gap:3, width:52, height:44, borderRadius:12,
+                                  display:'flex', alignItems:'center', justifyContent:'center',
+                                  width:40, height:40, borderRadius:12,
                                   background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
                                   cursor:'pointer', color:'#FF4444', transition:'box-shadow 0.12s',
                                 }}
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <TrashIcon/>
-                                <span style={{ fontSize:8, fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.5px' }}>REMOVE</span>
+                                <Trash size={18} weight="regular" />
                               </button>
                             </div>
 
