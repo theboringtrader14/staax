@@ -283,12 +283,12 @@ export default function DashboardPanel() {
           </button>
         </div>
 
-        {/* ── Action bar: Kill Switch > Stop All > Start Session ── */}
+        {/* ── Action bar: Kill Switch > Stop All > Start ── */}
         <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 8, borderBottom: '0.5px solid var(--border)' }}>
           <NeuBtn danger
             onClick={() => { setSelKill(displayAccounts.map((a:any) => a.id).filter((id: string) => !killedIds.includes(id))); setKillModal(true) }}
             disabled={(killActivated && killedIds.length >= accounts.length) || killLoading}
-            style={{ flexShrink: 0, padding: '0 12px' }}
+            style={{ flex: 2 }}
           >
             {killActivated && killedIds.length >= accounts.length ? 'Killed' : 'Kill Switch'}
           </NeuBtn>
