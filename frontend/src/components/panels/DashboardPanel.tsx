@@ -411,19 +411,16 @@ export default function DashboardPanel() {
                 const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
                 const angeloneOk: boolean = isZerodha ? false : (health?.checks?.['broker_angelone_' + acc.id]?.token_valid ?? acc.token_valid_today ?? false)
                 const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
-                const succeeded = loginSucceeded[acc.id] ?? false
                 return (
                   <div key={acc.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 8px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
-                    {/* Status dot */}
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLive ? '#22DD88' : 'var(--text-mute)', boxShadow: isLive ? '0 0 6px #22DD8888' : 'none' }} />
                     {/* Name */}
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textAlign: 'center' }}>{acc.nickname || acc.name}</div>
                     {/* Broker */}
                     <div style={{ fontSize: 9, color: 'var(--text-mute)', textAlign: 'center' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
-                    {/* Status / action */}
+                    {/* Status chip or Login button */}
                     {isLive
                       ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#22DD88' }}>Live</span>
-                      : <NeuBtn accent onClick={async () => {
+                      : <NeuBtn onClick={async () => {
                           if (isZerodha) {
                             const w = 520, h = 640, left = window.screenX + (window.outerWidth - w) / 2, top = window.screenY + (window.outerHeight - h) / 2
                             window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
@@ -432,7 +429,7 @@ export default function DashboardPanel() {
                             if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
                           }
                         }} style={{ height: 24, fontSize: 9, padding: '0 8px' }}>
-                          {succeeded ? 'Re-Login' : 'Login'}
+                          Login
                         </NeuBtn>
                     }
                   </div>
