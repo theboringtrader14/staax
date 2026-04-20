@@ -323,7 +323,7 @@ export default function DashboardPanel() {
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10 }}>Some algos may have passed entry time. Start anyway?</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <NeuBtn onClick={() => setLateWarning(false)} style={{ flex: 1, height: 28 }}>Cancel</NeuBtn>
-                  <NeuBtn danger onClick={doStartAll} style={{ flex: 1, height: 28 }}>Start Anyway</NeuBtn>
+                  <NeuBtn onClick={doStartAll} style={{ flex: 1, height: 28, color: 'var(--accent)', fontWeight: 600 }}>Start Anyway</NeuBtn>
                 </div>
               </div>
             </div>
