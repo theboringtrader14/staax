@@ -283,20 +283,20 @@ export default function DashboardPanel() {
           </button>
         </div>
 
-        {/* ── Action bar ── */}
+        {/* ── Action bar: Kill Switch > Stop All > Start Session ── */}
         <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 8, borderBottom: '0.5px solid var(--border)' }}>
-          <NeuBtn accent onClick={startAll} disabled={allRunning} style={{ flex: 1 }}>
-            ▶ Start Session
-          </NeuBtn>
-          <NeuBtn onClick={stopAll} disabled={allStopped} style={{ flex: 1 }}>
-            ■ Stop All
-          </NeuBtn>
           <NeuBtn danger
             onClick={() => { setSelKill(displayAccounts.map((a:any) => a.id).filter((id: string) => !killedIds.includes(id))); setKillModal(true) }}
             disabled={(killActivated && killedIds.length >= accounts.length) || killLoading}
             style={{ flexShrink: 0, padding: '0 12px' }}
           >
-            {killActivated && killedIds.length >= accounts.length ? 'Killed' : 'Kill'}
+            {killActivated && killedIds.length >= accounts.length ? 'Killed' : 'Kill Switch'}
+          </NeuBtn>
+          <NeuBtn onClick={stopAll} disabled={allStopped} style={{ flex: 1 }}>
+            Stop All
+          </NeuBtn>
+          <NeuBtn accent onClick={startAll} disabled={allRunning} style={{ flex: 1 }}>
+            Start
           </NeuBtn>
         </div>
 
@@ -327,7 +327,20 @@ export default function DashboardPanel() {
 
           {/* ── System Health ── */}
           <div>
-            {sectionLabel('System Health')}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' }}>
+                System Health
+              </div>
+              <button onClick={refetchHealth}
+                style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--bg)', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', boxShadow: 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 0.12s' }}
+                onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                title="Refresh Health"
+              >
+                <ArrowClockwise size={11} weight="bold" />
+              </button>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map(chip => {
                 const dotColor = chip.state === 'green' ? '#22DD88' : chip.state === 'red' ? '#FF4444' : '#FFD700'
@@ -383,15 +396,6 @@ export default function DashboardPanel() {
               )
             })()}
 
-            {/* Refresh health */}
-            <button onClick={refetchHealth}
-              style={{ marginTop: 8, width: '100%', height: 28, borderRadius: 100, background: 'var(--bg)', border: 'none', color: 'var(--text-dim)', fontSize: 10, fontWeight: 500, cursor: 'pointer', boxShadow: 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'box-shadow 0.12s' }}
-              onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
-              onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-            >
-              <ArrowClockwise size={11} weight="bold" /> Refresh Health
-            </button>
           </div>
 
           {/* ── Account Status ── */}
