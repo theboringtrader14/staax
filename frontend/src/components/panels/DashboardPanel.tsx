@@ -15,7 +15,7 @@ const INIT_SERVICES: Service[] = [
 ]
 
 const SVC_DOT: Record<ServiceStatus, string> = {
-  running: '#22DD88', stopped: 'var(--text-mute)', starting: '#FFD700', stopping: '#FFD700',
+  running: '#0ea66e', stopped: 'var(--text-mute)', starting: '#FFD700', stopping: '#FFD700',
 }
 
 function dedupeLog(lines: string[]): string[] {
@@ -197,7 +197,7 @@ export default function DashboardPanel() {
   const criticalRed = !(health?.checks?.database?.ok ?? false) || !(health?.checks?.redis?.ok ?? false) || !(health?.checks?.scheduler?.ok ?? false) || (isMarketHours && !ssConnected)
   const smartstreamAmber = !isMarketHours && !ssConnected
   const overallState: 'green' | 'amber' | 'red' = !health ? 'amber' : criticalRed ? 'red' : smartstreamAmber ? 'amber' : 'green'
-  const overallColor = overallState === 'green' ? '#22DD88' : overallState === 'amber' ? '#FFD700' : '#FF4444'
+  const overallColor = overallState === 'green' ? '#0ea66e' : overallState === 'amber' ? '#FFD700' : '#FF4444'
   const statusLabel  = !health ? 'Loading…' : criticalRed ? 'Not Ready' : smartstreamAmber ? 'Feed Inactive' : 'System Ready'
 
   const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
@@ -226,14 +226,14 @@ export default function DashboardPanel() {
   // ── Render ────────────────────────────────────────────────────
   return (
     <>
-      {/* Blur backdrop — covers full page */}
+      {/* Blur backdrop — starts below TopNav so nav stays visible */}
       <div
         onClick={() => setIsDashboardOpen(false)}
         style={{
-          position: 'fixed', inset: 0, zIndex: 199,
-          backdropFilter: isDashboardOpen ? 'blur(6px)' : 'blur(0px)',
-          WebkitBackdropFilter: isDashboardOpen ? 'blur(6px)' : 'blur(0px)',
-          background: isDashboardOpen ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0)',
+          position: 'fixed', top: 82, left: 0, right: 0, bottom: 0, zIndex: 199,
+          backdropFilter: isDashboardOpen ? 'blur(8px)' : 'blur(0px)',
+          WebkitBackdropFilter: isDashboardOpen ? 'blur(8px)' : 'blur(0px)',
+          background: isDashboardOpen ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0)',
           pointerEvents: isDashboardOpen ? 'auto' : 'none',
           transition: 'backdrop-filter 0.25s ease, background 0.25s ease',
         }}
@@ -347,7 +347,7 @@ export default function DashboardPanel() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map(chip => {
-                const dotColor = chip.state === 'green' ? '#22DD88' : chip.state === 'red' ? '#FF4444' : '#FFD700'
+                const dotColor = chip.state === 'green' ? '#0ea66e' : chip.state === 'red' ? '#FF4444' : '#FFD700'
                 const statusText = chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'
                 return (
                   <div key={chip.label} style={{
@@ -419,7 +419,7 @@ export default function DashboardPanel() {
                     <div style={{ fontSize: 9, color: 'var(--text-mute)', textAlign: 'center' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
                     {/* Status chip or Login button */}
                     {isLive
-                      ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#22DD88' }}>Live</span>
+                      ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#0ea66e' }}>Live</span>
                       : <NeuBtn onClick={async () => {
                           if (isZerodha) {
                             const w = 520, h = 640, left = window.screenX + (window.outerWidth - w) / 2, top = window.screenY + (window.outerHeight - h) / 2
@@ -450,7 +450,7 @@ export default function DashboardPanel() {
                     <div style={{ fontSize: 9, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{svc.detail}</div>
                   </div>
                   {/* Status chip — inset */}
-                  <span style={{ padding: '3px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, fontFamily: 'Inter, sans-serif', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: svc.status === 'running' ? '#22DD88' : 'var(--text-mute)', flexShrink: 0 }}>
+                  <span style={{ padding: '3px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, fontFamily: 'Inter, sans-serif', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: svc.status === 'running' ? '#0ea66e' : 'var(--text-mute)', flexShrink: 0 }}>
                     {svc.status}
                   </span>
                   {svc.status === 'stopped'  && (
@@ -481,7 +481,7 @@ export default function DashboardPanel() {
                   const isErr = line.includes('⛔')
                   const isWrn = line.includes('⚠')
                   return (
-                    <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF5555' : isWrn ? '#FFD700' : 'rgba(200,210,220,0.55)', lineHeight: 1.6, padding: '0.5px 0' }}>
+                    <div key={i} style={{ color: isOk ? '#0ea66e' : isErr ? '#FF5555' : isWrn ? '#FFD700' : 'rgba(200,210,220,0.55)', lineHeight: 1.6, padding: '0.5px 0' }}>
                       {line}
                     </div>
                   )
