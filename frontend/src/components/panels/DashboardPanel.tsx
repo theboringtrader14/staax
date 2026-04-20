@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import { X } from '@phosphor-icons/react'
+import { useEffect, useRef, useState } from 'react'
+import { X, ArrowClockwise } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
-// ── Types (copied from DashboardPage) ─────────────────────────
+// ── Types ──────────────────────────────────────────────────────
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
 
@@ -13,8 +13,9 @@ const INIT_SERVICES: Service[] = [
   { id: 'backend', name: 'Backend API', status: 'stopped', detail: 'http://localhost:8000' },
   { id: 'ws',      name: 'Market Feed', status: 'stopped', detail: 'NSE live tick data' },
 ]
-const STATUS_CLR: Record<ServiceStatus, string> = {
-  running: 'var(--sem-long)', stopped: '#4A4A52', starting: 'var(--sem-warn)', stopping: 'var(--sem-warn)',
+
+const SVC_DOT: Record<ServiceStatus, string> = {
+  running: '#22DD88', stopped: 'var(--text-mute)', starting: '#FFD700', stopping: '#FFD700',
 }
 
 function dedupeLog(lines: string[]): string[] {
@@ -50,6 +51,45 @@ function isPast9am() {
   return ist.getHours() > 9 || (ist.getHours() === 9 && ist.getMinutes() >= 15)
 }
 
+// ── Neumorphic button helper ───────────────────────────────────
+function NeuBtn({ children, onClick, disabled, accent, danger, style: extraStyle }: {
+  children: React.ReactNode
+  onClick?: () => void
+  disabled?: boolean
+  accent?: boolean
+  danger?: boolean
+  style?: React.CSSProperties
+}) {
+  const base: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    height: 32, padding: '0 14px', borderRadius: 100,
+    border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: 11, fontWeight: 600, fontFamily: 'Inter, sans-serif',
+    transition: 'box-shadow 0.12s, opacity 0.12s',
+    opacity: disabled ? 0.45 : 1,
+    ...(accent
+      ? { background: 'var(--accent)', color: '#fff', boxShadow: 'var(--neu-raised-sm)' }
+      : danger
+      ? { background: 'rgba(255,68,68,0.15)', color: '#FF4444', boxShadow: 'var(--neu-raised-sm)' }
+      : { background: 'var(--bg)', color: 'var(--text-dim)', boxShadow: 'var(--neu-raised-sm)' }),
+    ...extraStyle,
+  }
+  const ref = useRef<HTMLButtonElement>(null)
+  return (
+    <button
+      ref={ref}
+      style={base}
+      disabled={disabled}
+      onClick={onClick}
+      onMouseDown={() => { if (!disabled && ref.current) ref.current.style.boxShadow = 'var(--neu-inset)' }}
+      onMouseUp={() => { if (ref.current) ref.current.style.boxShadow = accent ? 'var(--neu-raised-sm)' : danger ? 'var(--neu-raised-sm)' : 'var(--neu-raised-sm)' }}
+      onMouseLeave={() => { if (ref.current) ref.current.style.boxShadow = 'var(--neu-raised-sm)' }}
+    >
+      {children}
+    </button>
+  )
+}
+
 // ── Component ──────────────────────────────────────────────────
 export default function DashboardPanel() {
   const isDashboardOpen    = useStore(s => s.isDashboardOpen)
@@ -57,12 +97,11 @@ export default function DashboardPanel() {
   const accounts           = useStore(s => s.accounts)
   const setAccounts        = useStore(s => s.setAccounts)
 
-  const [services, setServices]         = useState<Service[]>(INIT_SERVICES)
-  const [health, setHealth]             = useState<any>(null)
-  const [log, setLog]                   = useState<string[]>(['STAAX ready.'])
+  const [services, setServices]             = useState<Service[]>(INIT_SERVICES)
+  const [health, setHealth]                 = useState<any>(null)
+  const [log, setLog]                       = useState<string[]>(['STAAX ready.'])
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
 
-  // Kill switch state
   const [showKillConfirm, setKillModal]  = useState(false)
   const [killActivated, setKillActived]  = useState(false)
   const [killLoading, setKillLoading]    = useState(false)
@@ -71,14 +110,13 @@ export default function DashboardPanel() {
   const [killedIds, setKilledIds]        = useState<string[]>([])
   const [lateWarning, setLateWarning]    = useState(false)
 
-  // ── Helpers ──────────────────────────────────────────────────
   const addLog = (msg: string) => {
     const ts = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setLog(l => ['[' + ts + '] ' + msg, ...l.slice(0, 49)])
   }
-  const setSvc    = (id: string, st: ServiceStatus) => setServices(s => s.map(x => x.id === id ? { ...x, status: st } : x))
-  const startSvc  = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'…'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog('✅ '+id+' running') } catch { setSvc(id,'stopped'); addLog('⛔ '+id+' failed') } }
-  const stopSvc   = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'…'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog('⛔ '+id+' stopped') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
+  const setSvc   = (id: string, st: ServiceStatus) => setServices(s => s.map(x => x.id === id ? { ...x, status: st } : x))
+  const startSvc = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'…'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog('✅ '+id+' running') } catch { setSvc(id,'stopped'); addLog('⛔ '+id+' failed') } }
+  const stopSvc  = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'…'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog('⛔ '+id+' stopped') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
 
   const doStartAll = async () => {
     setLateWarning(false); addLog('Starting all services…')
@@ -111,10 +149,7 @@ export default function DashboardPanel() {
 
   const refetchHealth = () => systemAPI.health().then(r => setHealth(r.data)).catch(() => {})
 
-  // ── Effects ───────────────────────────────────────────────────
-  useEffect(() => {
-    accountsAPI.list().then(res => setAccounts(res.data)).catch(() => {})
-  }, [])
+  useEffect(() => { accountsAPI.list().then(res => setAccounts(res.data)).catch(() => {}) }, [])
 
   useEffect(() => {
     eventsAPI.list(50).then(res => {
@@ -134,11 +169,7 @@ export default function DashboardPanel() {
     }).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    refetchHealth()
-    const t = setInterval(refetchHealth, 30000)
-    return () => clearInterval(t)
-  }, [])
+  useEffect(() => { refetchHealth(); const t = setInterval(refetchHealth, 30000); return () => clearInterval(t) }, [])
 
   useEffect(() => {
     systemAPI.killSwitchStatus().then(res => {
@@ -151,12 +182,10 @@ export default function DashboardPanel() {
     const poll = () => servicesAPI.status().then(res => {
       setServices(prev => prev.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s }))
     }).catch(() => {})
-    poll()
-    const t = setInterval(poll, 5000)
-    return () => clearInterval(t)
+    poll(); const t = setInterval(poll, 5000); return () => clearInterval(t)
   }, [])
 
-  // ── Derived values ────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────
   const IST_OFFSET = 5.5 * 60 * 60 * 1000
   const nowIST = new Date(Date.now() + IST_OFFSET - new Date().getTimezoneOffset() * 60000)
   const day = nowIST.getUTCDay()
@@ -165,16 +194,11 @@ export default function DashboardPanel() {
 
   const ssData = health?.checks?.smartstream
   const ssConnected = (ssData?.connected || ssData?.ok) ?? false
-
-  const criticalRed =
-    !(health?.checks?.database?.ok ?? false) ||
-    !(health?.checks?.redis?.ok ?? false) ||
-    !(health?.checks?.scheduler?.ok ?? false) ||
-    (isMarketHours && !ssConnected)
+  const criticalRed = !(health?.checks?.database?.ok ?? false) || !(health?.checks?.redis?.ok ?? false) || !(health?.checks?.scheduler?.ok ?? false) || (isMarketHours && !ssConnected)
   const smartstreamAmber = !isMarketHours && !ssConnected
   const overallState: 'green' | 'amber' | 'red' = !health ? 'amber' : criticalRed ? 'red' : smartstreamAmber ? 'amber' : 'green'
   const overallColor = overallState === 'green' ? '#22DD88' : overallState === 'amber' ? '#FFD700' : '#FF4444'
-  const statusLabel  = !health ? 'Loading…' : criticalRed ? 'System Not Ready' : smartstreamAmber ? 'Feed Inactive' : 'System Ready'
+  const statusLabel  = !health ? 'Loading…' : criticalRed ? 'Not Ready' : smartstreamAmber ? 'Feed Inactive' : 'System Ready'
 
   const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
     { id: '1', nickname: 'Karthik', broker: 'zerodha',  token_valid_today: false },
@@ -193,14 +217,19 @@ export default function DashboardPanel() {
     { label: 'SmartStream', ok: ssConnected,                            state: ssConnected ? 'green' : isMarketHours ? 'red' : 'amber' },
   ] as const
 
+  const sectionLabel = (text: string) => (
+    <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const, marginBottom: 8 }}>
+      {text}
+    </div>
+  )
+
   // ── Render ────────────────────────────────────────────────────
   return (
     <>
       {/* Backdrop */}
       {isDashboardOpen && (
-        <div
-          onClick={() => setIsDashboardOpen(false)}
-          style={{ position: 'fixed', top: 98, left: 0, right: 380, bottom: 0, background: 'rgba(0,0,0,0.35)', zIndex: 199 }}
+        <div onClick={() => setIsDashboardOpen(false)}
+          style={{ position: 'fixed', top: 98, left: 0, right: 380, bottom: 0, background: 'rgba(0,0,0,0.2)', zIndex: 199 }}
         />
       )}
 
@@ -209,69 +238,61 @@ export default function DashboardPanel() {
         position: 'fixed', top: 98, right: 0, bottom: 0, width: 380, zIndex: 200,
         transform: isDashboardOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 300ms cubic-bezier(0.4,0,0.2,1)',
-        background: 'rgba(10,10,12,0.98)',
-        borderLeft: '0.5px solid rgba(255,107,0,0.20)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
+        background: 'var(--bg)',
+        boxShadow: 'var(--neu-raised-lg)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
 
         {/* ── Header ── */}
         <div style={{
-          height: 48, flexShrink: 0,
+          flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px',
-          borderBottom: '0.5px solid rgba(255,107,0,0.12)',
+          padding: '14px 16px',
+          borderBottom: '0.5px solid var(--border)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: overallColor, boxShadow: `0 0 8px ${overallColor}`, flexShrink: 0 }} />
-            <span style={{ fontFamily: 'Syne, sans-serif', fontSize: 13, fontWeight: 700, color: 'var(--ox-radiant)' }}>System Monitor</span>
-            <span style={{ fontSize: 10, color: overallColor, fontWeight: 600, marginLeft: 2 }}>· {statusLabel}</span>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: overallColor, boxShadow: `0 0 8px ${overallColor}`, flexShrink: 0 }} />
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>System Monitor</span>
+            <span style={{ fontSize: 10, color: overallColor, fontWeight: 600 }}>· {statusLabel}</span>
           </div>
           <button
             onClick={() => setIsDashboardOpen(false)}
-            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'rgba(240,237,232,0.40)', cursor: 'pointer', borderRadius: 6 }}
+            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--bg)', border: 'none', color: 'var(--text-dim)', cursor: 'pointer',
+              borderRadius: '50%', boxShadow: 'var(--neu-raised-sm)', transition: 'box-shadow 0.12s' }}
+            onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+            onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
           >
-            <X size={15} weight="regular" />
+            <X size={13} weight="bold" />
           </button>
         </div>
 
         {/* ── Action bar ── */}
-        <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 8, borderBottom: '0.5px solid rgba(255,255,255,0.05)' }}>
-          <button
-            className="btn btn-primary"
-            style={{ flex: 1, height: 30, fontSize: 11 }}
-            onClick={startAll}
-            disabled={allRunning}
-          >
+        <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 8, borderBottom: '0.5px solid var(--border)' }}>
+          <NeuBtn accent onClick={startAll} disabled={allRunning} style={{ flex: 1 }}>
             ▶ Start Session
-          </button>
-          <button
-            className="btn btn-steel"
-            style={{ flex: 1, height: 30, fontSize: 11 }}
-            onClick={stopAll}
-            disabled={allStopped}
-          >
+          </NeuBtn>
+          <NeuBtn onClick={stopAll} disabled={allStopped} style={{ flex: 1 }}>
             ■ Stop All
-          </button>
-          <button
-            className="btn btn-danger"
-            style={{ height: 30, padding: '0 12px', fontSize: 11, flexShrink: 0 }}
+          </NeuBtn>
+          <NeuBtn danger
             onClick={() => { setSelKill(displayAccounts.map((a:any) => a.id).filter((id: string) => !killedIds.includes(id))); setKillModal(true) }}
             disabled={(killActivated && killedIds.length >= accounts.length) || killLoading}
+            style={{ flexShrink: 0, padding: '0 12px' }}
           >
-            {killActivated && killedIds.length >= accounts.length ? 'Killed' : 'Kill Switch'}
-          </button>
+            {killActivated && killedIds.length >= accounts.length ? 'Killed' : 'Kill'}
+          </NeuBtn>
         </div>
 
         {/* ── Scrollable body ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Kill result banner */}
           {killActivated && killResult && (
-            <div style={{ background: 'rgba(255,68,68,0.08)', border: '0.5px solid rgba(255,68,68,0.30)', borderRadius: 8, padding: '8px 12px' }}>
+            <div style={{ background: 'rgba(255,68,68,0.08)', borderRadius: 12, padding: '10px 12px', boxShadow: 'var(--neu-inset)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#FF4444', marginBottom: 2 }}>⛔ Kill Switch Activated</div>
-              <div style={{ fontSize: 10, color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
                 {killResult.positions_squared} pos squared · {killResult.orders_cancelled} orders cancelled
               </div>
             </div>
@@ -279,40 +300,39 @@ export default function DashboardPanel() {
 
           {/* Late warning */}
           {lateWarning && (
-            <div style={{ background: 'rgba(255,68,68,0.08)', border: '0.5px solid rgba(255,68,68,0.30)', borderRadius: 8, padding: '10px 12px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#FF4444', marginBottom: 6 }}>⚠️ After 9:00 AM</div>
-              <div style={{ fontSize: 11, color: 'var(--gs-muted)', marginBottom: 10 }}>Some algos may have passed entry time. Start anyway?</div>
+            <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '12px', boxShadow: 'var(--neu-inset)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#FF4444', marginBottom: 4 }}>⚠️ After 9:00 AM</div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10 }}>Some algos may have passed entry time. Start anyway?</div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-ghost" style={{ flex: 1, height: 28, fontSize: 11 }} onClick={() => setLateWarning(false)}>Cancel</button>
-                <button className="btn btn-danger" style={{ flex: 1, height: 28, fontSize: 11 }} onClick={doStartAll}>Start Anyway</button>
+                <NeuBtn onClick={() => setLateWarning(false)} style={{ flex: 1, height: 28 }}>Cancel</NeuBtn>
+                <NeuBtn danger onClick={doStartAll} style={{ flex: 1, height: 28 }}>Start Anyway</NeuBtn>
               </div>
             </div>
           )}
 
-          {/* ── System Health chips ── */}
+          {/* ── System Health ── */}
           <div>
-            <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'rgba(240,237,232,0.30)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>System Health</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {sectionLabel('System Health')}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map(chip => {
-                const dotColor   = chip.state === 'green' ? '#22DD88' : chip.state === 'red' ? '#FF4444' : '#FFD700'
-                const dotGlow    = chip.state === 'green' ? '0 0 6px rgba(34,221,136,0.55)' : chip.state === 'red' ? '0 0 6px rgba(255,68,68,0.55)' : '0 0 6px rgba(255,215,0,0.45)'
+                const dotColor = chip.state === 'green' ? '#22DD88' : chip.state === 'red' ? '#FF4444' : '#FFD700'
                 const statusText = chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'
                 return (
                   <div key={chip.label} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 10px', borderRadius: 8,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '0.5px solid rgba(255,255,255,0.07)',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px', borderRadius: 12,
+                    background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
                   }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: dotColor, boxShadow: dotGlow }} />
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotColor, boxShadow: `0 0 6px ${dotColor}55` }} />
                     <div>
-                      <div style={{ fontSize: 9, fontFamily: 'Syne, sans-serif', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.6px', color: 'rgba(232,232,248,0.28)', lineHeight: 1.2 }}>{chip.label}</div>
-                      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 600, color: dotColor, lineHeight: 1.3 }}>{statusText}</div>
+                      <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-mute)', lineHeight: 1.3 }}>{chip.label}</div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, color: dotColor }}>{statusText}</div>
                     </div>
                   </div>
                 )
               })}
             </div>
+
             {/* Accounts needing login */}
             {(() => {
               const needsLogin = (accounts as any[]).filter((a: any) => {
@@ -326,46 +346,43 @@ export default function DashboardPanel() {
                     const isZerodha = acc.broker === 'zerodha'
                     const succeeded = loginSucceeded[acc.id] ?? false
                     return (
-                      <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 10px', borderRadius: 8, background: 'rgba(255,107,0,0.06)', border: '0.5px solid rgba(255,107,0,0.20)' }}>
+                      <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 12, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(232,232,248,0.9)' }}>{acc.nickname || acc.name}</div>
-                          <div style={{ fontSize: 10, color: 'var(--gs-muted)' }}>{isZerodha ? 'Zerodha' : 'Angel One'} · needs login</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{acc.nickname || acc.name}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>{isZerodha ? 'Zerodha' : 'Angel One'} · needs login</div>
                         </div>
-                        {isZerodha ? (
-                          <button
-                            onClick={() => {
-                              const w = 520, h = 640
-                              const left = window.screenX + (window.outerWidth - w) / 2
-                              const top  = window.screenY + (window.outerHeight - h) / 2
-                              window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
-                            }}
-                            style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne, sans-serif', fontWeight: 600, background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)', color: 'var(--ox-radiant)', cursor: 'pointer' }}
-                          >Refresh Token</button>
-                        ) : (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
-                                setLoginSucceeded(p => ({ ...p, [acc.id]: true }))
-                                refetchHealth()
-                              } catch {}
-                            }}
-                            style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne, sans-serif', fontWeight: 600, background: 'transparent', border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)', color: succeeded ? '#22DD88' : 'var(--ox-radiant)', cursor: 'pointer' }}
-                          >{succeeded ? 'Re-Login' : 'Login'}</button>
-                        )}
+                        <NeuBtn accent={!succeeded} onClick={() => {
+                          if (isZerodha) {
+                            const w = 520, h = 640, left = window.screenX + (window.outerWidth - w) / 2, top = window.screenY + (window.outerHeight - h) / 2
+                            window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
+                          } else {
+                            fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' }).then(() => { setLoginSucceeded(p => ({ ...p, [acc.id]: true })); refetchHealth() }).catch(() => {})
+                          }
+                        }} style={{ height: 26, fontSize: 10, padding: '0 10px', flexShrink: 0 }}>
+                          {succeeded ? 'Re-Login' : 'Login'}
+                        </NeuBtn>
                       </div>
                     )
                   })}
                 </div>
               )
             })()}
-            <button onClick={refetchHealth} className="btn btn-ghost" style={{ marginTop: 6, width: '100%', height: 26, fontSize: 10 }}>Refresh Health</button>
+
+            {/* Refresh health */}
+            <button onClick={refetchHealth}
+              style={{ marginTop: 8, width: '100%', height: 28, borderRadius: 100, background: 'var(--bg)', border: 'none', color: 'var(--text-dim)', fontSize: 10, fontWeight: 500, cursor: 'pointer', boxShadow: 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'box-shadow 0.12s' }}
+              onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+              onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+            >
+              <ArrowClockwise size={11} weight="bold" /> Refresh Health
+            </button>
           </div>
 
           {/* ── Account Status ── */}
           <div>
-            <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'rgba(240,237,232,0.30)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>Account Status</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {sectionLabel('Account Status')}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {dashboardAccounts.map((acc: any) => {
                 const isZerodha = acc.broker === 'zerodha'
                 const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
@@ -373,35 +390,30 @@ export default function DashboardPanel() {
                 const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
                 const succeeded = loginSucceeded[acc.id] ?? false
                 return (
-                  <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.07)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={isLive ? 'pulse-live-lg' : 'pulse-warn-lg'} />
+                  <div key={acc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: isLive ? '#22DD88' : 'var(--text-mute)', boxShadow: isLive ? '0 0 6px #22DD8888' : 'none' }} />
                       <div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: 'var(--ox-glow)' }}>{acc.nickname || acc.name}</div>
-                        <div style={{ fontSize: 10, color: 'var(--gs-muted)' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{acc.nickname || acc.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {isLive && <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontFamily: 'Syne, sans-serif', fontWeight: 600, background: 'rgba(34,221,136,0.12)', border: '0.5px solid rgba(34,221,136,0.25)', color: '#22DD88' }}>• Live</span>}
-                      {isZerodha && !zerodhaOk && (
-                        <button
-                          onClick={() => {
-                            const w = 520, h = 640
-                            const left = window.screenX + (window.outerWidth - w) / 2
-                            const top  = window.screenY + (window.outerHeight - h) / 2
-                            window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
-                          }}
-                          style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne, sans-serif', background: 'transparent', border: '0.5px solid rgba(255,107,0,0.5)', color: 'var(--ox-radiant)', cursor: 'pointer' }}
-                        >🔑 Login</button>
+                      {isLive && (
+                        <span style={{ padding: '3px 9px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#22DD88' }}>Live</span>
                       )}
-                      {!isZerodha && !isLive && (
-                        <button
-                          onClick={async () => {
+                      {!isLive && (
+                        <NeuBtn accent onClick={async () => {
+                          if (isZerodha) {
+                            const w = 520, h = 640, left = window.screenX + (window.outerWidth - w) / 2, top = window.screenY + (window.outerHeight - h) / 2
+                            window.open(`${API_BASE}/api/v1/zerodha/login`, 'zerodha_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0`)
+                          } else {
                             const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
                             if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
-                          }}
-                          style={{ padding: '3px 10px', borderRadius: 12, fontSize: 10, fontFamily: 'Syne, sans-serif', background: 'transparent', border: succeeded ? '0.5px solid rgba(34,221,136,0.4)' : '0.5px solid rgba(255,107,0,0.5)', color: succeeded ? '#22DD88' : 'var(--ox-radiant)', cursor: 'pointer' }}
-                        >{succeeded ? 'Re-Login' : '🔑 Login'}</button>
+                          }
+                        }} style={{ height: 26, fontSize: 10, padding: '0 10px', flexShrink: 0 }}>
+                          {succeeded ? 'Re-Login' : 'Login'}
+                        </NeuBtn>
                       )}
                     </div>
                   </div>
@@ -412,19 +424,28 @@ export default function DashboardPanel() {
 
           {/* ── Services ── */}
           <div>
-            <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'rgba(240,237,232,0.30)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>Services</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {sectionLabel('Services')}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {services.map(svc => (
-                <div key={svc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.07)' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: STATUS_CLR[svc.status], boxShadow: svc.status === 'running' ? '0 0 6px ' + STATUS_CLR[svc.status] : 'none' }} />
+                <div key={svc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: SVC_DOT[svc.status], boxShadow: svc.status === 'running' ? `0 0 6px ${SVC_DOT[svc.status]}88` : 'none', transition: 'background 0.3s' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ox-glow)' }}>{svc.name}</div>
-                    <div style={{ fontSize: 9, color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)' }}>{svc.detail}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{svc.name}</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{svc.detail}</div>
                   </div>
-                  <span className={'chip ' + (svc.status === 'running' ? 'chip-success' : 'chip-inactive')} style={{ fontSize: 9, padding: '1px 6px', flexShrink: 0 }}>{svc.status}</span>
-                  {svc.status === 'stopped'  && <button className="btn btn-ghost"  style={{ fontSize: 9, padding: '0 8px', height: 22 }} onClick={() => startSvc(svc.id)}>Start</button>}
-                  {svc.status === 'running'  && <button className="btn btn-danger" style={{ fontSize: 9, padding: '0 8px', height: 22 }} onClick={() => stopSvc(svc.id)}>Stop</button>}
-                  {(svc.status === 'starting' || svc.status === 'stopping') && <button className="btn btn-steel" style={{ fontSize: 9, padding: '0 8px', height: 22 }} disabled>{svc.status}…</button>}
+                  {/* Status chip — inset */}
+                  <span style={{ padding: '3px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, fontFamily: 'Inter, sans-serif', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: svc.status === 'running' ? '#22DD88' : 'var(--text-mute)', flexShrink: 0 }}>
+                    {svc.status}
+                  </span>
+                  {svc.status === 'stopped'  && (
+                    <NeuBtn onClick={() => startSvc(svc.id)} style={{ height: 24, padding: '0 8px', fontSize: 9, flexShrink: 0 }}>Start</NeuBtn>
+                  )}
+                  {svc.status === 'running'  && (
+                    <NeuBtn danger onClick={() => stopSvc(svc.id)} style={{ height: 24, padding: '0 8px', fontSize: 9, flexShrink: 0 }}>Stop</NeuBtn>
+                  )}
+                  {(svc.status === 'starting' || svc.status === 'stopping') && (
+                    <NeuBtn disabled style={{ height: 24, padding: '0 8px', fontSize: 9, flexShrink: 0 }}>{svc.status}…</NeuBtn>
+                  )}
                 </div>
               ))}
             </div>
@@ -432,24 +453,19 @@ export default function DashboardPanel() {
 
           {/* ── Engine Log ── */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <span className="pulse-live" />
-              <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'rgba(240,237,232,0.30)', fontWeight: 700, textTransform: 'uppercase' }}>Engine Log</div>
-            </div>
-            <div style={{ borderRadius: 8, overflow: 'hidden', background: 'rgba(5,4,2,0.92)', border: '0.5px solid rgba(255,107,0,0.14)' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '8px 10px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            {sectionLabel('Engine Log')}
+            <div style={{ borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '10px 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', color: 'var(--text-dim)' }}>
                 {dedupeLog(log).map((line, i) => {
                   const isSep = line.startsWith('──')
                   if (isSep) return (
-                    <div key={i} style={{ color: 'rgba(255,107,0,0.25)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0', borderTop: '0.5px solid rgba(255,107,0,0.08)', borderBottom: '0.5px solid rgba(255,107,0,0.08)' }}>
-                      {line}
-                    </div>
+                    <div key={i} style={{ color: 'var(--text-mute)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
                   )
                   const isOk  = line.includes('✅')
                   const isErr = line.includes('⛔')
                   const isWrn = line.includes('⚠')
                   return (
-                    <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF4444' : isWrn ? '#FFD700' : 'rgba(240,237,232,0.38)', lineHeight: 1.6, padding: '0.5px 0' }}>
+                    <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF4444' : isWrn ? '#FFD700' : 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>
                       {line}
                     </div>
                   )
@@ -466,35 +482,37 @@ export default function DashboardPanel() {
         <div className="modal-overlay" style={{ zIndex: 1200 }}>
           <div className="modal-box">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sem-short)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-              <span style={{ fontWeight: 800, fontSize: 16, fontFamily: 'var(--font-display)', color: 'var(--sem-short)' }}>Kill Switch</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF4444" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              <span style={{ fontWeight: 800, fontSize: 16, fontFamily: 'var(--font-display)', color: '#FF4444' }}>Kill Switch</span>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--gs-muted)', marginBottom: 14, lineHeight: 1.6 }}>Select accounts to kill. Uncheck any you want to leave running.</p>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 14, lineHeight: 1.6 }}>Select accounts to kill. Uncheck any you want to leave running.</p>
             <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {displayAccounts.map((acc: any) => {
                 const checked = selKill.includes(acc.id)
                 return (
-                  <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: checked ? 'rgba(255,68,68,0.08)' : 'rgba(255,255,255,0.03)', border: '0.5px solid ' + (checked ? 'rgba(255,68,68,0.4)' : 'rgba(255,255,255,0.08)'), borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>
+                  <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: checked ? 'rgba(255,68,68,0.06)' : 'var(--bg)', borderRadius: 12, padding: '8px 12px', cursor: 'pointer', boxShadow: checked ? 'var(--neu-inset)' : 'var(--neu-raised-sm)' }}>
                     {killedIds.includes(acc.id)
-                      ? <span style={{ fontSize: 12, color: 'var(--sem-short)' }}>⛔</span>
-                      : <input type="checkbox" checked={checked} onChange={() => setSelKill(p => p.includes(acc.id) ? p.filter(id => id !== acc.id) : [...p, acc.id])} style={{ width: 14, height: 14, accentColor: 'var(--sem-short)', cursor: 'pointer' }} />}
+                      ? <span style={{ fontSize: 12, color: '#FF4444' }}>⛔</span>
+                      : <input type="checkbox" checked={checked} onChange={() => setSelKill(p => p.includes(acc.id) ? p.filter(id => id !== acc.id) : [...p, acc.id])} style={{ width: 14, height: 14, accentColor: '#FF4444', cursor: 'pointer' }} />}
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ox-glow)' }}>{acc.nickname || acc.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--gs-muted)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{acc.nickname || acc.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
                     </div>
                     {killedIds.includes(acc.id)
-                      ? <span className="chip chip-error" style={{ fontSize: 9 }}>KILLED</span>
-                      : checked ? <span className="chip chip-error" style={{ fontSize: 9 }}>WILL KILL</span> : null}
+                      ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#FF4444' }}>KILLED</span>
+                      : checked ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, color: '#FF4444', background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>WILL KILL</span> : null}
                   </label>
                 )
               })}
             </div>
-            <div style={{ background: 'rgba(255,68,68,0.07)', border: '0.5px solid rgba(255,68,68,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 16, fontSize: 11, color: 'var(--sem-short)', fontWeight: 600 }}>
+            <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 11, color: '#FF4444', fontWeight: 600, boxShadow: 'var(--neu-inset)' }}>
               ⚠️ This will square off all positions + cancel all orders. Cannot be undone.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setKillModal(false)} disabled={killLoading}>Cancel</button>
-              <button className="btn btn-danger" onClick={handleKill} disabled={killLoading} style={{ minWidth: 160 }}>{killLoading ? 'Activating…' : 'Activate Kill Switch'}</button>
+              <NeuBtn onClick={() => setKillModal(false)} disabled={killLoading}>Cancel</NeuBtn>
+              <NeuBtn danger onClick={handleKill} disabled={killLoading} style={{ minWidth: 160, padding: '0 16px' }}>
+                {killLoading ? 'Activating…' : 'Activate Kill Switch'}
+              </NeuBtn>
             </div>
           </div>
         </div>

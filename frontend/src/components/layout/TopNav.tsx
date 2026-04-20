@@ -5,10 +5,10 @@ import { Pulse, Sun, Moon, User } from '@phosphor-icons/react'
 
 const NAV_TABS = [
   { path: '/grid',       label: 'Algos'     },
+  { path: '/indicators', label: 'Bots'      },
   { path: '/orders',     label: 'Orders'    },
   { path: '/reports',    label: 'Reports'   },
   { path: '/analytics',  label: 'Analytics' },
-  { path: '/indicators', label: 'Bots'      },
 ]
 
 const iconBtnStyle: React.CSSProperties = {

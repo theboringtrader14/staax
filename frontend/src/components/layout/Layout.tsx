@@ -13,10 +13,10 @@ import {
 export default function Layout() {
   useWebSocket()
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', background: 'transparent' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', position: 'relative', background: 'transparent' }}>
       <TopNav />
       {/* 16px gap between floating pill and page content */}
-      <main style={{ flex: 1, padding: '16px 24px 20px', position: 'relative', zIndex: 1 }}>
+      <main style={{ flex: 1, minHeight: 0, padding: '16px 24px 20px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Outlet />
       </main>
 

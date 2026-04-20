@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, algosAPI, gridAPI } from '@/services/api'
 import { useStore } from '@/store'
@@ -107,11 +107,32 @@ export default function GridPage() {
   const [expandedId,      setExpandedId]      = useState<string|null>(null)
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const scrollRef        = useRef<HTMLDivElement>(null)
+  const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
 const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
   const [showDeferModal, setShowDeferModal] = useState(false)
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
   const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
+
+  // ── Scroll-based auto-collapse ───────────────────────────────────────────────
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    const handleScroll = () => {
+      const containerTop = container.getBoundingClientRect().top
+      setCollapsedGroups(prev => {
+        const next = new Set<string>()
+        for (const [key, el] of groupHeaderRefs.current) {
+          if (el.getBoundingClientRect().bottom < containerTop) next.add(key)
+        }
+        if (next.size === prev.size && [...next].every(k => prev.has(k))) return prev
+        return next
+      })
+    }
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -409,7 +430,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 92px)' }}>
+    <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ flexShrink:0, paddingBottom:'4px', paddingLeft:'16px', paddingRight:'16px' }}>
@@ -497,7 +518,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
       {/* ── Algo cards outer container ─────── */}
       <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column' }}>
-        <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', padding:'16px 16px 24px' }}>
+        <div ref={scrollRef} className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', padding:'16px 16px 24px' }}>
 
           {visibleAlgos.length === 0 && (
             <div style={{ padding:'64px 24px', textAlign:'center', color:'var(--text-dim)', fontSize:'13px' }}>
@@ -513,6 +534,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                 {/* ── Group header ── */}
                 <div
+                  ref={el => { if (el) groupHeaderRefs.current.set(instrument, el); else groupHeaderRefs.current.delete(instrument) }}
                   onClick={() => setCollapsedGroups(prev => {
                     const next = new Set(prev)
                     if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
@@ -535,8 +557,11 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                 </div>
 
                 {/* ── Group cards ── */}
-                {!isCollapsed && (
-                  <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px' }}>
+                  <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px',
+                    overflow:'hidden', maxHeight: isCollapsed ? '0px' : '99999px',
+                    transition: 'max-height 0.28s ease-in-out, opacity 0.2s ease',
+                    opacity: isCollapsed ? 0 : 1,
+                  }}>
                     {groupAlgos.map(algo => {
                       const mult        = cardMults[algo.id] || 1
                       const isExpanded  = expandedId === algo.id
@@ -857,7 +882,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                       )
                     })}
                   </div>
-                )}
               </div>
             )
           })}
