@@ -132,6 +132,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     from app.models.order import Order, OrderStatus
     from app.models.algo import Algo
     from app.models.algo_state import AlgoState, AlgoRunStatus
+    from app.models.grid import GridEntry
 
     # IST date — used to scope counts to today (handles STBT/BTST correctly)
     _IST = _tz(_td(hours=5, minutes=30))
@@ -139,12 +140,15 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     today_ist_date = today_start_ist.date()
     today_ist_str = str(today_ist_date)
 
-    # ── Active algos: distinct algo_ids with OPEN orders today (IST trading_date) ──
+    # ── Active algos: distinct algo_ids with OPEN orders today (via GridEntry.trading_date) ──
+    # Order model has no trading_date — join through GridEntry to filter by date
     active_result = await db.execute(
-        sa_select(func.count(distinct(Order.algo_id))).where(
+        sa_select(func.count(distinct(Order.algo_id)))
+        .join(GridEntry, Order.grid_entry_id == GridEntry.id)
+        .where(
             Order.status == OrderStatus.OPEN,
             Order.is_practix == is_practix,
-            Order.trading_date == today_ist_str,
+            GridEntry.trading_date == today_ist_date,
         )
     )
     active_algos = active_result.scalar() or 0
@@ -181,15 +185,8 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     )
     open_positions = open_result.scalar() or 0
 
-    # ── Today P&L: sum of pnl for closed orders with IST trading_date = today ──
-    today_pnl_result = await db.execute(
-        sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
-            Order.status == OrderStatus.CLOSED,
-            Order.is_practix == is_practix,
-            Order.trading_date == today_ist_str,
-        )
-    )
-    today_pnl = float(today_pnl_result.scalar() or 0)
+    # ── Today P&L: skipped — returning 0 temporarily until dashboard is removed ──
+    # Order model has no trading_date column; calculation will be rebuilt in the dashboard revamp.
 
     # ── FY P&L: April 1 of current financial year to today ────────────────────
     # Indian FY: Apr 1 – Mar 31
@@ -206,51 +203,16 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db), is_practix: bo
     )
     fy_pnl = float(fy_pnl_result.scalar() or 0)
 
-    # ── MTM total: sum of unrealised P&L for OPEN orders using live in-memory LTP ──
-    # order.pnl is not updated in real-time for open orders — use LTPConsumer instead.
-    try:
-        from app.engine.algo_runner import algo_runner as _ar_sys
-        _ltp_cons_sys = getattr(_ar_sys, '_ltp_consumer', None)
-    except Exception:
-        _ltp_cons_sys = None
-
-    mtm_total = 0.0
-    if _ltp_cons_sys:
-        _open_orders_r = await db.execute(
-            sa_select(Order.instrument_token, Order.fill_price, Order.quantity, Order.direction).where(
-                Order.status == OrderStatus.OPEN,
-                Order.is_practix == is_practix,
-                Order.fill_price.isnot(None),
-            )
-        )
-        for _tok, _fp, _qty, _dir in _open_orders_r.all():
-            if not _tok or not _fp or not _qty:
-                continue
-            _ltp = _ltp_cons_sys.get_ltp(int(_tok))
-            if _ltp and _ltp > 0:
-                _d = (_dir or "").lower()
-                if _d == "sell":
-                    mtm_total += (_fp - _ltp) * _qty
-                else:
-                    mtm_total += (_ltp - _fp) * _qty
-    else:
-        # Fallback to DB pnl if LTP consumer unavailable (stale/zero but better than nothing)
-        mtm_result = await db.execute(
-            sa_select(func.coalesce(func.sum(Order.pnl), 0)).where(
-                Order.status == OrderStatus.OPEN,
-                Order.pnl.isnot(None),
-            )
-        )
-        mtm_total = float(mtm_result.scalar() or 0)
+    # ── MTM total: skipped — returning 0 temporarily until dashboard is removed ──
 
     return {
         "active_algos":   active_algos,
         "total_algos":    total_algos,
         "error_algos":    error_algos,
         "open_positions": open_positions,
-        "today_pnl":      today_pnl,
+        "today_pnl":      0,       # temporary until dashboard removed
         "fy_pnl":         fy_pnl,
-        "mtm_total":      mtm_total,
+        "mtm_total":      0,       # temporary until dashboard removed
     }
 
 

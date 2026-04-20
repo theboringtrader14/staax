@@ -1050,25 +1050,9 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* ── 11 Stat Cards — above day tabs ── */}
+        {/* ── Filter Stat Cards — above day tabs ── */}
         {(() => {
-          // ── Row 1 computed values ──
-          // Use live value for today instead of stale backend weekPnl
-          const weekTotalRaw   = Object.entries(weekPnl).filter(([, v]) => v != null).reduce((s, [day, v]) => {
-            const isToday = weekDates[day] === todayDate
-            return s + (isToday ? liveNetPnlForTab : (v ?? 0))
-          }, 0)
-          const weekTotal      = weekTotalRaw
-          const hasWeekData    = Object.values(weekPnl).some(v => v != null) || liveNetPnlForTab !== 0
-          const todayRealized  = localFilteredOrders.flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null)).reduce((s, l) => s + (l.pnl ?? 0), 0)
-          const hasTodayTrades = localFilteredOrders.some(g => g.legs.some(l => l.status === 'closed'))
-          // Past days have no live unrealized — zero it out so THU/WED etc. show realized only
-          const effectiveLiveMtm   = isPastDay ? 0 : liveTotalMtm
-          const effectiveHasLive   = isPastDay ? false : hasLiveData
-          const netPnl         = todayRealized + effectiveLiveMtm
-          const hasNet         = hasTodayTrades || effectiveHasLive
-
-          // ── Row 2 counts ──
+          // ── Row counts ──
           const openAlgosCount   = localFilteredOrders.filter(g => ['open','pending'].includes(getAlgoStatus(g))).length
           const closedAlgosCount = localFilteredOrders.filter(g => getAlgoStatus(g) === 'closed').length
           const openLegsCount    = localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'open').length, 0)
@@ -1077,17 +1061,6 @@ export default function OrdersPage() {
           const isWaitingError   = (w: WaitingAlgo) => !w.is_missed && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message))
           const errorCount       = safeWaiting.filter(isWaitingError).length
           const waitingCount     = safeWaiting.filter(w => !w.is_missed && !isWaitingError(w)).length
-
-          const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-          const pnlColor = (v: number) => v >= 0 ? 'var(--green)' : 'var(--red)'
-
-          // Day label for Realized / Unrealized / Net P&L cards
-          const dayLabel = selectedDate
-            ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase()
-            : ''
-          const daySpan = dayLabel
-            ? <span style={{ fontSize: 8, fontWeight: 500, color: 'rgba(255,107,0,0.55)', letterSpacing: '0.04em', marginLeft: 3 }}>({dayLabel})</span>
-            : null
 
           const valStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)' }
 
@@ -1102,45 +1075,7 @@ export default function OrdersPage() {
 
           return (
             <div style={{ padding: '8px 0 6px' }}>
-              {/* Row 1 — P&L */}
-              <div style={{ display: 'flex', gap: 6, padding: '0 0 6px' }}>
-                {/* Week P&L */}
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Week P&L</div>
-                  <div style={{ ...valStyle, color: hasWeekData ? pnlColor(weekTotal) : 'var(--text-dim)' }}>
-                    {hasWeekData ? fmtPnl(weekTotal) : '—'}
-                  </div>
-                </div>
-                {/* Realized */}
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
-                  <div className="card-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center' }}>
-                    Realized{daySpan}
-                  </div>
-                  <div style={{ ...valStyle, color: hasTodayTrades ? pnlColor(todayRealized) : 'var(--text-dim)' }}>
-                    {hasTodayTrades ? fmtPnl(todayRealized) : '—'}
-                  </div>
-                </div>
-                {/* Unrealized */}
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
-                  <div className="card-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center' }}>
-                    Unrealized{daySpan}
-                  </div>
-                  <div style={{ ...valStyle, color: effectiveHasLive ? pnlColor(effectiveLiveMtm) : (isPastDay && hasTodayTrades) ? pnlColor(0) : 'var(--text-dim)' }}>
-                    {effectiveHasLive ? fmtPnl(effectiveLiveMtm) : (isPastDay && hasTodayTrades) ? fmtPnl(0) : '—'}
-                  </div>
-                </div>
-                {/* Net P&L */}
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
-                  <div className="card-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center' }}>
-                    Net P&L{daySpan}
-                  </div>
-                  <div style={{ ...valStyle, color: hasNet ? pnlColor(netPnl) : 'var(--text-dim)' }}>
-                    {hasNet ? fmtPnl(netPnl) : '—'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2 — Filter chips */}
+              {/* Filter chips */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
                 <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'open' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('open')}>
                   <div className="card-label" style={{ marginBottom: 4 }}>Open Algos</div>

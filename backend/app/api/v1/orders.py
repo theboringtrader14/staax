@@ -999,16 +999,21 @@ async def get_waiting_algos(
         ):
             _is_missed = True
 
+        # Past date algos can only be MISSED or ERROR — never SCHEDULED or MONITORING
+        algo_trading_date = ge.trading_date  # date object from GridEntry
+        today_ist_date_for_status = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        is_past_date = algo_trading_date < today_ist_date_for_status
+
         # Priority order (top = highest priority):
         if _state.error_message or (hasattr(_state, 'status') and str(_state.status).endswith('error')):
             _display_status = "ERROR"
-        elif _is_missed or _is_orb_missed:
+        elif _is_missed or _is_orb_missed or is_past_date:
             _display_status = "MISSED"
-        elif _wt_monitor_armed or _just_retried:
+        elif (_wt_monitor_armed or _just_retried) and not is_past_date:
             _display_status = "MONITORING"
-        elif _is_orb_monitoring:
+        elif _is_orb_monitoring and not is_past_date:
             _display_status = "MONITORING"
-        elif entry_time_parsed and now_time < entry_time_parsed:
+        elif entry_time_parsed and now_time < entry_time_parsed and not is_past_date:
             _display_status = "SCHEDULED"
         else:
             _display_status = "WAITING"
