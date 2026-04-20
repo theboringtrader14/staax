@@ -84,9 +84,9 @@
 
 /* ── Neumorphic token layers (theme-scoped) ─────────────── */
 [data-theme="dark"] {
-  --bg:          #0A0A0B;
-  --bg-surface:  #111114;
-  --bg-elevated: #18181c;
+  --bg:          #1a1d25;
+  --bg-surface:  #1e2128;
+  --bg-elevated: #222631;
   --shadow-dark: rgba(0,0,0,0.7);
   --shadow-light: rgba(255,255,255,0.025);
   --neu-raised:    -6px -6px 12px rgba(255,255,255,0.025), 6px 6px 12px rgba(0,0,0,0.7);
@@ -104,9 +104,9 @@
 }
 
 [data-theme="light"] {
-  --bg:          #e8e4df;
-  --bg-surface:  #ede9e4;
-  --bg-elevated: #f5f2ef;
+  --bg:          #e4e7ef;
+  --bg-surface:  #ebeef5;
+  --bg-elevated: #f0f2f8;
   --shadow-dark: rgba(180,160,140,0.5);
   --shadow-light: rgba(255,255,255,0.95);
   --neu-raised:    -6px -6px 12px rgba(255,255,255,0.95), 6px 6px 12px rgba(180,160,140,0.5);
@@ -121,8 +121,8 @@
   --text-mute:     rgba(26,20,16,0.4);
   --border:        rgba(0,0,0,0.08);
   --border-accent: rgba(229,90,0,0.3);
-  --bg-primary:    #e8e4df;
-  --bg-void:       #e8e4df;
+  --bg-primary:    #e4e7ef;
+  --bg-void:       #e4e7ef;
   --bg-secondary:  #ddd9d4;
   --gs-border:     rgba(0,0,0,0.08);
   --glass-bg:      rgba(212,208,203,0.80);
@@ -130,7 +130,7 @@
 }
 
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-html { background:var(--bg,#0A0A0B); }
+html { background:var(--bg,#1a1d25); }
 body {
   background:var(--bg,var(--bg-primary)); color:var(--text,#F0EDE8);
   font-family:'Inter','DM Sans','Calibri',sans-serif; font-size:13px; line-height:1.6;
