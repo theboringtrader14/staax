@@ -71,26 +71,35 @@ export function StaaxSelect({ value, onChange, options, width }: {
           left: dropPos.left,
           width: dropPos.width,
           zIndex: 9999,
-          background: 'var(--bg-elevated)',
+          background: 'var(--bg)',
           border: 'none',
-          borderRadius: '14px',
+          borderRadius: '16px',
           overflow: 'hidden',
           boxShadow: 'var(--neu-raised)',
           maxHeight: '240px',
           overflowY: 'auto',
+          padding: '4px',
         }}>
           {options.map(o => (
             <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
               style={{
-                padding: '9px 14px', fontSize: '12px',
+                padding: '9px 12px', fontSize: '12px',
                 fontFamily: 'Inter, sans-serif', fontWeight: 500,
-                cursor: 'pointer',
-                color: o.value === value ? 'var(--accent)' : 'var(--text)',
+                cursor: 'pointer', borderRadius: '10px',
+                color: o.value === value ? 'var(--accent)' : 'var(--text-dim)',
                 background: o.value === value ? 'var(--accent-dim)' : 'transparent',
-                transition: 'background 0.1s',
+                transition: 'background 0.1s, color 0.1s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent-dim)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = o.value === value ? 'var(--accent-dim)' : 'transparent' }}>
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLDivElement
+                el.style.background = o.value === value ? 'var(--accent-dim)' : 'var(--bg-surface)'
+                el.style.color = o.value === value ? 'var(--accent)' : 'var(--text)'
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLDivElement
+                el.style.background = o.value === value ? 'var(--accent-dim)' : 'transparent'
+                el.style.color = o.value === value ? 'var(--accent)' : 'var(--text-dim)'
+              }}>
               {o.label}
             </div>
           ))}
