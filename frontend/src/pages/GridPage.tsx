@@ -489,20 +489,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
         </div>
       )}
 
-      {/* ── Status legend ───────────────────────────────────────────────── */}
-      <div style={{ flexShrink:0, display:'flex', gap:'18px', alignItems:'center', paddingLeft:'16px', paddingRight:'16px', marginBottom:'8px', flexWrap:'wrap' }}>
-        {([
-          ['#FF6B00','Active'], ['#00FF88','Open'], ['#FFE600','Waiting'],
-          ['#FF8C00','Pending'], ['#FF2244','Error'],
-          ['rgba(0,255,136,0.45)','Closed'], ['rgba(255,255,255,0.20)','No Trade'],
-        ] as [string,string][]).map(([color, label]) => (
-          <div key={label} style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-            <div style={{ width:'7px', height:'7px', borderRadius:'50%', background:color, boxShadow:`0 0 6px ${color}`, flexShrink:0 }}/>
-            <span style={{ fontSize:'10px', color:'var(--text-mute)', fontFamily:'var(--font-display)', letterSpacing:'0.5px' }}>{label}</span>
-          </div>
-        ))}
-      </div>
-
       {/* ── Algo cards outer container ─────── */}
       <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column' }}>
         <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', padding:'16px 16px 24px' }}>
