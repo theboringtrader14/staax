@@ -576,10 +576,10 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                                   {instruments.map(ins => (
                                     <span key={ins} style={{
-                                      display:'inline-flex', alignItems:'center', padding:'2px 7px', borderRadius:'100px',
+                                      display:'inline-flex', alignItems:'center', padding:'2px 8px', borderRadius:'100px',
                                       fontSize:'10px', fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'0.5px',
-                                      background:'rgba(255,107,0,0.10)', color:'var(--ox-glow)',
-                                      border:'0.5px solid rgba(255,107,0,0.28)',
+                                      background:'var(--bg)', color:'var(--text-dim)',
+                                      border:'none', boxShadow:'var(--neu-inset)',
                                     }}>{ins}</span>
                                   ))}
                                   {isExpanded && algoErrors[algo.id] && (
