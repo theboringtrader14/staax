@@ -15,7 +15,7 @@ const INIT_SERVICES: Service[] = [
 ]
 
 const SVC_DOT: Record<ServiceStatus, string> = {
-  running: '#0ea66e', stopped: 'var(--text-mute)', starting: '#FFD700', stopping: '#FFD700',
+  running: '#0ea66e', stopped: 'var(--text-mute)', starting: '#b45309', stopping: '#b45309',
 }
 
 function dedupeLog(lines: string[]): string[] {
@@ -197,7 +197,7 @@ export default function DashboardPanel() {
   const criticalRed = !(health?.checks?.database?.ok ?? false) || !(health?.checks?.redis?.ok ?? false) || !(health?.checks?.scheduler?.ok ?? false) || (isMarketHours && !ssConnected)
   const smartstreamAmber = !isMarketHours && !ssConnected
   const overallState: 'green' | 'amber' | 'red' = !health ? 'amber' : criticalRed ? 'red' : smartstreamAmber ? 'amber' : 'green'
-  const overallColor = overallState === 'green' ? '#0ea66e' : overallState === 'amber' ? '#FFD700' : '#FF4444'
+  const overallColor = overallState === 'green' ? '#0ea66e' : overallState === 'amber' ? '#b45309' : '#FF4444'
   const statusLabel  = !health ? 'Loading…' : criticalRed ? 'Not Ready' : smartstreamAmber ? 'Feed Inactive' : 'System Ready'
 
   const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
@@ -347,7 +347,7 @@ export default function DashboardPanel() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map(chip => {
-                const dotColor = chip.state === 'green' ? '#0ea66e' : chip.state === 'red' ? '#FF4444' : '#FFD700'
+                const dotColor = chip.state === 'green' ? '#0ea66e' : chip.state === 'red' ? '#FF4444' : '#b45309'
                 const statusText = chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'
                 return (
                   <div key={chip.label} style={{
@@ -481,7 +481,7 @@ export default function DashboardPanel() {
                   const isErr = line.includes('⛔')
                   const isWrn = line.includes('⚠')
                   return (
-                    <div key={i} style={{ color: isOk ? '#0ea66e' : isErr ? '#FF5555' : isWrn ? '#FFD700' : 'rgba(200,210,220,0.55)', lineHeight: 1.6, padding: '0.5px 0' }}>
+                    <div key={i} style={{ color: isOk ? '#0ea66e' : isErr ? '#FF5555' : isWrn ? '#b45309' : 'rgba(200,210,220,0.55)', lineHeight: 1.6, padding: '0.5px 0' }}>
                       {line}
                     </div>
                   )
