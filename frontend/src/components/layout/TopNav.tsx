@@ -61,12 +61,11 @@ export default function TopNav() {
 
   return (
     <>
-      {/* Sticky wrapper */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 100, padding: '20px 24px 0' }}>
+      {/* Sticky wrapper — matches landing page: 20px top, 20px side margins */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 100, padding: '20px 20px 0' }}>
         <header style={{
           maxWidth: 1200,
           margin: '0 auto',
-          height: 62,
           borderRadius: 100,
           background: 'var(--bg)',
           backdropFilter: 'blur(20px)',
@@ -75,7 +74,7 @@ export default function TopNav() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 24px',
+          padding: '14px 24px',
         }}>
 
           {/* LEFT — Wordmark */}
