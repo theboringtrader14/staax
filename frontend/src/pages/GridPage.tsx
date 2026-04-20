@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, algosAPI, gridAPI } from '@/services/api'
+import { algosAPI, gridAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { Lightning, LightningSlash, Archive, Copy, Trash } from '@phosphor-icons/react'
@@ -104,35 +104,13 @@ export default function GridPage() {
   const [opError,       setOpError]      = useState('')
   const [autoFillToast, setAutoFillToast] = useState('')
   const [cardMults,       setCardMults]       = useState<Record<string,number>>({})
-  const [expandedId,      setExpandedId]      = useState<string|null>(null)
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const scrollRef        = useRef<HTMLDivElement>(null)
-  const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
-const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
   const [showDeferModal, setShowDeferModal] = useState(false)
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
   const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
 
-  // ── Scroll-based auto-collapse ───────────────────────────────────────────────
-  useEffect(() => {
-    const container = scrollRef.current
-    if (!container) return
-    const handleScroll = () => {
-      const containerTop = container.getBoundingClientRect().top
-      setCollapsedGroups(prev => {
-        const next = new Set<string>()
-        for (const [key, el] of groupHeaderRefs.current) {
-          if (el.getBoundingClientRect().bottom < containerTop) next.add(key)
-        }
-        if (next.size === prev.size && [...next].every(k => prev.has(k))) return prev
-        return next
-      })
-    }
-    container.addEventListener('scroll', handleScroll, { passive: true })
-    return () => container.removeEventListener('scroll', handleScroll)
-  }, [])
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
   useEffect(() => {
@@ -244,27 +222,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
   useEffect(() => { loadData() }, [loadData])
 
-  // ── Fetch latest FAILED log for each active algo ──────────────────────────────
-  useEffect(() => {
-    const activeAlgos = algos.filter(a => !a.arch)
-    if (activeAlgos.length === 0) return
-    Promise.all(
-      activeAlgos.map(algo =>
-        api.get('/logs/', { params: { algo_id: algo.id, status: 'FAILED', limit: 1 } })
-          .then((res: any) => {
-            const reason = res.data?.logs?.[0]?.reason
-            return reason ? { id: algo.id, reason: reason as string } : null
-          })
-          .catch(() => null)
-      )
-    ).then(results => {
-      const map: Record<string,string> = {}
-      for (const r of results) {
-        if (r) map[r.id] = r.reason
-      }
-      setAlgoErrors(map)
-    })
-  }, [algos])
 
   // ── Day pill toggle ───────────────────────────────────────────────────────────
   const toggleDay = async (algo: Algo, day: string) => {
@@ -347,31 +304,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
     await algosAPI.demote(algoId)
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, is_live:false } : x))
     loadData()
-  }
-
-  // ── Add all weekdays ──────────────────────────────────────────────────────────
-  const addAllWeekdays = async (algoId: string) => {
-    const algo    = algos.find(x => x.id === algoId)
-    const missing = DAYS.filter(d => !grid[algoId]?.[d])
-    if (!missing.length) return
-    const mult = cardMults[algoId] || 1
-    const todayIso = weekDates[todayDay]
-    let deployedToday = false
-    setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], ...Object.fromEntries(missing.map(d => [d, { multiplier:mult, status:'algo_active' as CS, mode:isPractixMode?'practix':'live' as CM, entry:algo?.et||'09:16', exit:algo?.xt||'15:10' }])) } }))
-    await Promise.all(missing.map(async day => {
-      try {
-        const res = await gridAPI.deploy({ algo_id:algoId, trading_date:weekDates[day], lot_multiplier:mult, is_practix:isPractixMode })
-        const gridEntryId = String(res.data?.id||'')
-        setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:{ ...g[algoId][day], gridEntryId } } }))
-        if (Array.isArray(res.data?.algo_recurring_days)) setAlgos(a => a.map(x => x.id===algoId ? { ...x, recurringDays:res.data.algo_recurring_days } : x))
-        if (weekDates[day] === todayIso) deployedToday = true
-      } catch (e:any) {
-        setGrid(g => { const u={...g[algoId]}; delete u[day]; return { ...g, [algoId]:u } })
-        flashError(e?.response?.data?.detail || `Deploy failed for ${day}`)
-      }
-    }))
-    // Mid-day deploy: activate today's entries immediately so Orders page shows WAITING
-    if (deployedToday) gridAPI.activateNow().catch(() => {})
   }
 
   // ── Archive / Delete ──────────────────────────────────────────────────────────
@@ -463,7 +395,17 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
             >
               Archive
               {archived.length > 0 && (
-                <span style={{ position:'absolute', top:6, right:6, width:5, height:5, borderRadius:'50%', background:'var(--accent)' }}/>
+                <span style={{
+                  position:'absolute', top:-5, right:-5,
+                  minWidth:16, height:16, borderRadius:8,
+                  background:'var(--accent)', color:'#fff',
+                  fontSize:9, fontWeight:700, fontFamily:'Inter, sans-serif',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  padding:'0 4px', lineHeight:1,
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.2)',
+                }}>
+                  {archived.length}
+                </span>
               )}
             </button>
 
@@ -518,7 +460,7 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
       {/* ── Algo cards outer container ─────── */}
       <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column' }}>
-        <div ref={scrollRef} className="no-scrollbar" style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', padding:'16px 16px 24px' }}>
+        <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', padding:'16px 28px 24px' }}>
 
           {visibleAlgos.length === 0 && (
             <div style={{ padding:'64px 24px', textAlign:'center', color:'var(--text-dim)', fontSize:'13px' }}>
@@ -534,7 +476,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                 {/* ── Group header ── */}
                 <div
-                  ref={el => { if (el) groupHeaderRefs.current.set(instrument, el); else groupHeaderRefs.current.delete(instrument) }}
                   onClick={() => setCollapsedGroups(prev => {
                     const next = new Set(prev)
                     if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
@@ -557,21 +498,15 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                 </div>
 
                 {/* ── Group cards ── */}
-                  <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px',
-                    overflow:'hidden', maxHeight: isCollapsed ? '0px' : '99999px',
-                    transition: 'max-height 0.28s ease-in-out, opacity 0.2s ease',
-                    opacity: isCollapsed ? 0 : 1,
-                  }}>
+                  {!isCollapsed && <div style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px' }}>
                     {groupAlgos.map(algo => {
                       const mult        = cardMults[algo.id] || 1
-                      const isExpanded  = expandedId === algo.id
                       const typeStr     = algo.account?.toLowerCase().includes('ao') ? 'Direct' : 'Broker'
                       const instruments = Array.from(new Set(algo.legs.map(l => l.i)))
 
                       return (
                         <div key={algo.id}
-                          onClick={() => setExpandedId(expandedId === algo.id ? null : algo.id)}
-                          style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:20, cursor:'pointer',
+                          style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:20,
                             background:'var(--bg)', border:'none',
                             boxShadow:'var(--neu-raised)',
                             transition:'transform 0.18s ease, box-shadow 0.18s ease',
@@ -613,17 +548,6 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
                                       border:'none', boxShadow:'var(--neu-inset)',
                                     }}>{ins}</span>
                                   ))}
-                                  {isExpanded && algoErrors[algo.id] && (
-                                    <span style={{
-                                      background: 'rgba(255,68,68,0.15)',
-                                      border: '0.5px solid rgba(255,68,68,0.4)',
-                                      borderRadius: 4, padding: '1px 6px',
-                                      fontSize: 10, color: '#FF4444',
-                                      fontFamily: 'var(--font-mono)',
-                                      marginLeft: 6,
-                                      cursor: 'pointer',
-                                    }} title={algoErrors[algo.id]}>⚠ Entry failed</span>
-                                  )}
                                 </div>
                               </div>
 
@@ -831,57 +755,11 @@ const [algoErrors, setAlgoErrors] = useState<Record<string,string>>({})
 
                           </div>{/* end main row */}
 
-                          {/* ── Expanded detail panel ── */}
-                          {isExpanded && (() => {
-                            const leg0 = algo.legs[0]
-                            const lbl = (text: string) => (
-                              <div style={{ fontSize:'9px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'var(--gs-light)', fontFamily:'var(--font-display)', marginBottom:'4px' }}>{text}</div>
-                            )
-                            const val = (text: string, color = '#F0F0FF') => (
-                              <div style={{ fontSize:'13px', color, fontFamily:'var(--font-mono)' }}>{text}</div>
-                            )
-                            const boolVal = (flag?: boolean) => val(flag ? 'Yes' : 'No', flag ? '#22DD88' : 'var(--gs-light)')
-                            return (
-                              <div onClick={e => e.stopPropagation()}
-                                style={{ borderTop:'0.5px solid rgba(255,107,0,0.15)', padding:'14px 24px 16px',
-                                  display:'flex', flexDirection:'column', gap:'12px' }}>
-                                {/* Row 1 — MTM settings */}
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
-                                  <div>{lbl('MTM SL')}{val(algo.mtm_sl != null ? `₹${algo.mtm_sl.toLocaleString('en-IN')}` : '—')}</div>
-                                  <div>{lbl('MTM TP')}{val(algo.mtm_tp != null ? `₹${algo.mtm_tp.toLocaleString('en-IN')}` : '—')}</div>
-                                  <div>{lbl('MTM Unit')}{val(algo.mtm_unit ? toTitleCase(algo.mtm_unit) : '—')}</div>
-                                  <div>{lbl('Global SL')}{val('—')}</div>
-                                </div>
-                                {/* Row 2 — Execution settings (first leg) */}
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
-                                  <div>{lbl('Strike Type')}{val(leg0?.strikeType ? toTitleCase(leg0.strikeType) : '—')}</div>
-                                  <div>{lbl('Lots')}{val(leg0?.lots != null ? String(leg0.lots) : '—')}</div>
-                                  <div>{lbl('Re-entry SL')}{boolVal(leg0?.reSlEnabled)}</div>
-                                  <div>{lbl('Re-entry TP')}{boolVal(leg0?.reTpEnabled)}</div>
-                                </div>
-                                {/* Row 3 — Strategy settings (first leg) */}
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'16px' }}>
-                                  <div>{lbl('W&T')}{leg0?.wtEnabled && leg0?.wtValue != null ? val(`${leg0.wtValue}${leg0.wtUnit === 'pct' ? '%' : leg0.wtUnit === 'pts' ? ' pts' : ''}`, '#22DD88') : boolVal(leg0?.wtEnabled)}</div>
-                                  <div>{lbl('Journey')}{boolVal(leg0?.hasJourney)}</div>
-                                  <div>{lbl('TSL')}{val(leg0?.tslX != null ? `${leg0.tslX} → ${leg0.tslY}` : '—')}</div>
-                                  <div>{lbl('TTP')}{val(leg0?.ttpX != null ? `${leg0.ttpX} → ${leg0.ttpY}` : '—')}</div>
-                                </div>
-                                {DAYS.some(d => !grid[algo.id]?.[d]) && (
-                                  <div style={{ paddingTop:'8px', borderTop:'0.5px solid rgba(255,255,255,0.04)', display:'flex', gap:'8px' }}>
-                                    <button onClick={() => addAllWeekdays(algo.id)} className="btn btn-ghost"
-                                      style={{ fontSize:'11px', height:'28px', padding:'0 12px' }}>
-                                      Deploy All Weekdays
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
 
                         </div>
                       )
                     })}
-                  </div>
+                  </div>}
               </div>
             )
           })}

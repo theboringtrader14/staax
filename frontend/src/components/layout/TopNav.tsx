@@ -32,6 +32,7 @@ export default function TopNav() {
   const theme             = useStore(s => s.theme)
   const toggleTheme       = useStore(s => s.toggleTheme)
   const setIsProfileOpen  = useStore(s => s.setIsProfileOpen)
+  const isDashboardOpen    = useStore(s => s.isDashboardOpen)
   const setIsDashboardOpen = useStore(s => s.setIsDashboardOpen)
   const livePnl           = useStore(s => s.livePnl)
 
@@ -123,8 +124,10 @@ export default function TopNav() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
 
             {/* Activity */}
-            <button onClick={() => setIsDashboardOpen(true)} title="System Monitor"
-              style={iconBtnStyle} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+            <button onClick={() => setIsDashboardOpen(!isDashboardOpen)} title="System Monitor"
+              style={{ ...iconBtnStyle, boxShadow: isDashboardOpen ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: isDashboardOpen ? 'var(--accent)' : 'var(--text-dim)' }}
+              onMouseEnter={e => { if (!isDashboardOpen) onEnter(e) }}
+              onMouseLeave={e => { if (!isDashboardOpen) onLeave(e) }}>
               <Pulse size={16} weight="regular" />
             </button>
 

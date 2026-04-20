@@ -483,3 +483,146 @@ Animation principle: all draw animations use `calcMode="linear" from="N" to="0"`
 11. **lifex-landing**: Phase 4 — auth flow (`lifex-auth` repo)
 12. **Claude Code**: `brew upgrade` once cask updates to v2.1.111+
 13. **Android EAS build**
+
+## Session — 20 April 2026 (v8.9)
+
+### STAAX — P&L and Orders fixes
+- Removed P&L header stat cards (Week P&L, Realized, Unrealized, Net) from Orders page
+- Day tab P&L stays — each day shows own realized + unrealized
+- Dashboard today_pnl and mtm_total zeroed (temporary until dashboard removed)
+- SCHEDULED status fixed: past-date algos now always show MISSED (is_past_date check)
+- Week-summary refetch: already correct (deps: isPractixMode, weekOffset — not selectedDate)
+- FRI open_mtm correctly groups by trading_date, uses live LTP from SmartStream
+
+### STAAX — MissingGreenlet permanent fix (commit c31e83c)
+- Root cause: _enter_with_db() called outside APScheduler greenlet context
+- Fix: schedule_immediate_entry() method routes ALL entry calls through APScheduler AsyncIOExecutor
+- Three broken call sites replaced: W&T callback, entry-time gate, retry-legs
+- All RETRY calls now route via schedule_immediate_entry()
+
+### STAAX — SmartStream reconnect
+- Was FEED_INACTIVE on Monday morning
+- Fixed via POST /api/v1/system/smartstream/start
+- LTP now flowing correctly
+
+### LIFEX Phase 3 — lifex-shared-ui (commit 8265b12)
+- New repo: ~/STAXX/lifex-shared-ui
+- Components: Navbar, ThemeToggle, StatusChip
+- Hooks: useTheme (localStorage-backed)
+- Tokens: tokens.css (source of truth) + tokens.ts (TypeScript constants)
+- Dark + light mode neumorphic shadow values for all modules
+- Module brand colors: STAAX #FF6B00, INVEX #00C9A7, BUDGEX #7C3AED, FINEX #F59E0B, TRAVEX #2dd4bf
+- lifex-landing wired: ThemeToggle.tsx thin wrapper using useTheme from @lifex/shared-ui
+- Build: zero TS errors, 2177 modules
+
+### STAAX Phase A — UI Revamp
+- Sidebar removed, TopBar removed
+- New TopNav: floating pill (border-radius 100px, max-width 1200px, sticky top 20px)
+  - Left: "LIFEX OS · STAAX" (Syne 700, STAAX in #FF6B00)
+  - Center: 5 text-only tabs — Algos | Bots | Orders | Reports | Analytics
+  - Right: Activity icon (dashboard toggle), Theme toggle, KA avatar
+  - No Kill Switch, no IST clock in nav
+  - Dark/light neumorphic shadow matching platform tokens
+- CosmicCanvas archived to src/components/archived/CosmicCanvas.tsx
+- HoneycombBackground archived to src/assets/honeycomb-bg-reference.svg
+- Background: clean var(--bg) — #1a1d25 dark / #e4e7ef light (matching landing page)
+- Phosphor icons (@phosphor-icons/react) replacing lucide-react throughout
+- lucide-react uninstalled from package.json
+
+### STAAX Phase A — Notification System
+- NotificationSystem.tsx: module-level toast store, 3 types (error/warning/info)
+- Web Audio API tones: normal ascending tone, error descending double tone
+- Full-sentence descriptions, no abbreviations
+- Auto-dismiss: 4s info, 8s error (persists until dismissed)
+- WebSocket /ws/system wired: errors → notify error, order events → notify warning
+
+### STAAX Phase A — Dashboard Slide-Out Panel
+- 380px panel slides from right, fixed position, starts at top: 88px
+- System Health: real health dots from systemAPI.health() every 30s
+- Engine Log: real events from eventsAPI.list(50)
+- Kill Switch modal: copied verbatim from DashboardPage
+- Start Session / Stop All: wired to servicesAPI
+- /dashboard route → <Navigate to="/grid" replace />
+- Panel position: top:88, right:52, width:475, borderRadius:'0 0 20px 20px'
+- Pulse button in TopNav: inset shadow + accent color when panel open
+
+### STAAX Phase A — User Profile Popup (neumorphic)
+- background: var(--bg), boxShadow: var(--neu-raised), borderRadius: 20
+- Position: top:88, right:20 (below nav pill)
+- All borders → var(--border), text → var(--text-dim) / var(--text-mute)
+- Avatar "BK", name Karthikeyan, role Admin · STAAX
+- Action rows: Settings, Switch Account, Sign Out (→ lifexos.co.in)
+
+### STAAX Phase A — Algos Page (full neumorphic)
+- "Smart Cards" → "Algos", "Indicator Bots" → "Bots"
+- Card shadows: conditional overflow (hidden when collapsed, visible when expanded)
+- Archive badge: count pill (position:absolute, top:-5, right:-5)
+- Expanded detail panel: removed click-to-expand feature entirely
+- Scroll: fixed by removing flex/flexDirection:column from scroll container (plain block)
+- AlgoPage.tsx full neumorphic redesign:
+  - Outer padding: 0 28px 24px (matches algo cards container)
+  - All inputs (sInp, inpSt, csSt, staax-input): neu-inset + var(--bg), no borders
+  - Feature chips (SL/TP/TSL/TTP/W&T/RE): active=inset+color text, inactive=neu-raised-sm
+  - Toggle buttons (entry type, reentry, journey trigger, ORB): inset/raised pattern
+  - LegRow cards: neu-raised-sm, dragging=neu-inset
+  - JourneyChildPanel cards: neu-raised-sm + colored left border per depth level
+  - FeatVals value containers: neu-raised-sm, no tinted borders
+  - Identity/Delays cards: neu-raised replacing card cloud-fill
+  - Toast, F6 warning, locked state: neumorphic with color accent left borders
+  - All var(--text-muted) → var(--text-dim), hardcoded dark values removed
+
+### STAAX Phase A — AccountsDrawer (new global component)
+- 3 left-edge fixed tab triggers: Broker / Margin / Risk
+- Tabs: width:32px, height:120px, border-radius:0 12px 12px 0
+- Rotated vertical labels (writing-mode:vertical-rl, rotate:180deg)
+- neu-raised-sm → neu-inset when active, accent left border
+- Single 400px panel slides from left (transform translateX), swaps content per tab
+- Backdrop: rgba(0,0,0,0.25) + blur(2px), click-outside + Escape to close
+- Panel 1 (Broker): account cards with token status dot (live/offline), live funds strip,
+  Login/Refresh Token button, API Keys modal, Deactivate/Reactivate
+- Panel 2 (Margin): summary stats (total margin, brokerage), per-account FY margin +
+  brokerage edit (April-gated) + save
+- Panel 3 (Risk): per-account global SL/TP edit + save
+- All modals (Add Account, Edit API Keys, Confirm Action) fully neumorphic
+- Registered globally in App.tsx (visible on all pages)
+
+### AI Pricing tiers (updated)
+- Gemma tier: ₹300/mo (free model)
+- Claude Haiku tier: ₹1,000/mo (for AI Algo creation, HISTEX backtesting)
+- BYOK: −₹100/mo discount
+
+### Commercialization decisions
+- Indicator Bots (renamed Bots): internal only, not in commercial tier
+- HEALTHEX: internal only, not in commercial tier
+- HISTEX: public, AI-powered backtesting (Phase C — last)
+- Historical data source: Angel One API (1-min candles), not tick level
+
+### STAAX Phase B (next) — AI Algo Creation
+- Web: text/voice input → Claude Haiku parses → summary → confirm → creates algo
+- AI assistant microphone/image in Algos page
+- Mobile: voice input → STT → Haiku → confirm → create + enable for days
+- Same endpoint as HISTEX AI backtesting
+
+#### Platform Module Table (v8.9)
+
+| Module | Purpose | Port (local) | Domain | Status |
+|---|---|---|---|---|
+| STAAX | Algo trading | FE:3000 BE:8000 | staax.lifexos.co.in | ✅ LIVE |
+| INVEX | Investments | FE:3001 BE:8001 | invex.lifexos.co.in | ✅ LIVE |
+| BUDGEX | Expense tracking | FE:3002 BE:8002 | budgex.lifexos.co.in | ✅ LIVE |
+| TRAVEX | Travel tracker | FE:3004 BE:8004 | travex.lifexos.co.in | ✅ LIVE (DNS pending) |
+| lifex-landing | Marketing site | :5173 | lifexos.co.in | 🔨 Local only |
+| MT5 Bridge | MT5 broker adapter | 8765 | — | 🔨 Scaffolded |
+| lifex-mobile | React Native | Expo | — | ✅ Published |
+| lifex-shared-ui | Design tokens + shared components | — | — | ✅ v1 |
+
+#### Pending — Tuesday 22 April 2026
+
+1. **STAAX**: Verify MissingGreenlet fix — RETRY any ERROR algo, watch log for `[ENGINE] Immediate entry scheduled via APScheduler` (must NOT see MissingGreenlet)
+2. **STAAX**: Phase B — AI Algo creation (Claude Haiku integration, mic/AI assistant UI)
+3. **STAAX**: EC2 deploy
+4. **lifex-landing**: /start page — pipe redesign (straight pipe + liquid fill)
+5. **lifex-landing**: /start page — neumorphic shadows complete fix
+6. **lifex-landing**: GitHub repo + EC2 deploy under lifexos.co.in
+7. **TRAVEX**: Mapbox token env + DNS A records + certbot SSL
+8. **Android EAS build**

@@ -13,6 +13,7 @@ import { useStore } from '@/store'
 import { useEffect, useState } from 'react'
 import { accountsAPI } from '@/services/api'
 import DashboardPanel from '@/components/panels/DashboardPanel'
+import AccountsDrawer from '@/components/panels/AccountsDrawer'
 import UserProfilePopup from '@/components/profile/UserProfilePopup'
 
 export default function App() {
@@ -103,6 +104,7 @@ export default function App() {
     <BrowserRouter>
       <NotificationSystem />
       <DashboardPanel />
+      <AccountsDrawer />
       <UserProfilePopup />
       <Routes>
         {/* Landing page */}

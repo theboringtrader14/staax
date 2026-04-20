@@ -141,15 +141,15 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
   const active = FEATURES.filter(f => leg.active[f.key])
   if (!active.length) return null
   const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
-  const inpSt = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
+  const inpSt = { height: '26px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
   const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input type="number" min="0" value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} placeholder={ph} style={{ ...inpSt, width: w }} />
   const sel = (k: FeatureKey, sub: string, opts: [string, string][], w = '80px') =>
     <StaaxSelect value={(leg.vals[k] as any)[sub] || ''} onChange={v => u(k, sub, v)}
       options={opts.map(([value, label]) => ({ value, label }))} width={w} />
   return (
-    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
       {active.map(f => (
-        <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: `${f.color}08`, border: `1px solid ${f.color}22`, borderRadius: '5px', padding: '4px 8px' }}>
+        <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '4px 8px' }}>
           <span style={{ fontSize: '10px', color: f.color, fontWeight: 700, marginRight: '2px' }}>{f.label}:</span>
           {f.key === 'wt'  && <>{sel('wt',  'direction', [['up','↑Up'],['down','↓Dn']], '72px')} {inp('wt',  'value', 'val')} {sel('wt',  'unit', [['pts','pts'],['pct','%']], '60px')}</>}
           {f.key === 'sl'  && (() => {
@@ -164,15 +164,15 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
               const needsBuf = ov.slType === 'orb_range_plus_pts' || ov.slType === 'orb_range_minus_pts'
               return <>
                 <select value={ov.slType} onChange={e => uOrb('slType', e.target.value)}
-                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
                   {orbSlOpts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
                 {needsBuf && (
                   <>
                     <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)}
-                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)' }} />
+                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }} />
                     <select value={ov.bufferUnit} onChange={e => uOrb('bufferUnit', e.target.value)}
-                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
                       <option value="pts">pts</option>
                       <option value="pct">%</option>
                     </select>
@@ -192,31 +192,31 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
             return <>
               {(['re_entry', 're_execute'] as const).map(t => (
                 <button key={t} type="button" onClick={() => uRe('type', t)}
-                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 4, cursor: 'pointer', background: rv.type === t ? 'rgba(255,107,0,0.25)' : 'rgba(255,255,255,0.05)', color: rv.type === t ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${rv.type === t ? 'rgba(255,107,0,0.4)' : 'rgba(255,255,255,0.1)'}` }}>
+                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 20, cursor: 'pointer', background: 'var(--bg)', boxShadow: rv.type === t ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: rv.type === t ? 'var(--accent)' : 'var(--text-dim)', border: 'none' }}>
                   {t === 're_entry' ? 'Re-Entry' : 'Re-Execute'}
                 </button>
               ))}
               {rv.type === 're_entry' && (['ltp', 'candle_close'] as const).map(m => (
                 <button key={m} type="button" onClick={() => uRe('ltpMode', m)}
-                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 4, cursor: 'pointer', background: rv.ltpMode === m ? 'rgba(255,107,0,0.25)' : 'rgba(255,255,255,0.05)', color: rv.ltpMode === m ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${rv.ltpMode === m ? 'rgba(255,107,0,0.4)' : 'rgba(255,255,255,0.1)'}` }}>
+                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 20, cursor: 'pointer', background: 'var(--bg)', boxShadow: rv.ltpMode === m ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: rv.ltpMode === m ? 'var(--accent)' : 'var(--text-dim)', border: 'none' }}>
                   {m === 'ltp' ? 'LTP' : 'Candle'}
                 </button>
               ))}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-muted)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-dim)' }}>
                 <input type="checkbox" checked={rv.onSl} onChange={e => uRe('onSl', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> SL
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-muted)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-dim)' }}>
                 <input type="checkbox" checked={rv.onTp} onChange={e => uRe('onTp', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> TP
               </label>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-muted)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)' }}>
                 SL:<input type="number" min={0} max={5} value={rv.maxSl}
                   onChange={e => uRe('maxSl', e.target.value)}
-                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)', textAlign: 'center' }} />
+                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', textAlign: 'center' }} />
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-muted)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)' }}>
                 TP:<input type="number" min={0} max={5} value={rv.maxTp}
                   onChange={e => uRe('maxTp', e.target.value)}
-                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)', textAlign: 'center' }} />
+                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', textAlign: 'center' }} />
               </span>
             </>
           })()}
@@ -232,15 +232,15 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
               const needsBuf = ov.tpType === 'orb_range_plus_pts' || ov.tpType === 'orb_range_minus_pts'
               return <>
                 <select value={ov.tpType} onChange={e => uOrb('tpType', e.target.value)}
-                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
                   {orbTpOpts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
                 {needsBuf && (
                   <>
                     <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)}
-                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', color: 'var(--text-primary)' }} />
+                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }} />
                     <select value={ov.bufferUnit} onChange={e => uOrb('bufferUnit', e.target.value)}
-                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', color: 'var(--text-primary)' }}>
+                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
                       <option value="pts">pts</option>
                       <option value="pct">%</option>
                     </select>
@@ -266,7 +266,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
   child: JourneyChild; depth: number; onChange: (c: JourneyChild) => void
 }) {
   const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)' }
-  const csSt = { height: '26px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
+  const csSt = { height: '26px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
   const childExpiryOpts = MONTHLY_ONLY_CODES.has(child.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
   const depthColor = depth === 1 ? '#CC4400' : depth === 2 ? '#F59E0B' : '#22DD88'
@@ -276,24 +276,24 @@ function JourneyChildPanel({ child, depth, onChange }: {
   const reslBlocked = !child.sl_enabled || !child.sl_value
   const retpBlocked = !child.tp_enabled || !child.tp_value
   return (
-    <div style={{ marginTop: '8px', padding: '9px 10px', background: `${depthColor}08`, border: `1px solid ${depthColor}22`, borderRadius: '6px' }}>
+    <div style={{ marginTop: '8px', padding: '9px 10px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '10px', borderLeft: `2px solid ${depthColor}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
         <span style={{ fontSize: '10px', fontWeight: 700, color: depthColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>L{depth} {depthLabel}</span>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 'auto' }}>
           <input type="checkbox" checked={child.enabled} onChange={e => u('enabled', e.target.checked)} style={{ accentColor: depthColor }} /> Enable
         </label>
       </div>
       {child.enabled && (<>
         {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
-          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: child.instType === 'OP' ? 'rgba(255,107,0,0.15)' : 'rgba(215,123,18,0.15)', color: child.instType === 'OP' ? 'var(--ox-radiant)' : 'var(--accent-amber)', border: '1px solid rgba(255,107,0,0.3)', cursor: 'pointer' }}>{child.instType}</button>
+          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}>{child.instType}</button>
           <StaaxSelect value={child.instCode} onChange={code => {
             const patch: Partial<JourneyChild> = { instCode: code }
             if (MONTHLY_ONLY_CODES.has(code) && !child.expiry.includes('monthly')) patch.expiry = 'current_monthly'
             onChange({ ...child, ...patch })
           }} options={Object.entries(INST_CODES).map(([c]) => ({ value: c, label: c }))} width="68px" />
-          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: child.direction === 'BUY' ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: '1px solid rgba(34,221,136,0.3)', cursor: 'pointer' }}>{child.direction}</button>
-          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer' }}>{child.optType}</button>}
+          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: 'none', cursor: 'pointer' }}>{child.direction}</button>
+          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer' }}>{child.optType}</button>}
           {child.instType === 'OP' && <>
             <StaaxSelect value={child.expiry} onChange={v => u('expiry', v)} options={childExpiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" />
             <StaaxSelect value={child.strikeMode} onChange={v => u('strikeMode', v)} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" />
@@ -302,7 +302,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
             {child.strikeMode === 'straddle' && <StaaxSelect value={child.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" />}
           </>}
           <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...csSt, width: '56px', textAlign: 'center' }} />
-          <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>|</span>
+          <span style={{ color: 'var(--border)', fontSize: '14px' }}>|</span>
           {[
             { key: 'wt_enabled', label: 'W&T',   color: '#9CA3AF' },
             { key: 'sl_enabled',    label: 'SL',    color: '#FF4444' },
@@ -319,7 +319,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
               if (f.key === 'sl_enabled' && !newVal) { patch.tsl_enabled = false; patch.re_sl_enabled = false }
               if (f.key === 'tp_enabled' && !newVal) { patch.ttp_enabled = false; patch.re_tp_enabled = false }
               onChange({ ...child, ...patch })
-            }} style={{ height: '24px', padding: '0 9px', borderRadius: '11px', fontSize: '10px', fontWeight: 600, cursor: f.blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', background: child[f.key as keyof JourneyChild] ? f.color : 'var(--bg-surface)', color: child[f.key as keyof JourneyChild] ? '#000' : f.blocked ? 'rgba(255,255,255,0.18)' : 'var(--text-dim)', opacity: f.blocked ? 0.4 : 1 }}>
+            }} style={{ height: '24px', padding: '0 9px', borderRadius: '11px', fontSize: '10px', fontWeight: 600, cursor: f.blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', background: 'var(--bg)', boxShadow: child[f.key as keyof JourneyChild] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: child[f.key as keyof JourneyChild] ? f.color : f.blocked ? 'var(--text-mute)' : 'var(--text-dim)', opacity: f.blocked ? 0.4 : 1 }}>
               {f.label}
             </button>
           ))}
@@ -327,7 +327,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
         {/* Row 3 — active feature values */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
           {child.wt_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(156,163,175,0.08)', border: '1px solid rgba(156,163,175,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 700, marginRight: '2px' }}>W&T:</span>
               <StaaxSelect value={child.wt_direction} onChange={v => u('wt_direction', v)} options={[{ value: 'up', label: '↑Up' }, { value: 'down', label: '↓Dn' }]} width="72px" />
               <input type="number" min="0" value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
@@ -335,14 +335,14 @@ function JourneyChildPanel({ child, depth, onChange }: {
             </div>
           )}
           {child.sl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#FF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
               <StaaxSelect value={child.sl_type} onChange={v => u('sl_type', v)} options={TYPE_OPTS.map(([value, label]) => ({ value, label }))} width="88px" />
               <input type="number" min="0" value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.re_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE:</span>
               <StaaxSelect value={child.re_mode} onChange={v => u('re_mode', v)} options={[{ value: 'at_entry_price', label: '@Entry' }, { value: 'immediate', label: 'Now' }, { value: 'at_cost', label: '@Cost' }]} width="80px" />
               <StaaxSelect value={child.re_trigger} onChange={v => u('re_trigger', v)} options={[{ value: 'sl', label: 'SL' }, { value: 'tp', label: 'TP' }, { value: 'any', label: 'Any' }]} width="60px" />
@@ -350,28 +350,28 @@ function JourneyChildPanel({ child, depth, onChange }: {
             </div>
           )}
           {child.re_sl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE-SL:</span>
               <StaaxSelect value={child.re_mode} onChange={v => u('re_mode', v)} options={[{ value: 'at_entry_price', label: '@Entry' }, { value: 'immediate', label: 'Now' }, { value: 'at_cost', label: '@Cost' }]} width="80px" />
               <StaaxSelect value={child.re_count} onChange={v => u('re_count', v)} options={['1','2','3'].map(n => ({ value: n, label: `${n}×` }))} width="56px" />
             </div>
           )}
           {child.re_tp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE-TP:</span>
               <StaaxSelect value={child.re_mode} onChange={v => u('re_mode', v)} options={[{ value: 'at_entry_price', label: '@Entry' }, { value: 'immediate', label: 'Now' }, { value: 'at_cost', label: '@Cost' }]} width="80px" />
               <StaaxSelect value={child.re_count} onChange={v => u('re_count', v)} options={['1','2','3'].map(n => ({ value: n, label: `${n}×` }))} width="56px" />
             </div>
           )}
           {child.tp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(34,221,136,0.08)', border: '1px solid rgba(34,221,136,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#22DD88', fontWeight: 700, marginRight: '2px' }}>TP:</span>
               <StaaxSelect value={child.tp_type} onChange={v => u('tp_type', v)} options={TYPE_OPTS.map(([value, label]) => ({ value, label }))} width="88px" />
               <input type="number" min="0" value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
             </div>
           )}
           {child.tsl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(255,107,0,0.08)', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
               <input type="number" min="0" value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
@@ -380,7 +380,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
             </div>
           )}
           {child.ttp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '5px', padding: '3px 7px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
               <span style={{ fontSize: '10px', color: '#CC4400', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
               <input type="number" min="0" value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
               <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
@@ -410,7 +410,7 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   const showTriggerChips = hasJourney && leg.active.sl && leg.active.tp
   const currentTrigger = leg.journey_trigger || 'either'
   return (
-    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(167,139,250,0.15)' }}>
+    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
       <button onClick={() => setOpen((o: boolean) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
         <span style={{ fontSize: '10px', fontWeight: 700, color: hasJourney ? '#CC4400' : 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {open ? '▾' : '▸'} Journey {hasJourney ? '● Active' : ''}
@@ -429,8 +429,9 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
                   style={{
                     height: '22px', padding: '0 10px', borderRadius: '11px', fontSize: '10px', fontWeight: 600,
                     cursor: 'pointer', border: 'none', transition: 'all 0.12s',
-                    background: active ? opt.color : 'var(--bg-surface)',
-                    color: active ? '#000' : 'var(--text-dim)',
+                    background: 'var(--bg)',
+                    boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                    color: active ? opt.color : 'var(--text-dim)',
                   }}
                 >
                   {opt.label}
@@ -455,22 +456,22 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   entryType: string
 }) {
   const u = (k: keyof Leg, v: any) => onUpdate(leg.id, { [k]: v })
-  const sInp = { height: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '4px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
+  const sInp = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
   const expiryOpts = MONTHLY_ONLY_CODES.has(leg.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
 
   return (
-    <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `0.5px solid ${isDragging ? 'rgba(255,107,0,0.65)' : 'rgba(255,107,0,0.22)'}`, borderRadius: '7px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'border-color 0.1s' }}>
+    <div style={{ background: 'var(--bg)', boxShadow: isDragging ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', borderRadius: '12px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'box-shadow 0.1s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
         <span {...dragHandleProps} title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-dim)', fontSize: '13px', flexShrink: 0, padding: '0 2px', userSelect: 'none' }}>⠿</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', minWidth: '20px', textAlign: 'center' }}>L{leg.no}</span>
-        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: leg.instType === 'OP' ? 'rgba(255,107,0,0.15)' : 'rgba(215,123,18,0.15)', color: leg.instType === 'OP' ? 'var(--ox-radiant)' : 'var(--accent-amber)', border: `1px solid ${leg.instType === 'OP' ? 'rgba(255,107,0,0.3)' : 'rgba(215,123,18,0.3)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
+        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
         <StaaxSelect value={leg.instCode} onChange={code => {
           const patch: Partial<Leg> = { instCode: code }
           if (MONTHLY_ONLY_CODES.has(code) && !leg.expiry.includes('monthly')) patch.expiry = 'current_monthly'
           onUpdate(leg.id, patch)
         }} options={Object.entries(INST_CODES).map(([c, n]) => ({ value: c, label: c + (n ? '' : '') }))} width="68px" />
-        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: leg.direction === 'BUY' ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)', color: leg.direction === 'BUY' ? 'var(--sem-long)' : 'var(--sem-short)', border: `0.5px solid ${leg.direction === 'BUY' ? 'rgba(34,221,136,0.35)' : 'rgba(255,68,68,0.35)'}`, cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
-        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--bg-border)', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
+        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: leg.direction === 'BUY' ? 'var(--sem-long)' : 'var(--sem-short)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
+        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
           <StaaxSelect value={leg.expiry} onChange={v => u('expiry', v)} options={expiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" />
           <StaaxSelect value={leg.strikeMode} onChange={v => { u('strikeMode', v); if (v === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" />
@@ -479,7 +480,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           {leg.strikeMode === 'straddle' && <StaaxSelect value={leg.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" />}
         </>}
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: 'var(--text)' }} />
-        <span style={{ color: 'var(--bg-border)', fontSize: '14px', flexShrink: 0 }}>|</span>
+        <span style={{ color: 'var(--border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.map(f => {
           const slHasValue = !!(leg.vals.sl as any)?.value
           const tpHasValue = !!(leg.vals.tp as any)?.value
@@ -491,22 +492,22 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
               if (f.key === 'sl' && leg.active['sl']) newActive['tsl'] = false
               if (f.key === 'tp' && leg.active['tp']) newActive['ttp'] = false
               onUpdate(leg.id, { active: newActive })
-            }} style={{ height: '28px', padding: '0 11px', borderRadius: '13px', fontSize: '11px', fontWeight: 600, cursor: blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: leg.active[f.key] ? f.color : 'var(--bg-surface)', color: leg.active[f.key] ? '#000' : blocked ? 'rgba(255,255,255,0.18)' : 'var(--text-dim)', opacity: blocked ? 0.4 : 1 }}>
+            }} style={{ height: '28px', padding: '0 11px', borderRadius: '13px', fontSize: '11px', fontWeight: 600, cursor: blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: 'var(--bg)', boxShadow: leg.active[f.key] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.active[f.key] ? f.color : blocked ? 'var(--text-mute)' : 'var(--text-dim)', opacity: blocked ? 0.4 : 1 }}>
               {f.label}
             </button>
           )
         })}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexShrink: 0 }}>
           <button onClick={() => onCopy(leg.id)} title="Copy leg"
-            style={{ height: '28px', width: '28px', background: 'none', border: '0.5px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms ease', flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)' }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)' }}>
+            style={{ height: '28px', width: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: 'var(--text-dim)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms ease', flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)' }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <rect x="4.083" y="4.083" width="8.167" height="8.167" rx="1.167" stroke="currentColor" strokeWidth="1.2"/>
               <path d="M2.333 9.917H1.75A.583.583 0 011.167 9.333V1.75A.583.583 0 011.75 1.167h7.583a.583.583 0 01.584.583v.583" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
           </button>
-          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'none', border: '0.5px solid rgba(255,68,68,0.35)', color: 'var(--red)', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: '#FF4444', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
       {entryType === 'orb' && (
@@ -515,8 +516,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           {(['high','low'] as const).map(ea => (
             <button key={ea} type="button"
               onClick={() => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...leg.vals.orb, entryAt: ea } } })}
-              className={`chip ${leg.vals.orb.entryAt === ea ? 'chip-active' : 'chip-inactive'}`}
-              style={{ height: '24px', padding: '0 8px', cursor: 'pointer', fontSize: '10px' }}>
+              style={{ height: '24px', padding: '0 8px', borderRadius: '100px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: leg.vals.orb.entryAt === ea ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.vals.orb.entryAt === ea ? 'var(--accent)' : 'var(--text-dim)' }}>
               {ea === 'high' ? 'ORB High (BUY)' : 'ORB Low (SELL)'}
             </button>
           ))}
@@ -531,11 +531,11 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
 function SubSection({ title }: { title: string }) {
   return (
     <div style={{
-      fontSize: '10px', fontWeight: 700, color: 'rgba(232,232,248,0.7)',
+      fontSize: '10px', fontWeight: 700, color: 'var(--text-mute)',
       textTransform: 'uppercase', letterSpacing: '1.5px',
       marginBottom: '10px', marginTop: '6px', paddingBottom: '6px',
-      borderBottom: '1px solid rgba(255,107,0,0.12)',
-      borderLeft: '2px solid #FF6B00', paddingLeft: '10px',
+      borderBottom: '1px solid var(--border)',
+      borderLeft: '2px solid var(--accent)', paddingLeft: '10px',
     }}>{title}</div>
   )
 }
@@ -551,7 +551,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
     return `${String(hh).padStart(2,'0')}:${m || '00'}:${s || '00'}`
   }
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-secondary)', border: '1px solid var(--bg-border)', borderRadius: '5px', height: '32px', padding: '0 7px', boxSizing: 'border-box' }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '8px', height: '32px', padding: '0 7px', boxSizing: 'border-box' }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.7 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 12"/></svg>
       <input
         type="time"
@@ -564,7 +564,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
           background: 'transparent',
           border: 'none',
           color: 'var(--text)',
-          colorScheme: 'dark',
+          colorScheme: 'inherit',
           fontSize: '12px',
           fontFamily: 'inherit',
           height: '100%',
@@ -960,15 +960,15 @@ export default function AlgoPage() {
     return (
       <div>
         <div className="page-header">
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>{algoName || 'Edit Algo'}</h1>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>{algoName || 'Edit Algo'}</h1>
           <div className="page-header-actions">
             <button className="btn btn-ghost" onClick={() => navigate('/grid')}>← Back to Algos</button>
           </div>
         </div>
-        <div style={{ background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: '8px', padding: '20px 24px', textAlign: 'center' }}>
+        <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '14px', padding: '20px 24px', textAlign: 'center', borderLeft: '3px solid #FF4444' }}>
           <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔒</div>
           <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--red)', marginBottom: '6px' }}>Algo is live — editing locked</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
             <strong>{algoName}</strong> has an active trade today.<br />
             Editing is only allowed during off-market hours.<br />
             Any changes made will apply from the next trading day.
@@ -979,20 +979,22 @@ export default function AlgoPage() {
   }
 
   return (
-    <div className="algo-page">
+    <div className="algo-page" style={{ padding: '0 28px 24px' }}>
       <style>{`
         .staax-time-input::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
         .staax-time-input::-webkit-inner-spin-button { display: none !important; }
         .staax-time-input::-webkit-datetime-edit-ampm-field { display: none !important; }
         .staax-time-input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
         .staax-time-input { line-height: 30px; }
-        .staax-input::placeholder { color: var(--text-muted) !important; }
-        .staax-select option { background: var(--bg-secondary); color: var(--text); }
-        .leg-select-dim { color: var(--text-muted) !important; }
+        .algo-page .staax-input { background: var(--bg) !important; box-shadow: var(--neu-inset) !important; border: none !important; border-radius: 8px !important; color: var(--text) !important; }
+        .algo-page .staax-input::placeholder { color: var(--text-dim) !important; }
+        .algo-page .staax-input:hover:not(:focus), .algo-page .staax-input:focus { box-shadow: var(--neu-inset) !important; border: none !important; }
+        .staax-select option { background: var(--bg); color: var(--text); }
+        .leg-select-dim { color: var(--text-dim) !important; }
         .leg-select-active { color: var(--text) !important; }
       `}</style>
       <div className="page-header">
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
         <div className="page-header-actions">
           {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
@@ -1003,15 +1005,15 @@ export default function AlgoPage() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(30,30,30,0.95)', border: '1px solid rgba(255,68,68,0.4)', borderRadius: '8px', padding: '10px 18px', fontSize: '12px', color: 'var(--red)', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '100px', padding: '10px 18px', fontSize: '12px', color: '#FF4444', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
           ⚠ {toast}
         </div>
       )}
       {/* F6 — tomorrow warning */}
       {showTomorrowWarn && (
-        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '8px', padding: '14px 16px', marginBottom: '12px' }}>
+        <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '14px', borderLeft: '3px solid #F59E0B', padding: '14px 16px', marginBottom: '12px' }}>
           <div style={{ fontWeight: 700, color: 'var(--accent-amber)', marginBottom: '6px' }}>⚠️ Changes apply from tomorrow</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px' }}>
             This algo may be deployed in today's grid. Changes you save will NOT affect today's trades — they will apply from the next trading day onward.
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1022,7 +1024,7 @@ export default function AlgoPage() {
       )}
 
       {/* Identity card */}
-      <div className="card cloud-fill" style={{ marginBottom: '12px' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '16px', padding: '16px', marginBottom: '12px' }}>
         <SubSection title="Identity — Algo Level" />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 150px', maxWidth: '180px' }}>
@@ -1044,7 +1046,7 @@ export default function AlgoPage() {
         </div>
 
         {/* Entry Type & Timing + MTM Controls — combined single row */}
-        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '0.5px solid rgba(255,107,0,0.12)', display: 'grid', gridTemplateColumns: '1fr 1px auto', columnGap: '28px', alignItems: 'start' }}>
+        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1px auto', columnGap: '28px', alignItems: 'start' }}>
           {/* Entry Type & Timing */}
           <div>
             <SubSection title="Entry Type & Timing — Algo Level" />
@@ -1052,8 +1054,8 @@ export default function AlgoPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Type</label>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={() => setEntryType('direct')} className={`chip ${entryType === 'direct' ? 'chip-active' : 'chip-inactive'}`} style={{ height: '32px', padding: '0 14px', cursor: 'pointer' }}>Direct</button>
-                  <button onClick={() => setEntryType('orb')}    className={`chip ${entryType === 'orb'    ? 'chip-active' : 'chip-inactive'}`} style={{ height: '32px', padding: '0 14px', cursor: 'pointer' }}>ORB</button>
+                  <button onClick={() => setEntryType('direct')} style={{ height: '32px', padding: '0 14px', borderRadius: '100px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'direct' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'direct' ? 'var(--accent)' : 'var(--text-dim)' }}>Direct</button>
+                  <button onClick={() => setEntryType('orb')}    style={{ height: '32px', padding: '0 14px', borderRadius: '100px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'orb' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'orb' ? 'var(--accent)' : 'var(--text-dim)' }}>ORB</button>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1072,8 +1074,7 @@ export default function AlgoPage() {
                   <div style={{ display: 'flex', gap: '5px' }}>
                     {(['underlying','instrument'] as const).map(s => (
                       <button key={s} type="button" onClick={() => setOrbRangeSource(s)}
-                        className={`chip ${orbRangeSource === s ? 'chip-active' : 'chip-inactive'}`}
-                        style={{ height: '28px', padding: '0 10px', cursor: 'pointer', fontSize: '10px' }}>
+                        style={{ height: '28px', padding: '0 10px', borderRadius: '100px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: orbRangeSource === s ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: orbRangeSource === s ? 'var(--accent)' : 'var(--text-dim)' }}>
                         {s === 'underlying' ? 'Underlying' : 'Instrument'}
                       </button>
                     ))}
@@ -1104,7 +1105,7 @@ export default function AlgoPage() {
           </div>
 
           {/* Vertical separator */}
-          <div style={{ width: '1px', background: 'rgba(255,107,0,0.15)', alignSelf: 'stretch', minHeight: '60px' }} />
+          <div style={{ width: '1px', background: 'var(--border)', alignSelf: 'stretch', minHeight: '60px' }} />
 
           {/* MTM Controls */}
           <div>
@@ -1130,8 +1131,8 @@ export default function AlgoPage() {
       {/* Legs */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Legs</span>
-          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '3px', background: 'rgba(34,221,136,0.1)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · TTP · W&T · RE · Journey per leg</span>
+          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Legs</span>
+          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '20px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · TTP · W&T · RE · Journey per leg</span>
           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{legs.length} leg{legs.length > 1 ? 's' : ''}</span>
         </div>
         <button className="btn btn-ghost" style={{ fontSize: '11px' }} onClick={addLeg}>+ Add Leg</button>
@@ -1139,18 +1140,18 @@ export default function AlgoPage() {
       {legs.map((leg, i) => (
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
-          style={{ outline: dragOverIdx === i && dragIdx !== i ? '1px dashed rgba(255,107,0,0.55)' : 'none', borderRadius: '7px' }}>
+          style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent)' : 'none', borderRadius: '12px' }}>
           <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} entryType={entryType} />
         </div>
       ))}
 
       {/* Delays + Errors */}
-      <div className="card cloud-fill" style={{ marginTop: '12px' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '16px', padding: '16px', marginTop: '12px' }}>
         <SubSection title="Order Delays — Algo Level" />
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           {/* F2 — Entry delay with BUY/SELL scope */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Entry Delay:</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Entry Delay:</span>
             {/* Scope dropdown — BUY/SELL/All */}
             <StaaxSelect value={entryDelayScope} onChange={setEntryDelayScope} options={[{ value: 'all', label: 'All legs' }, { value: 'buy', label: 'BUY legs' }, { value: 'sell', label: 'SELL legs' }]} width="90px" />
             <input value={entryDelay} onChange={e => setEntryDelay(e.target.value)} type="number" min={0} max={60} className="staax-input" style={{ width: '60px', fontSize: '12px' }} />
@@ -1158,14 +1159,14 @@ export default function AlgoPage() {
           </div>
           {/* F2 — Exit delay with BUY/SELL scope */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Exit Delay:</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Exit Delay:</span>
             <StaaxSelect value={exitDelayScope} onChange={setExitDelayScope} options={[{ value: 'all', label: 'All legs' }, { value: 'buy', label: 'BUY legs' }, { value: 'sell', label: 'SELL legs' }]} width="90px" />
             <input value={exitDelay} onChange={e => setExitDelay(e.target.value)} type="number" min={0} max={60} className="staax-input" style={{ width: '60px', fontSize: '12px' }} />
             <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>s (max 60)</span>
           </div>
         </div>
 
-        <div style={{ margin: '12px 0 10px', borderTop: '0.5px solid rgba(255,107,0,0.12)' }} />
+        <div style={{ margin: '12px 0 10px', borderTop: '1px solid var(--border)' }} />
         <SubSection title="Error Settings — Algo Level" />
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }}>

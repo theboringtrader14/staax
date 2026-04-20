@@ -39,7 +39,7 @@ export default function UserProfilePopup() {
     padding: '10px 16px',
     cursor: 'pointer',
     fontSize: 13,
-    color: 'rgba(240,237,232,0.65)',
+    color: 'var(--text-dim)',
     transition: 'background 150ms ease',
   }
 
@@ -72,15 +72,13 @@ export default function UserProfilePopup() {
       ref={popupRef}
       style={{
         position: 'fixed',
-        top: 64,
-        right: 16,
+        top: 88,
+        right: 20,
         width: 260,
         zIndex: 300,
-        background: 'rgba(22,22,25,0.97)',
-        border: '0.5px solid rgba(255,107,0,0.22)',
-        borderRadius: 12,
-        backdropFilter: 'blur(24px)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+        background: 'var(--bg)',
+        borderRadius: 20,
+        boxShadow: 'var(--neu-raised)',
         overflow: 'hidden',
         opacity: isProfileOpen ? 1 : 0,
         transform: isProfileOpen ? 'translateY(0)' : 'translateY(-8px)',
@@ -92,7 +90,7 @@ export default function UserProfilePopup() {
       <div
         style={{
           padding: 16,
-          borderBottom: '0.5px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid var(--border)',
         }}
       >
         {/* Avatar */}
@@ -144,7 +142,7 @@ export default function UserProfilePopup() {
             {i === 2 && (
               <div
                 style={{
-                  borderTop: '0.5px solid rgba(255,255,255,0.06)',
+                  borderTop: '1px solid var(--border)',
                   margin: '4px 16px',
                 }}
               />
@@ -155,11 +153,11 @@ export default function UserProfilePopup() {
               onMouseLeave={() => setHovered(null)}
               style={{
                 ...actionBase,
-                background: hovered === i ? 'rgba(255,255,255,0.04)' : 'transparent',
+                background: hovered === i ? 'rgba(128,128,128,0.08)' : 'transparent',
                 color:
                   action.danger && hovered === i
                     ? '#FF4444'
-                    : 'rgba(240,237,232,0.65)',
+                    : 'var(--text-dim)',
               }}
             >
               <span
@@ -167,7 +165,7 @@ export default function UserProfilePopup() {
                   color:
                     action.danger && hovered === i
                       ? '#FF4444'
-                      : 'rgba(240,237,232,0.65)',
+                      : 'var(--text-dim)',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -184,9 +182,9 @@ export default function UserProfilePopup() {
       <div
         style={{
           padding: '10px 16px',
-          borderTop: '0.5px solid rgba(255,255,255,0.06)',
+          borderTop: '1px solid var(--border)',
           fontSize: 10,
-          color: 'rgba(240,237,232,0.20)',
+          color: 'var(--text-mute)',
           letterSpacing: '0.15em',
           textTransform: 'uppercase',
           fontFamily: 'var(--font-mono)',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ArrowClockwise, Warning } from '@phosphor-icons/react'
+import { ArrowClockwise, Warning } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
@@ -70,7 +70,7 @@ function NeuBtn({ children, onClick, disabled, accent, danger, style: extraStyle
     ...(accent
       ? { background: 'var(--accent)', color: '#fff', boxShadow: 'var(--neu-raised-sm)' }
       : danger
-      ? { background: 'rgba(255,68,68,0.15)', color: '#FF4444', boxShadow: 'var(--neu-raised-sm)' }
+      ? { background: 'var(--bg)', color: '#FF4444', boxShadow: 'var(--neu-raised-sm)' }
       : { background: 'var(--bg)', color: 'var(--text-dim)', boxShadow: 'var(--neu-raised-sm)' }),
     ...extraStyle,
   }
@@ -226,6 +226,12 @@ export default function DashboardPanel() {
   // ── Render ────────────────────────────────────────────────────
   return (
     <>
+      <style>{`
+        @keyframes dotPulse {
+          0%, 100% { transform: scale(1);    opacity: 1;   }
+          50%       { transform: scale(1.45); opacity: 0.6; }
+        }
+      `}</style>
       {/* Blur backdrop — starts below TopNav so nav stays visible */}
       <div
         onClick={() => setIsDashboardOpen(false)}
@@ -239,20 +245,20 @@ export default function DashboardPanel() {
         }}
       />
 
-      {/* Panel — drops from below the TopNav, clipped at bottom with margin */}
+      {/* Panel — sits flush below the TopNav pill, seamless via shared background */}
       <div style={{
         position: 'fixed',
-        top: 82,       /* below the sticky nav pill (20px wrapper + ~48px pill + 14px gap) */
-        right: 20,     /* matches TopNav side margin */
+        top: 88,       /* safely below nav pill (20px wrapper + ~60px pill + 8px gap) */
+        right: 52,     /* matches algo card right edge: 24px main padding + 28px scroll padding */
         width: 475,
-        maxHeight: 'calc(100vh - 110px)', /* clip before the bottom */
+        maxHeight: 'calc(100vh - 108px)',
         zIndex: 200,
-        borderRadius: 20,
+        borderRadius: '0 0 20px 20px', /* flat top connects visually with pill bottom */
         background: 'var(--bg)',
         boxShadow: 'var(--neu-raised-lg)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         opacity: isDashboardOpen ? 1 : 0,
-        transform: isDashboardOpen ? 'translateY(0) scale(1)' : 'translateY(-12px) scale(0.97)',
+        transform: isDashboardOpen ? 'translateY(0) scale(1)' : 'translateY(-20px) scale(0.98)',
         pointerEvents: isDashboardOpen ? 'auto' : 'none',
         transition: 'opacity 0.22s ease, transform 0.22s ease',
         transformOrigin: 'top right',
@@ -266,21 +272,10 @@ export default function DashboardPanel() {
           borderBottom: '0.5px solid var(--border)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: overallColor, boxShadow: `0 0 8px ${overallColor}`, flexShrink: 0 }} />
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: overallColor, boxShadow: `0 0 8px ${overallColor}`, flexShrink: 0, animation: 'dotPulse 2.2s ease-in-out infinite' }} />
             <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>System Monitor</span>
             <span style={{ fontSize: 10, color: overallColor, fontWeight: 600 }}>· {statusLabel}</span>
           </div>
-          <button
-            onClick={() => setIsDashboardOpen(false)}
-            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'var(--bg)', border: 'none', color: 'var(--text-dim)', cursor: 'pointer',
-              borderRadius: '50%', boxShadow: 'var(--neu-raised-sm)', transition: 'box-shadow 0.12s' }}
-            onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
-            onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-          >
-            <X size={13} weight="bold" />
-          </button>
         </div>
 
         {/* ── Action bar: Kill Switch > Stop All > Start ── */}
@@ -348,7 +343,7 @@ export default function DashboardPanel() {
               </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {healthChips.map(chip => {
+              {healthChips.map((chip) => {
                 const dotColor = chip.state === 'green' ? '#0ea66e' : chip.state === 'red' ? '#FF4444' : '#b45309'
                 const statusText = chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'
                 return (
@@ -414,14 +409,14 @@ export default function DashboardPanel() {
                 const angeloneOk: boolean = isZerodha ? false : (health?.checks?.['broker_angelone_' + acc.id]?.token_valid ?? acc.token_valid_today ?? false)
                 const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
                 return (
-                  <div key={acc.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 8px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
+                  <div key={acc.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '10px 8px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
                     {/* Name */}
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textAlign: 'center' }}>{acc.nickname || acc.name}</div>
                     {/* Broker */}
                     <div style={{ fontSize: 9, color: 'var(--text-mute)', textAlign: 'center' }}>{isZerodha ? 'Zerodha' : 'Angel One'}</div>
                     {/* Status chip or Login button */}
                     {isLive
-                      ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#0ea66e' }}>Live</span>
+                      ? <span style={{ marginTop: 'auto', padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#0ea66e' }}>Live</span>
                       : <NeuBtn onClick={async () => {
                           if (isZerodha) {
                             const w = 520, h = 640, left = window.screenX + (window.outerWidth - w) / 2, top = window.screenY + (window.outerHeight - h) / 2
@@ -430,7 +425,7 @@ export default function DashboardPanel() {
                             const res = await fetch(`${API_BASE}/api/v1/accounts/${acc.id}/login`, { method: 'POST' })
                             if (res.ok) setLoginSucceeded(prev => ({ ...prev, [acc.id]: true }))
                           }
-                        }} style={{ height: 24, fontSize: 9, padding: '0 8px' }}>
+                        }} style={{ height: 24, fontSize: 9, padding: '0 8px', marginTop: 'auto' }}>
                           Login
                         </NeuBtn>
                     }
@@ -472,7 +467,7 @@ export default function DashboardPanel() {
           {/* ── Engine Log ── */}
           <div style={{ padding: '14px 16px 16px' }}>
             {sectionLabel('Engine Log')}
-            <div style={{ borderRadius: 14, background: '#0f1117', overflow: 'hidden', padding: '10px 0' }}>
+            <div style={{ borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden', padding: '10px 0' }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '0 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                 {dedupeLog(log).map((line, i) => {
                   const isSep = line.startsWith('──')
@@ -483,7 +478,7 @@ export default function DashboardPanel() {
                   const isErr = line.includes('⛔')
                   const isWrn = line.includes('⚠')
                   return (
-                    <div key={i} style={{ color: isOk ? '#0ea66e' : isErr ? '#FF5555' : isWrn ? '#b45309' : 'rgba(200,210,220,0.55)', lineHeight: 1.6, padding: '0.5px 0' }}>
+                    <div key={i} style={{ color: isOk ? '#0ea66e' : isErr ? '#FF5555' : isWrn ? '#b45309' : 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>
                       {line}
                     </div>
                   )
