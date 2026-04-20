@@ -477,18 +477,18 @@ export default function DashboardPanel() {
           {/* ── Engine Log ── */}
           <div style={{ padding: '14px 16px 16px' }}>
             {sectionLabel('Engine Log')}
-            <div style={{ borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden', padding: '10px 0' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '0 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', color: 'var(--text-dim)' }}>
+            <div style={{ borderRadius: 14, background: '#0f1117', overflow: 'hidden', padding: '10px 0' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '0 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                 {dedupeLog(log).map((line, i) => {
                   const isSep = line.startsWith('──')
                   if (isSep) return (
-                    <div key={i} style={{ color: 'var(--text-mute)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
+                    <div key={i} style={{ color: 'rgba(255,107,0,0.3)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
                   )
                   const isOk  = line.includes('✅')
                   const isErr = line.includes('⛔')
                   const isWrn = line.includes('⚠')
                   return (
-                    <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF4444' : isWrn ? '#FFD700' : 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>
+                    <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF5555' : isWrn ? '#FFD700' : 'rgba(200,210,220,0.55)', lineHeight: 1.6, padding: '0.5px 0' }}>
                       {line}
                     </div>
                   )
