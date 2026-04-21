@@ -7,6 +7,28 @@ import { TradeReplay } from '@/components/TradeReplay'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
+function formatExitReason(reason: string | null | undefined): string {
+  if (!reason) return '—'
+  switch (reason) {
+    case 'sq':                 return 'SQ'
+    case 'auto_sq':            return 'Exit Time'
+    case 'sl':                 return 'SL Hit'
+    case 'tp':                 return 'TP Hit'
+    case 'tsl':                return 'TSL Hit'
+    case 'mtm_sl':             return 'MTM SL'
+    case 'mtm_tp':             return 'MTM TP'
+    case 'global_sl':          return 'Global SL'
+    case 'btst_exit':          return 'BTST Exit'
+    case 'stbt_exit':          return 'STBT Exit'
+    case 'expiry_force_close': return 'Expiry'
+    case 'kill_switch':        return 'Kill Switch'
+    case 'error':              return 'Error'
+    case 'terminated':         return 'Terminate'
+    case 'reconcile':          return 'Reconcile'
+    default:                   return reason
+  }
+}
+
 // IST time formatters — all timestamps from backend are UTC ISO strings
 const fmtIST = (iso: string | null | undefined): string => {
   if (!iso) return '—'
@@ -373,7 +395,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
       <td style={{ width: COLS[9], ...C }}>
         {leg.exitReason
           ? <span style={{ fontSize: '10px', color: leg.status === 'error' ? 'var(--red)' : 'var(--text-muted)' }}>
-              {leg.exitReason === 'auto_sq' ? 'Exit Time' : leg.exitReason}
+              {formatExitReason(leg.exitReason)}
             </span>
           : <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>}
       </td>
