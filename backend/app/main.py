@@ -161,6 +161,18 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"Angel One instrument master pre-warm failed (non-fatal): {_e}")
 
+    # ── 4c. Build expiry calendar from Angel One instrument master ────────────
+    from app.engine.expiry_calendar import ExpiryCalendar
+    try:
+        _calendar = ExpiryCalendar.get()
+        if AngelOneBroker._master_cache:
+            await _calendar.build_from_master(AngelOneBroker._master_cache)
+            logger.info("[STARTUP] Expiry calendar built from Angel One master")
+        else:
+            logger.warning("[STARTUP] Expiry calendar not built — master not loaded yet")
+    except Exception as _e:
+        logger.warning(f"[STARTUP] Expiry calendar build failed (non-fatal): {_e}")
+
     # ── 5. LTP infrastructure (ticker created lazily after broker login) ───────
     ltp_cache    = LTPCache(redis_client)
     virtual_book = VirtualOrderBook()

@@ -37,6 +37,22 @@ from app.models.algo_state import AlgoState, AlgoRunStatus
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
+
+def _should_skip_on_expiry(algo_mode: str, underlying: str) -> tuple[bool, str]:
+    """Returns (should_skip, reason). STBT/BTST skip on expiry day."""
+    from app.engine.expiry_calendar import ExpiryCalendar
+    SKIP_MODES = ('stbt', 'btst')
+    if algo_mode.lower() not in SKIP_MODES:
+        return False, ""
+    calendar = ExpiryCalendar.get()
+    if not calendar.is_built():
+        return False, ""  # calendar not ready, don't block
+    from datetime import date
+    today = date.today()
+    if calendar.is_expiry_today(underlying, today):
+        return True, f"today is {underlying} expiry ({today.strftime('%d %b %Y')})"
+    return False, ""
+
 # NSE trading holidays — used by _next_trading_day() and _prev_trading_day()
 # to avoid scheduling BTST/STBT exit/SL-check jobs on market-closed days.
 # NOTE: Verify and update NSE_HOLIDAYS annually using the official NSE circular.
@@ -156,6 +172,14 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+        # 15:15 — force close open positions on expiry day (safety net)
+        self._scheduler.add_job(
+            self._force_close_expiring_positions,
+            CronTrigger(hour=15, minute=15, timezone=IST),
+            id="expiry_force_close",
+            replace_existing=True,
+        )
+
         # 15:35 — EOD safety net: close any stale intraday algos
         self._scheduler.add_job(
             self._job_eod_cleanup,
@@ -184,7 +208,7 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, eod_cleanup, broker_reconnect")
+        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, broker_reconnect")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -208,6 +232,18 @@ class AlgoScheduler:
 
         # Entry time job (Direct algos only — ORB/W&T have their own triggers)
         if algo.entry_type == EntryType.DIRECT and algo.entry_time:
+            # Expiry skip — STBT/BTST must not enter on expiry day
+            _underlying_for_skip = ""
+            if hasattr(algo, 'legs') and algo.legs:
+                _underlying_for_skip = getattr(algo.legs[0], 'underlying', '')
+            _skip, _skip_reason = _should_skip_on_expiry(
+                str(algo.strategy_mode.value if hasattr(algo.strategy_mode, 'value') else algo.strategy_mode or ''),
+                _underlying_for_skip,
+            )
+            if _skip:
+                logger.warning(f"[SCHEDULER] {algo.name} entry skipped — {_skip_reason}")
+                return jobs  # no jobs registered for this algo today
+
             h, m = map(int, algo.entry_time.split(":")[:2])
             run_time = datetime.now(IST).replace(hour=h, minute=m, second=0, microsecond=0)
             if run_time > datetime.now(IST):
@@ -542,6 +578,7 @@ class AlgoScheduler:
                 rows = result.all()
 
                 activated = 0
+                skipped_expiry = 0
                 for grid_entry, algo in rows:
                     # Check AlgoState doesn't already exist
                     existing = await db.execute(
@@ -550,6 +587,46 @@ class AlgoScheduler:
                         )
                     )
                     if existing.scalar_one_or_none():
+                        continue
+
+                    # Expiry skip — STBT/BTST must not activate on the underlying's expiry day
+                    # Legs are loaded lazily; use a separate query to get the first leg's underlying
+                    _act_underlying = ""
+                    try:
+                        from app.models.algo import AlgoLeg as _AlgoLeg
+                        _leg_res = await db.execute(
+                            select(_AlgoLeg)
+                            .where(_AlgoLeg.algo_id == algo.id, _AlgoLeg.is_archived == False)
+                            .order_by(_AlgoLeg.leg_number)
+                            .limit(1)
+                        )
+                        _first_leg = _leg_res.scalar_one_or_none()
+                        if _first_leg:
+                            _act_underlying = _first_leg.underlying or ""
+                    except Exception as _le:
+                        logger.debug(f"[SCHEDULER] leg lookup for expiry check failed: {_le}")
+
+                    _act_mode = str(algo.strategy_mode.value if hasattr(algo.strategy_mode, 'value') else algo.strategy_mode or '')
+                    _skip, _skip_reason = _should_skip_on_expiry(_act_mode, _act_underlying)
+                    if _skip:
+                        logger.warning(
+                            f"[SCHEDULER] {algo.name} skipped at activation — "
+                            f"expiry_skip: {_skip_reason}"
+                        )
+                        # Mark grid entry as NO_TRADE with expiry reason
+                        state_missed = AlgoState(
+                            grid_entry_id=grid_entry.id,
+                            algo_id=algo.id,
+                            account_id=grid_entry.account_id,
+                            trading_date=str(today),
+                            status=AlgoRunStatus.NO_TRADE,
+                            is_practix=grid_entry.is_practix,
+                            activated_at=datetime.now(IST),
+                            error_message=f"expiry_skip: {_skip_reason}",
+                        )
+                        db.add(state_missed)
+                        grid_entry.status = GridStatus.NO_TRADE
+                        skipped_expiry += 1
                         continue
 
                     # Create AlgoState
@@ -602,7 +679,10 @@ class AlgoScheduler:
                     activated += 1
 
                 await db.commit()
-                logger.info(f"✅ Activated {activated} algos for {today}")
+                logger.info(
+                    f"✅ Activated {activated} algos for {today}"
+                    + (f", skipped {skipped_expiry} (expiry)" if skipped_expiry else "")
+                )
 
             except Exception as e:
                 await db.rollback()
@@ -835,6 +915,61 @@ class AlgoScheduler:
             await self._algo_runner.exit_all(grid_entry_id, reason="auto_sq")
         else:
             logger.error("AlgoRunner not wired into Scheduler — auto SQ skipped")
+
+    async def _force_close_expiring_positions(self):
+        """Safety net: force close open positions on expiry day at 15:15."""
+        from app.engine.expiry_calendar import ExpiryCalendar, _parse_underlying_from_symbol
+        from app.models.order import Order, OrderStatus
+        from datetime import date as _date
+
+        calendar = ExpiryCalendar.get()
+        today = _date.today()
+
+        if not calendar.is_built():
+            logger.info("[EXPIRY-EXIT] Expiry calendar not built — skipping force close sweep")
+            return
+
+        async with AsyncSessionLocal() as session:
+            try:
+                result = await session.execute(
+                    select(Order).where(Order.status == OrderStatus.OPEN)
+                )
+                orders = result.scalars().all()
+
+                if not orders:
+                    logger.info("[EXPIRY-EXIT] No open orders to check at 15:15")
+                    return
+
+                # Collect unique grid_entry_ids whose symbol is expiring today
+                geid_to_symbol: dict = {}
+                for order in orders:
+                    underlying = _parse_underlying_from_symbol(order.symbol or '')
+                    if underlying and calendar.is_expiry_today(underlying, today):
+                        geid_str = str(order.grid_entry_id)
+                        geid_to_symbol[geid_str] = order.symbol
+
+                if not geid_to_symbol:
+                    logger.info("[EXPIRY-EXIT] No expiring open positions at 15:15")
+                    return
+
+            except Exception as e:
+                logger.error(f"[EXPIRY-EXIT] DB query failed: {e}")
+                return
+
+        # Execute exits outside the session (exit_all opens its own session)
+        for grid_entry_id, symbol in geid_to_symbol.items():
+            underlying = _parse_underlying_from_symbol(symbol or '')
+            logger.warning(
+                f"[EXPIRY-EXIT] Force closing grid_entry={grid_entry_id} symbol={symbol} — "
+                f"{underlying} expires today at 15:15"
+            )
+            try:
+                if self._algo_runner:
+                    await self._algo_runner.exit_all(grid_entry_id, reason="expiry_force_close")
+                else:
+                    logger.error("[EXPIRY-EXIT] AlgoRunner not wired — cannot force close")
+            except Exception as e:
+                logger.error(f"[EXPIRY-EXIT] Failed to square {symbol} (grid={grid_entry_id}): {e}")
 
     async def _job_eod_cleanup(self):
         """

@@ -162,13 +162,16 @@ function formatSlSetting(slType: string | null, slOriginal: number | null): stri
   if (slOriginal == null) return ''
   const val = slOriginal % 1 === 0 ? slOriginal.toFixed(0) : slOriginal.toFixed(1)
   switch (slType) {
-    case 'pts':     return `(I-${val}pt)`
-    case 'pct':     return `(I-${val}%)`
-    case 'tsl':     return `(TSL-${val}%)`
-    case 'tsl_pts': return `(TSL-${val}pt)`
-    case 'u_pts':   return `(U-${val}pt)`
-    case 'u_pct':   return `(U-${val}%)`
-    default:        return `(${val})`
+    case 'pts_instrument': return `(I-${val}pt)`
+    case 'pct_instrument': return `(I-${val}%)`
+    case 'tsl_pts':        return `(TSL-${val}pt)`
+    case 'tsl_pct':        return `(TSL-${val}%)`
+    case 'pts_underlying': return `(U-${val}pt)`
+    case 'pct_underlying': return `(U-${val}%)`
+    case 'orb_high':       return `(ORB-H)`
+    case 'orb_low':        return `(ORB-L)`
+    case 'orb_range':      return `(ORB-R)`
+    default:               return `(${val})`
   }
 }
 
@@ -1470,6 +1473,15 @@ export default function OrdersPage() {
                               ORB window passed ({w.orb_end_time}) — RETRY disabled
                             </span>
                           )}
+                        </div>
+                      )}
+
+                      {/* Expiry skip subtitle — shown only on MISSED cards with expiry reason */}
+                      {isMissed && w.error_message?.includes('expiry_skip') && (
+                        <div style={{ padding: '0 14px 10px 14px' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
+                            {w.error_message.replace('expiry_skip: ', '')}
+                          </span>
                         </div>
                       )}
                     </div>
