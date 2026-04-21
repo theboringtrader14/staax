@@ -1639,37 +1639,42 @@ class AlgoRunner:
                 # ── System Log: per-order exit event ──────────────────────────
                 try:
                     _sym  = order.symbol or ""
-                    _pnl  = float(order.pnl or 0)
                     _algo_name = getattr(algo, "name", "") or ""
-                    _sign = "+" if _pnl >= 0 else ""
+                    _raw_pnl = order.pnl  # may be None when fill_price was missing
+                    if _raw_pnl is None:
+                        _pnl_str = "unknown (fill_price missing)"
+                    else:
+                        _pnl = float(_raw_pnl)
+                        _sign = "+" if _pnl >= 0 else ""
+                        _pnl_str = f"{_sign}₹{_pnl:,.2f}"
                     if reason in ("sl", "overnight_sl"):
                         await _ev.error(
-                            f"{_algo_name} · {_sym} SL HIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            f"{_algo_name} · {_sym} SL HIT @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason == "tp":
                         await _ev.success(
-                            f"{_algo_name} · {_sym} TP HIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            f"{_algo_name} · {_sym} TP HIT @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason == "tsl":
                         await _ev.info(
-                            f"{_algo_name} · {_sym} TSL EXIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            f"{_algo_name} · {_sym} TSL EXIT @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason in ("auto_sq", "all_legs_closed", "btst_exit", "stbt_exit"):
                         await _ev.info(
-                            f"{_algo_name} · {_sym} AUTO SQ @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            f"{_algo_name} · {_sym} AUTO SQ @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason in ("terminate", "sq"):
                         await _ev.info(
-                            f"{_algo_name} · {_sym} MANUAL SQ @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            f"{_algo_name} · {_sym} MANUAL SQ @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason in ("global_sl",):
                         await _ev.error(
-                            f"{_algo_name} · {_sym} GLOBAL SL EXIT @ {ltp:.2f} | P&L {_sign}₹{_pnl:,.2f}",
+                            f"{_algo_name} · {_sym} GLOBAL SL EXIT @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                 except Exception as _log_err:
@@ -2253,9 +2258,13 @@ class AlgoRunner:
         order.exit_reason = self._resolve_exit_reason(reason)
         order.pnl         = self._compute_pnl(order, exit_price)
 
-    def _compute_pnl(self, order: Order, exit_price: float) -> float:
-        if not order.fill_price:
-            return 0.0
+    def _compute_pnl(self, order: Order, exit_price: float) -> Optional[float]:
+        if order.fill_price is None or order.fill_price == 0:
+            logger.warning(
+                f"[ENGINE] Auto-square P&L unknown — fill_price missing for order {order.id} "
+                f"({order.symbol}). Setting pnl=None."
+            )
+            return None
         qty = order.quantity or 0
         if order.direction == "buy":
             return (exit_price - order.fill_price) * qty

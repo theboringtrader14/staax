@@ -729,9 +729,13 @@ class AlgoScheduler:
         """
         Fires 5 minutes after entry_time.
         If the algo is still WAITING (no order was placed), mark it NO_TRADE.
-        Handles cases where algo_runner.enter() silently failed or market
-        conditions prevented entry (ORB no-breakout is handled by _job_orb_end,
-        but this acts as a safety net for DIRECT algos too).
+
+        Entry window expiry ONLY applies to ORB algos (window = orb_start → orb_end)
+        and W&T algos (monitoring window).  Direct, BTST, STBT, and TF algos fire
+        at entry_time and execute immediately — they have no entry window and must
+        NOT be expired here.  ORB no-breakout is already handled by _job_orb_end;
+        this coroutine is a safety net for cases where enter() silently fails on
+        windowed modes only.
         """
         logger.info(f"⏰ Entry expiry check: {grid_entry_id}")
         async with AsyncSessionLocal() as db:
@@ -746,6 +750,30 @@ class AlgoScheduler:
                 if not row:
                     return
                 algo_state, grid_entry, algo = row
+
+                # ── Mode guard: only windowed modes have an entry expiry ──────
+                # Direct/BTST/STBT/TF: fire-and-forget at entry_time, no window.
+                # ORB: window is orb_start_time → orb_end_time (_job_orb_end is
+                #      the primary handler; this is a safety net only).
+                # W&T: monitoring window applies (entry_type would remain DIRECT
+                #      at algo level but wt_enabled is per-leg; treat as windowed).
+                WINDOWED_ENTRY_TYPES = (EntryType.ORB,)
+                WINDOWED_STRATEGY_MODES: tuple = ()   # extend if W&T gets its own mode
+
+                algo_mode        = algo.strategy_mode
+                algo_entry_type  = algo.entry_type
+
+                is_windowed = (
+                    algo_entry_type in WINDOWED_ENTRY_TYPES
+                    or algo_mode in WINDOWED_STRATEGY_MODES
+                )
+
+                if not is_windowed:
+                    logger.info(
+                        f"[ENTRY_EXPIRY] Skipped — {algo.name} is not a windowed mode "
+                        f"(entry_type={algo_entry_type}, strategy_mode={algo_mode})"
+                    )
+                    return
 
                 if algo_state.status == AlgoRunStatus.WAITING:
                     algo_state.status = AlgoRunStatus.NO_TRADE
