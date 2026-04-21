@@ -537,6 +537,18 @@ async def list_bot_signals(bot_id: str, limit: int = Query(50), db: AsyncSession
         return []
 
 
+@router.post("/{bot_id}/warmup")
+async def warmup_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+    """Manually trigger historical candle warmup for a Channel or TT Bands bot."""
+    from app.engine.bot_runner import bot_runner
+    try:
+        result = await bot_runner._warmup_single_bot(bot_id)
+        return result
+    except Exception as e:
+        logger.error(f"[BOTS] Manual warmup failed for {bot_id}: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
 @router.patch("/{bot_id}/pinescript")
 async def update_bot_pinescript(bot_id: str, payload: dict, db: AsyncSession = Depends(get_db)):
     """Save or update the PineScript code for a bot."""

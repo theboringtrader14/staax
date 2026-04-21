@@ -914,6 +914,162 @@ class BotRunner:
             except Exception as e:
                 logger.error("[BOT] %s: warmup failed: %s", bot.name, e, exc_info=True)
 
+    async def _warmup_single_bot(self, bot_id: str) -> dict:
+        """
+        Run warmup for a single bot by ID.
+        Extracts the single-bot logic from _warmup_strategies for on-demand use.
+        Returns a dict with status, candle_count, etc.
+        """
+        from app.models.bot import IndicatorType
+        from app.engine.candle_fetcher import Candle as _Candle
+
+        bot = next((b for b in self._bots if str(b.id) == bot_id), None)
+        if not bot:
+            return {"status": "error", "message": f"Bot {bot_id} not found in runner"}
+
+        if str(bot.indicator) == IndicatorType.DTR:
+            return {"status": "skipped", "message": "DTR bots use load_daily_data(), not candle warmup"}
+
+        broker = next((b for b in self._angel_brokers if b.is_token_set()), None)
+        if not broker:
+            return {"status": "error", "message": "No Angel One broker with valid token"}
+
+        _INTERVAL_MAP = {
+            1: "ONE_MINUTE", 3: "THREE_MINUTE", 5: "FIVE_MINUTE",
+            10: "TEN_MINUTE", 15: "FIFTEEN_MINUTE", 30: "THIRTY_MINUTE",
+            60: "ONE_HOUR", 180: "THREE_HOUR", 1440: "ONE_DAY",
+        }
+        _avail = sorted(_INTERVAL_MAP)
+
+        def _closest(tf: int) -> str:
+            return _INTERVAL_MAP[min(_avail, key=lambda x: abs(x - tf))]
+
+        def _parse_candles(raw: list) -> list:
+            out = []
+            for row in (raw or []):
+                try:
+                    ts_raw = row[0]
+                    if isinstance(ts_raw, str):
+                        ts = datetime.fromisoformat(ts_raw[:19])
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=IST)
+                    elif isinstance(ts_raw, (int, float)):
+                        ts = datetime.fromtimestamp(ts_raw, tz=IST)
+                    else:
+                        ts = ts_raw
+                    out.append(_Candle(
+                        open_=float(row[1]), high=float(row[2]),
+                        low=float(row[3]),   close=float(row[4]),
+                        ts=ts, is_complete=True,
+                    ))
+                except Exception as _e:
+                    logger.debug("[BOT] warmup: skipping malformed row: %s", _e)
+            return out
+
+        strategy = self._strategies.get(bot_id)
+        if strategy is None:
+            return {"status": "error", "message": "No strategy instance for this bot"}
+
+        tf_mins      = bot.timeframe_mins or 60
+        symbol_token = str(MCX_TOKENS.get(bot.instrument, ""))
+        indicator    = str(bot.indicator or "").lower()
+
+        if "channel" in indicator:
+            bars_needed = (bot.channel_candles or 1) + 5
+        elif "tt" in indicator:
+            bars_needed = (bot.tt_lookback or 5) + 10
+        else:
+            bars_needed = 20
+
+        candles_per_day = max(1, (14 * 60) // tf_mins)
+        days_needed = min(max(3, bars_needed // candles_per_day + 2), 10)
+
+        now_ist = datetime.now(IST)
+        from_dt = (now_ist - timedelta(days=days_needed)).strftime("%Y-%m-%d %H:%M")
+        to_dt   = now_ist.strftime("%Y-%m-%d %H:%M")
+        interval = _closest(tf_mins)
+
+        logger.info("[WARMUP] %s: fetching %d × %dmin candles (interval=%s, from=%s)",
+                    bot.name, bars_needed, tf_mins, interval, from_dt)
+
+        try:
+            raw = await broker.get_candle_data(
+                symbol=bot.instrument, exchange="MCX", interval=interval,
+                symbol_token=symbol_token, from_dt=from_dt, to_dt=to_dt,
+            )
+            logger.info("[WARMUP] %s: got %d raw rows from AO historical API", bot.name, len(raw or []))
+
+            parsed = _parse_candles(raw)
+            if not parsed:
+                return {"status": "warn", "message": "AO returned 0 candles — cold start remains", "candle_count": 0}
+
+            feed = parsed[:-1] if len(parsed) > 1 else parsed
+
+            # Re-seed channel aggregator
+            ch_agg = self._channel_aggregators.get(bot_id)
+            if ch_agg is not None:
+                try:
+                    ch_tf = int(bot.channel_tf)
+                except (TypeError, ValueError):
+                    ch_tf = tf_mins
+                if ch_tf != tf_mins:
+                    raw_ch = await broker.get_candle_data(
+                        symbol=bot.instrument, exchange="MCX", interval=_closest(ch_tf),
+                        symbol_token=symbol_token,
+                        from_dt=(now_ist - timedelta(days=days_needed)).strftime("%Y-%m-%d %H:%M"),
+                        to_dt=to_dt,
+                    )
+                    ch_parsed = _parse_candles(raw_ch)
+                    ch_feed = ch_parsed[:-1] if len(ch_parsed) > 1 else ch_parsed
+                    ch_agg._bars.clear()
+                    for c in ch_feed:
+                        ch_agg._bars.append(c)
+                    logger.info("[WARMUP] %s: channel agg seeded with %d %dmin candles",
+                                bot.name, len(ch_agg._bars), ch_tf)
+
+            # Re-seed main aggregator
+            agg = self._aggregators.get(bot_id)
+            if agg is not None:
+                agg._bars.clear()
+                for c in feed:
+                    agg._bars.append(c)
+
+            # Re-feed strategy (reset first to avoid duplicate signals)
+            if hasattr(strategy, '_completed'):
+                strategy._completed.clear()
+            if hasattr(strategy, '_prev_close'):
+                strategy._prev_close = None
+
+            discarded = 0
+            for c in feed:
+                try:
+                    if "channel" in indicator:
+                        ch_live = self._channel_aggregators[bot_id].candles \
+                            if bot_id in self._channel_aggregators else None
+                        sig = strategy.on_candle(c, channel_candles=ch_live)
+                    else:
+                        sig = strategy.on_candle(c)
+                    if sig is not None:
+                        discarded += 1
+                except Exception as _e:
+                    logger.debug("[WARMUP] candle error: %s", _e)
+
+            logger.info("[WARMUP] %s: done — %d candles, %d warmup signals discarded",
+                        bot.name, len(feed), discarded)
+            return {
+                "status": "ok",
+                "bot_id": bot_id,
+                "bot_name": bot.name,
+                "candle_count": len(feed),
+                "warmup_signals_discarded": discarded,
+                "upper_channel": getattr(strategy, 'upper_channel', None),
+                "lower_channel": getattr(strategy, 'lower_channel', None),
+            }
+
+        except Exception as e:
+            logger.error("[WARMUP] %s failed: %s", bot.name, e, exc_info=True)
+            return {"status": "error", "message": str(e)}
+
     # ── Rollover ──────────────────────────────────────────────────────────────
 
     async def check_rollover(self):
