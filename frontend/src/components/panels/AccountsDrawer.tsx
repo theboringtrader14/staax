@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { PencilSimple } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
-import { getCurrentFY } from '@/utils/fy'
-
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
@@ -22,7 +20,7 @@ interface AddAccountForm {
 
 const EMPTY_FORM: AddAccountForm = { broker: '', nickname: '', client_id: '', api_key: '', api_secret: '', totp_secret: '', scope: 'fo' }
 const NAME_TO_SLUG: Record<string, string> = { 'Mom': 'mom', 'Wife': 'wife', 'Karthik AO': 'karthik' }
-function isApril() { return new Date().getMonth() === 3 }
+interface AccountFunds { account_id: string; nickname: string; broker: string; cash: number | null; collateral: number | null; utilised: number | null; net: number | null }
 
 type PanelId = 'broker' | 'margin' | 'risk'
 const TABS: { id: PanelId; label: string }[] = [
@@ -52,10 +50,8 @@ export default function AccountsDrawer() {
 
   // Account data
   const [accounts,     setAccounts]     = useState<AccountLocal[]>([])
-  const [editMargin,   setEditMargin]   = useState<Record<string, string>>({})
   const [editSL,       setEditSL]       = useState<Record<string, string>>({})
   const [editTP,       setEditTP]       = useState<Record<string, string>>({})
-  const [editBrok,     setEditBrok]     = useState<Record<string, string>>({})
   const [saved,        setSaved]        = useState<Record<string, string>>({})
   const [saving,       setSaving]       = useState<Record<string, boolean>>({})
   const [tokenStatus,  setTokenStatus]  = useState<Record<string, boolean>>({})
@@ -65,9 +61,16 @@ export default function AccountsDrawer() {
   const [editingCreds, setEditingCreds] = useState<EditCredsState | null>(null)
   const [showSecret,   setShowSecret]   = useState(false)
   const [showTotp,     setShowTotp]     = useState(false)
-  const [fundsData,    setFundsData]    = useState<Record<string, { available: number; used: number; total: number; unrealized_pnl: number; realized_pnl: number } | null>>({})
-  const [fundsLoading, setFundsLoading] = useState<Record<string, boolean>>({})
+  // All-accounts funds panel state
+  const [allFunds,        setAllFunds]        = useState<AccountFunds[]>([])
+  const [allFundsLoading, setAllFundsLoading] = useState(false)
+  const [allFundsUpdated, setAllFundsUpdated] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'reactivate'; accountId: string; nickname: string } | null>(null)
+
+  // FY margin data (from new account_fy_margin table)
+  const [fyMarginData,  setFYMarginData]  = useState<Record<string, { fy_margin: number|null; fy_brokerage: number|null }>>({})
+  const [fyMarginEdits, setFYMarginEdits] = useState<Record<string, { margin?: string; brokerage?: string }>>({})
+  const [savingFY,      setSavingFY]      = useState<Record<string, boolean>>({})
 
   // Add Account modal
   const [addModal,  setAddModal]  = useState(false)
@@ -102,17 +105,23 @@ export default function AccountsDrawer() {
     if (storeAccounts.length > 0) setAccounts(mapAccounts(storeAccounts as any[]))
   }, [storeAccounts])
 
-  const fetchFunds = async (accName: string, refresh = false) => {
-    const slug = NAME_TO_SLUG[accName]
-    if (!slug) return
-    setFundsLoading(p => ({ ...p, [accName]: true }))
+  const fetchAllFunds = async () => {
+    setAllFundsLoading(true)
     try {
-      const res = await accountsAPI.angeloneFunds(slug, refresh)
-      setFundsData(p => ({ ...p, [accName]: res.data }))
+      const [fundsRes, fyRes] = await Promise.all([accountsAPI.funds(), accountsAPI.getFYMargin()])
+      setAllFunds(fundsRes.data?.funds ?? [])
+      // Build FY map keyed by account_id
+      const fyMap: Record<string, { fy_margin: number|null; fy_brokerage: number|null }> = {}
+      for (const row of (fyRes.data?.data ?? [])) {
+        fyMap[row.account_id] = { fy_margin: row.fy_margin ?? null, fy_brokerage: row.fy_brokerage ?? null }
+      }
+      setFYMarginData(fyMap)
+      const now = new Date()
+      setAllFundsUpdated(now.toTimeString().slice(0, 8))
     } catch {
-      setFundsData(p => ({ ...p, [accName]: null }))
+      setAllFunds([])
     } finally {
-      setFundsLoading(p => ({ ...p, [accName]: false }))
+      setAllFundsLoading(false)
     }
   }
 
@@ -132,13 +141,15 @@ export default function AccountsDrawer() {
           'Karthik AO': kao.data?.connected  ?? false,
         }
         setTokenStatus(status)
-        for (const [name, connected] of Object.entries(status)) {
-          if (connected && NAME_TO_SLUG[name]) fetchFunds(name)
-        }
       } catch {}
     }
     check()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-fetch funds when margin tab is selected
+  useEffect(() => {
+    if (openPanel === 'margin') fetchAllFunds()
+  }, [openPanel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset to broker tab when panel opens; reset modal when closed
   useEffect(() => {
@@ -152,16 +163,17 @@ export default function AccountsDrawer() {
     }
   }, [isProfileOpen])
 
-  // Click outside to close
+  // Click outside to close (skip when add-account or edit modal is open — they render outside panelRef)
   useEffect(() => {
     const h = (e: MouseEvent) => {
+      if (addModal || editingCreds || confirmAction) return
       if (isProfileOpen && panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setIsProfileOpen(false)
       }
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
-  }, [isProfileOpen, setIsProfileOpen])
+  }, [isProfileOpen, setIsProfileOpen, addModal, editingCreds, confirmAction])
 
   // Escape key to close
   useEffect(() => {
@@ -186,21 +198,23 @@ export default function AccountsDrawer() {
     setNickEditing(n => ({ ...n, [acc.id]: false }))
   }
 
-  const saveMargin = async (acc: AccountLocal) => {
-    const marginVal = parseFloat(editMargin[acc.id] || String(acc.margin))
-    const brok = parseFloat(editBrok[acc.id] || String(acc.fyBrokerage ?? 0))
-    setSaving(s => ({ ...s, [acc.id + '_margin']: true }))
+  const saveFYMarginForAccount = async (accountId: string) => {
+    setSavingFY(s => ({ ...s, [accountId]: true }))
     try {
-      const calls: Promise<any>[] = []
-      if (!isNaN(marginVal) && marginVal > 0) calls.push(accountsAPI.updateMargin(acc.id, { financial_year: getCurrentFY(), margin_amount: marginVal }))
-      const riskPayload: Record<string, number> = {}
-      if (isApril() && !isNaN(brok)) riskPayload.fy_brokerage = brok
-      if (Object.keys(riskPayload).length > 0) calls.push(accountsAPI.updateGlobalRisk(acc.id, riskPayload))
-      await Promise.all(calls)
-      setAccounts(a => a.map(x => x.id === acc.id ? { ...x, margin: !isNaN(marginVal) ? marginVal : x.margin, fyBrokerage: isApril() && !isNaN(brok) ? brok : x.fyBrokerage } : x))
-      showSaved(acc.id + '_margin', '✅ Saved')
-    } catch { showSaved(acc.id + '_margin', '⚠️ Failed') }
-    finally { setSaving(s => ({ ...s, [acc.id + '_margin']: false })) }
+      const edit = fyMarginEdits[accountId] || {}
+      const payload: { account_id: string; fy_margin?: number; fy_brokerage?: number } = { account_id: accountId }
+      if (edit.margin    !== undefined) payload.fy_margin    = parseFloat(edit.margin)    || 0
+      if (edit.brokerage !== undefined) payload.fy_brokerage = parseFloat(edit.brokerage) || 0
+      await accountsAPI.saveFYMargin(payload)
+      const fyRes = await accountsAPI.getFYMargin()
+      const fyMap: Record<string, { fy_margin: number|null; fy_brokerage: number|null }> = {}
+      for (const row of (fyRes.data?.data ?? [])) {
+        fyMap[row.account_id] = { fy_margin: row.fy_margin ?? null, fy_brokerage: row.fy_brokerage ?? null }
+      }
+      setFYMarginData(fyMap)
+      setFYMarginEdits(e => { const n = { ...e }; delete n[accountId]; return n })
+    } catch { }
+    setSavingFY(s => ({ ...s, [accountId]: false }))
   }
 
   const saveRisk = async (acc: AccountLocal) => {
@@ -226,7 +240,6 @@ export default function AccountsDrawer() {
         await accountsAPI.angeloneAutoLogin(slug)
         const res = await accountsAPI.angeloneTokenStatus(slug)
         setTokenStatus(s => ({ ...s, [acc.name]: res.data?.connected ?? false }))
-        if (res.data?.connected) fetchFunds(acc.name)
       } else if (acc.broker === 'Zerodha') {
         const res = await accountsAPI.zerodhaLoginUrl()
         if (res.data?.login_url) window.open(res.data.login_url, '_blank', 'width=800,height=600')
@@ -384,82 +397,129 @@ export default function AccountsDrawer() {
             </div>
           )}
 
-          {/* ── Panel 2: Margin ─── */}
-          {openPanel === 'margin' && (
-            <div>
-              {/* Summary */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                {[
-                  { label: 'Total FY Margin', value: `₹${(accounts.reduce((s, a) => s + (a.margin || 0), 0) / 100000).toFixed(1)}L` },
-                  { label: 'Total Brokerage', value: `₹${accounts.reduce((s, a) => s + (a.fyBrokerage || 0), 0).toLocaleString('en-IN')}` },
-                ].map(m => (
-                  <div key={m.label} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 12, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{m.label}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{m.value}</div>
+          {/* ── Panel 2: Margin / Funds ─── */}
+          {openPanel === 'margin' && (() => {
+            const fmt = (v: number | null) => v === null ? '—' : `₹${Math.abs(v).toLocaleString('en-IN')}`
+            const today = new Date()
+            const fyYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
+            const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`
+            const totalFYMargin = Object.values(fyMarginData).reduce((s, r) => s + (r.fy_margin ?? 0), 0)
+            const totalFYBrok   = Object.values(fyMarginData).reduce((s, r) => s + (r.fy_brokerage ?? 0), 0)
+            return (
+              <div>
+                {/* ── Section 1 header ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live Funds</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {allFundsUpdated && <span style={{ fontSize: 9, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{allFundsUpdated}</span>}
+                    <button onClick={fetchAllFunds} disabled={allFundsLoading}
+                      style={{ height: 26, padding: '0 10px', borderRadius: 100, fontSize: 10, fontWeight: 700, border: 'none', cursor: allFundsLoading ? 'default' : 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontFamily: 'var(--font-display)' }}
+                      onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                      onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                      onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
+                      {allFundsLoading ? '…' : 'Refresh'}
+                    </button>
                   </div>
-                ))}
-              </div>
-              {accounts.filter(a => a.status === 'active').map(acc => {
-                const slug = NAME_TO_SLUG[acc.name]
-                const connected = tokenStatus[acc.name] ?? false
-                const funds = fundsData[acc.name]
-                return (
-                  <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 12 }}>
-                    <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
-                      {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
-                    </div>
+                </div>
 
-                    {/* Live Funds */}
-                    {slug && connected && (
-                      <div style={{ marginBottom: 14 }}>
-                        <div style={{ marginBottom: 6 }}>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live Funds</span>
+                {/* Loading / empty states */}
+                {allFundsLoading && allFunds.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text-mute)', textAlign: 'center', padding: '24px 0' }}>Loading funds…</div>
+                )}
+                {!allFundsLoading && allFunds.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text-mute)', textAlign: 'center', padding: '24px 0' }}>No funds data — accounts may be offline</div>
+                )}
+
+                {/* ── Per-account cards ── */}
+                {allFunds.map(f => {
+                  const netColor = f.net === null ? 'var(--text-dim)' : f.net >= 0 ? '#0ea66e' : '#FF4444'
+                  const fyRow    = fyMarginData[f.account_id] || { fy_margin: null, fy_brokerage: null }
+                  const fyEdit   = fyMarginEdits[f.account_id] || {}
+                  return (
+                    <div key={f.account_id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                      {/* Card header */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <div>
+                          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{f.nickname}</span>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-mute)', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 7px', marginLeft: 6 }}>
+                            {f.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}
+                          </span>
                         </div>
-                        {funds ? (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {[
-                              { label: 'Cash',        value: `₹${(funds.available/100000).toFixed(1)}L`,  color: '#0ea66e' },
-                              { label: 'Collateral',  value: `₹${(funds.used/100000).toFixed(1)}L`,      color: '#0ea66e' },
-                              { label: 'Margin',      value: `₹${(funds.total/100000).toFixed(1)}L`,     color: '#0ea66e' },
-                            ].map(m => (
-                              <div key={m.label} style={{ flex: 1, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 8, padding: '5px 4px', textAlign: 'center' }}>
-                                <div style={{ fontSize: 8, color: 'var(--text-mute)', marginBottom: 2, textTransform: 'uppercase' }}>{m.label}</div>
-                                <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: m.color }}>{m.value}</div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : fundsLoading[acc.name] ? (
-                          <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>Loading…</div>
-                        ) : null}
                       </div>
-                    )}
 
-                    {/* FY Margin + FY Brokerage + Save — single row */}
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={lbl}>FY Margin (₹)</label>
-                        <input style={inp} type="number" defaultValue={acc.margin || ''} placeholder="₹ Margin"
-                          onChange={e => setEditMargin(m => ({ ...m, [acc.id]: e.target.value }))} />
+                      {/* Funds grid */}
+                      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {([
+                          { label: 'Cash',      value: f.cash,      color: '#0ea66e' },
+                          { label: 'Collateral',value: f.collateral, color: '#4488FF' },
+                          { label: 'Utilised',  value: f.utilised,  color: '#F59E0B' },
+                        ] as const).map(row => (
+                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{row.label}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: row.color }}>{fmt(row.value)}</span>
+                          </div>
+                        ))}
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Net Available</span>
+                          <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--font-mono)', color: netColor }}>
+                            {f.net !== null && f.net < 0 ? '-' : ''}{fmt(f.net)}
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <label style={lbl}>FY Brokerage {!isApril() && '(Apr)'}</label>
-                        <input style={{ ...inp, opacity: isApril() ? 1 : 0.5 }} type="number" defaultValue={acc.fyBrokerage ?? ''} placeholder="₹" disabled={!isApril()}
-                          onChange={e => setEditBrok(m => ({ ...m, [acc.id]: e.target.value }))} />
+
+                      {/* FY Margin & Brokerage */}
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{fyLabel} Settings</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={lbl}>FY Margin (₹)</label>
+                            <input style={inp} type="number" placeholder="₹ Margin"
+                              value={fyEdit.margin !== undefined ? fyEdit.margin : (fyRow.fy_margin ?? '')}
+                              onChange={e => setFYMarginEdits(ed => ({ ...ed, [f.account_id]: { ...fyEdit, margin: e.target.value } }))} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <label style={lbl}>FY Brokerage (₹)</label>
+                            <input style={inp} type="number" placeholder="₹ Brokerage"
+                              value={fyEdit.brokerage !== undefined ? fyEdit.brokerage : (fyRow.fy_brokerage ?? '')}
+                              onChange={e => setFYMarginEdits(ed => ({ ...ed, [f.account_id]: { ...fyEdit, brokerage: e.target.value } }))} />
+                          </div>
+                          <button onClick={() => saveFYMarginForAccount(f.account_id)} disabled={savingFY[f.account_id]}
+                            style={{ height: 32, padding: '0 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-display)', transition: 'box-shadow 0.15s' }}
+                            onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                            onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
+                            {savingFY[f.account_id] ? '…' : 'Save'}
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={() => saveMargin(acc)} disabled={saving[acc.id + '_margin']}
-                        style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-display)' }}
-                        onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
-                        onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-                        onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
-                        {saving[acc.id + '_margin'] ? '…' : 'Save'}
-                      </button>
                     </div>
-                    {saved[acc.id + '_margin'] && <div style={{ marginTop: 8, fontSize: 11, color: '#0ea66e', fontWeight: 600 }}>{saved[acc.id + '_margin']}</div>}
+                  )
+                })}
+
+                {/* ── Section 2: FY Totals ── */}
+                {Object.keys(fyMarginData).length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>{fyLabel} Totals</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {[
+                        { label: 'Total FY Margin',    value: totalFYMargin },
+                        { label: 'Total FY Brokerage', value: totalFYBrok   },
+                      ].map(card => (
+                        <div key={card.label} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 12, padding: '12px 14px' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{card.label}</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                            {card.value >= 100000
+                              ? `₹${(card.value / 100000).toFixed(1)}L`
+                              : `₹${Math.round(card.value).toLocaleString('en-IN')}`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            )
+          })()}
 
           {/* ── Panel 3: Risk ─── */}
           {openPanel === 'risk' && (

@@ -263,6 +263,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_daily_reset_job(daily_system_reset)
     scheduler.add_mcx_token_refresh_job(bot_runner)
     scheduler.add_bot_daily_data_job(bot_runner)
+    scheduler.add_fy_margin_stamp_job(app.state)
     from apscheduler.triggers.cron import CronTrigger as _CT
     scheduler._scheduler.add_job(
         _ensure_today_grid_entries,

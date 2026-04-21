@@ -16,8 +16,7 @@ export default function Layout() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', position: 'relative', background: 'transparent' }}>
       <TopNav />
       {/* 16px gap between floating pill and page content */}
-      {/* Left padding (44px) = 32px tabs + 12px clearance so cards never bleed behind side panels */}
-      <main style={{ flex: 1, minHeight: 0, padding: '16px 24px 20px 44px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <main style={{ flex: 1, minHeight: 0, padding: '16px 24px 20px 24px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Outlet />
       </main>
 

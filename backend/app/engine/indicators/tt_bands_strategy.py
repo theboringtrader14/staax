@@ -61,6 +61,19 @@ class TTBandsStrategy:
             return None
         return mean(self._fractal_lows)
 
+    # ── Session reset ─────────────────────────────────────────────────────────
+
+    def reset_session(self) -> None:
+        """
+        Called at each MCX session boundary (09:00 IST).
+        Clears fractal state so previous-day fractals don't contaminate the new session.
+        Keeps _completed history — channel levels remain valid across sessions.
+        """
+        self._fractal_highs.clear()
+        self._fractal_lows.clear()
+        self._prev_close = None
+        logger.info("[TT_BANDS] Session reset — fractal deques cleared, prev_close reset")
+
     # ── Fractal detection ─────────────────────────────────────────────────────
 
     def _check_fractal(self) -> None:

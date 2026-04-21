@@ -14,7 +14,6 @@ import { useEffect, useState } from 'react'
 import { accountsAPI } from '@/services/api'
 import DashboardPanel from '@/components/panels/DashboardPanel'
 import AccountsDrawer from '@/components/panels/AccountsDrawer'
-import UserProfilePopup from '@/components/profile/UserProfilePopup'
 
 export default function App() {
   const setAccounts = useStore(s => s.setAccounts)
@@ -105,7 +104,6 @@ export default function App() {
       <NotificationSystem />
       <DashboardPanel />
       <AccountsDrawer />
-      <UserProfilePopup />
       <Routes>
         {/* Landing page */}
         <Route path="/" element={<LandingPage />} />

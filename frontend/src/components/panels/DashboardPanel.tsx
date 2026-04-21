@@ -258,10 +258,8 @@ export default function DashboardPanel() {
         boxShadow: 'var(--neu-raised-lg)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         opacity: isDashboardOpen ? 1 : 0,
-        transform: isDashboardOpen ? 'translateY(0) scale(1)' : 'translateY(-20px) scale(0.98)',
         pointerEvents: isDashboardOpen ? 'auto' : 'none',
-        transition: 'opacity 0.22s ease, transform 0.22s ease',
-        transformOrigin: 'top right',
+        transition: 'opacity 0.15s ease',
       }}>
 
         {/* ── Header ── */}

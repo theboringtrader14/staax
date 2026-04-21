@@ -804,6 +804,68 @@ class AngelOneBroker(BaseBroker):
             logger.error(f"[ANGEL ONE] get_margins error: {e}")
             return {"available": 0.0, "used": 0.0, "total": 0.0}
 
+    async def get_rms_funds(self) -> dict:
+        """
+        Return structured funds breakdown for the Funds panel.
+
+        Angel One RMS fields used:
+          availablecash           — pure liquid cash available
+          collateral              — pledged holdings value
+          utilisedpayout          — margin actually utilised
+          net                     — total net available (AO computed)
+          availableintradaypayin  — intraday margin available
+          availabledeliverymargin — delivery margin available
+          t1holdingsvalue         — T+1 holdings value
+
+        Returns: { cash, collateral, utilised, net, intraday_margin, delivery_margin, t1_holdings }
+        """
+        client = self._get_client()
+        loop = asyncio.get_running_loop()
+        _empty = {"cash": None, "collateral": None, "utilised": None, "net": None,
+                  "intraday_margin": None, "delivery_margin": None, "t1_holdings": None}
+
+        try:
+            data = await loop.run_in_executor(None, client.rmsLimit)
+
+            if not data or not data.get("status"):
+                logger.warning(f"[ANGEL ONE] rmsLimit non-success: {data}")
+                return _empty
+
+            d = data.get("data", {})
+            logger.info(f"[FUNDS] AO raw RMS keys={list(d.keys())} net={d.get('net')} "
+                        f"availablecash={d.get('availablecash')} collateral={d.get('collateral')} "
+                        f"utilisedpayout={d.get('utilisedpayout')} utiliseddebits={d.get('utiliseddebits')}")
+
+            def _f(key: str) -> float:
+                try:
+                    return round(float(d.get(key) or 0), 2)
+                except (TypeError, ValueError):
+                    return 0.0
+
+            cash             = _f("availablecash")
+            collateral       = _f("collateral")
+            utilised         = _f("utilisedpayout")
+            # Use AO's own net field; fall back to computing if not present
+            raw_net = d.get("net")
+            net = round(float(raw_net), 2) if raw_net not in (None, "", "0") else round(cash + collateral - utilised, 2)
+            intraday_margin  = _f("availableintradaypayin")
+            delivery_margin  = _f("availabledeliverymargin")
+            t1_holdings      = _f("t1holdingsvalue")
+
+            return {
+                "cash":             cash,
+                "collateral":       collateral,
+                "utilised":         utilised,
+                "net":              net,
+                "intraday_margin":  intraday_margin,
+                "delivery_margin":  delivery_margin,
+                "t1_holdings":      t1_holdings,
+            }
+
+        except Exception as e:
+            logger.error(f"[ANGEL ONE] get_rms_funds error: {e}")
+            return _empty
+
     # ── Order book ────────────────────────────────────────────────────────────
 
     async def get_order_book(self) -> list:

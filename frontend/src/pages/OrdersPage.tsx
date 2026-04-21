@@ -113,7 +113,7 @@ const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
 }
 
 const COLS = ['36px','66px','158px','50px','120px','66px','72px','54px','84px','74px','120px']
-const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L']
+const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL','Target','Exit','Reason','P&L']
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function todayDay(): string {
@@ -677,7 +677,7 @@ export default function OrdersPage() {
         setWeekPnl(map)
       })
       .catch(() => {})
-  }, [isPractixMode, weekOffset]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load orders + waiting algos for selectedDate — skip if already cached
   useEffect(() => {
@@ -1235,7 +1235,7 @@ export default function OrdersPage() {
         })()}
 
         {/* Date navigation + MTM summary bar — breaks out of 28px padding to go edge-to-edge */}
-        <div style={{ borderBottom: '0.5px solid var(--border)', borderTop: '0.5px solid var(--border)', marginTop: 12, margin: '12px -24px 0', padding: '0 24px' }}>
+        <div style={{ borderBottom: '0.5px solid var(--border)', borderTop: '0.5px solid var(--border)', margin: '12px 0 0' }}>
           {/* Day tabs — full width */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0' }}>
             <div style={{ display: 'flex', flex: 1 }}>
@@ -1413,7 +1413,7 @@ export default function OrdersPage() {
                   }}>
 
                   {/* ── Card header ── */}
-                  <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch' }}>
+                  <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
 
                     {/* Left status strip */}
                     <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: stripBg, boxShadow: `0 0 8px ${stripGlow}, 0 0 20px ${stripGlow}` }}/>
@@ -1505,7 +1505,8 @@ export default function OrdersPage() {
                     </div>
 
                     {/* ── Action buttons ── */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', flexShrink: 0 }}>
+                      <span style={{ color: 'var(--border)', fontSize: '14px', userSelect: 'none' }}>|</span>
                       {missedBtns.map((btn, bi) => (
                         <button key={bi}
                           disabled={btn.disabled}
@@ -1540,7 +1541,7 @@ export default function OrdersPage() {
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
                           <tr>
-                            {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
+                            {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL','Target','Exit','Reason','P&L'].map(h => (
                               <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-dim)', fontWeight: 600, padding: '8px 20px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
                             ))}
                           </tr>
@@ -1577,7 +1578,7 @@ export default function OrdersPage() {
                                   return <span style={{ color: 'var(--text-dim)' }}>—</span>
                                 })()}
                               </td>
-                              {['LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(col => (
+                              {['LTP','SL','Target','Exit','Reason','P&L'].map(col => (
                                 <td key={col} style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>—</td>
                               ))}
                             </tr>
@@ -1692,7 +1693,7 @@ export default function OrdersPage() {
                         style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '20px', overflow: 'hidden', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', marginBottom: 14 }}>
 
                         {/* ── Algo card header ── */}
-                        <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch' }}>
+                        <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
 
                           {/* Status strip */}
                           <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: bar.color, boxShadow: `0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
@@ -1792,7 +1793,8 @@ export default function OrdersPage() {
                           </div>
 
                           {/* ── Action buttons ── */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', flexShrink: 0 }}>
+                            <span style={{ color: 'var(--border)', fontSize: '14px', userSelect: 'none' }}>|</span>
                             {BTNS.map((btn, bi) => (
                               <button key={bi}
                                 disabled={btn.disabled}

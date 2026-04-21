@@ -2,7 +2,7 @@
 Account model — stores broker account details.
 Accounts: Karthik (Zerodha F&O), Mom (Angel One F&O), Wife (Angel One MCX Phase 2)
 """
-from sqlalchemy import Column, String, Float, Boolean, DateTime, Text, Enum
+from sqlalchemy import Column, String, Float, Boolean, DateTime, Text, Enum, Integer, Date, Numeric, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -44,3 +44,19 @@ class Account(Base):
     scope       = Column(String(10), nullable=True, default='fo')   # 'fo' (F&O) or 'mcx'
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AccountFYMargin(Base):
+    """Per-account per-FY margin and brokerage tracking."""
+    __tablename__ = "account_fy_margin"
+    __table_args__ = (
+        UniqueConstraint("account_id", "fy_start", name="uq_account_fy_margin"),
+    )
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    account_id    = Column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
+    fy_start      = Column(Date, nullable=False)          # e.g. 2026-04-01
+    fy_margin     = Column(Numeric(18, 2), nullable=True) # total capital deployed this FY
+    fy_brokerage  = Column(Numeric(18, 2), nullable=True) # brokerage paid this FY
+    stamped_at    = Column(DateTime(timezone=True), nullable=True)  # when auto-stamped from broker
+    updated_at    = Column(DateTime(timezone=True), nullable=True)

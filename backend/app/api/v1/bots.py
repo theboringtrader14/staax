@@ -79,11 +79,18 @@ async def create_bot(body: BotCreate, db: AsyncSession = Depends(get_db)):
     db.add(bot)
     await db.commit()
     await db.refresh(bot)
-    # Wire to bot_runner
+    # Wire to bot_runner (also triggers warmup for Channel/TT Bands)
     try:
         from app.engine.bot_runner import bot_runner
         bot_runner._bots.append(bot)
         bot_runner._init_bot(bot)
+        # Warmup new bot immediately (non-blocking)
+        from app.models.bot import IndicatorType
+        if bot.indicator != IndicatorType.DTR:
+            import asyncio
+            strategy = bot_runner._strategies.get(str(bot.id))
+            if strategy is not None:
+                asyncio.create_task(bot_runner._warmup_strategies())
     except Exception as e:
         logger.warning(f"[BOTS] Failed to wire bot to runner: {e}")
     return _bot_dict(bot)
@@ -144,6 +151,12 @@ async def archive_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot.is_archived = True
     bot.status = "inactive"
     await db.commit()
+    # Remove from in-memory runner so archived bot stops receiving ticks
+    try:
+        from app.engine.bot_runner import bot_runner
+        bot_runner.stop_bot(bot_id)
+    except Exception as e:
+        logger.warning(f"[BOTS] stop_bot failed for {bot_id}: {e}")
     return {"status": "archived"}
 
 @router.get("/orders")
@@ -286,76 +299,78 @@ async def get_bot_chart_data(
     Returns candles from the bot's CandleAggregator + strategy levels + recent signals.
     Used by the frontend chart overlay on each bot card.
     """
-    from app.engine.bot_runner import bot_runner
-
-    # Get candles from in-memory aggregator
-    candles = []
-    agg = getattr(bot_runner, '_aggregators', {}).get(bot_id)
-    if agg:
-        for c in list(agg.candles)[-limit:]:
-            ts = c.ts if hasattr(c, 'ts') else getattr(c, 'close_time', None)
-            candles.append({
-                "time":  int(ts.timestamp()) if ts else 0,
-                "value": c.close,
-            })
-
-    # Get strategy levels
-    strategy = getattr(bot_runner, '_strategies', {}).get(bot_id)
-    levels = {}
-    if strategy:
-        # DTR
-        if hasattr(strategy, 'upper_pivot') and strategy.upper_pivot is not None:
-            levels['upp1'] = strategy.upper_pivot
-        if hasattr(strategy, 'lower_pivot') and strategy.lower_pivot is not None:
-            levels['lpp1'] = strategy.lower_pivot
-        # Channel
-        if hasattr(strategy, 'upper_channel') and strategy.upper_channel is not None:
-            levels['upper_channel'] = strategy.upper_channel
-        if hasattr(strategy, 'lower_channel') and strategy.lower_channel is not None:
-            levels['lower_channel'] = strategy.lower_channel
-        # TT Bands
-        if hasattr(strategy, 'highline') and strategy.highline is not None:
-            levels['tt_high'] = strategy.highline
-        if hasattr(strategy, 'lowline') and strategy.lowline is not None:
-            levels['tt_low'] = strategy.lowline
-
-    # Get recent signals from DB
     try:
-        bot_uuid = uuid_lib.UUID(bot_id)
-    except ValueError:
+        from app.engine.bot_runner import bot_runner, MCX_TOKENS
+
+        # Get candles from in-memory aggregator
+        candles = []
+        agg = getattr(bot_runner, '_aggregators', {}).get(bot_id)
+        if agg:
+            for c in list(agg.candles)[-limit:]:
+                ts = c.ts if hasattr(c, 'ts') else getattr(c, 'close_time', None)
+                candles.append({
+                    "time":  int(ts.timestamp()) if ts else 0,
+                    "value": c.close,
+                })
+
+        # Get strategy levels
+        strategy = getattr(bot_runner, '_strategies', {}).get(bot_id)
+        levels = {}
+        if strategy:
+            if hasattr(strategy, 'upper_pivot') and strategy.upper_pivot is not None:
+                levels['upp1'] = strategy.upper_pivot
+            if hasattr(strategy, 'lower_pivot') and strategy.lower_pivot is not None:
+                levels['lpp1'] = strategy.lower_pivot
+            if hasattr(strategy, 'upper_channel') and strategy.upper_channel is not None:
+                levels['upper_channel'] = strategy.upper_channel
+            if hasattr(strategy, 'lower_channel') and strategy.lower_channel is not None:
+                levels['lower_channel'] = strategy.lower_channel
+            if hasattr(strategy, 'highline') and strategy.highline is not None:
+                levels['tt_high'] = strategy.highline
+            if hasattr(strategy, 'lowline') and strategy.lowline is not None:
+                levels['tt_low'] = strategy.lowline
+
+        # Get recent signals from DB
         bot_uuid = None
+        try:
+            bot_uuid = uuid_lib.UUID(bot_id)
+        except ValueError:
+            pass
 
-    db_signals = []
-    if bot_uuid:
-        sig_result = await db.execute(
-            select(BotSignal)
-            .where(BotSignal.bot_id == bot_uuid)
-            .order_by(desc(BotSignal.fired_at))
-            .limit(50)
-        )
-        for sig in sig_result.scalars().all():
-            ts = sig.candle_timestamp or sig.fired_at
-            db_signals.append({
-                "time":      int(ts.timestamp()) if ts else 0,
-                "direction": sig.direction.lower() if sig.direction else None,
-                "price":     sig.trigger_price,
-                "reason":    sig.reason,
-                "status":    sig.status,
-            })
+        db_signals = []
+        if bot_uuid:
+            sig_result = await db.execute(
+                select(BotSignal)
+                .where(BotSignal.bot_id == bot_uuid)
+                .order_by(desc(BotSignal.fired_at))
+                .limit(50)
+            )
+            for sig in sig_result.scalars().all():
+                ts = sig.candle_timestamp or sig.fired_at
+                db_signals.append({
+                    "time":      int(ts.timestamp()) if ts else 0,
+                    "direction": sig.direction.lower() if sig.direction else None,
+                    "price":     sig.trigger_price,
+                    "reason":    sig.reason,
+                    "status":    sig.status,
+                })
 
-    # Current LTP
-    ltp = None
-    try:
-        from app.engine.bot_runner import MCX_TOKENS
-        bot_obj = next((b for b in bot_runner._bots if str(b.id) == bot_id), None)
-        if bot_obj:
-            token = MCX_TOKENS.get(bot_obj.instrument)
-            if token and hasattr(bot_runner._ltp_consumer, 'get_ltp'):
-                ltp = bot_runner._ltp_consumer.get_ltp(int(token))
-    except Exception:
-        pass
+        # Current LTP
+        ltp = None
+        try:
+            bot_obj = next((b for b in bot_runner._bots if str(b.id) == bot_id), None)
+            if bot_obj:
+                token = MCX_TOKENS.get(bot_obj.instrument)
+                if token and hasattr(bot_runner._ltp_consumer, 'get_ltp'):
+                    ltp = bot_runner._ltp_consumer.get_ltp(int(token))
+        except Exception:
+            pass
 
-    return {"candles": candles, "levels": levels, "signals": db_signals, "ltp": ltp}
+        return {"candles": candles, "levels": levels, "signals": db_signals, "ltp": ltp}
+
+    except Exception as e:
+        logger.error(f"[BOTS] chart-data error for {bot_id}: {e}", exc_info=True)
+        return {"bot_id": bot_id, "candles": [], "levels": {}, "signals": [], "ltp": None, "error": str(e)}
 
 
 def _signal_dict(s: BotSignal) -> dict:
@@ -508,10 +523,18 @@ async def create_signal(bot_id: str, body: BotSignalCreate, db: AsyncSession = D
 
 @router.get("/{bot_id}/signals")
 async def list_bot_signals(bot_id: str, limit: int = Query(50), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(BotSignal).where(BotSignal.bot_id == bot_id).order_by(desc(BotSignal.fired_at)).limit(limit)
-    )
-    return [_signal_dict(s) for s in result.scalars().all()]
+    try:
+        bot_uuid = uuid_lib.UUID(bot_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid bot_id: {bot_id!r}")
+    try:
+        result = await db.execute(
+            select(BotSignal).where(BotSignal.bot_id == bot_uuid).order_by(desc(BotSignal.fired_at)).limit(limit)
+        )
+        return [_signal_dict(s) for s in result.scalars().all()]
+    except Exception as e:
+        logger.error(f"[BOTS] signals error for {bot_id}: {e}", exc_info=True)
+        return []
 
 
 @router.patch("/{bot_id}/pinescript")

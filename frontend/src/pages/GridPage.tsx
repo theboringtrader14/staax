@@ -365,10 +365,10 @@ export default function GridPage() {
     <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ flexShrink:0, paddingBottom:'4px', paddingLeft:'16px', paddingRight:'16px' }}>
+      <div style={{ flexShrink:0, paddingBottom:'4px', paddingLeft:'28px', paddingRight:'28px' }}>
         <div className="page-header">
           <div>
-            <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--ox-radiant)' }}>Algos</h1>
+            <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--accent)' }}>Algos</h1>
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'3px' }}>
               <span style={{ fontSize:'12px', color:'var(--gs-muted)' }}>
                 Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })}
@@ -432,7 +432,7 @@ export default function GridPage() {
 
       {/* ── Archive panel ──────────────────────────────────────────────────── */}
       {showArch && (
-        <div style={{ flexShrink:0, marginLeft:'16px', marginRight:'16px', marginBottom:'12px' }}>
+        <div style={{ flexShrink:0, marginLeft:'28px', marginRight:'28px', marginBottom:'12px' }}>
           <div style={{ background:'var(--bg)', borderRadius:16, boxShadow:'var(--neu-inset)', padding:'14px 16px' }}>
             <div style={{ fontSize:'10px', fontWeight:700, color:'var(--text-mute)', marginBottom:'12px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'Inter, sans-serif' }}>Archived</div>
           {loading

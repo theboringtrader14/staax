@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { CaretDown } from '@phosphor-icons/react'
 
-export function StaaxSelect({ value, onChange, options, width }: {
+export function StaaxSelect({ value, onChange, options, width, height, borderRadius }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
   width?: string
+  height?: string
+  borderRadius?: string
 }) {
   const [open, setOpen] = useState(false)
   const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 })
@@ -36,10 +38,10 @@ export function StaaxSelect({ value, onChange, options, width }: {
   return (
     <div ref={triggerRef} style={{ position: 'relative', width: width || '130px', flexShrink: 0 }}>
       <button onClick={openDropdown} style={{
-        width: '100%', height: '32px', padding: '0 28px 0 12px',
+        width: '100%', height: height || '32px', padding: '0 28px 0 12px',
         background: 'var(--bg)',
         border: 'none',
-        borderRadius: '100px',
+        borderRadius: borderRadius || '100px',
         color: 'var(--text-dim)',
         fontSize: '12px',
         fontFamily: 'Inter, sans-serif',

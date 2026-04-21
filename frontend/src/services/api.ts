@@ -44,6 +44,15 @@ export const accountsAPI = {
   updateCredentials: (id: string, creds: { api_key?: string; api_secret?: string; totp_secret?: string }) =>
     api.patch(`/accounts/${id}/credentials`, creds),
 
+  // All-accounts funds endpoint
+  funds: () => api.get('/accounts/funds'),
+
+  // FY margin endpoints
+  getFYMargin:  () => api.get('/accounts/fy-margin'),
+  saveFYMargin: (data: { account_id: string; fy_margin?: number; fy_brokerage?: number }) =>
+    api.post('/accounts/fy-margin', data),
+  stampFYMargin: () => api.post('/accounts/fy-margin/stamp-all'),
+
   // Zerodha token flow
   zerodhaLoginUrl:    () => api.get('/accounts/zerodha/login-url'),
   zerodhaSetToken:    (requestToken: string) =>

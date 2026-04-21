@@ -410,6 +410,35 @@ class AlgoScheduler:
         )
         logger.info("OrderReconciler job registered (every 15s)")
 
+    def add_fy_margin_stamp_job(self, app_state):
+        """
+        Register annual April 1st 09:05 IST job to auto-stamp FY starting margins
+        for all active accounts from broker APIs.
+        """
+        async def _do_stamp():
+            from app.core.database import AsyncSessionLocal
+            from app.api.v1.accounts import stamp_fy_margin_all
+            from app.models.account import Account
+            from sqlalchemy import select as _sel
+            import types
+
+            # Build a minimal fake request with app.state
+            fake_request = types.SimpleNamespace(app=types.SimpleNamespace(state=app_state))
+            async with AsyncSessionLocal() as db:
+                try:
+                    result = await stamp_fy_margin_all(fake_request, db)
+                    logger.info(f"[FY STAMP] Annual stamp complete: {result}")
+                except Exception as e:
+                    logger.error(f"[FY STAMP] Annual stamp failed: {e}", exc_info=True)
+
+        self._scheduler.add_job(
+            _do_stamp,
+            CronTrigger(month=4, day=1, hour=9, minute=5, timezone=IST),
+            id="fy_margin_stamp",
+            replace_existing=True,
+        )
+        logger.info("FY margin stamp job registered (April 1st 09:05 IST)")
+
     def cancel_algo_jobs(self, grid_entry_id: str):
         """Cancel all scheduled jobs for one algo (called on terminate)."""
         for job_id in self._per_algo_jobs.pop(grid_entry_id, []):

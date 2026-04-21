@@ -895,13 +895,20 @@ export default function AlgoPage() {
       strike_offset:   0,
       lots:            parseInt(l.lots) || 1,
       // Features
-      wt_enabled:  l.active.wt,
-      wt_direction: l.vals.wt.direction, wt_value: parseFloat(l.vals.wt.value) || undefined, wt_unit: l.vals.wt.unit,
-      sl_type:  l.active.sl && entryType !== 'orb' ? l.vals.sl.type : undefined,
-      sl_value: l.active.sl && entryType !== 'orb' ? parseFloat(l.vals.sl.value) : undefined,
-      tp_type:  l.active.tp && entryType !== 'orb' ? l.vals.tp.type : undefined,  tp_value: l.active.tp && entryType !== 'orb' ? parseFloat(l.vals.tp.value) : undefined,
-      tsl_x: parseFloat(l.vals.tsl.x) || undefined, tsl_y: parseFloat(l.vals.tsl.y) || undefined, tsl_unit: l.vals.tsl.unit,
-      ttp_x: parseFloat(l.vals.ttp.x) || undefined, ttp_y: parseFloat(l.vals.ttp.y) || undefined, ttp_unit: l.vals.ttp.unit,
+      wt_enabled:   l.active.wt,
+      wt_direction: l.active.wt ? l.vals.wt.direction : null,
+      wt_value:     l.active.wt ? (parseFloat(l.vals.wt.value) || undefined) : null,
+      wt_unit:      l.active.wt ? l.vals.wt.unit : null,
+      sl_type:      l.active.sl && entryType !== 'orb' ? l.vals.sl.type  : null,
+      sl_value:     l.active.sl && entryType !== 'orb' ? parseFloat(l.vals.sl.value) || null : null,
+      tp_type:      l.active.tp && entryType !== 'orb' ? l.vals.tp.type  : null,
+      tp_value:     l.active.tp && entryType !== 'orb' ? parseFloat(l.vals.tp.value) || null : null,
+      tsl_x:        l.active.tsl ? parseFloat(l.vals.tsl.x) || null : null,
+      tsl_y:        l.active.tsl ? parseFloat(l.vals.tsl.y) || null : null,
+      tsl_unit:     l.active.tsl ? l.vals.tsl.unit : null,
+      ttp_x:        l.active.ttp ? parseFloat(l.vals.ttp.x) || null : null,
+      ttp_y:        l.active.ttp ? parseFloat(l.vals.ttp.y) || null : null,
+      ttp_unit:     l.active.ttp ? l.vals.ttp.unit : null,
       reentry_on_sl:    l.active.reentry ? l.vals.reentry.onSl : false,
       reentry_on_tp:    l.active.reentry ? l.vals.reentry.onTp : false,
       reentry_max_sl:   l.active.reentry ? parseInt(l.vals.reentry.maxSl) || 0 : 0,
@@ -915,7 +922,7 @@ export default function AlgoPage() {
       orb_tp_type:       entryType === 'orb' ? l.vals.orb.tpType : undefined,
       orb_buffer_value:  l.vals.orb.bufferValue ? parseFloat(l.vals.orb.bufferValue) : undefined,
       orb_buffer_unit:   l.vals.orb.bufferUnit || undefined,
-      journey_config:  buildJourneyConfig(l.journey),
+      journey_config:  l.journey?.enabled ? buildJourneyConfig(l.journey) : null,
       journey_trigger: l.active.sl && l.active.tp ? (l.journey_trigger || 'either') : 'either',
     })),
   })
@@ -923,7 +930,7 @@ export default function AlgoPage() {
   }
 
   const buildJourneyConfig = (j?: JourneyChild, depth = 1): any => {
-    if (!j || !j.enabled || depth > 3) return undefined
+    if (!j || !j.enabled || depth > 3) return null
     return {
       level: depth, trigger: 'any',
       child: {
@@ -932,13 +939,27 @@ export default function AlgoPage() {
         direction: j.direction.toLowerCase(),
         strike_type: j.strikeType, expiry: j.expiry,
         lots: parseInt(j.lots) || 1,
-        wt_enabled: j.wt_enabled, wt_direction: j.wt_direction, wt_value: parseFloat(j.wt_value) || undefined, wt_unit: j.wt_unit,
-        sl_type: j.sl_enabled ? j.sl_type : undefined, sl_value: j.sl_enabled ? parseFloat(j.sl_value) || undefined : undefined,
-        tp_type: j.tp_enabled ? j.tp_type : undefined, tp_value: j.tp_enabled ? parseFloat(j.tp_value) || undefined : undefined,
-        tsl_enabled: j.tsl_enabled, tsl_x: parseFloat(j.tsl_x) || undefined, tsl_y: parseFloat(j.tsl_y) || undefined, tsl_unit: j.tsl_unit,
-        ttp_enabled: j.ttp_enabled, ttp_x: parseFloat(j.ttp_x) || undefined, ttp_y: parseFloat(j.ttp_y) || undefined, ttp_unit: j.ttp_unit,
-        reentry_on_sl: j.re_enabled && j.reentry.onSl, reentry_on_tp: j.re_enabled && j.reentry.onTp, reentry_max: j.re_enabled ? (parseInt(j.reentry.maxSl) || 0) : 0, reentry_ltp_mode: j.reentry.ltpMode,
-        journey_config: buildJourneyConfig(j.child, depth + 1),
+        wt_enabled:   j.wt_enabled,
+        wt_direction: j.wt_enabled ? j.wt_direction : null,
+        wt_value:     j.wt_enabled ? (parseFloat(j.wt_value) || null) : null,
+        wt_unit:      j.wt_enabled ? j.wt_unit : null,
+        sl_type:      j.sl_enabled ? j.sl_type  : null,
+        sl_value:     j.sl_enabled ? (parseFloat(j.sl_value) || null) : null,
+        tp_type:      j.tp_enabled ? j.tp_type  : null,
+        tp_value:     j.tp_enabled ? (parseFloat(j.tp_value) || null) : null,
+        tsl_enabled:  j.tsl_enabled,
+        tsl_x:        j.tsl_enabled ? (parseFloat(j.tsl_x) || null) : null,
+        tsl_y:        j.tsl_enabled ? (parseFloat(j.tsl_y) || null) : null,
+        tsl_unit:     j.tsl_enabled ? j.tsl_unit : null,
+        ttp_enabled:  j.ttp_enabled,
+        ttp_x:        j.ttp_enabled ? (parseFloat(j.ttp_x) || null) : null,
+        ttp_y:        j.ttp_enabled ? (parseFloat(j.ttp_y) || null) : null,
+        ttp_unit:     j.ttp_enabled ? j.ttp_unit : null,
+        reentry_on_sl:   j.re_enabled ? j.reentry.onSl  : false,
+        reentry_on_tp:   j.re_enabled ? j.reentry.onTp  : false,
+        reentry_max:     j.re_enabled ? (parseInt(j.reentry.maxSl) || 0) : 0,
+        reentry_ltp_mode: j.re_enabled ? j.reentry.ltpMode : null,
+        journey_config: j.child?.enabled ? buildJourneyConfig(j.child, depth + 1) : null,
       }
     }
   }

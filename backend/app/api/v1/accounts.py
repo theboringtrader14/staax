@@ -5,11 +5,14 @@ Fully wired to PostgreSQL. Reads/writes real account data.
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from pydantic import BaseModel
 from typing import Optional
+import logging
+_logger = logging.getLogger(__name__)
 import uuid as _uuid
 from app.core.database import get_db
-from app.models.account import Account, AccountStatus, BrokerType
+from app.models.account import Account, AccountStatus, BrokerType, AccountFYMargin
 from app.models.order import MarginHistory
 
 router = APIRouter()
@@ -303,6 +306,87 @@ async def get_all_positions(request: Request):
             })
     total_pnl = sum(p["pnl"] for p in all_positions)
     return {"positions": all_positions, "count": len(all_positions), "total_pnl": round(total_pnl, 2)}
+
+
+@router.get("/funds")
+async def get_all_funds(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Return live cash / collateral / utilised / net for every active account.
+    Each broker is queried in parallel; failures return null values for that account.
+    """
+    import asyncio as _asyncio
+
+    result = await db.execute(
+        select(Account).where(Account.is_active == True).order_by(Account.created_at)
+    )
+    accounts = result.scalars().all()
+
+    async def _fetch_angelone(acc: Account, state_key: str) -> dict:
+        base = {
+            "account_id": str(acc.id),
+            "nickname":   acc.nickname,
+            "broker":     acc.broker.value if acc.broker else None,
+            "cash": None, "collateral": None, "utilised": None, "net": None,
+            "intraday_margin": None, "delivery_margin": None, "t1_holdings": None,
+        }
+        broker = getattr(request.app.state, state_key, None)
+        if broker is None or not broker.is_token_set():
+            return base
+        try:
+            data = await broker.get_rms_funds()
+            base.update(data)
+        except Exception:
+            pass
+        return base
+
+    async def _fetch_zerodha(acc: Account) -> dict:
+        base = {
+            "account_id": str(acc.id),
+            "nickname":   acc.nickname,
+            "broker":     acc.broker.value if acc.broker else None,
+            "cash": None, "collateral": None, "utilised": None, "net": None,
+            "intraday_margin": None, "delivery_margin": None, "t1_holdings": None,
+        }
+        broker = getattr(request.app.state, "zerodha", None)
+        if broker is None or not broker.is_token_set():
+            return base
+        try:
+            data = await broker.get_full_funds()
+            base.update(data)
+        except Exception:
+            pass
+        return base
+
+    # Map DB nicknames → state keys for Angel One
+    _AO_STATE_MAP = {
+        "Mom":        "angelone_mom",
+        "Wife":       "angelone_wife",
+        "Karthik AO": "angelone_karthik",
+    }
+
+    tasks = []
+    for acc in accounts:
+        broker_val = acc.broker.value if acc.broker else ""
+        if broker_val == "angelone":
+            state_key = _AO_STATE_MAP.get(acc.nickname)
+            if state_key:
+                tasks.append(_fetch_angelone(acc, state_key))
+            else:
+                async def _unknown(a=acc, bv=broker_val):
+                    return {"account_id": str(a.id), "nickname": a.nickname, "broker": bv,
+                            "cash": None, "collateral": None, "utilised": None, "net": None}
+                tasks.append(_unknown())
+        elif broker_val == "zerodha":
+            tasks.append(_fetch_zerodha(acc))
+
+    results = await _asyncio.gather(*tasks, return_exceptions=True)
+    funds = []
+    for r in results:
+        if isinstance(r, Exception):
+            continue
+        funds.append(r)
+
+    return {"funds": funds}
 
 
 @router.get("/{account_id}")
@@ -693,3 +777,159 @@ async def angelone_funds(
             pass
 
     return result
+
+
+# ── FY Margin endpoints ────────────────────────────────────────────────────────
+
+def _current_fy_start():
+    """Return the April 1st date for the current financial year."""
+    from datetime import date
+    today = date.today()
+    year = today.year if today.month >= 4 else today.year - 1
+    return date(year, 4, 1)
+
+
+class FYMarginUpdate(BaseModel):
+    account_id:   str
+    fy_margin:    Optional[float] = None
+    fy_brokerage: Optional[float] = None
+
+
+@router.get("/fy-margin")
+async def get_fy_margin(db: AsyncSession = Depends(get_db)):
+    """Return FY margin + brokerage for all accounts for the current FY."""
+    fy_start = _current_fy_start()
+    result = await db.execute(
+        select(AccountFYMargin).where(AccountFYMargin.fy_start == fy_start)
+    )
+    rows = result.scalars().all()
+    return {
+        "fy_start": fy_start.isoformat(),
+        "data": [
+            {
+                "account_id":   str(r.account_id),
+                "fy_margin":    float(r.fy_margin)    if r.fy_margin    is not None else None,
+                "fy_brokerage": float(r.fy_brokerage) if r.fy_brokerage is not None else None,
+                "stamped_at":   r.stamped_at.isoformat() if r.stamped_at else None,
+                "updated_at":   r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/fy-margin")
+async def save_fy_margin(body: FYMarginUpdate, db: AsyncSession = Depends(get_db)):
+    """Upsert FY margin and/or brokerage for an account."""
+    from datetime import datetime, timezone
+    try:
+        account_uuid = _uuid.UUID(body.account_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid account_id")
+
+    fy_start = _current_fy_start()
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(
+        select(AccountFYMargin).where(
+            AccountFYMargin.account_id == account_uuid,
+            AccountFYMargin.fy_start == fy_start,
+        ).limit(1)
+    )
+    row = result.scalar_one_or_none()
+
+    if row:
+        if body.fy_margin is not None:
+            row.fy_margin = body.fy_margin
+        if body.fy_brokerage is not None:
+            row.fy_brokerage = body.fy_brokerage
+        row.updated_at = now
+    else:
+        row = AccountFYMargin(
+            account_id   = account_uuid,
+            fy_start     = fy_start,
+            fy_margin    = body.fy_margin,
+            fy_brokerage = body.fy_brokerage,
+            updated_at   = now,
+        )
+        db.add(row)
+
+    await db.commit()
+    return {
+        "account_id":   str(row.account_id),
+        "fy_start":     fy_start.isoformat(),
+        "fy_margin":    float(row.fy_margin)    if row.fy_margin    is not None else None,
+        "fy_brokerage": float(row.fy_brokerage) if row.fy_brokerage is not None else None,
+    }
+
+
+@router.post("/fy-margin/stamp-all")
+async def stamp_fy_margin_all(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Manually trigger FY margin stamp for all active accounts.
+    Fetches current net from each broker and stamps as the FY starting margin.
+    Only stamps once per FY (skips accounts already stamped for this FY).
+    """
+    from datetime import datetime, timezone
+    fy_start = _current_fy_start()
+    stamped, skipped = [], []
+
+    result = await db.execute(select(Account).where(Account.is_active == True))
+    accounts = result.scalars().all()
+    _AO_STATE_MAP = {"Mom": "angelone_mom", "Wife": "angelone_wife", "Karthik AO": "angelone_karthik"}
+
+    for acc in accounts:
+        existing = await db.execute(
+            select(AccountFYMargin).where(
+                AccountFYMargin.account_id == acc.id,
+                AccountFYMargin.fy_start   == fy_start,
+                AccountFYMargin.stamped_at != None,
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            skipped.append(acc.nickname)
+            continue
+
+        net = None
+        try:
+            broker_val = acc.broker.value if acc.broker else ""
+            if broker_val == "angelone":
+                state_key = _AO_STATE_MAP.get(acc.nickname)
+                broker = getattr(request.app.state, state_key, None) if state_key else None
+                if broker and broker.is_token_set():
+                    funds = await broker.get_rms_funds()
+                    net = funds.get("net")
+            elif broker_val == "zerodha":
+                broker = getattr(request.app.state, "zerodha", None)
+                if broker and broker.is_token_set():
+                    funds = await broker.get_full_funds()
+                    net = funds.get("net")
+        except Exception as e:
+            _logger.warning(f"[FY STAMP] Failed to fetch funds for {acc.nickname}: {e}")
+
+        now = datetime.now(timezone.utc)
+        existing_row = await db.execute(
+            select(AccountFYMargin).where(
+                AccountFYMargin.account_id == acc.id,
+                AccountFYMargin.fy_start   == fy_start,
+            ).limit(1)
+        )
+        row = existing_row.scalar_one_or_none()
+        if row:
+            if net is not None:
+                row.fy_margin = net
+            row.stamped_at = now
+            row.updated_at = now
+        else:
+            row = AccountFYMargin(
+                account_id = acc.id,
+                fy_start   = fy_start,
+                fy_margin  = net,
+                stamped_at = now,
+                updated_at = now,
+            )
+            db.add(row)
+        stamped.append(acc.nickname)
+
+    await db.commit()
+    return {"fy_start": fy_start.isoformat(), "stamped": stamped, "skipped": skipped}

@@ -6,10 +6,11 @@ export function getCurrentFY(): string {
   return `${fyStart}-${String(fyStart + 1).slice(2)}`
 }
 
-export function getFYOptions(yearsBack: number = 3): { value: string; label: string }[] {
+export function getFYOptions(_yearsBack: number = 3): { value: string; label: string }[] {
   const current = getCurrentFY()
   const startYear = parseInt(current.split('-')[0])
-  return Array.from({ length: yearsBack }, (_, i) => {
+  const DATA_START_YEAR = 2026
+  return Array.from({ length: startYear - DATA_START_YEAR + 1 }, (_, i) => {
     const y = startYear - i
     return { value: `${y}-${String(y + 1).slice(2)}`, label: `FY ${y}-${String(y + 1).slice(2)}` }
   })
