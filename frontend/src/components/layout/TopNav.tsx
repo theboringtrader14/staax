@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Pulse, Sun, Moon, User } from '@phosphor-icons/react'
+import { Pulse, Sun, Moon, User, Warning } from '@phosphor-icons/react'
 
 const NAV_TABS = [
   { path: '/grid',       label: 'Algos'     },
@@ -31,6 +31,7 @@ export default function TopNav() {
   const navigate          = useNavigate()
   const theme             = useStore(s => s.theme)
   const toggleTheme       = useStore(s => s.toggleTheme)
+  const isProfileOpen      = useStore(s => s.isProfileOpen)
   const setIsProfileOpen  = useStore(s => s.setIsProfileOpen)
   const isDashboardOpen    = useStore(s => s.isDashboardOpen)
   const setIsDashboardOpen = useStore(s => s.setIsDashboardOpen)
@@ -44,6 +45,7 @@ export default function TopNav() {
   }, [livePnl])
 
   const handleNavClick = (e: React.MouseEvent, to: string) => {
+    setIsDashboardOpen(false)
     if ((window as any).__staaxDirty) {
       e.preventDefault()
       setPendingPath(to)
@@ -63,7 +65,7 @@ export default function TopNav() {
   return (
     <>
       {/* Sticky wrapper — matches landing page: 20px top, 20px side margins */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 210, padding: '20px 20px 0' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 320, padding: '20px 20px 0' }}>
         <header style={{
           maxWidth: 1200,
           margin: '0 auto',
@@ -124,7 +126,7 @@ export default function TopNav() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
 
             {/* Activity */}
-            <button onClick={() => setIsDashboardOpen(!isDashboardOpen)} title="System Monitor"
+            <button onClick={() => { setIsProfileOpen(false); setIsDashboardOpen(!isDashboardOpen) }} title="System Monitor"
               style={{ ...iconBtnStyle, boxShadow: isDashboardOpen ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: isDashboardOpen ? 'var(--accent)' : 'var(--text-dim)' }}
               onMouseEnter={e => { if (!isDashboardOpen) onEnter(e) }}
               onMouseLeave={e => { if (!isDashboardOpen) onLeave(e) }}>
@@ -138,8 +140,10 @@ export default function TopNav() {
             </button>
 
             {/* Profile */}
-            <button onClick={() => setIsProfileOpen(true)} title="Profile"
-              style={iconBtnStyle} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+            <button onMouseDown={e => { e.stopPropagation(); setIsDashboardOpen(false); setIsProfileOpen(!isProfileOpen) }} title="Profile"
+              style={{ ...iconBtnStyle, boxShadow: isProfileOpen ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: isProfileOpen ? 'var(--accent)' : 'var(--text-dim)' }}
+              onMouseEnter={e => { if (!isProfileOpen) onEnter(e) }}
+              onMouseLeave={e => { if (!isProfileOpen) onLeave(e) }}>
               <User size={16} weight="regular" />
             </button>
           </div>
@@ -148,22 +152,74 @@ export default function TopNav() {
 
       {/* Unsaved changes modal */}
       {pendingPath && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-box" style={{ maxWidth: '360px' }}>
-            <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>
-              Unsaved changes
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1100,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.35)',
+          backdropFilter: 'blur(18px)',
+          WebkitBackdropFilter: 'blur(18px)',
+          animation: 'fadeIn 0.15s ease',
+        }}>
+          <div style={{
+            background: 'var(--bg)',
+            boxShadow: 'var(--neu-raised-lg, var(--neu-raised))',
+            borderRadius: '24px',
+            padding: '28px 28px 24px',
+            width: '340px',
+            maxWidth: '90vw',
+            animation: 'slideUp 0.18s ease',
+          }}>
+            {/* Icon + Title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: '10px',
+                background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Warning size={18} weight="fill" color="#F59E0B" />
+              </div>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: 'var(--text)' }}>
+                Unsaved changes
+              </span>
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.5 }}>
-              You have unsaved changes on this page.<br />Leave without saving?
-            </div>
+
+            {/* Body */}
+            <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, margin: '0 0 24px', paddingLeft: '46px' }}>
+              You have unsaved changes on this page. Leave without saving?
+            </p>
+
+            {/* Actions */}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setPendingPath(null)}>Stay</button>
-              <button className="btn btn-danger" onClick={() => {
+              <button onClick={() => setPendingPath(null)} style={{
+                height: '36px', padding: '0 20px', borderRadius: '100px',
+                border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                color: 'var(--text-dim)', fontFamily: 'inherit',
+                transition: 'box-shadow 0.15s',
+              }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
+              >
+                Stay
+              </button>
+              <button onClick={() => {
                 (window as any).__staaxDirty = false
                 const dest = pendingPath
                 setPendingPath(null)
                 navigate(dest)
-              }}>Leave</button>
+              }} style={{
+                height: '36px', padding: '0 20px', borderRadius: '100px',
+                border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                color: '#FF4444', fontFamily: 'inherit',
+                transition: 'box-shadow 0.15s',
+              }}
+                onMouseDown={e => e.currentTarget.style.boxShadow = 'var(--neu-inset)'}
+                onMouseUp={e => e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)'}
+              >
+                Leave
+              </button>
             </div>
           </div>
         </div>

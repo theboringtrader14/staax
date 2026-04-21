@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { CaretRight } from '@phosphor-icons/react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { PencilSimple } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { getCurrentFY } from '@/utils/fy'
@@ -44,8 +44,11 @@ const lbl: React.CSSProperties = {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AccountsDrawer() {
-  const storeAccounts = useStore(s => s.accounts)
-  const [openPanel, setOpenPanel] = useState<PanelId | null>(null)
+  const isProfileOpen     = useStore(s => s.isProfileOpen)
+  const setIsProfileOpen  = useStore(s => s.setIsProfileOpen)
+  const storeAccounts     = useStore(s => s.accounts)
+  const [openPanel, setOpenPanel] = useState<PanelId>('broker')
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // Account data
   const [accounts,     setAccounts]     = useState<AccountLocal[]>([])
@@ -137,12 +140,35 @@ export default function AccountsDrawer() {
     check()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reset to broker tab when panel opens; reset modal when closed
+  useEffect(() => {
+    if (isProfileOpen) {
+      setOpenPanel('broker')
+    } else {
+      setAddModal(false)
+      setAddStep(1)
+      setAddForm(EMPTY_FORM)
+      setAddError('')
+    }
+  }, [isProfileOpen])
+
+  // Click outside to close
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (isProfileOpen && panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setIsProfileOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [isProfileOpen, setIsProfileOpen])
+
   // Escape key to close
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenPanel(null) }
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsProfileOpen(false) }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [])
+  }, [setIsProfileOpen])
 
   const showSaved = (id: string, msg: string) => {
     setSaved(s => ({ ...s, [id]: msg }))
@@ -229,29 +255,13 @@ export default function AccountsDrawer() {
     } catch {}
   }
 
-  const togglePanel = (id: PanelId) => setOpenPanel(p => p === id ? null : id)
-
-  // ── Panel header ─────────────────────────────────────────────────────────────
-  const PanelHeader = ({ title, subtitle }: { title: string; subtitle: string }) => (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{title}</span>
-        <button onClick={() => setOpenPanel(null)} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>{subtitle}</div>
-      <div style={{ marginTop: 12, borderBottom: '1px solid var(--border)' }} />
-    </div>
-  )
-
-  // ── Account card for Panel 1 (Broker) ────────────────────────────────────────
+  // ── Account card for Broker panel ────────────────────────────────────────────
   const BrokerCard = ({ acc }: { acc: AccountLocal }) => {
     const connected = tokenStatus[acc.name] ?? false
-    const slug = NAME_TO_SLUG[acc.name]
     const isWife = acc.name === 'Wife'
-    const funds = fundsData[acc.name]
 
     return (
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 12 }}>
         {/* Row 1: Name + status */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div>
@@ -263,56 +273,24 @@ export default function AccountsDrawer() {
             ) : (
               <div onClick={() => setNickEditing(n => ({ ...n, [acc.id]: true }))} title="Click to rename"
                 style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>✎</span>
+                {acc.name} <PencilSimple size={11} color="var(--text-mute)" />
               </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 600 }}>{acc.broker}</span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}>{acc.broker}</span>
               <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>{acc.type}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? '#22DD88' : isWife ? '#F59E0B' : '#FF4444', display: 'inline-block', boxShadow: connected ? '0 0 6px #22DD88' : 'none' }} />
-            <span style={{ fontSize: 10, color: connected ? '#22DD88' : isWife ? '#F59E0B' : '#FF4444', fontWeight: 600 }}>
-              {connected ? 'Live' : isWife ? 'Phase 2' : 'Offline'}
-            </span>
-          </div>
+          <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '3px 10px', fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: connected ? '#0ea66e' : isWife ? '#F59E0B' : '#FF4444', flexShrink: 0 }}>
+            {connected ? 'Live' : isWife ? 'Phase 2' : 'Offline'}
+          </span>
         </div>
-
-        {/* Live funds strip */}
-        {slug && connected && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live Funds</span>
-              <button onClick={() => fetchFunds(acc.name, true)} disabled={fundsLoading[acc.name]}
-                style={{ background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 11, padding: 0 }}>
-                {fundsLoading[acc.name] ? '…' : '↻'}
-              </button>
-            </div>
-            {funds ? (
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[
-                  { label: 'Cash',  value: `₹${(funds.available/100000).toFixed(1)}L`, color: 'var(--text)' },
-                  { label: 'Used',  value: `₹${(funds.used/100000).toFixed(1)}L`,      color: 'var(--text-dim)' },
-                  { label: 'Unreal', value: `${funds.unrealized_pnl >= 0 ? '+' : ''}₹${Math.abs(funds.unrealized_pnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: funds.unrealized_pnl >= 0 ? '#22DD88' : '#FF4444' },
-                ].map(m => (
-                  <div key={m.label} style={{ flex: 1, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 8, padding: '5px 4px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 8, color: 'var(--text-mute)', marginBottom: 2, textTransform: 'uppercase' }}>{m.label}</div>
-                    <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: m.color }}>{m.value}</div>
-                  </div>
-                ))}
-              </div>
-            ) : fundsLoading[acc.name] ? (
-              <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>Loading…</div>
-            ) : null}
-          </div>
-        )}
 
         {/* Action row */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {!isWife && (
             <button onClick={() => handleLogin(acc)} disabled={loginLoading[acc.id]}
-              style={{ height: 28, padding: '0 12px', borderRadius: 100, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: connected ? '#22DD88' : 'var(--accent)' }}>
+              style={{ height: 28, padding: '0 12px', borderRadius: 100, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: connected ? '#0ea66e' : 'var(--accent)' }}>
               {loginLoading[acc.id] ? '…' : connected ? 'Refresh Token' : 'Login'}
             </button>
           )}
@@ -327,161 +305,200 @@ export default function AccountsDrawer() {
             </button>
           ) : (
             <button onClick={() => setConfirmAction({ type: 'reactivate', accountId: acc.id, nickname: acc.name })}
-              style={{ height: 28, padding: '0 12px', borderRadius: 100, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#22DD88' }}>
+              style={{ height: 28, padding: '0 12px', borderRadius: 100, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e' }}>
               Reactivate
             </button>
           )}
         </div>
 
         {saved[acc.id] && (
-          <div style={{ marginTop: 8, fontSize: 11, color: saved[acc.id].startsWith('✅') ? '#22DD88' : '#F59E0B', fontWeight: 600 }}>{saved[acc.id]}</div>
+          <div style={{ marginTop: 8, fontSize: 11, color: saved[acc.id].startsWith('✅') ? '#0ea66e' : '#F59E0B', fontWeight: 600 }}>{saved[acc.id]}</div>
         )}
       </div>
     )
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
+  if (!isProfileOpen) return null
+
   return (
     <>
-      {/* Tab triggers — fixed left edge */}
-      <div style={{ position: 'fixed', left: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 80, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {TABS.map(tab => {
-          const isOpen = openPanel === tab.id
-          return (
-            <button key={tab.id} onClick={() => togglePanel(tab.id)}
-              style={{
-                width: 32, height: 120, cursor: 'pointer', border: 'none',
-                borderRadius: '0 12px 12px 0',
-                background: 'var(--bg)',
-                boxShadow: isOpen ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-                borderLeft: `3px solid ${isOpen ? 'var(--accent)' : 'transparent'}`,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
-                transition: 'all 200ms ease',
-                padding: 0,
-              }}>
-              <span style={{
-                writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
-                letterSpacing: '1.5px', textTransform: 'uppercase',
-                color: isOpen ? 'var(--accent)' : 'var(--text-dim)',
-              }}>{tab.label}</span>
-              <CaretRight size={10} weight="bold"
-                style={{ color: isOpen ? 'var(--accent)' : 'var(--text-mute)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }} />
-            </button>
-          )
-        })}
-      </div>
+      {/* Blur backdrop — sits behind the panel, blurs the rest of the page */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 299, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.15)' }} />
 
-      {/* Backdrop */}
-      {openPanel && (
-        <div onClick={() => setOpenPanel(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 78, backdropFilter: 'blur(2px)' }} />
-      )}
-
-      {/* Sliding panel */}
-      <div style={{
-        position: 'fixed', left: 32, top: 68, height: 'calc(100vh - 68px)', width: 440,
-        background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '0 0 0 0',
-        zIndex: 79, overflowY: 'auto', padding: 28,
-        transform: openPanel ? 'translateX(0)' : 'translateX(-100%)',
-        transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-        borderRight: '1px solid var(--border)',
+      {/* Floating accounts + profile panel */}
+      <div ref={panelRef} style={{
+        position: 'fixed', top: 88, right: 20, width: 420, zIndex: 322,
+        background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 20,
+        display: 'flex', flexDirection: 'column',
+        maxHeight: 'calc(100vh - 108px)',
       }}>
 
-        {/* ── Panel 1: Broker ─── */}
-        {openPanel === 'broker' && (
-          <div>
-            <PanelHeader title="Broker Accounts" subtitle="API credentials and connection status" />
-            {accounts.length === 0 && (
-              <div style={{ fontSize: 13, color: 'var(--text-mute)', textAlign: 'center', padding: '32px 0' }}>No accounts found</div>
-            )}
-            {accounts.map(acc => <BrokerCard key={acc.id} acc={acc} />)}
-            <button onClick={() => { setAddModal(true); setAddStep(1); setAddForm(EMPTY_FORM); setAddError('') }}
-              style={{ width: '100%', height: 36, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, marginTop: 4 }}>
-              + Add Account
+        {/* ── Header: user identity ── */}
+        <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: 'var(--accent)', flexShrink: 0 }}>
+              BK
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Karthikeyan</div>
+              <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 2 }}>LIFEX OS · STAAX</div>
+            </div>
+            <button onClick={() => setIsProfileOpen(false)}
+              style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              ✕
             </button>
-            {addToast && <div style={{ marginTop: 10, fontSize: 12, color: '#22DD88', fontWeight: 600, textAlign: 'center' }}>{addToast}</div>}
           </div>
-        )}
+        </div>
 
-        {/* ── Panel 2: Margin ─── */}
-        {openPanel === 'margin' && (
-          <div>
-            <PanelHeader title="Margin & Brokerage" subtitle="FY margin and brokerage settings per account" />
-            {/* Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-              {[
-                { label: 'Total FY Margin', value: `₹${(accounts.reduce((s, a) => s + (a.margin || 0), 0) / 100000).toFixed(1)}L` },
-                { label: 'Total Brokerage', value: `₹${accounts.reduce((s, a) => s + (a.fyBrokerage || 0), 0).toLocaleString('en-IN')}` },
-              ].map(m => (
-                <div key={m.label} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 12, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{m.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{m.value}</div>
+        {/* ── Tab row ── */}
+        <div style={{ display: 'flex', gap: 6, padding: '12px 20px 0', flexShrink: 0 }}>
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setOpenPanel(tab.id)} style={{
+              flex: 1, height: 32, borderRadius: 100, border: 'none', cursor: 'pointer',
+              background: 'var(--bg)',
+              boxShadow: openPanel === tab.id ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+              color: openPanel === tab.id ? 'var(--accent)' : 'var(--text-dim)',
+              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)',
+              letterSpacing: '0.5px', textTransform: 'uppercase' as const,
+              transition: 'all 0.15s',
+            }}>{tab.label}</button>
+          ))}
+        </div>
+
+        {/* ── Panel content (scrollable) ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 20px' }}>
+
+          {/* ── Panel 1: Broker ─── */}
+          {openPanel === 'broker' && (
+            <div>
+              {accounts.length === 0 && (
+                <div style={{ fontSize: 13, color: 'var(--text-mute)', textAlign: 'center', padding: '32px 0' }}>No accounts found</div>
+              )}
+              {accounts.map(acc => <BrokerCard key={acc.id} acc={acc} />)}
+              <button onClick={() => { setAddModal(true); setAddStep(1); setAddForm(EMPTY_FORM); setAddError('') }}
+                style={{ width: '100%', height: 36, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, marginTop: 4 }}>
+                + Add Account
+              </button>
+              {addToast && <div style={{ marginTop: 10, fontSize: 12, color: '#0ea66e', fontWeight: 600, textAlign: 'center' }}>{addToast}</div>}
+            </div>
+          )}
+
+          {/* ── Panel 2: Margin ─── */}
+          {openPanel === 'margin' && (
+            <div>
+              {/* Summary */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                {[
+                  { label: 'Total FY Margin', value: `₹${(accounts.reduce((s, a) => s + (a.margin || 0), 0) / 100000).toFixed(1)}L` },
+                  { label: 'Total Brokerage', value: `₹${accounts.reduce((s, a) => s + (a.fyBrokerage || 0), 0).toLocaleString('en-IN')}` },
+                ].map(m => (
+                  <div key={m.label} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{m.label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{m.value}</div>
+                  </div>
+                ))}
+              </div>
+              {accounts.filter(a => a.status === 'active').map(acc => {
+                const slug = NAME_TO_SLUG[acc.name]
+                const connected = tokenStatus[acc.name] ?? false
+                const funds = fundsData[acc.name]
+                return (
+                  <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 12 }}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
+                      {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
+                    </div>
+
+                    {/* Live Funds */}
+                    {slug && connected && (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 6 }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live Funds</span>
+                        </div>
+                        {funds ? (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {[
+                              { label: 'Cash',        value: `₹${(funds.available/100000).toFixed(1)}L`,  color: '#0ea66e' },
+                              { label: 'Collateral',  value: `₹${(funds.used/100000).toFixed(1)}L`,      color: '#0ea66e' },
+                              { label: 'Margin',      value: `₹${(funds.total/100000).toFixed(1)}L`,     color: '#0ea66e' },
+                            ].map(m => (
+                              <div key={m.label} style={{ flex: 1, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 8, padding: '5px 4px', textAlign: 'center' }}>
+                                <div style={{ fontSize: 8, color: 'var(--text-mute)', marginBottom: 2, textTransform: 'uppercase' }}>{m.label}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: m.color }}>{m.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : fundsLoading[acc.name] ? (
+                          <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>Loading…</div>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {/* FY Margin + FY Brokerage + Save — single row */}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={lbl}>FY Margin (₹)</label>
+                        <input style={inp} type="number" defaultValue={acc.margin || ''} placeholder="₹ Margin"
+                          onChange={e => setEditMargin(m => ({ ...m, [acc.id]: e.target.value }))} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={lbl}>FY Brokerage {!isApril() && '(Apr)'}</label>
+                        <input style={{ ...inp, opacity: isApril() ? 1 : 0.5 }} type="number" defaultValue={acc.fyBrokerage ?? ''} placeholder="₹" disabled={!isApril()}
+                          onChange={e => setEditBrok(m => ({ ...m, [acc.id]: e.target.value }))} />
+                      </div>
+                      <button onClick={() => saveMargin(acc)} disabled={saving[acc.id + '_margin']}
+                        style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-display)' }}
+                        onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                        onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                        onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
+                        {saving[acc.id + '_margin'] ? '…' : 'Save'}
+                      </button>
+                    </div>
+                    {saved[acc.id + '_margin'] && <div style={{ marginTop: 8, fontSize: 11, color: '#0ea66e', fontWeight: 600 }}>{saved[acc.id + '_margin']}</div>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* ── Panel 3: Risk ─── */}
+          {openPanel === 'risk' && (
+            <div>
+              {accounts.filter(a => a.status === 'active').map(acc => (
+                <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 12 }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
+                    {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={lbl}>Global SL (₹)</label>
+                      <input style={inp} type="number" defaultValue={acc.globalSL ?? ''} placeholder="₹ SL"
+                        onChange={e => setEditSL(s => ({ ...s, [acc.id]: e.target.value }))} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={lbl}>Global TP (₹)</label>
+                      <input style={inp} type="number" defaultValue={acc.globalTP ?? ''} placeholder="₹ TP"
+                        onChange={e => setEditTP(s => ({ ...s, [acc.id]: e.target.value }))} />
+                    </div>
+                    <button onClick={() => saveRisk(acc)} disabled={saving[acc.id + '_risk']}
+                      style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)', whiteSpace: 'nowrap', flexShrink: 0 }}
+                      onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                      onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                      onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
+                      {saving[acc.id + '_risk'] ? '…' : 'Save'}
+                    </button>
+                  </div>
+                  {saved[acc.id + '_risk'] && <div style={{ marginTop: 8, fontSize: 11, color: '#0ea66e', fontWeight: 600 }}>{saved[acc.id + '_risk']}</div>}
                 </div>
               ))}
             </div>
-            {accounts.filter(a => a.status === 'active').map(acc => (
-              <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
-                  {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                  <div>
-                    <label style={lbl}>FY Margin (₹)</label>
-                    <input style={inp} type="number" defaultValue={acc.margin || ''} placeholder="₹ Margin"
-                      onChange={e => setEditMargin(m => ({ ...m, [acc.id]: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label style={lbl}>FY Brokerage {!isApril() && '(April only)'}</label>
-                    <input style={{ ...inp, opacity: isApril() ? 1 : 0.5 }} type="number" defaultValue={acc.fyBrokerage ?? ''} placeholder="₹" disabled={!isApril()}
-                      onChange={e => setEditBrok(m => ({ ...m, [acc.id]: e.target.value }))} />
-                  </div>
-                </div>
-                <button onClick={() => saveMargin(acc)} disabled={saving[acc.id + '_margin']}
-                  style={{ width: '100%', height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
-                  {saving[acc.id + '_margin'] ? 'Saving…' : 'Save'}
-                </button>
-                {saved[acc.id + '_margin'] && <div style={{ marginTop: 8, fontSize: 11, color: '#22DD88', fontWeight: 600 }}>{saved[acc.id + '_margin']}</div>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Panel 3: Risk ─── */}
-        {openPanel === 'risk' && (
-          <div>
-            <PanelHeader title="Risk Controls" subtitle="Global stop loss and target profit per account" />
-            {accounts.filter(a => a.status === 'active').map(acc => (
-              <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
-                  {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                  <div>
-                    <label style={lbl}>Global SL (₹)</label>
-                    <input style={inp} type="number" defaultValue={acc.globalSL ?? ''} placeholder="₹ SL"
-                      onChange={e => setEditSL(s => ({ ...s, [acc.id]: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Global TP (₹)</label>
-                    <input style={inp} type="number" defaultValue={acc.globalTP ?? ''} placeholder="₹ TP"
-                      onChange={e => setEditTP(s => ({ ...s, [acc.id]: e.target.value }))} />
-                  </div>
-                </div>
-                <button onClick={() => saveRisk(acc)} disabled={saving[acc.id + '_risk']}
-                  style={{ width: '100%', height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
-                  {saving[acc.id + '_risk'] ? 'Saving…' : 'Save'}
-                </button>
-                {saved[acc.id + '_risk'] && <div style={{ marginTop: 8, fontSize: 11, color: '#22DD88', fontWeight: 600 }}>{saved[acc.id + '_risk']}</div>}
-              </div>
-            ))}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Add Account Modal ─────────────────────────────────────────────── */}
       {addModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
           onClick={() => { setAddModal(false); setAddError('') }}>
           <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 28, width: 440, maxWidth: '90%' }}
             onClick={e => e.stopPropagation()}>
@@ -494,19 +511,18 @@ export default function AccountsDrawer() {
             {addStep === 1 && (
               <div>
                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>Select your broker</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {(['zerodha', 'angelone'] as const).map(b => (
-                    <div key={b} onClick={() => setAddForm(f => ({ ...f, broker: b }))}
-                      style={{ padding: '20px 16px', borderRadius: 16, cursor: 'pointer', textAlign: 'center', background: 'var(--bg)', boxShadow: addForm.broker === b ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', transition: 'box-shadow 0.15s' }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: addForm.broker === b ? 'var(--accent)' : 'var(--text)' }}>{b === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
+                    <div key={b} onClick={() => { setAddForm(f => ({ ...f, broker: b })); setAddStep(2) }}
+                      style={{ padding: '20px 16px', borderRadius: 16, cursor: 'pointer', textAlign: 'center', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', transition: 'box-shadow 0.15s' }}
+                      onMouseDown={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--neu-inset)' }}
+                      onMouseUp={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--neu-raised-sm)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--neu-raised-sm)' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: 'var(--text)' }}>{b === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{b === 'zerodha' ? 'Kite API' : 'SmartAPI'}</div>
                     </div>
                   ))}
                 </div>
-                <button disabled={!addForm.broker} onClick={() => setAddStep(2)}
-                  style={{ width: '100%', height: 40, borderRadius: 12, border: 'none', cursor: addForm.broker ? 'pointer' : 'not-allowed', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: addForm.broker ? 'var(--accent)' : 'var(--text-mute)', fontSize: 13, fontWeight: 700 }}>
-                  Continue
-                </button>
               </div>
             )}
 
@@ -552,7 +568,7 @@ export default function AccountsDrawer() {
 
       {/* ── Edit API Keys Modal ──────────────────────────────────────────── */}
       {editingCreds && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
           onClick={() => { setEditingCreds(null); setShowSecret(false); setShowTotp(false) }}>
           <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 28, width: 420, maxWidth: '90%' }}
             onClick={e => e.stopPropagation()}>
@@ -597,7 +613,7 @@ export default function AccountsDrawer() {
 
       {/* ── Confirm Deactivate/Reactivate Modal ─────────────────────────── */}
       {confirmAction && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
           onClick={() => setConfirmAction(null)}>
           <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 24, width: 360, maxWidth: '90%' }}
             onClick={e => e.stopPropagation()}>
@@ -613,7 +629,7 @@ export default function AccountsDrawer() {
               <button onClick={() => setConfirmAction(null)}
                 style={{ height: 36, padding: '0 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', fontSize: 12 }}>Cancel</button>
               <button onClick={executeConfirmedAction}
-                style={{ height: 36, padding: '0 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: confirmAction.type === 'deactivate' ? '#FF4444' : '#22DD88', fontSize: 12, fontWeight: 700 }}>
+                style={{ height: 36, padding: '0 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: confirmAction.type === 'deactivate' ? '#FF4444' : '#0ea66e', fontSize: 12, fontWeight: 700 }}>
                 {confirmAction.type === 'deactivate' ? 'Deactivate' : 'Reactivate'}
               </button>
             </div>

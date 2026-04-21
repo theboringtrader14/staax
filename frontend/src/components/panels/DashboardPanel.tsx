@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowClockwise, Warning } from '@phosphor-icons/react'
+import { Warning, ProhibitInset } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
@@ -248,12 +248,12 @@ export default function DashboardPanel() {
       {/* Panel — sits flush below the TopNav pill, seamless via shared background */}
       <div style={{
         position: 'fixed',
-        top: 88,       /* safely below nav pill (20px wrapper + ~60px pill + 8px gap) */
-        right: 52,     /* matches algo card right edge: 24px main padding + 28px scroll padding */
-        width: 475,
+        top: 88,
+        right: 20,
+        width: 420,
         maxHeight: 'calc(100vh - 108px)',
-        zIndex: 200,
-        borderRadius: '0 0 20px 20px', /* flat top connects visually with pill bottom */
+        zIndex: 322,
+        borderRadius: 20,
         background: 'var(--bg)',
         boxShadow: 'var(--neu-raised-lg)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -328,19 +328,10 @@ export default function DashboardPanel() {
 
           {/* ── System Health ── */}
           <div style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' }}>
                 System Health
               </div>
-              <button onClick={refetchHealth}
-                style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--bg)', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', boxShadow: 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 0.12s' }}
-                onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
-                onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
-                title="Refresh Health"
-              >
-                <ArrowClockwise size={11} weight="bold" />
-              </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map((chip) => {
@@ -492,35 +483,74 @@ export default function DashboardPanel() {
 
       {/* ── Kill Switch Modal ── */}
       {showKillConfirm && (
-        <div className="modal-overlay" style={{ zIndex: 1200 }}>
-          <div className="modal-box">
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1200,
+          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          background: 'rgba(0,0,0,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--bg)',
+            boxShadow: 'var(--neu-raised-lg), 0 0 40px rgba(255,68,68,0.12)',
+            borderRadius: 24, padding: 24,
+            minWidth: 340, maxWidth: 480, width: '90%',
+          }}>
+            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF4444" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-              <span style={{ fontWeight: 800, fontSize: 16, fontFamily: 'var(--font-display)', color: '#FF4444' }}>Kill Switch</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF4444" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              <span style={{ fontWeight: 800, fontSize: 17, fontFamily: 'var(--font-display)', color: '#FF4444' }}>Kill Switch</span>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 14, lineHeight: 1.6 }}>Select accounts to kill. Uncheck any you want to leave running.</p>
-            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16, lineHeight: 1.6 }}>
+              Select accounts to kill. Uncheck any you want to leave running.
+            </p>
+
+            {/* Account list */}
+            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {displayAccounts.map((acc: any) => {
                 const checked = selKill.includes(acc.id)
+                const killed = killedIds.includes(acc.id)
                 return (
-                  <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: checked ? 'rgba(255,68,68,0.06)' : 'var(--bg)', borderRadius: 12, padding: '8px 12px', cursor: 'pointer', boxShadow: checked ? 'var(--neu-inset)' : 'var(--neu-raised-sm)' }}>
-                    {killedIds.includes(acc.id)
-                      ? <span style={{ fontSize: 12, color: '#FF4444' }}>⛔</span>
-                      : <input type="checkbox" checked={checked} onChange={() => setSelKill(p => p.includes(acc.id) ? p.filter(id => id !== acc.id) : [...p, acc.id])} style={{ width: 14, height: 14, accentColor: '#FF4444', cursor: 'pointer' }} />}
-                    <div style={{ flex: 1 }}>
+                  <div key={acc.id}
+                    onClick={() => !killed && setSelKill(p => p.includes(acc.id) ? p.filter(id => id !== acc.id) : [...p, acc.id])}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      background: 'var(--bg)',
+                      boxShadow: checked ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                      borderRadius: 14, padding: '10px 14px', cursor: killed ? 'default' : 'pointer',
+                      transition: 'box-shadow 0.15s',
+                    }}>
+                    {killed
+                      ? <ProhibitInset size={18} weight="fill" color="#FF4444" style={{ flexShrink: 0 }} />
+                      : <div style={{
+                          width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                          background: 'var(--bg)',
+                          boxShadow: checked ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {checked && <div style={{ width: 8, height: 8, borderRadius: 2, background: '#FF4444' }} />}
+                        </div>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{acc.nickname || acc.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-mute)' }}>{acc.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}</div>
                     </div>
-                    {killedIds.includes(acc.id)
-                      ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: '#FF4444' }}>KILLED</span>
-                      : checked ? <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, color: '#FF4444', background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>WILL KILL</span> : null}
-                  </label>
+                    {killed
+                      ? <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '3px 10px', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#FF4444', flexShrink: 0 }}>KILLED</span>
+                      : checked
+                      ? <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '3px 10px', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#FF4444', flexShrink: 0 }}>WILL KILL</span>
+                      : null}
+                  </div>
                 )
               })}
             </div>
-            <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 11, color: '#FF4444', fontWeight: 600, boxShadow: 'var(--neu-inset)' }}>
-              ⚠️ This will square off all positions + cancel all orders. Cannot be undone.
+
+            {/* Warning */}
+            <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 12, padding: '10px 14px', marginBottom: 18, fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <Warning size={14} weight="fill" color="#FF4444" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span><span style={{ color: '#FF4444', fontWeight: 700 }}>Warning: </span>
+              This will square off all positions + cancel all orders. Cannot be undone.</span>
             </div>
+
+            {/* Actions */}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <NeuBtn onClick={() => setKillModal(false)} disabled={killLoading}>Cancel</NeuBtn>
               <NeuBtn danger onClick={handleKill} disabled={killLoading} style={{ minWidth: 160, padding: '0 16px' }}>

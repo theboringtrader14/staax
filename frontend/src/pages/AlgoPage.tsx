@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { algosAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
@@ -21,8 +21,8 @@ const FEATURES: { key: FeatureKey; label: string; color: string }[] = [
   { key: 'wt',      label: 'W&T',      color: '#9CA3AF' },
   { key: 'sl',      label: 'SL',       color: '#FF4444' },
   { key: 'tsl',     label: 'TSL',      color: '#FF6B00' },
-  { key: 'reentry', label: 'Re-entry', color: '#F59E0B' },
-  { key: 'tp',      label: 'TP',       color: '#22DD88' },
+  { key: 'reentry', label: 'RE', color: '#F59E0B' },
+  { key: 'tp',      label: 'TP',       color: '#0ea66e' },
   { key: 'ttp',     label: 'TTP',      color: '#CC4400' },
 ]
 
@@ -49,25 +49,27 @@ interface LegVals {
     bufferUnit:  string;   // "pts" | "pct"
   }
 }
+type ReentryVals = { type: string; ltpMode: string; onSl: boolean; onTp: boolean; maxSl: string; maxTp: string }
 interface JourneyChild {
   enabled: boolean
   instType: string; instCode: string; direction: string; optType: string
   strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
   wt_enabled: boolean; wt_direction: string; wt_value: string; wt_unit: string
   sl_enabled: boolean; sl_type: string; sl_value: string
-  re_enabled: boolean; re_sl_enabled: boolean; re_tp_enabled: boolean; re_mode: string; re_trigger: string; re_count: string
+  re_enabled: boolean; reentry: ReentryVals
   tp_enabled: boolean; tp_type: string; tp_value: string
   tsl_enabled: boolean; tsl_x: string; tsl_y: string; tsl_unit: string
   ttp_enabled: boolean; ttp_x: string; ttp_y: string; ttp_unit: string
   child?: JourneyChild
 }
+const mkReentry = (): ReentryVals => ({ type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, maxSl: '1', maxTp: '1' })
 const mkJourneyChild = (): JourneyChild => ({
   enabled: false,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
   wt_enabled: false, wt_direction: 'up', wt_value: '', wt_unit: 'pts',
   sl_enabled: false, sl_type: 'pts_instrument', sl_value: '',
-  re_enabled: false, re_sl_enabled: false, re_tp_enabled: false, re_mode: 'at_entry_price', re_trigger: 'sl', re_count: '1',
+  re_enabled: false, reentry: mkReentry(),
   tp_enabled: false, tp_type: 'pts_instrument', tp_value: '',
   tsl_enabled: false, tsl_x: '', tsl_y: '', tsl_unit: 'pts',
   ttp_enabled: false, ttp_x: '', ttp_y: '', ttp_unit: 'pts',
@@ -97,12 +99,15 @@ const fromJourneyConfig = (jc: any): JourneyChild => {
     sl_enabled:    !!(c.sl_type && c.sl_value != null),
     sl_type:       c.sl_type || 'pts_instrument',
     sl_value:      c.sl_value != null ? String(c.sl_value) : '',
-    re_enabled:    false,
-    re_sl_enabled: !!c.reentry_on_sl,
-    re_tp_enabled: !!c.reentry_on_tp,
-    re_mode:       'at_entry_price',
-    re_trigger:    'sl',
-    re_count:      String(c.reentry_max || 0),
+    re_enabled:    !!(c.reentry_on_sl || c.reentry_on_tp),
+    reentry: {
+      type:    're_entry',
+      ltpMode: c.reentry_ltp_mode || 'ltp',
+      onSl:    !!c.reentry_on_sl,
+      onTp:    !!c.reentry_on_tp,
+      maxSl:   c.reentry_on_sl ? String(c.reentry_max || 1) : '1',
+      maxTp:   c.reentry_on_tp ? String(c.reentry_max || 1) : '1',
+    },
     tp_enabled:    !!(c.tp_type && c.tp_value != null),
     tp_type:       c.tp_type || 'pts_instrument',
     tp_value:      c.tp_value != null ? String(c.tp_value) : '',
@@ -138,126 +143,132 @@ const mkLeg = (n: number): Leg => ({
 const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, reentry: { ...l.vals.reentry }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp }, orb: { ...l.vals.orb } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
 
 function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void; entryType: string }) {
-  const active = FEATURES.filter(f => leg.active[f.key])
-  if (!active.length) return null
   const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
-  const inpSt = { height: '26px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
-  const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input type="number" min="0" value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} placeholder={ph} style={{ ...inpSt, width: w }} />
+  const inpSt = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
+  const noZero = (e: React.FocusEvent<HTMLInputElement>, fn: (v: string) => void) => { if (e.target.value === '' || Number(e.target.value) < 1) fn('1') }
+  const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input type="number" min="1" value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} onBlur={e => noZero(e, v => u(k, sub, v))} placeholder={ph} style={{ ...inpSt, width: w }} />
   const sel = (k: FeatureKey, sub: string, opts: [string, string][], w = '80px') =>
     <StaaxSelect value={(leg.vals[k] as any)[sub] || ''} onChange={v => u(k, sub, v)}
-      options={opts.map(([value, label]) => ({ value, label }))} width={w} />
-  return (
-    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
-      {active.map(f => (
-        <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '4px 8px' }}>
-          <span style={{ fontSize: '10px', color: f.color, fontWeight: 700, marginRight: '2px' }}>{f.label}:</span>
-          {f.key === 'wt'  && <>{sel('wt',  'direction', [['up','↑Up'],['down','↓Dn']], '72px')} {inp('wt',  'value', 'val')} {sel('wt',  'unit', [['pts','pts'],['pct','%']], '60px')}</>}
-          {f.key === 'sl'  && (() => {
-            if (entryType === 'orb') {
-              const orbSlOpts: [string,string][] = [
-                ['orb_low','ORB Low'],['orb_high','ORB High'],
-                ['orb_range','ORB Range'],['orb_range_plus_pts','Range+pts'],['orb_range_minus_pts','Range-pts'],
-                ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
-              ]
-              const ov = leg.vals.orb
-              const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
-              const needsBuf = ov.slType === 'orb_range_plus_pts' || ov.slType === 'orb_range_minus_pts'
-              return <>
-                <select value={ov.slType} onChange={e => uOrb('slType', e.target.value)}
-                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
-                  {orbSlOpts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                {needsBuf && (
-                  <>
-                    <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)}
-                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }} />
-                    <select value={ov.bufferUnit} onChange={e => uOrb('bufferUnit', e.target.value)}
-                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
-                      <option value="pts">pts</option>
-                      <option value="pct">%</option>
-                    </select>
-                  </>
-                )}
-                {(!ov.slType.startsWith('orb_')) && inp('sl', 'value', 'val')}
-              </>
-            }
-            // Non-ORB: original behavior
-            const slOpts: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']]
-            return <>{sel('sl', 'type', slOpts, '88px')} {inp('sl', 'value', 'val')}</>
-          })()}
-          {f.key === 're'  && <>{sel('re',  'mode', [['at_entry_price','@Entry'],['immediate','Now'],['at_cost','@Cost']], '80px')} {sel('re',  'trigger', [['sl','SL'],['tp','TP'],['any','Any']], '60px')} {sel('re', 'count', [['1','1×'],['2','2×'],['3','3×'],['4','4×'],['5','5×']], '56px')}</>}
-          {f.key === 'reentry' && (() => {
-            const rv = leg.vals.reentry
-            const uRe = (sub: keyof typeof rv, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, reentry: { ...rv, [sub]: val } } })
-            return <>
-              {(['re_entry', 're_execute'] as const).map(t => (
-                <button key={t} type="button" onClick={() => uRe('type', t)}
-                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 20, cursor: 'pointer', background: 'var(--bg)', boxShadow: rv.type === t ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: rv.type === t ? 'var(--accent)' : 'var(--text-dim)', border: 'none' }}>
-                  {t === 're_entry' ? 'Re-Entry' : 'Re-Execute'}
-                </button>
-              ))}
-              {rv.type === 're_entry' && (['ltp', 'candle_close'] as const).map(m => (
-                <button key={m} type="button" onClick={() => uRe('ltpMode', m)}
-                  style={{ padding: '2px 7px', fontSize: 10, borderRadius: 20, cursor: 'pointer', background: 'var(--bg)', boxShadow: rv.ltpMode === m ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: rv.ltpMode === m ? 'var(--accent)' : 'var(--text-dim)', border: 'none' }}>
-                  {m === 'ltp' ? 'LTP' : 'Candle'}
-                </button>
-              ))}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-dim)' }}>
-                <input type="checkbox" checked={rv.onSl} onChange={e => uRe('onSl', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> SL
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-dim)' }}>
-                <input type="checkbox" checked={rv.onTp} onChange={e => uRe('onTp', e.target.checked)} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} /> TP
-              </label>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)' }}>
-                SL:<input type="number" min={0} max={5} value={rv.maxSl}
-                  onChange={e => uRe('maxSl', e.target.value)}
-                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', textAlign: 'center' }} />
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)' }}>
-                TP:<input type="number" min={0} max={5} value={rv.maxTp}
-                  onChange={e => uRe('maxTp', e.target.value)}
-                  style={{ width: '32px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', textAlign: 'center' }} />
-              </span>
-            </>
-          })()}
-          {f.key === 'tp'  && (() => {
-            if (entryType === 'orb') {
-              const orbTpOpts: [string,string][] = [
-                ['orb_range','ORB Range'],['orb_high','ORB High'],['orb_low','ORB Low'],
-                ['orb_range_plus_pts','Range+pts'],['orb_range_minus_pts','Range-pts'],
-                ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
-              ]
-              const ov = leg.vals.orb
-              const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
-              const needsBuf = ov.tpType === 'orb_range_plus_pts' || ov.tpType === 'orb_range_minus_pts'
-              return <>
-                <select value={ov.tpType} onChange={e => uOrb('tpType', e.target.value)}
-                  style={{ width: '100px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
-                  {orbTpOpts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                {needsBuf && (
-                  <>
-                    <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)}
-                      placeholder="buf" style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }} />
-                    <select value={ov.bufferUnit} onChange={e => uOrb('bufferUnit', e.target.value)}
-                      style={{ width: '44px', fontSize: '10px', padding: '2px 4px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)' }}>
-                      <option value="pts">pts</option>
-                      <option value="pct">%</option>
-                    </select>
-                  </>
-                )}
-                {(!ov.tpType.startsWith('orb_')) && inp('tp', 'value', 'val')}
-              </>
-            }
-            // Non-ORB: original behavior
-            return <>{sel('tp',  'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('tp',  'value', 'val')}</>
-          })()}
-          {f.key === 'tsl' && <>{inp('tsl', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('tsl', 'y', 'Y')} {sel('tsl', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
-        {f.key === 'ttp' && <>{inp('ttp', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('ttp', 'y', 'Y')} {sel('ttp', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
-        </div>
-      ))}
+      options={opts.map(([value, label]) => ({ value, label }))} width={w} height="28px" borderRadius="6px" />
+  const sep = <span style={{ width: '1px', height: '14px', background: 'var(--border)', flexShrink: 0, margin: '0 8px' }} />
+
+  const row1Keys: FeatureKey[] = ['sl', 'tsl', 'tp', 'ttp']
+  const row2Keys: FeatureKey[] = ['wt', 'reentry']
+  const row1 = FEATURES.filter(f => row1Keys.includes(f.key) && leg.active[f.key])
+  const row2 = FEATURES.filter(f => row2Keys.includes(f.key) && leg.active[f.key])
+  if (!row1.length && !row2.length) return null
+
+  const renderFeat = (f: typeof FEATURES[0], idx: number) => (
+    <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      {idx > 0 && sep}
+      <span style={{ fontSize: '10px', color: f.color, fontWeight: 700, marginRight: '2px' }}>{f.label}:</span>
+      {f.key === 'sl' && (() => {
+        if (entryType === 'orb') {
+          const orbSlOpts: [string,string][] = [
+            ['orb_low','ORB Low'],['orb_high','ORB High'],['orb_range','ORB Range'],
+            ['orb_range_plus_pts','Range+pts'],['orb_range_minus_pts','Range-pts'],
+            ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
+          ]
+          const ov = leg.vals.orb
+          const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
+          const needsBuf = ov.slType === 'orb_range_plus_pts' || ov.slType === 'orb_range_minus_pts'
+          return <>
+            <StaaxSelect value={ov.slType} onChange={v => uOrb('slType', v)} options={orbSlOpts.map(([value, label]) => ({ value, label }))} width="100px" height="28px" borderRadius="6px" />
+            {needsBuf && (<>
+              <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)} placeholder="buf" style={{ ...inpSt, width: '44px' }} />
+              <StaaxSelect value={ov.bufferUnit} onChange={v => uOrb('bufferUnit', v)} options={[{ value: 'pts', label: 'pts' }, { value: 'pct', label: '%' }]} width="52px" height="28px" borderRadius="6px" />
+            </>)}
+            {!ov.slType.startsWith('orb_') && inp('sl', 'value', 'val')}
+          </>
+        }
+        return <>{sel('sl', 'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('sl', 'value', 'val')}</>
+      })()}
+      {f.key === 'tsl' && <>{inp('tsl', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('tsl', 'y', 'Y')} {sel('tsl', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
+      {f.key === 'tp' && (() => {
+        if (entryType === 'orb') {
+          const orbTpOpts: [string,string][] = [
+            ['orb_range','ORB Range'],['orb_high','ORB High'],['orb_low','ORB Low'],
+            ['orb_range_plus_pts','Range+pts'],['orb_range_minus_pts','Range-pts'],
+            ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
+          ]
+          const ov = leg.vals.orb
+          const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
+          const needsBuf = ov.tpType === 'orb_range_plus_pts' || ov.tpType === 'orb_range_minus_pts'
+          return <>
+            <StaaxSelect value={ov.tpType} onChange={v => uOrb('tpType', v)} options={orbTpOpts.map(([value, label]) => ({ value, label }))} width="100px" height="28px" borderRadius="6px" />
+            {needsBuf && (<>
+              <input type="number" value={ov.bufferValue} onChange={e => uOrb('bufferValue', e.target.value)} placeholder="buf" style={{ ...inpSt, width: '44px' }} />
+              <StaaxSelect value={ov.bufferUnit} onChange={v => uOrb('bufferUnit', v)} options={[{ value: 'pts', label: 'pts' }, { value: 'pct', label: '%' }]} width="52px" height="28px" borderRadius="6px" />
+            </>)}
+            {!ov.tpType.startsWith('orb_') && inp('tp', 'value', 'val')}
+          </>
+        }
+        return <>{sel('tp', 'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('tp', 'value', 'val')}</>
+      })()}
+      {f.key === 'ttp' && <>{inp('ttp', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('ttp', 'y', 'Y')} {sel('ttp', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
+      {f.key === 'wt' && <>{sel('wt', 'direction', [['up','↑Up'],['down','↓Dn']], '72px')} {inp('wt', 'value', 'val')} {sel('wt', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
+      {f.key === 'reentry' && <ReentryConfig rv={leg.vals.reentry} uRe={(sub, val) => onUpdate(leg.id, { vals: { ...leg.vals, reentry: { ...leg.vals.reentry, [sub]: val } } })} inpSt={inpSt} />}
     </div>
   )
+
+  return (
+    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
+      {row1.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+          {row1.map((f, idx) => renderFeat(f, idx))}
+        </div>
+      )}
+      {row2.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginTop: row1.length > 0 ? '8px' : '0' }}>
+          {row2.map((f, idx) => renderFeat(f, idx))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReentryConfig({ rv, uRe, inpSt }: {
+  rv: ReentryVals
+  uRe: (sub: keyof ReentryVals, val: any) => void
+  inpSt: React.CSSProperties
+}) {
+  const bSt = (on: boolean): React.CSSProperties => ({ height: '28px', padding: '0 9px', fontSize: 10, borderRadius: 6, cursor: 'pointer', background: 'var(--bg)', boxShadow: on ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: on ? 'var(--accent)' : 'var(--text-dim)', border: 'none' })
+  const Chk = ({ val, toggle }: { val: boolean; toggle: () => void }) => (
+    <div onClick={toggle} style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: val ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {val && <div style={{ width: 8, height: 8, borderRadius: 1, background: 'var(--accent)' }} />}
+    </div>
+  )
+  const iSep = <span style={{ width: '1px', height: '14px', background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
+  return <>
+    {(['re_entry', 're_execute'] as const).map(t => (
+      <button key={t} type="button" onClick={() => uRe('type', t)} style={bSt(rv.type === t)}>
+        {t === 're_entry' ? 'RE' : 'RE-Ex'}
+      </button>
+    ))}
+    {rv.type === 're_entry' && <>{iSep}{(['ltp', 'candle_close'] as const).map(m => (
+      <button key={m} type="button" onClick={() => uRe('ltpMode', m)} style={bSt(rv.ltpMode === m)}>
+        {m === 'ltp' ? 'LTP' : 'Candle'}
+      </button>
+    ))}</>}
+    {iSep}
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => uRe('onSl', !rv.onSl)}>
+      <Chk val={rv.onSl} toggle={() => uRe('onSl', !rv.onSl)} /> SL
+    </span>
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => uRe('onTp', !rv.onTp)}>
+      <Chk val={rv.onTp} toggle={() => uRe('onTp', !rv.onTp)} /> TP
+    </span>
+    {(rv.onSl || rv.onTp) && iSep}
+    {rv.onSl && (
+      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-dim)' }}>
+        SL:<input type="number" min={1} max={5} value={rv.maxSl} onChange={e => uRe('maxSl', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) uRe('maxSl', '1') }} style={{ ...inpSt, width: '52px', textAlign: 'center' }} />
+      </span>
+    )}
+    {rv.onTp && (
+      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-dim)' }}>
+        TP:<input type="number" min={1} max={5} value={rv.maxTp} onChange={e => uRe('maxTp', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) uRe('maxTp', '1') }} style={{ ...inpSt, width: '52px', textAlign: 'center' }} />
+      </span>
+    )}
+  </>
 }
 
 const TYPE_OPTS: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']]
@@ -265,130 +276,145 @@ const TYPE_OPTS: [string,string][] = [['pts_instrument','Pts(I)'],['pct_instrume
 function JourneyChildPanel({ child, depth, onChange }: {
   child: JourneyChild; depth: number; onChange: (c: JourneyChild) => void
 }) {
-  const cs = { height: '26px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)' }
-  const csSt = { height: '26px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' }
+  const cs = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)', outline: 'none' as const, padding: '0 8px' }
+  const csSt = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
   const childExpiryOpts = MONTHLY_ONLY_CODES.has(child.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
-  const depthColor = depth === 1 ? '#CC4400' : depth === 2 ? '#F59E0B' : '#22DD88'
+  const depthColor = depth === 1 ? '#CC4400' : depth === 2 ? '#F59E0B' : '#0ea66e'
   const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
   const tslBlocked = !child.sl_enabled || !child.sl_value
   const ttpBlocked = !child.tp_enabled || !child.tp_value
-  const reslBlocked = !child.sl_enabled || !child.sl_value
-  const retpBlocked = !child.tp_enabled || !child.tp_value
   return (
-    <div style={{ marginTop: '8px', padding: '9px 10px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '10px', borderLeft: `2px solid ${depthColor}` }}>
+    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)', borderLeft: `3px solid ${depthColor}`, paddingLeft: '10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
         <span style={{ fontSize: '10px', fontWeight: 700, color: depthColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>L{depth} {depthLabel}</span>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 'auto' }}>
-          <input type="checkbox" checked={child.enabled} onChange={e => u('enabled', e.target.checked)} style={{ accentColor: depthColor }} /> Enable
-        </label>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 'auto' }} onClick={() => u('enabled', !child.enabled)}>
+          <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: child.enabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {child.enabled && <div style={{ width: 8, height: 8, borderRadius: 1, background: depthColor }} />}
+          </div>
+          Enable
+        </span>
       </div>
       {child.enabled && (<>
         {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
-          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}>{child.instType}</button>
+          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}>{child.instType}</button>
           <StaaxSelect value={child.instCode} onChange={code => {
             const patch: Partial<JourneyChild> = { instCode: code }
             if (MONTHLY_ONLY_CODES.has(code) && !child.expiry.includes('monthly')) patch.expiry = 'current_monthly'
             onChange({ ...child, ...patch })
-          }} options={Object.entries(INST_CODES).map(([c]) => ({ value: c, label: c }))} width="68px" />
-          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: child.direction === 'BUY' ? 'var(--green)' : 'var(--red)', border: 'none', cursor: 'pointer' }}>{child.direction}</button>
-          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '26px', padding: '0 8px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer' }}>{child.optType}</button>}
+          }} options={Object.entries(INST_CODES).map(([c]) => ({ value: c, label: c }))} width="68px" height="28px" borderRadius="6px" />
+          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: child.direction === 'BUY' ? '#0ea66e' : 'var(--red)', border: 'none', cursor: 'pointer' }}>{child.direction}</button>
+          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer' }}>{child.optType}</button>}
           {child.instType === 'OP' && <>
-            <StaaxSelect value={child.expiry} onChange={v => u('expiry', v)} options={childExpiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" />
-            <StaaxSelect value={child.strikeMode} onChange={v => u('strikeMode', v)} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" />
-            {child.strikeMode === 'leg' && <StaaxSelect value={child.strikeType} onChange={v => u('strikeType', v)} options={STRIKE_OPTIONS.map(st => ({ value: st.toLowerCase(), label: st }))} width="70px" />}
+            <StaaxSelect value={child.expiry} onChange={v => u('expiry', v)} options={childExpiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" height="28px" borderRadius="6px" />
+            <StaaxSelect value={child.strikeMode} onChange={v => u('strikeMode', v)} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" height="28px" borderRadius="6px" />
+            {child.strikeMode === 'leg' && <StaaxSelect value={child.strikeType} onChange={v => u('strikeType', v)} options={STRIKE_OPTIONS.map(st => ({ value: st.toLowerCase(), label: st }))} width="70px" height="28px" borderRadius="6px" />}
             {child.strikeMode === 'premium' && <input value={child.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...csSt, width: '82px' }} />}
-            {child.strikeMode === 'straddle' && <StaaxSelect value={child.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" />}
+            {child.strikeMode === 'straddle' && <StaaxSelect value={child.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" height="28px" borderRadius="6px" />}
           </>}
           <input value={child.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...csSt, width: '56px', textAlign: 'center' }} />
           <span style={{ color: 'var(--border)', fontSize: '14px' }}>|</span>
           {[
-            { key: 'wt_enabled', label: 'W&T',   color: '#9CA3AF' },
-            { key: 'sl_enabled',    label: 'SL',    color: '#FF4444' },
-            { key: 'tsl_enabled',   label: 'TSL',   color: '#FF6B00', blocked: tslBlocked },
-            { key: 're_sl_enabled', label: 'RE-SL', color: '#F59E0B', blocked: reslBlocked },
-            { key: 'tp_enabled',    label: 'TP',    color: '#22DD88' },
-            { key: 'ttp_enabled',  label: 'TTP',   color: '#CC4400', blocked: ttpBlocked },
-            { key: 're_tp_enabled', label: 'RE-TP', color: '#F59E0B', blocked: retpBlocked },
+            { key: 'sl_enabled',  label: 'SL',  color: '#FF4444' },
+            { key: 'tsl_enabled', label: 'TSL', color: '#FF6B00', blocked: tslBlocked },
+            { key: 'tp_enabled',  label: 'TP',  color: '#0ea66e' },
+            { key: 'ttp_enabled', label: 'TTP', color: '#CC4400', blocked: ttpBlocked },
           ].map(f => (
             <button key={f.key} onClick={() => {
               if (f.blocked) return
               const newVal = !(child[f.key as keyof JourneyChild])
               const patch: Partial<JourneyChild> = { [f.key]: newVal }
-              if (f.key === 'sl_enabled' && !newVal) { patch.tsl_enabled = false; patch.re_sl_enabled = false }
-              if (f.key === 'tp_enabled' && !newVal) { patch.ttp_enabled = false; patch.re_tp_enabled = false }
+              if (f.key === 'sl_enabled' && !newVal) patch.tsl_enabled = false
+              if (f.key === 'tp_enabled' && !newVal) patch.ttp_enabled = false
               onChange({ ...child, ...patch })
-            }} style={{ height: '24px', padding: '0 9px', borderRadius: '11px', fontSize: '10px', fontWeight: 600, cursor: f.blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', background: 'var(--bg)', boxShadow: child[f.key as keyof JourneyChild] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: child[f.key as keyof JourneyChild] ? f.color : f.blocked ? 'var(--text-mute)' : 'var(--text-dim)', opacity: f.blocked ? 0.4 : 1 }}>
+            }} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '10px', fontWeight: 600, cursor: f.blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', background: 'var(--bg)', boxShadow: child[f.key as keyof JourneyChild] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: child[f.key as keyof JourneyChild] ? f.color : f.blocked ? 'var(--text-mute)' : 'var(--text-dim)', opacity: f.blocked ? 0.4 : 1 }}>
+              {f.label}
+            </button>
+          ))}
+          <span style={{ color: 'var(--border)', fontSize: '14px' }}>|</span>
+          {[
+            { key: 'wt_enabled', label: 'W&T', color: '#9CA3AF' },
+            { key: 're_enabled', label: 'RE',  color: '#F59E0B' },
+          ].map(f => (
+            <button key={f.key} onClick={() => onChange({ ...child, [f.key]: !(child[f.key as keyof JourneyChild]) })}
+              style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '10px', fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.12s', background: 'var(--bg)', boxShadow: child[f.key as keyof JourneyChild] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: child[f.key as keyof JourneyChild] ? f.color : 'var(--text-dim)' }}>
               {f.label}
             </button>
           ))}
         </div>
-        {/* Row 3 — active feature values */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-          {child.wt_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 700, marginRight: '2px' }}>W&T:</span>
-              <StaaxSelect value={child.wt_direction} onChange={v => u('wt_direction', v)} options={[{ value: 'up', label: '↑Up' }, { value: 'down', label: '↓Dn' }]} width="72px" />
-              <input type="number" min="0" value={child.wt_value} onChange={e => u('wt_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
-              <StaaxSelect value={child.wt_unit} onChange={v => u('wt_unit', v)} options={[{ value: 'pts', label: 'pts' }, { value: 'pct', label: '%' }]} width="60px" />
-            </div>
-          )}
-          {child.sl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#FF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
-              <StaaxSelect value={child.sl_type} onChange={v => u('sl_type', v)} options={TYPE_OPTS.map(([value, label]) => ({ value, label }))} width="88px" />
-              <input type="number" min="0" value={child.sl_value} onChange={e => u('sl_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
-            </div>
-          )}
-          {child.re_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE:</span>
-              <StaaxSelect value={child.re_mode} onChange={v => u('re_mode', v)} options={[{ value: 'at_entry_price', label: '@Entry' }, { value: 'immediate', label: 'Now' }, { value: 'at_cost', label: '@Cost' }]} width="80px" />
-              <StaaxSelect value={child.re_trigger} onChange={v => u('re_trigger', v)} options={[{ value: 'sl', label: 'SL' }, { value: 'tp', label: 'TP' }, { value: 'any', label: 'Any' }]} width="60px" />
-              <StaaxSelect value={child.re_count} onChange={v => u('re_count', v)} options={['1','2','3','4','5'].map(n => ({ value: n, label: `${n}×` }))} width="56px" />
-            </div>
-          )}
-          {child.re_sl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE-SL:</span>
-              <StaaxSelect value={child.re_mode} onChange={v => u('re_mode', v)} options={[{ value: 'at_entry_price', label: '@Entry' }, { value: 'immediate', label: 'Now' }, { value: 'at_cost', label: '@Cost' }]} width="80px" />
-              <StaaxSelect value={child.re_count} onChange={v => u('re_count', v)} options={['1','2','3'].map(n => ({ value: n, label: `${n}×` }))} width="56px" />
-            </div>
-          )}
-          {child.re_tp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE-TP:</span>
-              <StaaxSelect value={child.re_mode} onChange={v => u('re_mode', v)} options={[{ value: 'at_entry_price', label: '@Entry' }, { value: 'immediate', label: 'Now' }, { value: 'at_cost', label: '@Cost' }]} width="80px" />
-              <StaaxSelect value={child.re_count} onChange={v => u('re_count', v)} options={['1','2','3'].map(n => ({ value: n, label: `${n}×` }))} width="56px" />
-            </div>
-          )}
-          {child.tp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#22DD88', fontWeight: 700, marginRight: '2px' }}>TP:</span>
-              <StaaxSelect value={child.tp_type} onChange={v => u('tp_type', v)} options={TYPE_OPTS.map(([value, label]) => ({ value, label }))} width="88px" />
-              <input type="number" min="0" value={child.tp_value} onChange={e => u('tp_value', e.target.value)} placeholder="val" style={{ ...csSt, width: '46px', height: '22px' }} />
-            </div>
-          )}
-          {child.tsl_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
-              <input type="number" min="0" value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
-              <input type="number" min="0" value={child.tsl_y} onChange={e => u('tsl_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
-              <select value={child.tsl_unit} onChange={e => u('tsl_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
-            </div>
-          )}
-          {child.ttp_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '3px 7px' }}>
-              <span style={{ fontSize: '10px', color: '#CC4400', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
-              <input type="number" min="0" value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} placeholder="X" style={{ ...cs, width: '40px', height: '22px' }} />
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
-              <input type="number" min="0" value={child.ttp_y} onChange={e => u('ttp_y', e.target.value)} placeholder="Y" style={{ ...cs, width: '40px', height: '22px' }} />
-              <select value={child.ttp_unit} onChange={e => u('ttp_unit', e.target.value)} style={{ ...cs, height: '22px' }}><option value="pts">pts</option><option value="pct">%</option></select>
-            </div>
-          )}
-        </div>
+        {/* Row 3 — feature values, split: Row1=SL/TSL/TP/TTP, Row2=W&T/RE */}
+        {(child.sl_enabled || child.tsl_enabled || child.tp_enabled || child.ttp_enabled || child.wt_enabled || child.re_enabled) && (() => {
+            const withSeps = (items: (React.ReactElement | false)[]) => {
+              const filtered = items.filter(Boolean) as React.ReactElement[]
+              return filtered.flatMap((el, i) => i === 0 ? [el] : [<span key={`cs${i}`} style={{ width: '1px', height: '14px', background: 'var(--border)', flexShrink: 0, margin: '0 8px' }} />, el])
+            }
+            const row1Items = withSeps([
+              child.sl_enabled && (
+                <div key="sl" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#FF4444', fontWeight: 700, marginRight: '2px' }}>SL:</span>
+                  <StaaxSelect value={child.sl_type} onChange={v => u('sl_type', v)} options={TYPE_OPTS.map(([value, label]) => ({ value, label }))} width="88px" height="28px" borderRadius="6px" />
+                  <input type="number" min="1" value={child.sl_value} onChange={e => u('sl_value', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('sl_value', '1') }} placeholder="val" style={{ ...csSt, width: '46px' }} />
+                </div>
+              ),
+              child.tsl_enabled && (
+                <div key="tsl" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, marginRight: '2px' }}>TSL:</span>
+                  <input type="number" min="1" value={child.tsl_x} onChange={e => u('tsl_x', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('tsl_x', '1') }} placeholder="X" style={{ ...cs, width: '40px' }} />
+                  <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
+                  <input type="number" min="1" value={child.tsl_y} onChange={e => u('tsl_y', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('tsl_y', '1') }} placeholder="Y" style={{ ...cs, width: '40px' }} />
+                  <StaaxSelect value={child.tsl_unit} onChange={v => u('tsl_unit', v)} options={[{ value: 'pts', label: 'pts' }, { value: 'pct', label: '%' }]} width="60px" height="28px" borderRadius="6px" />
+                </div>
+              ),
+              child.tp_enabled && (
+                <div key="tp" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#0ea66e', fontWeight: 700, marginRight: '2px' }}>TP:</span>
+                  <StaaxSelect value={child.tp_type} onChange={v => u('tp_type', v)} options={TYPE_OPTS.map(([value, label]) => ({ value, label }))} width="88px" height="28px" borderRadius="6px" />
+                  <input type="number" min="1" value={child.tp_value} onChange={e => u('tp_value', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('tp_value', '1') }} placeholder="val" style={{ ...csSt, width: '46px' }} />
+                </div>
+              ),
+              child.ttp_enabled && (
+                <div key="ttp" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#CC4400', fontWeight: 700, marginRight: '2px' }}>TTP:</span>
+                  <input type="number" min="1" value={child.ttp_x} onChange={e => u('ttp_x', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('ttp_x', '1') }} placeholder="X" style={{ ...cs, width: '40px' }} />
+                  <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span>
+                  <input type="number" min="1" value={child.ttp_y} onChange={e => u('ttp_y', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('ttp_y', '1') }} placeholder="Y" style={{ ...cs, width: '40px' }} />
+                  <StaaxSelect value={child.ttp_unit} onChange={v => u('ttp_unit', v)} options={[{ value: 'pts', label: 'pts' }, { value: 'pct', label: '%' }]} width="60px" height="28px" borderRadius="6px" />
+                </div>
+              ),
+            ])
+            const row2Items = withSeps([
+              child.wt_enabled && (
+                <div key="wt" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 700, marginRight: '2px' }}>W&T:</span>
+                  <StaaxSelect value={child.wt_direction} onChange={v => u('wt_direction', v)} options={[{ value: 'up', label: '↑Up' }, { value: 'down', label: '↓Dn' }]} width="72px" height="28px" borderRadius="6px" />
+                  <input type="number" min="1" value={child.wt_value} onChange={e => u('wt_value', e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) u('wt_value', '1') }} placeholder="val" style={{ ...csSt, width: '46px' }} />
+                  <StaaxSelect value={child.wt_unit} onChange={v => u('wt_unit', v)} options={[{ value: 'pts', label: 'pts' }, { value: 'pct', label: '%' }]} width="60px" height="28px" borderRadius="6px" />
+                </div>
+              ),
+              child.re_enabled && (
+                <div key="re" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700, marginRight: '2px' }}>RE:</span>
+                  <ReentryConfig rv={child.reentry} uRe={(sub, val) => u('reentry', { ...child.reentry, [sub]: val })} inpSt={csSt} />
+                </div>
+              ),
+            ])
+            if (!row1Items.length && !row2Items.length) return null
+            return (
+              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
+                {row1Items.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+                    {row1Items}
+                  </div>
+                )}
+                {row2Items.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', marginTop: row1Items.length > 0 ? '8px' : '0' }}>
+                    {row2Items}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         {depth < 3 && (
           <JourneyChildPanel child={child.child || mkJourneyChild()} depth={depth + 1} onChange={c => u('child', c)} />
         )}
@@ -399,7 +425,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
 
 const JOURNEY_TRIGGER_OPTS: { value: string; label: string; color: string }[] = [
   { value: 'sl',     label: 'SL Hit',  color: '#FF4444' },
-  { value: 'tp',     label: 'TP Hit',  color: '#22DD88' },
+  { value: 'tp',     label: 'TP Hit',  color: '#0ea66e' },
   { value: 'either', label: 'Either',  color: '#A78BFA' },
 ]
 
@@ -427,7 +453,7 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
                   key={opt.value}
                   onClick={() => onUpdate(leg.id, { journey_trigger: opt.value })}
                   style={{
-                    height: '22px', padding: '0 10px', borderRadius: '11px', fontSize: '10px', fontWeight: 600,
+                    height: '28px', padding: '0 10px', borderRadius: '6px', fontSize: '10px', fontWeight: 600,
                     cursor: 'pointer', border: 'none', transition: 'all 0.12s',
                     background: 'var(--bg)',
                     boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
@@ -460,28 +486,28 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   const expiryOpts = MONTHLY_ONLY_CODES.has(leg.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
 
   return (
-    <div style={{ background: 'var(--bg)', boxShadow: isDragging ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', borderRadius: '12px', padding: '9px 10px', marginBottom: '6px', opacity: isDragging ? 0.7 : 1, transition: 'box-shadow 0.1s' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+    <div style={{ background: 'var(--bg)', boxShadow: isDragging ? 'var(--neu-inset)' : 'var(--neu-raised)', borderRadius: '16px', padding: '14px 16px', marginBottom: '10px', opacity: isDragging ? 0.7 : 1, transition: 'box-shadow 0.1s' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
         <span {...dragHandleProps} title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-dim)', fontSize: '13px', flexShrink: 0, padding: '0 2px', userSelect: 'none' }}>⠿</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', minWidth: '20px', textAlign: 'center' }}>L{leg.no}</span>
-        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
+        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
         <StaaxSelect value={leg.instCode} onChange={code => {
           const patch: Partial<Leg> = { instCode: code }
           if (MONTHLY_ONLY_CODES.has(code) && !leg.expiry.includes('monthly')) patch.expiry = 'current_monthly'
           onUpdate(leg.id, patch)
-        }} options={Object.entries(INST_CODES).map(([c, n]) => ({ value: c, label: c + (n ? '' : '') }))} width="68px" />
-        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: leg.direction === 'BUY' ? 'var(--sem-long)' : 'var(--sem-short)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
-        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '100px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
+        }} options={Object.entries(INST_CODES).map(([c, n]) => ({ value: c, label: c + (n ? '' : '') }))} width="68px" height="28px" borderRadius="6px" />
+        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: leg.direction === 'BUY' ? '#0ea66e' : 'var(--sem-short)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
+        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
-          <StaaxSelect value={leg.expiry} onChange={v => u('expiry', v)} options={expiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" />
-          <StaaxSelect value={leg.strikeMode} onChange={v => { u('strikeMode', v); if (v === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" />
-          {leg.strikeMode === 'leg' && <StaaxSelect value={leg.strikeType} onChange={v => u('strikeType', v)} options={STRIKE_OPTIONS.map(st => ({ value: st.toLowerCase(), label: st }))} width="70px" />}
+          <StaaxSelect value={leg.expiry} onChange={v => u('expiry', v)} options={expiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" height="28px" borderRadius="6px" />
+          <StaaxSelect value={leg.strikeMode} onChange={v => { u('strikeMode', v); if (v === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" height="28px" borderRadius="6px" />
+          {leg.strikeMode === 'leg' && <StaaxSelect value={leg.strikeType} onChange={v => u('strikeType', v)} options={STRIKE_OPTIONS.map(st => ({ value: st.toLowerCase(), label: st }))} width="70px" height="28px" borderRadius="6px" />}
           {leg.strikeMode === 'premium' && <input value={leg.premiumVal} onChange={e => u('premiumVal', e.target.value)} placeholder="₹ premium" style={{ ...sInp, width: '82px' }} />}
-          {leg.strikeMode === 'straddle' && <StaaxSelect value={leg.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" />}
+          {leg.strikeMode === 'straddle' && <StaaxSelect value={leg.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" height="28px" borderRadius="6px" />}
         </>}
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: 'var(--text)' }} />
         <span style={{ color: 'var(--border)', fontSize: '14px', flexShrink: 0 }}>|</span>
-        {FEATURES.map(f => {
+        {FEATURES.filter(f => ['sl','tsl','tp','ttp'].includes(f.key)).map(f => {
           const slHasValue = !!(leg.vals.sl as any)?.value
           const tpHasValue = !!(leg.vals.tp as any)?.value
           const blocked = (f.key === 'tsl' && (!leg.active['sl'] || !slHasValue)) || (f.key === 'ttp' && (!leg.active['tp'] || !tpHasValue))
@@ -492,14 +518,23 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
               if (f.key === 'sl' && leg.active['sl']) newActive['tsl'] = false
               if (f.key === 'tp' && leg.active['tp']) newActive['ttp'] = false
               onUpdate(leg.id, { active: newActive })
-            }} style={{ height: '28px', padding: '0 11px', borderRadius: '13px', fontSize: '11px', fontWeight: 600, cursor: blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: 'var(--bg)', boxShadow: leg.active[f.key] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.active[f.key] ? f.color : blocked ? 'var(--text-mute)' : 'var(--text-dim)', opacity: blocked ? 0.4 : 1 }}>
+            }} style={{ height: '28px', padding: '0 11px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: blocked ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: 'var(--bg)', boxShadow: leg.active[f.key] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.active[f.key] ? f.color : blocked ? 'var(--text-mute)' : 'var(--text-dim)', opacity: blocked ? 0.4 : 1 }}>
               {f.label}
             </button>
           )
         })}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexShrink: 0 }}>
+        <span style={{ color: 'var(--border)', fontSize: '14px', flexShrink: 0 }}>|</span>
+        {FEATURES.filter(f => ['wt','reentry'].includes(f.key)).map(f => (
+          <button key={f.key} onClick={() => {
+            const newActive = { ...leg.active, [f.key]: !leg.active[f.key] }
+            onUpdate(leg.id, { active: newActive })
+          }} style={{ height: '28px', padding: '0 11px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: 'var(--bg)', boxShadow: leg.active[f.key] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.active[f.key] ? f.color : 'var(--text-dim)' }}>
+            {f.label}
+          </button>
+        ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexShrink: 0 }}>
           <button onClick={() => onCopy(leg.id)} title="Copy leg"
-            style={{ height: '28px', width: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: 'var(--text-dim)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms ease', flexShrink: 0 }}
+            style={{ height: '28px', width: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: 'var(--text-dim)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms ease', flexShrink: 0 }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)' }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)' }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -507,7 +542,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
               <path d="M2.333 9.917H1.75A.583.583 0 011.167 9.333V1.75A.583.583 0 011.75 1.167h7.583a.583.583 0 01.584.583v.583" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
           </button>
-          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: '#FF4444', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: '#FF4444', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
       {entryType === 'orb' && (
@@ -516,7 +551,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           {(['high','low'] as const).map(ea => (
             <button key={ea} type="button"
               onClick={() => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...leg.vals.orb, entryAt: ea } } })}
-              style={{ height: '24px', padding: '0 8px', borderRadius: '100px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: leg.vals.orb.entryAt === ea ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.vals.orb.entryAt === ea ? 'var(--accent)' : 'var(--text-dim)' }}>
+              style={{ height: '28px', padding: '0 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: leg.vals.orb.entryAt === ea ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.vals.orb.entryAt === ea ? 'var(--accent)' : 'var(--text-dim)' }}>
               {ea === 'high' ? 'ORB High (BUY)' : 'ORB Low (SELL)'}
             </button>
           ))}
@@ -535,7 +570,6 @@ function SubSection({ title }: { title: string }) {
       textTransform: 'uppercase', letterSpacing: '1.5px',
       marginBottom: '10px', marginTop: '6px', paddingBottom: '6px',
       borderBottom: '1px solid var(--border)',
-      borderLeft: '2px solid var(--accent)', paddingLeft: '10px',
     }}>{title}</div>
   )
 }
@@ -551,7 +585,7 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
     return `${String(hh).padStart(2,'0')}:${m || '00'}:${s || '00'}`
   }
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '8px', height: '32px', padding: '0 7px', boxSizing: 'border-box' }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', height: '28px', padding: '0 7px', boxSizing: 'border-box' }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.7 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 12"/></svg>
       <input
         type="time"
@@ -903,7 +937,7 @@ export default function AlgoPage() {
         tp_type: j.tp_enabled ? j.tp_type : undefined, tp_value: j.tp_enabled ? parseFloat(j.tp_value) || undefined : undefined,
         tsl_enabled: j.tsl_enabled, tsl_x: parseFloat(j.tsl_x) || undefined, tsl_y: parseFloat(j.tsl_y) || undefined, tsl_unit: j.tsl_unit,
         ttp_enabled: j.ttp_enabled, ttp_x: parseFloat(j.ttp_x) || undefined, ttp_y: parseFloat(j.ttp_y) || undefined, ttp_unit: j.ttp_unit,
-        reentry_on_sl: !!j.re_sl_enabled, reentry_on_tp: !!j.re_tp_enabled, reentry_max: parseInt(j.re_count) || 0,
+        reentry_on_sl: j.re_enabled && j.reentry.onSl, reentry_on_tp: j.re_enabled && j.reentry.onTp, reentry_max: j.re_enabled ? (parseInt(j.reentry.maxSl) || 0) : 0, reentry_ltp_mode: j.reentry.ltpMode,
         journey_config: buildJourneyConfig(j.child, depth + 1),
       }
     }
@@ -962,7 +996,7 @@ export default function AlgoPage() {
         <div className="page-header">
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>{algoName || 'Edit Algo'}</h1>
           <div className="page-header-actions">
-            <button className="btn btn-ghost" onClick={() => navigate('/grid')}>← Back to Algos</button>
+            <button onClick={() => navigate('/grid')} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>← Back to Algos</button>
           </div>
         </div>
         <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '14px', padding: '20px 24px', textAlign: 'center', borderLeft: '3px solid #FF4444' }}>
@@ -979,7 +1013,7 @@ export default function AlgoPage() {
   }
 
   return (
-    <div className="algo-page" style={{ padding: '0 28px 24px' }}>
+    <div className="algo-page" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 24px' }}>
       <style>{`
         .staax-time-input::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
         .staax-time-input::-webkit-inner-spin-button { display: none !important; }
@@ -999,8 +1033,8 @@ export default function AlgoPage() {
           {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
           {saveError  && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveError}</span>}
-          <button className="btn btn-ghost" onClick={() => navigate('/grid')}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : (isEdit ? 'Update Algo' : 'Save Algo')}</button>
+          <button onClick={() => navigate('/grid')} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', border: 'none', background: 'var(--bg)', boxShadow: saving ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: '#0ea66e', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : (isEdit ? 'Update Algo' : 'Save Algo')}</button>
         </div>
       </div>
 
@@ -1024,7 +1058,7 @@ export default function AlgoPage() {
       )}
 
       {/* Identity card */}
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '16px', padding: '16px', marginBottom: '12px' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '20px', padding: '20px', marginBottom: '12px' }}>
         <SubSection title="Identity — Algo Level" />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 150px', maxWidth: '180px' }}>
@@ -1037,11 +1071,11 @@ export default function AlgoPage() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Strategy</label>
-            <StaaxSelect value={stratMode} onChange={setStratMode} options={[{ value: 'intraday', label: 'Intraday' }, { value: 'btst', label: 'BTST' }, { value: 'stbt', label: 'STBT' }, { value: 'positional', label: 'Positional' }]} width="118px" />
+            <StaaxSelect value={stratMode} onChange={setStratMode} options={[{ value: 'intraday', label: 'Intraday' }, { value: 'btst', label: 'BTST' }, { value: 'stbt', label: 'STBT' }, { value: 'positional', label: 'Positional' }]} width="118px" height="28px" borderRadius="6px" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: 'auto' }}>
             <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</label>
-            <StaaxSelect value={account} onChange={setAccount} options={accountOptions.map(a => ({ value: a.id, label: a.label }))} width="160px" />
+            <StaaxSelect value={account} onChange={setAccount} options={accountOptions.map(a => ({ value: a.id, label: a.label }))} width="160px" height="28px" borderRadius="6px" />
           </div>
         </div>
 
@@ -1054,8 +1088,8 @@ export default function AlgoPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Type</label>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={() => setEntryType('direct')} style={{ height: '32px', padding: '0 14px', borderRadius: '100px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'direct' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'direct' ? 'var(--accent)' : 'var(--text-dim)' }}>Direct</button>
-                  <button onClick={() => setEntryType('orb')}    style={{ height: '32px', padding: '0 14px', borderRadius: '100px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'orb' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'orb' ? 'var(--accent)' : 'var(--text-dim)' }}>ORB</button>
+                  <button onClick={() => setEntryType('direct')} style={{ height: '28px', padding: '0 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'direct' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'direct' ? 'var(--accent)' : 'var(--text-dim)' }}>Direct</button>
+                  <button onClick={() => setEntryType('orb')}    style={{ height: '28px', padding: '0 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'orb' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'orb' ? 'var(--accent)' : 'var(--text-dim)' }}>ORB</button>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1074,7 +1108,7 @@ export default function AlgoPage() {
                   <div style={{ display: 'flex', gap: '5px' }}>
                     {(['underlying','instrument'] as const).map(s => (
                       <button key={s} type="button" onClick={() => setOrbRangeSource(s)}
-                        style={{ height: '28px', padding: '0 10px', borderRadius: '100px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: orbRangeSource === s ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: orbRangeSource === s ? 'var(--accent)' : 'var(--text-dim)' }}>
+                        style={{ height: '28px', padding: '0 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: orbRangeSource === s ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: orbRangeSource === s ? 'var(--accent)' : 'var(--text-dim)' }}>
                         {s === 'underlying' ? 'Underlying' : 'Instrument'}
                       </button>
                     ))}
@@ -1094,7 +1128,7 @@ export default function AlgoPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DTE</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <StaaxSelect value={dte} onChange={setDte} options={Array.from({ length: 31 }, (_, n) => ({ value: String(n), label: String(n) }))} width="72px" />
+                    <StaaxSelect value={dte} onChange={setDte} options={Array.from({ length: 31 }, (_, n) => ({ value: String(n), label: String(n) }))} width="72px" height="28px" borderRadius="6px" />
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', maxWidth: '120px', lineHeight: 1.3 }}>
                       {dte === '0' ? 'Exit on expiry day' : `${dte} day${Number(dte) !== 1 ? 's' : ''} before expiry`}
                     </span>
@@ -1113,15 +1147,15 @@ export default function AlgoPage() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unit</label>
-                <StaaxSelect value={mtmUnit} onChange={setMtmUnit} options={[{ value: 'amt', label: '₹ Amount' }, { value: 'pct', label: '% Premium' }]} width="96px" />
+                <StaaxSelect value={mtmUnit} onChange={setMtmUnit} options={[{ value: 'amt', label: '₹ Amount' }, { value: 'pct', label: '% Premium' }]} width="96px" height="28px" borderRadius="6px" />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM SL</label>
-                <input value={mtmSL} onChange={e => setMtmSL(e.target.value)} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+                <input value={mtmSL} onChange={e => setMtmSL(e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) setMtmSL('1') }} type="number" min={1} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM TP</label>
-                <input value={mtmTP} onChange={e => setMtmTP(e.target.value)} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+                <input value={mtmTP} onChange={e => setMtmTP(e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) setMtmTP('1') }} type="number" min={1} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
               </div>
             </div>
           </div>
@@ -1129,38 +1163,37 @@ export default function AlgoPage() {
       </div>
 
       {/* Legs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', marginTop: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Legs</span>
-          <span style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '20px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--green)', fontWeight: 700 }}>SL · TP · TSL · TTP · W&T · RE · Journey per leg</span>
           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{legs.length} leg{legs.length > 1 ? 's' : ''}</span>
         </div>
-        <button className="btn btn-ghost" style={{ fontSize: '11px' }} onClick={addLeg}>+ Add Leg</button>
+        <button onClick={addLeg} title="Add Leg" style={{ height: '28px', width: '28px', borderRadius: '6px', fontSize: '16px', fontWeight: 400, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>+</button>
       </div>
       {legs.map((leg, i) => (
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
-          style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent)' : 'none', borderRadius: '12px' }}>
+          style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent)' : 'none', borderRadius: '16px' }}>
           <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} entryType={entryType} />
         </div>
       ))}
 
       {/* Delays + Errors */}
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '16px', padding: '16px', marginTop: '12px' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '20px', padding: '20px', marginTop: '12px' }}>
         <SubSection title="Order Delays — Algo Level" />
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           {/* F2 — Entry delay with BUY/SELL scope */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Entry Delay:</span>
             {/* Scope dropdown — BUY/SELL/All */}
-            <StaaxSelect value={entryDelayScope} onChange={setEntryDelayScope} options={[{ value: 'all', label: 'All legs' }, { value: 'buy', label: 'BUY legs' }, { value: 'sell', label: 'SELL legs' }]} width="90px" />
+            <StaaxSelect value={entryDelayScope} onChange={setEntryDelayScope} options={[{ value: 'all', label: 'All legs' }, { value: 'buy', label: 'BUY legs' }, { value: 'sell', label: 'SELL legs' }]} width="90px" height="28px" borderRadius="6px" />
             <input value={entryDelay} onChange={e => setEntryDelay(e.target.value)} type="number" min={0} max={60} className="staax-input" style={{ width: '60px', fontSize: '12px' }} />
             <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>s (max 60)</span>
           </div>
           {/* F2 — Exit delay with BUY/SELL scope */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap' }}>Exit Delay:</span>
-            <StaaxSelect value={exitDelayScope} onChange={setExitDelayScope} options={[{ value: 'all', label: 'All legs' }, { value: 'buy', label: 'BUY legs' }, { value: 'sell', label: 'SELL legs' }]} width="90px" />
+            <StaaxSelect value={exitDelayScope} onChange={setExitDelayScope} options={[{ value: 'all', label: 'All legs' }, { value: 'buy', label: 'BUY legs' }, { value: 'sell', label: 'SELL legs' }]} width="90px" height="28px" borderRadius="6px" />
             <input value={exitDelay} onChange={e => setExitDelay(e.target.value)} type="number" min={0} max={60} className="staax-input" style={{ width: '60px', fontSize: '12px' }} />
             <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>s (max 60)</span>
           </div>
@@ -1169,14 +1202,18 @@ export default function AlgoPage() {
         <div style={{ margin: '12px 0 10px', borderTop: '1px solid var(--border)' }} />
         <SubSection title="Error Settings — Algo Level" />
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }}>
-            <input type="checkbox" checked={errorMargin} onChange={e => setErrorMargin(e.target.checked)} style={{ accentColor: 'var(--red)' }} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }} onClick={() => setErrorMargin(v => !v)}>
+            <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: errorMargin ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {errorMargin && <div style={{ width: 8, height: 8, borderRadius: 1, background: 'var(--red)' }} />}
+            </div>
             On margin error, exit all open positions
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }}>
-            <input type="checkbox" checked={errorEntry} onChange={e => setErrorEntry(e.target.checked)} style={{ accentColor: 'var(--red)' }} />
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }} onClick={() => setErrorEntry(v => !v)}>
+            <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: errorEntry ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {errorEntry && <div style={{ width: 8, height: 8, borderRadius: 1, background: 'var(--red)' }} />}
+            </div>
             If any entry fails, exit all open positions
-          </label>
+          </span>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { algosAPI, ordersAPI, holidaysAPI, accountsAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
+import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -84,8 +85,8 @@ interface WaitingAlgo {
 }
 // ── Leg status chip colours ─────────────────────────────────────────────────
 const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
-  open:    { color: '#22DD88',              bg: 'rgba(34,221,136,0.12)'  },
-  closed:  { color: 'rgba(34,221,136,0.5)', bg: 'rgba(34,221,136,0.07)' },
+  open:    { color: '#0ea66e',  bg: 'rgba(34,221,136,0.12)'  },
+  closed:  { color: '#0ea66e', bg: 'rgba(34,221,136,0.10)' },
   error:   { color: '#FF4444',              bg: 'rgba(255,68,68,0.12)'   },
   pending: { color: '#FF8C00',              bg: 'rgba(255,140,0,0.12)'   },
   waiting: { color: '#F59E0B',              bg: 'rgba(245,158,11,0.12)'  },
@@ -93,25 +94,25 @@ const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
 
 // ── Algo-level status chip ──────────────────────────────────────────────────
 const ALGO_STATUS_CHIP: Record<AlgoStatus, { color: string; bg: string; label: string }> = {
-  open:     { color: '#22DD88',               bg: 'rgba(34,221,136,0.12)',   label: 'OPEN'     },
-  closed:   { color: 'rgba(34,221,136,0.5)',  bg: 'rgba(34,221,136,0.07)',   label: 'CLOSED'   },
-  error:    { color: '#FF4444',               bg: 'rgba(255,68,68,0.12)',    label: 'ERROR'    },
-  pending:  { color: '#FF8C00',               bg: 'rgba(255,140,0,0.12)',    label: 'PENDING'  },
-  waiting:  { color: '#FFD700',               bg: 'rgba(255,215,0,0.12)',    label: 'WAITING'  },
-  no_trade: { color: 'rgba(255,255,255,0.2)', bg: 'rgba(255,255,255,0.04)', label: 'NO TRADE' },
+  open:     { color: '#0ea66e', bg: 'rgba(34,221,136,0.12)',  label: 'OPEN'     },
+  closed:   { color: '#0ea66e', bg: 'rgba(34,221,136,0.10)',  label: 'CLOSED'   },
+  error:    { color: '#FF4444', bg: 'rgba(255,68,68,0.12)',   label: 'ERROR'    },
+  pending:  { color: '#FF8C00', bg: 'rgba(255,140,0,0.12)',   label: 'PENDING'  },
+  waiting:  { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: 'WAITING'  },
+  no_trade: { color: 'var(--text-dim)', bg: 'transparent',    label: 'NO TRADE' },
 }
 
 // ── Algo card left status strip ─────────────────────────────────────────────
 const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
-  open:     { color: '#00FF88',               glow: 'rgba(0,255,136,0.70)'   },
-  closed:   { color: 'rgba(0,255,136,0.45)',  glow: 'rgba(0,255,136,0.30)'   },
+  open:     { color: '#0ea66e',               glow: 'rgba(14,166,110,0.70)'  },
+  closed:   { color: 'rgba(14,166,110,0.60)', glow: 'rgba(14,166,110,0.40)'  },
   error:    { color: '#FF2244',               glow: 'rgba(255,34,68,0.70)'   },
   pending:  { color: '#FF8C00',               glow: 'rgba(255,140,0,0.65)'   },
-  waiting:  { color: '#FFE600',               glow: 'rgba(255,230,0,0.70)'   },
-  no_trade: { color: 'rgba(255,255,255,0.20)', glow: 'transparent'            },
+  waiting:  { color: '#D97706',               glow: 'rgba(217,119,6,0.65)'   },
+  no_trade: { color: 'var(--border)',          glow: 'transparent'            },
 }
 
-const COLS = ['36px','66px','174px','66px','140px','68px','76px','58px','88px','90px','82px']
+const COLS = ['36px','66px','158px','50px','120px','66px','72px','54px','84px','74px','120px']
 const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L']
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -246,8 +247,8 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
       </td>
       <td style={{ width: COLS[1], ...C }}>
         {isWtWaiting
-          ? <span className="tag" style={{ color: '#F59E0B', background: 'rgba(245,158,11,0.12)', fontSize: '10px' }}>W&amp;T</span>
-          : <span className="tag" style={{ color: st.color, background: st.bg, fontSize: '10px' }}>{leg.status.toUpperCase()}</span>
+          ? <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: '#D97706', fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>W&amp;T</span>
+          : <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         }
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
@@ -269,7 +270,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
           </div>
         ) : isOrbAlgo && leg.status === 'waiting' && orbHigh && orbLow ? (
           <div style={{ fontSize: '10px', textAlign: 'center' }}>
-            <div style={{ color: '#22DD88', fontWeight: 600 }}>H: {orbHigh.toFixed(0)}</div>
+            <div style={{ color: '#0ea66e', fontWeight: 600 }}>H: {orbHigh.toFixed(0)}</div>
             <div style={{ color: '#FF4444', fontWeight: 600 }}>L: {orbLow.toFixed(0)}</div>
             <div style={{ color: 'var(--text-dim)', fontSize: '9px' }}>Range: {(orbHigh - orbLow).toFixed(0)}pts</div>
           </div>
@@ -277,16 +278,12 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
           <div style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'center' }}>ORB window...</div>
         ) : (
           <>
-            {leg.fillPrice != null
-              ? <div style={{ fontWeight: 600 }}>Fill: ₹{leg.fillPrice}{leg.fillTime && <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '5px', fontSize: '10px' }}>{leg.fillTime}</span>}</div>
-              : <div style={{ color: 'var(--text-dim)' }}>Fill: —</div>}
-            {leg.entryReference != null && (
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                Ref: ₹{leg.entryReference.toFixed(2)}
-              </span>
-            )}
-            {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice} · {leg.entryCondition}</div>}
-            {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
+            {leg.fillPrice != null ? (
+              <div>
+                <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)', display: 'inline-block' }}>₹{leg.fillPrice}</div>
+                {leg.fillTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>{leg.fillTime}</div>}
+              </div>
+            ) : <div style={{ color: 'var(--text-dim)' }}>—</div>}
             {isOrbAlgo && orbHigh && orbLow && leg.status === 'open' && (
               <div style={{ color: 'var(--text-dim)', fontSize: '9px' }}>ORB H:{orbHigh.toFixed(0)} L:{orbLow.toFixed(0)}</div>
             )}
@@ -294,12 +291,12 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         )}
       </td>
       <td style={{ width: COLS[5], ...C, fontWeight: 600, color: isWtWaiting
-        ? (wtTrigger != null && ltp != null ? (wtTriggered ? '#22DD88' : '#06B6D4') : 'var(--text-muted)')
+        ? (wtTrigger != null && ltp != null ? (wtTriggered ? '#0ea66e' : '#06B6D4') : 'var(--text-muted)')
         : (ltp != null && leg.fillPrice != null ? (ltp > leg.fillPrice ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)') }}>
         {ltp != null ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
             {hasLivePoll ? (
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22DD88', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#0ea66e', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
             ) : (
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', border: '1px solid #666', flexShrink: 0 }} />
             )}
@@ -525,7 +522,7 @@ function SmoothedSparkline({ algoId, legs, totalPnl }: { algoId: string; legs: L
 
   const lastX = coords[coords.length - 1].x
   const lastY = coords[coords.length - 1].y
-  const lineColor = totalPnl >= 0 ? '#22DD88' : '#FF4444'
+  const lineColor = totalPnl >= 0 ? '#0ea66e' : '#FF4444'
   const gradId = `sg-${algoId.replace(/[^a-z0-9]/gi, '')}`
   const fillD = `${d} L${lastX.toFixed(1)},${H} L${PAD},${H} Z`
 
@@ -1125,39 +1122,47 @@ export default function OrdersPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
 
       {/* ── Fixed zone ── */}
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, padding: '0 28px' }}>
 
         {/* Page header */}
         <div className="page-header">
           <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>Orders</h1>
-            <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>Orders</h1>
+            <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
           </div>
-          <div className="page-header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="page-header-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             {/* Week navigation */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: 8 }}>
               <button
                 onClick={() => setWeekOffset(o => o - 1)}
-                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
+                style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 title="Previous week"
-              >‹</button>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', minWidth: '110px', textAlign: 'center' as const }}>
-                Week of {weekLabel}
+                onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+              ><CaretLeft size={13} /></button>
+              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '0 20px', height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' as const, minWidth: 130 }}>
+                {weekLabel}
               </span>
               <button
                 onClick={() => setWeekOffset(o => Math.min(0, o + 1))}
                 disabled={weekOffset === 0}
-                style={{ background: 'none', border: 'none', color: weekOffset === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.4)', cursor: weekOffset === 0 ? 'default' : 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1 }}
+                style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: weekOffset === 0 ? 'default' : 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: weekOffset === 0 ? 'var(--text-mute)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: weekOffset === 0 ? 0.4 : 1, flexShrink: 0 }}
                 title="Next week"
-              >›</button>
+                onMouseDown={e => { if (weekOffset !== 0) e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+              ><CaretRight size={13} /></button>
             </div>
             {statusFilter !== null && (
               <button
-                className="btn btn-ghost"
-                style={{ height: '32px', fontSize: '11px', padding: '0 10px' }}
+                style={{ height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)' }}
                 onClick={() => { setStatusFilter(null); try { sessionStorage.removeItem('staax_status_filter') } catch {} }}
+                onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
               >
-                ✕ Reset Filter
+                Reset Filter
               </button>
             )}
             <StaaxSelect
@@ -1184,7 +1189,7 @@ export default function OrdersPage() {
           const errorCount       = safeWaiting.filter(isWaitingError).length
           const waitingCount     = safeWaiting.filter(w => !w.is_missed && !isWaitingError(w)).length
 
-          const valStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)' }
+          const valStyle: React.CSSProperties = { fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-mono)', lineHeight: 1 }
 
           const toggleFilter = (f: string) => {
             const next = statusFilter === f ? null : f
@@ -1192,48 +1197,45 @@ export default function OrdersPage() {
             try { if (next) sessionStorage.setItem('staax_status_filter', next); else sessionStorage.removeItem('staax_status_filter') } catch {}
           }
 
-          // active filter card gets a neon border override; inactive is plain card cloud-fill
-          const filterActiveStyle: React.CSSProperties = { borderColor: 'rgba(255,107,0,0.55)', background: 'rgba(255,107,0,0.10)' }
+          const kpiCard = (filter: string | null, _label: string, _value: number, _valColor: string): React.CSSProperties => ({
+            flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', borderRadius: 12,
+            background: 'var(--bg)',
+            boxShadow: statusFilter === filter ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+            border: statusFilter === filter ? '1px solid var(--border-accent)' : '1px solid transparent',
+            transition: 'box-shadow 0.15s',
+          })
+          void kpiCard
 
           return (
             <div style={{ padding: '8px 0 6px' }}>
-              {/* Filter chips */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'open' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('open')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Open Algos</div>
-                  <div style={{ ...valStyle, color: openAlgosCount > 0 ? '#22DD88' : 'var(--text-dim)' }}>{openAlgosCount}</div>
-                </div>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'closed' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('closed')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Closed Algos</div>
-                  <div style={{ ...valStyle, color: closedAlgosCount > 0 ? 'rgba(34,221,136,0.6)' : 'var(--text-dim)' }}>{closedAlgosCount}</div>
-                </div>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'open' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('open')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Open Pos</div>
-                  <div style={{ ...valStyle, color: openLegsCount > 0 ? '#22DD88' : 'var(--text-dim)' }}>{openLegsCount}</div>
-                </div>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'closed' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('closed')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Closed Pos</div>
-                  <div style={{ ...valStyle, color: closedLegsCount > 0 ? 'rgba(34,221,136,0.6)' : 'var(--text-dim)' }}>{closedLegsCount}</div>
-                </div>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'missed' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('missed')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Missed</div>
-                  <div style={{ ...valStyle, color: missedCount > 0 ? '#F59E0B' : 'var(--text-dim)' }}>{missedCount}</div>
-                </div>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'error' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('error')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Error</div>
-                  <div style={{ ...valStyle, color: errorCount > 0 ? '#FF4444' : 'var(--text-dim)' }}>{errorCount}</div>
-                </div>
-                <div className="card cloud-fill" style={{ flex: 1, minWidth: 0, padding: '8px 12px', cursor: 'pointer', ...(statusFilter === 'waiting' ? filterActiveStyle : {}) }} onClick={() => toggleFilter('waiting')}>
-                  <div className="card-label" style={{ marginBottom: 4 }}>Waiting</div>
-                  <div style={{ ...valStyle, color: waitingCount > 0 ? '#FFD700' : 'var(--text-dim)' }}>{waitingCount}</div>
-                </div>
+                {[
+                  { f: 'open',    label: 'Open Algos',   val: openAlgosCount,   color: openAlgosCount   > 0 ? '#0ea66e' : 'var(--text-mute)' },
+                  { f: 'closed',  label: 'Closed Algos', val: closedAlgosCount, color: closedAlgosCount > 0 ? '#0ea66e' : 'var(--text-mute)' },
+                  { f: 'open',    label: 'Open Pos',     val: openLegsCount,    color: openLegsCount    > 0 ? '#0ea66e' : 'var(--text-mute)' },
+                  { f: 'closed',  label: 'Closed Pos',   val: closedLegsCount,  color: closedLegsCount  > 0 ? '#0ea66e' : 'var(--text-mute)' },
+                  { f: 'missed',  label: 'Missed',       val: missedCount,      color: missedCount      > 0 ? '#E08000' : 'var(--text-mute)' },
+                  { f: 'error',   label: 'Error',        val: errorCount,       color: errorCount       > 0 ? '#E03030' : 'var(--text-mute)' },
+                  { f: 'waiting', label: 'Waiting',      val: waitingCount,     color: waitingCount     > 0 ? '#C8A000' : 'var(--text-mute)' },
+                ].map(({ f, label, val, color }) => (
+                  <div key={label} onClick={() => toggleFilter(f)}
+                    style={{
+                      flex: 1, minWidth: 0, padding: '10px 16px', cursor: 'pointer', borderRadius: 12,
+                      background: 'var(--bg)',
+                      boxShadow: statusFilter === f ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                      transition: 'box-shadow 0.15s',
+                    }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase' as const, color: 'var(--text-dim)', marginBottom: 4 }}>{label}</div>
+                    <div style={{ ...valStyle, color }}>{val}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )
         })()}
 
-        {/* Date navigation + MTM summary bar */}
-        <div style={{ borderBottom: '0.5px solid var(--ox-border)', borderTop: '0.5px solid var(--ox-border)', marginTop: 12 }}>
+        {/* Date navigation + MTM summary bar — breaks out of 28px padding to go edge-to-edge */}
+        <div style={{ borderBottom: '0.5px solid var(--border)', borderTop: '0.5px solid var(--border)', marginTop: 12, margin: '12px -24px 0', padding: '0 24px' }}>
           {/* Day tabs — full width */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0' }}>
             <div style={{ display: 'flex', flex: 1 }}>
@@ -1249,10 +1251,10 @@ export default function OrdersPage() {
                     onClick={() => date && setSelectedDate(date)}
                     style={{
                       flex: 1, padding: '12px 0', textAlign: 'center' as const,
-                      background: isActive ? 'rgba(255,107,0,0.08)' : 'transparent',
+                      background: isActive ? 'var(--bg)' : 'transparent',
                       border: 'none',
-                      borderBottom: isActive ? '2px solid #FF6B00' : '2px solid transparent',
-                      color: isActive ? '#FF6B00' : 'rgba(255,255,255,0.4)',
+                      borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+                      color: isActive ? 'var(--accent)' : 'var(--text-dim)',
                       fontFamily: 'var(--font-display)', fontSize: '12px', fontWeight: 600,
                       cursor: 'pointer', transition: 'all 0.15s ease',
                       display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px',
@@ -1268,7 +1270,7 @@ export default function OrdersPage() {
                         {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
                       </span>
                     ) : (
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>—</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-mute)' }}>—</span>
                     )}
                   </button>
                 )
@@ -1280,9 +1282,10 @@ export default function OrdersPage() {
                 padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
                 fontSize: 11, fontFamily: 'var(--font-display)',
                 marginLeft: 12, flexShrink: 0,
-                background: showWeekends ? 'rgba(255,107,0,0.15)' : 'transparent',
-                border: showWeekends ? '0.5px solid rgba(255,107,0,0.5)' : '0.5px solid rgba(255,255,255,0.15)',
-                color: showWeekends ? '#FF6B00' : 'rgba(255,255,255,0.4)',
+                background: 'var(--bg)',
+                boxShadow: showWeekends ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                border: 'none',
+                color: showWeekends ? 'var(--accent)' : 'var(--text-dim)',
                 whiteSpace: 'nowrap' as const, userSelect: 'none' as const,
                 transition: 'all 0.15s ease',
               }}
@@ -1293,8 +1296,7 @@ export default function OrdersPage() {
       </div>{/* end fixed zone */}
 
       {/* ── Scroll zone ── */}
-      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto' }}>
-        <div style={{ height: '6px' }} />
+      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '6px 28px 24px' }}>
 
         {/* Live MTM wired to header — strip removed */}
 
@@ -1331,7 +1333,7 @@ export default function OrdersPage() {
 
               // Card accent colours — red for ERROR, amber for WAITING/MISSED
               const legStatusChip = isMissed
-                ? { label: 'MISSED',  color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' }
+                ? { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' }
                 : w.display_status === 'MONITORING'
                 ? { label: 'W&T',     color: '#2dd4bf',               bg: 'rgba(45,212,191,0.10)'  }
                 : w.display_status === 'SCHEDULED'
@@ -1391,12 +1393,12 @@ export default function OrdersPage() {
               const isOrbRetryBlocked = isOrbWindowPast || (isOrbAlgo && isMissed)
               const canRetry  = !isRetrying && !isOrbRetryBlocked
               const retryLabel = isOrbRetryBlocked ? 'ORB ✕' : 'RETRY'
-              const retryCol   = isOrbRetryBlocked ? 'rgba(255,255,255,0.2)' : '#F59E0B'
-              const retryBg    = isOrbRetryBlocked ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.05)'
-              const retryHBg   = isOrbRetryBlocked ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.14)'
+              const retryCol   = isOrbRetryBlocked ? 'var(--text-mute)' : '#F59E0B'
+              const retryBg    = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.05)'
+              const retryHBg   = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.14)'
               const missedBtns = [
                 { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
-                { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
+                { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
                 { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true, action: undefined },
                 { label: retryLabel, col: retryCol, bg: retryBg, hBg: retryHBg, border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
                 { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, action: undefined },
@@ -1405,14 +1407,13 @@ export default function OrdersPage() {
               return (
                 <div key={w.grid_entry_id}
                   style={{
-                    borderRadius: '20px', overflow: 'hidden', marginBottom: 12,
-                    background: 'var(--bg-surface)',
+                    borderRadius: '20px', overflow: 'hidden', marginBottom: 14,
+                    background: 'var(--bg)',
                     boxShadow: 'var(--neu-raised)',
-                    border: '1px solid var(--border)',
                   }}>
 
                   {/* ── Card header ── */}
-                  <div style={{ background: 'var(--bg-surface)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch' }}>
 
                     {/* Left status strip */}
                     <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: stripBg, boxShadow: `0 0 8px ${stripGlow}, 0 0 20px ${stripGlow}` }}/>
@@ -1430,7 +1431,7 @@ export default function OrdersPage() {
 
                         {/* Account pill */}
                         {w.account_name && (
-                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', whiteSpace: 'nowrap' as const }}>
+                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--text-dim)', whiteSpace: 'nowrap' as const }}>
                             {w.account_name}
                           </span>
                         )}
@@ -1439,14 +1440,14 @@ export default function OrdersPage() {
                         {(() => {
                           const ds = w.display_status || (isError ? 'ERROR' : isMissed ? 'MISSED' : 'WAITING')
                           const chipStyles: Record<string, { color: string; bg: string; label: string }> = {
-                            MONITORING: { color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)', label: 'MONITORING' },
-                            SCHEDULED:  { color: '#4488FF', bg: 'rgba(68,136,255,0.12)', label: '⏰ SCHEDULED'  },
-                            WAITING:    { color: '#FFD700', bg: 'rgba(255,215,0,0.12)',  label: '⏳ WAITING'    },
-                            MISSED:     { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', label: '⏭ MISSED'     },
-                            ERROR:      { color: '#FF4444', bg: 'rgba(255,68,68,0.12)',  label: '⛔ ERROR'      },
+                            MONITORING: { color: '#0EA5A0', bg: 'rgba(14,165,160,0.12)', label: 'MONITORING' },
+                            SCHEDULED:  { color: '#3B82F6', bg: 'rgba(59,130,246,0.12)', label: '⏰ SCHEDULED'  },
+                            WAITING:    { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: '⏳ WAITING'    },
+                            MISSED:     { color: '#C2610C', bg: 'rgba(194,97,12,0.12)',   label: '⏭ MISSED'     },
+                            ERROR:      { color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   label: '⛔ ERROR'      },
                           }
                           const c = chipStyles[ds] || chipStyles['WAITING']
-                          return <span className="tag" style={{ color: c.color, background: c.bg, fontSize: '10px', whiteSpace: 'nowrap' as const }}>{c.label}</span>
+                          return <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
                         })()}
 
                         {/* Retrying badge — shown while polling for result */}
@@ -1486,7 +1487,7 @@ export default function OrdersPage() {
                             </span>
                           )}
                           {isOrbWindowPast && (
-                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-mute)', fontStyle: 'italic' }}>
                               ORB window passed ({w.orb_end_time}) — RETRY disabled
                             </span>
                           )}
@@ -1503,24 +1504,29 @@ export default function OrdersPage() {
                       )}
                     </div>
 
-                    {/* ── Tall action buttons ── */}
-                    <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '1px solid var(--border)' }}>
+                    {/* ── Action buttons ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
                       {missedBtns.map((btn, bi) => (
                         <button key={bi}
                           disabled={btn.disabled}
                           onClick={btn.action}
                           style={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            gap: 4, padding: '0 14px', background: 'transparent', border: 'none',
-                            borderRight: '1px solid var(--border)',
-                            cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                            color: btn.col, minWidth: 52, transition: 'all 150ms',
-                            opacity: btn.disabled ? 0.3 : 1,
-                            pointerEvents: btn.disabled ? 'none' : 'auto',
+                            height: 28, padding: '0 10px', borderRadius: 100, border: 'none',
+                            background: 'var(--bg)',
+                            boxShadow: 'var(--neu-raised-sm)',
+                            fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
+                            color: btn.col,
+                            cursor: btn.disabled ? 'default' : 'pointer',
+                            opacity: btn.disabled ? 0.38 : 1,
+                            letterSpacing: '0.5px',
+                            transition: 'box-shadow 0.12s',
+                            whiteSpace: 'nowrap' as const,
                           }}
-                          onMouseEnter={e => { if (!btn.disabled) e.currentTarget.style.background = btn.hBg }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
-                          <span style={{ fontSize: 9, letterSpacing: '0.5px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{btn.label}</span>
+                          onMouseDown={e => { if (!btn.disabled) e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                          onMouseUp={e => { if (!btn.disabled) e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                          onMouseLeave={e => { if (!btn.disabled) e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                        >
+                          {btn.label}
                         </button>
                       ))}
                     </div>
@@ -1535,7 +1541,7 @@ export default function OrdersPage() {
                         <thead>
                           <tr>
                             {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
-                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-dim)', fontWeight: 600, padding: '8px 6px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
+                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-dim)', fontWeight: 600, padding: '8px 20px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1629,7 +1635,7 @@ export default function OrdersPage() {
               </div>
 
               {!isCollapsed && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '4px' }}>
                   {groupAlgos.map(group => {
                     // gi = global index into safeOrders[] — needed by all action handlers
                     const gi       = safeOrders.findIndex(g => g.algoId === group.algoId)
@@ -1674,7 +1680,7 @@ export default function OrdersPage() {
                     const retryBtnBg    = isRetrying ? 'rgba(6,182,212,0.06)' : (canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)')
                     const BTNS = [
                       { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs, title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs, title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
                       { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!canRetry ? 'Available when algo is in error or missed state' : undefined)), action: doSmartRetry },
                       { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
@@ -1683,10 +1689,10 @@ export default function OrdersPage() {
                     return (
                       <div key={group.algoId}
                         id={`algo-card-${group.algoId}`}
-                        style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '20px', overflow: 'hidden', background: 'var(--bg-surface)', boxShadow: 'var(--neu-raised)', border: '1px solid var(--border)' }}>
+                        style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '20px', overflow: 'hidden', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', marginBottom: 14 }}>
 
                         {/* ── Algo card header ── */}
-                        <div style={{ background: 'var(--bg-surface)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch' }}>
 
                           {/* Status strip */}
                           <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: bar.color, boxShadow: `0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
@@ -1704,7 +1710,7 @@ export default function OrdersPage() {
                             </span>
 
                             {/* Account pill */}
-                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
                               {group.account || '—'}
                             </span>
 
@@ -1714,7 +1720,7 @@ export default function OrdersPage() {
                                 ↻ Pending...
                               </span>
                             ) : (
-                              <span className="tag" style={{ color: chip.color, background: chip.bg, fontSize: '10px', whiteSpace: 'nowrap' }}>
+                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
                                 {chip.label}
                               </span>
                             )}
@@ -1785,25 +1791,30 @@ export default function OrdersPage() {
                             </div>
                           </div>
 
-                          {/* ── Tall action buttons ── */}
-                          <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '1px solid var(--border)' }}>
+                          {/* ── Action buttons ── */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
                             {BTNS.map((btn, bi) => (
                               <button key={bi}
                                 disabled={btn.disabled}
                                 title={btn.title}
                                 onClick={btn.action}
                                 style={{
-                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                  gap: 4, padding: '0 14px', background: 'transparent', border: 'none',
-                                  borderRight: '1px solid var(--border)',
+                                  height: 28, padding: '0 10px', borderRadius: 100, border: 'none',
+                                  background: 'var(--bg)',
+                                  boxShadow: btn.disabled ? 'none' : 'var(--neu-raised-sm)',
+                                  fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
+                                  color: btn.disabled ? 'var(--text-mute)' : btn.col,
                                   cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                                  color: btn.col, minWidth: 52, transition: 'all 150ms',
-                                  opacity: btn.disabled ? 0.3 : 1,
-                                  pointerEvents: btn.disabled ? 'none' : 'auto',
+                                  opacity: btn.disabled ? 0.35 : 1,
+                                  letterSpacing: '0.5px',
+                                  transition: 'box-shadow 0.12s',
+                                  whiteSpace: 'nowrap' as const,
                                 }}
-                                onMouseEnter={e => { if (!btn.disabled) e.currentTarget.style.background = btn.hBg }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
-                                <span style={{ fontSize: 9, letterSpacing: '0.5px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{btn.label}</span>
+                                onMouseDown={e => { if (!btn.disabled) e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                                onMouseUp={e => { if (!btn.disabled) e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                                onMouseLeave={e => { if (!btn.disabled) e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                              >
+                                {btn.label}
                               </button>
                             ))}
                           </div>
@@ -1824,15 +1835,13 @@ export default function OrdersPage() {
                         )}
 
                         {/* ── Legs table ── */}
-                        <div style={{ overflow: 'visible' }}>
-                          <div style={{ overflow: 'visible' }}>
-                            <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+                        <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
                             <table className="staax-table">
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                               <thead>
                                 <tr>
-                                  {HDRS.map(h => (
-                                    <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center', background: 'var(--bg)' }}>{h}</th>
+                                  {HDRS.map((h, hi) => (
+                                    <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center', background: 'var(--bg)', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', paddingLeft: hi === 0 ? 20 : undefined, paddingRight: hi === HDRS.length - 1 ? 20 : undefined }}>{h}</th>
                                   ))}
                                 </tr>
                               </thead>
@@ -1859,8 +1868,6 @@ export default function OrdersPage() {
                                 })}
                               </tbody>
                             </table>
-                            </div>
-                          </div>
                         </div>
 
                       </div>
