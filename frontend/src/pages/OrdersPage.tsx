@@ -557,6 +557,7 @@ export default function OrdersPage() {
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
   const [retryModal, setRetryModal] = useState<{ algoIdx: number; legs: Leg[] } | null>(null)
   const [retryChecked, setRetryChecked] = useState<Record<string, boolean>>({})
+  const [retryingIds, setRetryingIds]   = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<string | null>(() => {
     try { return sessionStorage.getItem('staax_status_filter') ?? null } catch { return null }
   })
@@ -717,29 +718,90 @@ export default function OrdersPage() {
     const gridEntryId = safeOrders[idx]?.gridEntryId
     if (!gridEntryId) return
     const dateAtCall = selectedDateRef.current
+
+    // 1. Optimistic UI — mark as retrying
+    setRetryingIds(prev => new Set(prev).add(gridEntryId))
     setLoading(l => ({ ...l, [`retry-${idx}`]: true }))
-    setInlineStatus(setOrdersByDate, dateAtCall, idx, '↻ Running...', 'var(--accent-amber)', 30000)
+    setInlineStatus(setOrdersByDate, dateAtCall, idx, '↻ Retrying...', 'var(--accent-amber)', 30000)
+
+    // 2. Fire retry API call
     try {
       await ordersAPI.retryEntry(gridEntryId)
-      // Wait for backend to process before refreshing
-      await new Promise(r => setTimeout(r, 800))
-      setInlineStatus(setOrdersByDate, dateAtCall, idx, '✅ Done', 'var(--green)', 3000)
-      ordersAPI.list(dateAtCall, isPractixMode)
-        .then(r => {
-          if (selectedDateRef.current !== dateAtCall) return
-          const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
-          setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
-        })
-        .catch(() => {})
-      ordersAPI.waiting(dateAtCall, isPractixMode)
-        .then(res => { if (selectedDateRef.current === dateAtCall) setWaitingByDate(prev => ({ ...prev, [dateAtCall]: res.data?.waiting || [] })) })
-        .catch(() => {})
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
       setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
-    } finally {
+      setRetryingIds(prev => { const s = new Set(prev); s.delete(gridEntryId); return s })
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
+      return
     }
+
+    // 3. Extended poll — 10 attempts × 2s = 20s window
+    // APScheduler has ~2s delay, so ERROR before 6 attempts (12s) is treated as transient
+    let attempts = 0
+    const refetchAndClear = async (statusMsg: string, statusColor: string) => {
+      try {
+        const [_wRes, _oRes] = await Promise.all([
+          ordersAPI.waiting(dateAtCall, isPractixMode).catch(() => null),
+          ordersAPI.list(dateAtCall, isPractixMode).catch(() => null),
+        ])
+        if (selectedDateRef.current === dateAtCall) {
+          if (_wRes) setWaitingByDate(prev => ({ ...prev, [dateAtCall]: _wRes.data?.waiting || [] }))
+          if (_oRes) {
+            const raw: any[] = Array.isArray(_oRes.data) ? [] : (_oRes.data?.groups || [])
+            setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
+          }
+        }
+      } catch { /* ignore refetch errors */ }
+      setRetryingIds(prev => { const s = new Set(prev); s.delete(gridEntryId); return s })
+      setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, statusMsg, statusColor, 3000)
+      setTimeout(() => {
+        document.getElementById(`algo-card-${safeOrders[idx]?.algoId}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
+    }
+
+    const pollInterval = setInterval(async () => {
+      attempts++
+      try {
+        if (selectedDateRef.current !== dateAtCall) {
+          clearInterval(pollInterval)
+          setRetryingIds(prev => { const s = new Set(prev); s.delete(gridEntryId); return s })
+          setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
+          return
+        }
+        const res = await ordersAPI.list(dateAtCall, isPractixMode)
+        const raw: any[] = Array.isArray(res.data) ? [] : (res.data?.groups || [])
+        const updatedGroup = raw.find((g: any) => g.grid_entry_id === gridEntryId)
+        if (updatedGroup) {
+          // Derive status from orders in the group
+          const orders: any[] = updatedGroup.orders || []
+          const hasOpen    = orders.some((o: any) => o.status === 'open')
+          const hasPending = orders.some((o: any) => o.status === 'pending')
+          const hasError   = orders.some((o: any) => o.status === 'error')
+          const allError   = orders.length > 0 && orders.every((o: any) => o.status === 'error')
+
+          // Terminal SUCCESS — at least one leg opened
+          if (hasOpen || hasPending) {
+            clearInterval(pollInterval)
+            await refetchAndClear('✅ Retry succeeded', 'var(--green)')
+            return
+          }
+          // ERROR is only terminal after 6+ attempts (12s elapsed) to absorb APScheduler delay
+          if ((hasError || allError) && attempts >= 6) {
+            clearInterval(pollInterval)
+            await refetchAndClear('⚠️ Still errored', 'var(--red)')
+            return
+          }
+          // Otherwise: keep polling (error before 6 attempts, waiting, no orders yet, etc.)
+        }
+      } catch { /* network error during poll — keep trying */ }
+
+      if (attempts >= 10) {
+        clearInterval(pollInterval)
+        await refetchAndClear('↻ Refreshed', 'var(--accent-amber)')
+      }
+    }, 2000)
   }
 
   // Retry specific errored legs (partial failure — some legs succeeded)
@@ -1526,7 +1588,8 @@ export default function OrdersPage() {
                       return istNow.getHours() > hh || (istNow.getHours() === hh && istNow.getMinutes() >= mm)
                     })()
                     // RETRY is available when: algo errored (all or some legs), or no_trade (missed entry)
-                    const canRetry = !!group.gridEntryId && !isTerminated && !isOrbMissed &&
+                    const isRetrying = !!group.gridEntryId && retryingIds.has(group.gridEntryId)
+                    const canRetry = !!group.gridEntryId && !isTerminated && !isOrbMissed && !isRetrying &&
                       (algoSt === 'error' || algoSt === 'no_trade' || someLegsError)
 
                     // RETRY action: direct retry if all legs errored or no_trade; modal for partial errors
@@ -1541,11 +1604,14 @@ export default function OrdersPage() {
                     }
 
                     // Action button definitions — RE-RUN removed, single smart RETRY
+                    const retryBtnLabel = isRetrying ? '↻' : (loading[`retry-${gi}`] ? '↻' : 'RETRY')
+                    const retryBtnCol   = isRetrying ? 'rgba(6,182,212,0.7)' : (canRetry ? '#F59E0B' : '#6B6B6B')
+                    const retryBtnBg    = isRetrying ? 'rgba(6,182,212,0.06)' : (canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)')
                     const BTNS = [
                       { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
                       { label: 'SQ',     col: '#22DD88', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs, title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: loading[`retry-${gi}`] ? '↻' : 'RETRY', col: canRetry ? '#F59E0B' : '#6B6B6B', bg: canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)', hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`], title: isOrbMissed ? 'ORB window closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined), action: doSmartRetry },
+                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!canRetry ? 'Available when algo is in error or missed state' : undefined)), action: doSmartRetry },
                       { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
@@ -1579,10 +1645,16 @@ export default function OrdersPage() {
                               {group.account || '—'}
                             </span>
 
-                            {/* Status chip */}
-                            <span className="tag" style={{ color: chip.color, background: chip.bg, fontSize: '10px', whiteSpace: 'nowrap' }}>
-                              {chip.label}
-                            </span>
+                            {/* Status chip — show "Pending..." during retry to suppress stale ERROR */}
+                            {isRetrying ? (
+                              <span className="tag" style={{ color: '#06B6D4', background: 'rgba(6,182,212,0.12)', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                                ↻ Pending...
+                              </span>
+                            ) : (
+                              <span className="tag" style={{ color: chip.color, background: chip.bg, fontSize: '10px', whiteSpace: 'nowrap' }}>
+                                {chip.label}
+                              </span>
+                            )}
                             {/* ORB capture indicator */}
                             {isOrbAlgo && !isOrbMissed && algoSt === 'waiting' && (
                               <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.10)', border: '0.5px solid rgba(245,158,11,0.30)', padding: '1px 8px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 600 }}>
@@ -1599,8 +1671,8 @@ export default function OrdersPage() {
                               </span>
                             )}
 
-                            {/* Error badge */}
-                            {!group.terminated && group.legs.some(l => l.status === 'error') && (() => {
+                            {/* Error badge — suppressed during retry to avoid misleading stale ERROR display */}
+                            {!isRetrying && !group.terminated && group.legs.some(l => l.status === 'error') && (() => {
                               const errLegs = group.legs.filter(l => l.status === 'error')
                               const firstMsg = errLegs[0]?.errorMessage
                               const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
