@@ -570,16 +570,32 @@ class AlgoScheduler:
                     # Schedule per-algo time-based jobs
                     self.schedule_algo_jobs(str(grid_entry.id), algo, today)
 
-                    # Register ORB windows with AlgoRunner
+                    # Register ORB windows with AlgoRunner.
+                    # Capture all needed ORM values as plain Python strings/ints HERE
+                    # while the session is still open.  register_orb() is called via
+                    # ensure_future() which runs AFTER this coroutine yields control,
+                    # by which point the session context may be closed — accessing ORM
+                    # attributes on a detached object causes MissingGreenlet.
                     if algo.entry_type == EntryType.ORB and self._algo_runner:
+                        _orb_algo_id         = str(algo.id)
+                        _orb_algo_name       = algo.name
+                        _orb_start_time      = algo.orb_start_time
+                        _orb_end_time        = algo.orb_end_time
+                        _orb_dte             = algo.dte
+                        _orb_grid_entry_id   = str(grid_entry.id)
                         import asyncio
                         asyncio.ensure_future(
                             _run_orb_safe(
                                 self._algo_runner.register_orb(
-                                    str(grid_entry.id), algo, grid_entry
+                                    _orb_grid_entry_id,
+                                    algo_id=_orb_algo_id,
+                                    algo_name=_orb_algo_name,
+                                    algo_orb_start_time=_orb_start_time,
+                                    algo_orb_end_time=_orb_end_time,
+                                    algo_dte=_orb_dte,
                                 ),
-                                algo_id=str(algo.id),
-                                grid_entry_id=str(grid_entry.id),
+                                algo_id=_orb_algo_id,
+                                grid_entry_id=_orb_grid_entry_id,
                             )
                         )
 
@@ -1220,11 +1236,27 @@ class AlgoScheduler:
                             source="scheduler",
                         )
                     else:
-                        # ORB window still open — re-register tracker + orb_end job
+                        # ORB window still open — re-register tracker + orb_end job.
+                        # Capture all needed ORM values as plain Python scalars HERE
+                        # while the session is still open.  register_orb() runs via
+                        # ensure_future() after the session closes — accessing ORM
+                        # attributes on a detached object causes MissingGreenlet.
                         if self._algo_runner:
+                            _rec_algo_id       = str(algo.id)
+                            _rec_algo_name     = algo.name
+                            _rec_orb_start     = algo.orb_start_time
+                            _rec_orb_end       = algo.orb_end_time
+                            _rec_dte           = algo.dte
                             import asyncio
                             asyncio.ensure_future(
-                                self._algo_runner.register_orb(geid, algo, grid_entry)
+                                self._algo_runner.register_orb(
+                                    geid,
+                                    algo_id=_rec_algo_id,
+                                    algo_name=_rec_algo_name,
+                                    algo_orb_start_time=_rec_orb_start,
+                                    algo_orb_end_time=_rec_orb_end,
+                                    algo_dte=_rec_dte,
+                                )
                             )
 
                         # Re-register orb_end job

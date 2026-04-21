@@ -1947,10 +1947,24 @@ class AlgoRunner:
         "SENSEX":      99919000,
     }
 
-    async def register_orb(self, grid_entry_id: str, algo: Algo, grid_entry):
+    async def register_orb(
+        self,
+        grid_entry_id: str,
+        algo_id: str,
+        algo_name: str,
+        algo_orb_start_time: Optional[str],
+        algo_orb_end_time: Optional[str],
+        algo_dte: Optional[int] = None,
+    ):
         """
         Register an ORB window at orb_start_time activation.
         Called from scheduler._job_activate_all when entry_type == ORB.
+
+        IMPORTANT: Accepts only plain Python scalar values — NOT ORM objects.
+        The caller must extract all needed fields from ORM objects while the
+        session is still open, then pass them here as plain Python primitives.
+        This prevents MissingGreenlet errors when called via asyncio.ensure_future()
+        after the session context has closed.
 
         ORB tracks the UNDERLYING index token during the window,
         not the option itself. The option is selected at breakout time.
@@ -1959,20 +1973,33 @@ class AlgoRunner:
         if not self._orb_tracker:
             return
 
-        # Load first leg to get underlying name — Algo model has no underlying field
+        # Load first leg to get underlying name — Algo model has no underlying field.
+        # This is a NEW session opened inside this function — safe because we own it.
         async with AsyncSessionLocal() as _db:
             _legs_res = await _db.execute(
                 select(AlgoLeg)
-                .where(AlgoLeg.algo_id == algo.id)
+                .where(AlgoLeg.algo_id == algo_id)
                 .order_by(AlgoLeg.leg_number)
             )
             _legs = _legs_res.scalars().all()
+            # Capture all needed leg attributes INSIDE the session as plain Python values
+            if _legs:
+                _first_underlying    = _legs[0].underlying or "NIFTY"
+                _first_instrument    = _legs[0].instrument or "ce"
+                _first_expiry        = _legs[0].expiry or "current_weekly"
+                _first_strike_type   = _legs[0].strike_type or "atm"
+                _first_strike_value  = _legs[0].strike_value
+                _first_orb_entry_at  = getattr(_legs[0], 'orb_entry_at', None)
+                _first_direction     = _legs[0].direction or "buy"
+                _first_orb_src       = getattr(_legs[0], 'orb_range_source', None) or "underlying"
+            else:
+                _first_underlying = None
 
-        if not _legs:
-            logger.error(f"[ORB] Cannot register — no legs for algo {algo.name} ({algo.id})")
+        if not _first_underlying:
+            logger.error(f"[ORB] Cannot register — no legs for algo {algo_name} ({algo_id})")
             return
 
-        underlying = _legs[0].underlying.upper()
+        underlying = _first_underlying.upper()
         underlying_token = self._ORB_UNDERLYING_TOKENS.get(underlying, 0)
         if not underlying_token:
             # MCX instruments (GOLDM etc.) use rolling futures tokens — look up from bot_runner
@@ -1988,37 +2015,36 @@ class AlgoRunner:
                 pass
         if not underlying_token:
             logger.error(
-                f"[ORB] Unknown underlying '{underlying}' for algo {algo.name} — "
+                f"[ORB] Unknown underlying '{underlying}' for algo {algo_name} — "
                 f"add to _ORB_UNDERLYING_TOKENS (NSE index) or MCX_TOKENS (MCX futures)"
             )
             return
 
         # Determine entry direction from orb_entry_at (Phase 2) or leg direction (fallback)
-        _entry_at = getattr(_legs[0], 'orb_entry_at', None)
-        if _entry_at == "high":
+        if _first_orb_entry_at == "high":
             direction = "buy"
-        elif _entry_at == "low":
+        elif _first_orb_entry_at == "low":
             direction = "sell"
         else:
-            direction = _legs[0].direction or "buy"  # backward compat
+            direction = _first_direction  # backward compat
 
         # ── ORB Phase 2: instrument range tracking ─────────────────────────────────
         # When orb_range_source == "instrument", pre-select the ATM option at window
         # registration time and track the option LTP during the window instead of
         # the underlying spot. Falls back to underlying if pre-selection fails.
-        _orb_range_source = getattr(_legs[0], 'orb_range_source', None) or "underlying"
+        _orb_range_source = _first_orb_src
         _tracking_token = underlying_token  # default: track underlying index
 
         if _orb_range_source == "instrument" and self._strike_selector:
             try:
                 # Pre-select strike now so we can subscribe and track its LTP
                 _pre_instrument = await self._strike_selector.select(
-                    underlying=_legs[0].underlying,
-                    instrument_type=_legs[0].instrument or "ce",
-                    expiry=_legs[0].expiry or "current_weekly",
-                    strike_type=_legs[0].strike_type or "atm",
-                    strike_value=_legs[0].strike_value,
-                    dte=getattr(algo, "dte", None),
+                    underlying=_first_underlying,
+                    instrument_type=_first_instrument,
+                    expiry=_first_expiry,
+                    strike_type=_first_strike_type,
+                    strike_value=_first_strike_value,
+                    dte=algo_dte,
                 )
                 if _pre_instrument:
                     _pre_token = _pre_instrument.get("instrument_token", 0)
@@ -2034,33 +2060,33 @@ class AlgoRunner:
                     else:
                         logger.warning(
                             f"[ORB] Instrument pre-selection failed — falling back to underlying. "
-                            f"algo={algo.name}"
+                            f"algo={algo_name}"
                         )
                 else:
                     logger.warning(
                         f"[ORB] Instrument pre-selection failed — falling back to underlying. "
-                        f"algo={algo.name}"
+                        f"algo={algo_name}"
                     )
             except Exception as _orb_pre_err:
                 logger.warning(
                     f"[ORB] Instrument pre-selection failed — falling back to underlying. "
-                    f"algo={algo.name} error={_orb_pre_err}"
+                    f"algo={algo_name} error={_orb_pre_err}"
                 )
         else:
             if _orb_range_source == "instrument" and not self._strike_selector:
                 logger.warning(
                     f"[ORB] Instrument pre-selection failed — falling back to underlying "
-                    f"(strike_selector not available). algo={algo.name}"
+                    f"(strike_selector not available). algo={algo_name}"
                 )
 
         window = ORBWindow(
             grid_entry_id=str(grid_entry_id),
-            algo_id=str(algo.id),
+            algo_id=str(algo_id),
             direction=direction,
-            start_time=self._parse_time(algo.orb_start_time or "09:15"),
-            end_time=self._parse_time(algo.orb_end_time or "11:16"),
-            instrument_token=_tracking_token,      # was: underlying_token
-            orb_range_source=_orb_range_source,    # NEW field
+            start_time=self._parse_time(algo_orb_start_time or "09:15"),
+            end_time=self._parse_time(algo_orb_end_time or "11:16"),
+            instrument_token=_tracking_token,
+            orb_range_source=_orb_range_source,
             wt_value=0.0,   # ORB uses range breakout, not W&T buffer
             wt_unit="pts",
         )
@@ -2069,11 +2095,11 @@ class AlgoRunner:
             on_entry=self._make_orb_callback(str(grid_entry_id)),
         )
         if self._ltp_consumer:
-            self._ltp_consumer.subscribe([_tracking_token])   # was: underlying_token
+            self._ltp_consumer.subscribe([_tracking_token])
         logger.info(
-            f"ORB registered: {algo.name} | underlying={underlying} token={_tracking_token} "
+            f"ORB registered: {algo_name} | underlying={underlying} token={_tracking_token} "
             f"direction={direction} orb_range_source={_orb_range_source} "
-            f"window={algo.orb_start_time or '09:15'}–{algo.orb_end_time or '11:16'}"
+            f"window={algo_orb_start_time or '09:15'}–{algo_orb_end_time or '11:16'}"
         )
 
     # ── Overnight SL check ───────────────────────────────────────────────────
