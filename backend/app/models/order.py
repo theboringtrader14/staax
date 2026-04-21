@@ -74,6 +74,7 @@ class Order(Base):
 
     # ── Live tracking ─────────────────────────────────────────────────────────
     ltp           = Column(Float, nullable=True)
+    sl_type       = Column(String(20), nullable=True)  # from leg: pts_instrument|pct_instrument|pts_underlying|pct_underlying|orb_*
     sl_original   = Column(Float, nullable=True)
     sl_actual     = Column(Float, nullable=True)   # current level after TSL trails
     tsl_trail_count = Column(Integer, default=0)

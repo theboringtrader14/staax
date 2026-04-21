@@ -1169,6 +1169,17 @@ class AlgoRunner:
             if not reentry
             else f"{algo_state.journey_level or '1'}.{algo_state.reentry_count}"
         )
+        # ── W&T entry_reference: option LTP at arm time ────────────────────────
+        # When a leg has W&T enabled and this is the force_direct entry triggered by
+        # WTEvaluator, pull the reference price from the arming cache and store it on
+        # the order so the Orders page can show "W&T ref: <price>".
+        _wt_entry_ref: Optional[str] = None
+        if leg.wt_enabled and force_direct:
+            _ge_id_str_wt = str(grid_entry.id)
+            _cached_wt = self._wt_arming_cache.get(_ge_id_str_wt)
+            if _cached_wt and _cached_wt.get("reference_price"):
+                _wt_entry_ref = f"W&T ref: {_cached_wt['reference_price']:.2f}"
+
         order = Order(
             id=uuid.uuid4(),
             algo_id=algo.id,
@@ -1185,9 +1196,11 @@ class AlgoRunner:
             is_practix=grid_entry.is_practix,
             is_overnight=is_overnight,
             entry_type=algo.entry_type,
+            entry_reference=_wt_entry_ref,
             status=OrderStatus.PENDING,
             journey_level=journey_level,
             instrument_token=instrument_token,
+            sl_type=leg.sl_type,
             sl_original=leg.sl_value,
         )
         db.add(order)
