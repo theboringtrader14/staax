@@ -251,7 +251,7 @@ export default function AccountsDrawer() {
     const funds = fundsData[acc.name]
 
     return (
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
         {/* Row 1: Name + status */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div>
@@ -380,9 +380,9 @@ export default function AccountsDrawer() {
 
       {/* Sliding panel */}
       <div style={{
-        position: 'fixed', left: 32, top: 68, height: 'calc(100vh - 68px)', width: 400,
+        position: 'fixed', left: 32, top: 68, height: 'calc(100vh - 68px)', width: 440,
         background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '0 0 0 0',
-        zIndex: 79, overflowY: 'auto', padding: 24,
+        zIndex: 79, overflowY: 'auto', padding: 28,
         transform: openPanel ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
         borderRight: '1px solid var(--border)',
@@ -421,11 +421,11 @@ export default function AccountsDrawer() {
               ))}
             </div>
             {accounts.filter(a => a.status === 'active').map(acc => (
-              <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 12 }}>
+              <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
                   {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                   <div>
                     <label style={lbl}>FY Margin (₹)</label>
                     <input style={inp} type="number" defaultValue={acc.margin || ''} placeholder="₹ Margin"
@@ -438,10 +438,10 @@ export default function AccountsDrawer() {
                   </div>
                 </div>
                 <button onClick={() => saveMargin(acc)} disabled={saving[acc.id + '_margin']}
-                  style={{ width: '100%', height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
+                  style={{ width: '100%', height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
                   {saving[acc.id + '_margin'] ? 'Saving…' : 'Save'}
                 </button>
-                {saved[acc.id + '_margin'] && <div style={{ marginTop: 6, fontSize: 11, color: '#22DD88', fontWeight: 600 }}>{saved[acc.id + '_margin']}</div>}
+                {saved[acc.id + '_margin'] && <div style={{ marginTop: 8, fontSize: 11, color: '#22DD88', fontWeight: 600 }}>{saved[acc.id + '_margin']}</div>}
               </div>
             ))}
           </div>
@@ -452,11 +452,11 @@ export default function AccountsDrawer() {
           <div>
             <PanelHeader title="Risk Controls" subtitle="Global stop loss and target profit per account" />
             {accounts.filter(a => a.status === 'active').map(acc => (
-              <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 12 }}>
+              <div key={acc.id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 14 }}>
                   {acc.name} <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 400 }}>· {acc.broker}</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                   <div>
                     <label style={lbl}>Global SL (₹)</label>
                     <input style={inp} type="number" defaultValue={acc.globalSL ?? ''} placeholder="₹ SL"
@@ -469,10 +469,10 @@ export default function AccountsDrawer() {
                   </div>
                 </div>
                 <button onClick={() => saveRisk(acc)} disabled={saving[acc.id + '_risk']}
-                  style={{ width: '100%', height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
+                  style={{ width: '100%', height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
                   {saving[acc.id + '_risk'] ? 'Saving…' : 'Save'}
                 </button>
-                {saved[acc.id + '_risk'] && <div style={{ marginTop: 6, fontSize: 11, color: '#22DD88', fontWeight: 600 }}>{saved[acc.id + '_risk']}</div>}
+                {saved[acc.id + '_risk'] && <div style={{ marginTop: 8, fontSize: 11, color: '#22DD88', fontWeight: 600 }}>{saved[acc.id + '_risk']}</div>}
               </div>
             ))}
           </div>
