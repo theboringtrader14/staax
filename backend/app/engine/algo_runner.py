@@ -1179,6 +1179,9 @@ class AlgoRunner:
             _cached_wt = self._wt_arming_cache.get(_ge_id_str_wt)
             if _cached_wt and _cached_wt.get("reference_price"):
                 _wt_entry_ref = float(_cached_wt["reference_price"])
+            # Clear cache here (not in on_wt_entry) — entry fires 2s after callback,
+            # so clearing early caused entry_reference to always be null.
+            self._wt_arming_cache.pop(_ge_id_str_wt, None)
 
         order = Order(
             id=uuid.uuid4(),
@@ -1929,8 +1932,9 @@ class AlgoRunner:
         """Returns a callback for WTEvaluator on_entry."""
         async def on_wt_entry(eid: str, entry_price: float):
             logger.info(f"[W&T] Threshold crossed for {eid} @ {entry_price:.2f} — scheduling order")
-            # Clear arming cache — window has fired, rearm should not re-register it
-            self._wt_arming_cache.pop(eid, None)
+            # NOTE: do NOT clear _wt_arming_cache here — _place_leg reads it 2s later
+            # (APScheduler fires enter() after a DateTrigger delay). Cache is cleared
+            # inside _place_leg after reference_price is read.
             # Schedule via APScheduler's AsyncIOExecutor — this is the ONLY safe path.
             # asyncio.create_task() / ensure_future() / run_coroutine_threadsafe() all
             # lack SQLAlchemy's greenlet bridge and cause MissingGreenlet.

@@ -666,6 +666,49 @@ async def system_health(request: Request):
     }
 
 
+@router.get("/expiry-calendar")
+async def get_expiry_calendar():
+    """
+    Returns ExpiryCalendar contents: next expiries and today_is_expiry for each underlying.
+    NIFTY + BANKNIFTY expire on Tuesdays; SENSEX expires on Thursdays.
+    """
+    from app.engine.expiry_calendar import ExpiryCalendar
+    cal = ExpiryCalendar.get()
+    if not cal.is_built():
+        return {
+            "built": False,
+            "detail": "ExpiryCalendar not yet built — instrument master not loaded",
+        }
+
+    underlyings = ["NIFTY", "BANKNIFTY", "SENSEX"]
+    result = {
+        "built": True,
+        "today_is_expiry": {},
+        "next_expiries": {},
+    }
+    from datetime import date as _date
+    today = _date.today()
+    for u in underlyings:
+        result["today_is_expiry"][u] = cal.is_expiry_today(u)
+        try:
+            cur = cal.get_current_weekly_expiry(u)
+            result["next_expiries"][u] = cur.isoformat() if cur else None
+        except Exception:
+            result["next_expiries"][u] = None
+
+    # Upcoming expiries per underlying (next 5 dates from today)
+    result["upcoming_expiries"] = {}
+    for u in underlyings:
+        try:
+            all_exp = cal._expiries.get(u.upper(), [])
+            future = [e for e in all_exp if e >= today][:5]
+            result["upcoming_expiries"][u] = [d.isoformat() for d in future]
+        except Exception:
+            result["upcoming_expiries"][u] = []
+
+    return result
+
+
 async def daily_system_reset():
     """
     Called at 08:00 IST every day.

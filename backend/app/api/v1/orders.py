@@ -1969,14 +1969,21 @@ async def square_off(
                     broker_order_id = order.broker_order_id,
                 )
                 broker_ok = True
-                # result is the new exit broker_order_id (str) or None; use fill_price as exit_price
-                exit_price = order.fill_price
+                # Use LTP at exit time for pnl (broker fills at market; LTP is best approximation)
+                exit_price = order.fill_price  # fallback
+                if ltp_cache and order.instrument_token:
+                    try:
+                        ltp_val = await ltp_cache.get(order.instrument_token)
+                        if ltp_val is not None:
+                            exit_price = ltp_val
+                    except Exception as _ltp_e:
+                        logger.warning(f"[SQ] ltp_cache.get failed for LIVE order {order.instrument_token}: {_ltp_e}")
 
                 order.status      = OrderStatus.CLOSED
                 order.exit_price  = exit_price
                 order.exit_reason = ExitReason.SQ
                 order.exit_time   = now
-                # BUG4: compute pnl on manual LIVE SQ
+                # Compute pnl: (exit - fill) * qty for buy; (fill - exit) * qty for sell
                 if order.fill_price and exit_price:
                     order.pnl = (exit_price - order.fill_price) * (order.quantity or 1) if order.direction == "buy" else (order.fill_price - exit_price) * (order.quantity or 1)
                 else:
