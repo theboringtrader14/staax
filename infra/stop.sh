@@ -2,6 +2,18 @@
 # LIFEX Platform — Evening Shutdown
 # Usage: ~/STAXX/stop.sh
 
+# Kill via PID files (most precise)
+for pidfile in ~/STAXX/pids/*.pid; do
+  if [ -f "$pidfile" ]; then
+    pid=$(cat "$pidfile" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" 2>/dev/null
+      echo "  Killed PID $pid ($(basename $pidfile .pid))"
+    fi
+    rm -f "$pidfile"
+  fi
+done
+
 # Kill by port (most reliable — catches child workers too)
 for port in 8000 8001 8002 8003 8004; do
   pid=$(lsof -ti:$port 2>/dev/null)

@@ -2,6 +2,9 @@
 # LIFEX Platform — Morning Startup
 # Usage: ~/STAXX/start.sh
 
+# Load platform-level env vars (ports etc)
+[ -f ~/STAXX/.env ] && set -a && source ~/STAXX/.env && set +a
+
 echo "🚀 Starting LIFEX Platform..."
 
 # ── Safety: kill any stale backend processes ──────────────────────────────
@@ -12,6 +15,9 @@ sleep 2
 brew services stop postgresql@16 2>/dev/null
 /opt/homebrew/opt/postgresql@16/bin/pg_ctl stop -D /opt/homebrew/var/postgresql@16 -m fast 2>/dev/null
 sleep 1
+
+# ── PID directory ─────────────────────────────────────────────────────────
+mkdir -p ~/STAXX/pids
 
 # ── Start Docker containers ───────────────────────────────────────────────
 docker start staax_db staax_redis 2>/dev/null
@@ -39,19 +45,28 @@ echo "  Running migrations..."
 # ── Start all backends ────────────────────────────────────────────────────
 mkdir -p ~/STAXX/logs
 
-(cd ~/STAXX/staax/backend  && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 >> ~/STAXX/logs/staax.log 2>&1) &
-(cd ~/STAXX/invex/backend  && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 >> ~/STAXX/logs/invex.log 2>&1) &
-(cd ~/STAXX/budgex/backend && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port 8002 >> ~/STAXX/logs/budgex.log 2>&1) &
-(cd ~/STAXX/travex/backend  && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port 8004 >> ~/STAXX/logs/travex.log 2>&1) &
+(cd ~/STAXX/staax/backend  && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port ${STAAX_BACKEND_PORT:-8000} >> ~/STAXX/logs/staax.log 2>&1) &
+echo $! > ~/STAXX/pids/staax-backend.pid
+(cd ~/STAXX/invex/backend  && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port ${INVEX_BACKEND_PORT:-8001} >> ~/STAXX/logs/invex.log 2>&1) &
+echo $! > ~/STAXX/pids/invex-backend.pid
+(cd ~/STAXX/budgex/backend && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port ${BUDGEX_BACKEND_PORT:-8002} >> ~/STAXX/logs/budgex.log 2>&1) &
+echo $! > ~/STAXX/pids/budgex-backend.pid
+(cd ~/STAXX/travex/backend  && python3.12 -m uvicorn app.main:app --host 0.0.0.0 --port ${TRAVEX_BACKEND_PORT:-8004} >> ~/STAXX/logs/travex.log 2>&1) &
+echo $! > ~/STAXX/pids/travex-backend.pid
 
 # ── Start all frontends ───────────────────────────────────────────────────
 echo "  Starting frontends..."
 
 (cd ~/STAXX/staax/frontend   && npm run dev > ~/STAXX/logs/staax-frontend.log   2>&1) &
+echo $! > ~/STAXX/pids/staax-frontend.pid
 (cd ~/STAXX/invex/frontend   && npm run dev > ~/STAXX/logs/invex-frontend.log   2>&1) &
+echo $! > ~/STAXX/pids/invex-frontend.pid
 (cd ~/STAXX/budgex/frontend  && npm run dev > ~/STAXX/logs/budgex-frontend.log  2>&1) &
+echo $! > ~/STAXX/pids/budgex-frontend.pid
 (cd ~/STAXX/travex/frontend  && npm run dev > ~/STAXX/logs/travex-frontend.log  2>&1) &
+echo $! > ~/STAXX/pids/travex-frontend.pid
 (cd ~/STAXX/lifex-landing    && npm run dev > ~/STAXX/logs/lifex-landing.log    2>&1) &
+echo $! > ~/STAXX/pids/lifex-landing.pid
 
 sleep 5
 

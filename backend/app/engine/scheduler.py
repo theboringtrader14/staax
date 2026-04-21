@@ -379,8 +379,8 @@ class AlgoScheduler:
         for job_id in self._per_algo_jobs.pop(grid_entry_id, []):
             try:
                 self._scheduler.remove_job(job_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"[SCHEDULER] Job registration failed for {job_id}: {e}", exc_info=True)
 
     # ── Job implementations ───────────────────────────────────────────────────
 
@@ -890,8 +890,8 @@ class AlgoScheduler:
                             algo_id=str(algo.id),
                             source="scheduler",
                         ))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(f"[SCHEDULER] Job registration failed for {algo.id}: {e}", exc_info=True)
                 await db.commit()
                 logger.info(f"✅ Applied pending day removals for {applied} algo(s)")
             except Exception as e:

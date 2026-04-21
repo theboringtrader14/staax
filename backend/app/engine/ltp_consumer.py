@@ -136,8 +136,8 @@ class AngelOneTickerAdapter:
         try:
             if self._sws:
                 self._sws.close_connection()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"[LTP] Error in AngelOneTickerAdapter.stop: {e}", exc_info=True)
         logger.info("[AO] 🛑 SmartStream stopped")
 
     def register_mcx_tokens(self, tokens: List[str]):
@@ -519,8 +519,8 @@ class LTPConsumer:
         if self.ticker:
             try:
                 self.ticker.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"[LTP] Error in LTPConsumer.stop (ticker.close): {e}", exc_info=True)
         if self._angel_adapter:
             self._angel_adapter.stop()
         logger.info("🛑 LTP Consumer stopped")

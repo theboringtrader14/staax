@@ -41,7 +41,7 @@ async def _fetch_budgex_summary() -> dict:
     try:
         headers = {"x-api-key": settings.BUDGEX_API_KEY}
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get("http://localhost:8002/api/v1/expenses/summary", headers=headers)
+            r = await client.get(f"{settings.BUDGEX_URL}/api/v1/expenses/summary", headers=headers)
             r.raise_for_status()
             return r.json()
     except Exception:
@@ -52,7 +52,7 @@ async def _fetch_budgex_summary() -> dict:
 async def get_mobile_config():
     return {
         "budgex_api_key": settings.BUDGEX_API_KEY,
-        "budgex_url": "http://localhost:8002",
+        "budgex_url": settings.BUDGEX_URL,
     }
 
 

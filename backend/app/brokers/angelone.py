@@ -150,8 +150,8 @@ class AngelOneBroker(BaseBroker):
             "Accept":           "application/json",
             "X-UserType":       "USER",
             "X-SourceID":       "WEB",
-            "X-ClientLocalIP":  "127.0.0.1",
-            "X-ClientPublicIP": "127.0.0.1",
+            "X-ClientLocalIP":  "",
+            "X-ClientPublicIP": "",
             "X-MACAddress":     "00:00:00:00:00:00",
             "X-PrivateKey":     self.api_key,
         }

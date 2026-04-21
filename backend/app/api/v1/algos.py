@@ -1062,13 +1062,13 @@ async def terminate_algo(algo_id: str, request: Request, db: AsyncSession = Depe
             oid_str = str(order.id)
             if tsl_eng:
                 try: tsl_eng.deregister(oid_str)
-                except Exception: pass
+                except Exception as e: logger.warning(f"[ALGO] Failed to deregister from tsl_engine: {e}")
             if ttp_eng:
                 try: ttp_eng.deregister(oid_str)
-                except Exception: pass
+                except Exception as e: logger.warning(f"[ALGO] Failed to deregister from ttp_engine: {e}")
             if sl_tp:
                 try: sl_tp.remove_position(oid_str)
-                except Exception: pass
+                except Exception as e: logger.warning(f"[ALGO] Failed to deregister from sltp_monitor: {e}")
     except Exception as e:
         logger.warning(f"[TERMINATE] Could not deregister engines: {e}")
 
