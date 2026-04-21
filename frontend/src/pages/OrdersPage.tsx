@@ -752,12 +752,12 @@ export default function OrdersPage() {
   const safeOrders  = ordersByDate[selectedDate] ?? []
   const safeWaiting = waitingByDate[selectedDate] ?? []
 
-  // Live MTM strip — computed from polling data
-  const ltpDataEntries = Object.values(ltpData)
-  const hasLiveData    = ltpDataEntries.length > 0
-  const liveTotalMtm   = hasLiveData
-    ? ltpDataEntries.reduce((sum, e) => sum + (e?.pnl ?? 0), 0)
-    : 0
+  // Tab-scoped live MTM — only open orders belonging to the ACTIVE tab's date.
+  // Prevents cross-day bleed: a BTST position entered TUE must NOT inflate WED's pill.
+  const liveTabMtm = safeOrders
+    .flatMap(g => g.legs)
+    .filter(l => l.status === 'open')
+    .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
 
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
@@ -1078,7 +1078,12 @@ export default function OrdersPage() {
     : (ordersByDate[selectedDate] ?? []).filter(g => g.account === accountFilter)
   ).flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
    .reduce((s, l) => s + (l.pnl ?? 0), 0)
-  const liveNetPnlForTab = _tabRealized + (isPastDay ? 0 : liveTotalMtm)
+  // Use tab-scoped MTM (not global liveTotalMtm) so a BTST entered yesterday
+  // does not bleed into today's tab P&L.
+  const _hasTabActivity = safeOrders.some(g => g.legs.length > 0)
+  const liveNetPnlForTab = _hasTabActivity
+    ? _tabRealized + (isPastDay ? 0 : liveTabMtm)
+    : null
 
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
@@ -1243,7 +1248,9 @@ export default function OrdersPage() {
                 const date      = weekDates[day]
                 const isActive  = selectedDate === date
                 const isHoliday = date ? holidayDates.has(date) : false
-                const pnl       = isActive ? liveNetPnlForTab : (weekPnl[day] ?? null)
+                // Past days: always use static weekPnl (prevents flicker when switching tabs).
+                // Today (non-past active): use live scoped P&L.
+                const pnl       = (isActive && !isPastDay) ? liveNetPnlForTab : (weekPnl[day] ?? null)
                 const rupee     = '\u20B9'
                 return (
                   <button
