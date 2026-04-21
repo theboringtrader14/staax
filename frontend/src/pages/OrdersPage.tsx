@@ -612,7 +612,6 @@ export default function OrdersPage() {
   const [showWeekends, setShowWeekends] = useState(false)
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
   const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
@@ -1338,10 +1337,6 @@ export default function OrdersPage() {
                 : w.display_status === 'SCHEDULED'
                 ? { label: 'SCHED',   color: '#4488FF',               bg: 'rgba(68,136,255,0.10)'  }
                 : { label: isError ? 'ERROR' : 'WAITING', color: isError ? '#FF4444' : '#FFD700', bg: isError ? 'rgba(255,68,68,0.10)' : 'rgba(255,215,0,0.10)' }
-              const accentHex  = isError ? '#FF4444'               : '#FFE600'
-              void accentHex
-              const accentRgba = isError ? 'rgba(255,68,68,0.20)'  : 'rgba(255,215,0,0.20)'
-              const accentHover= isError ? 'rgba(255,68,68,0.45)'  : 'rgba(255,215,0,0.45)'
               const displayStatus = w.display_status  // 'MONITORING' | 'SCHEDULED' | 'WAITING' | 'MISSED' | 'ERROR'
               const stripBg =
                 displayStatus === 'MONITORING' ? '#2dd4bf' :
@@ -1409,15 +1404,15 @@ export default function OrdersPage() {
 
               return (
                 <div key={w.grid_entry_id}
-                  onMouseEnter={() => setHoveredCard(w.grid_entry_id)}
-                  onMouseLeave={() => setHoveredCard(null)}
                   style={{
-                    borderRadius: '10px', overflow: 'hidden', marginBottom: 10,
-                    border: `0.5px solid ${hoveredCard === w.grid_entry_id ? accentHover : accentRgba}`,
+                    borderRadius: '20px', overflow: 'hidden', marginBottom: 12,
+                    background: 'var(--bg-surface)',
+                    boxShadow: 'var(--neu-raised)',
+                    border: '1px solid var(--border)',
                   }}>
 
                   {/* ── Card header ── */}
-                  <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'stretch' }}>
+                  <div style={{ background: 'var(--bg-surface)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
 
                     {/* Left status strip */}
                     <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: stripBg, boxShadow: `0 0 8px ${stripGlow}, 0 0 20px ${stripGlow}` }}/>
@@ -1426,16 +1421,16 @@ export default function OrdersPage() {
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
                       {/* Row 1: name + chips + entry time */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap' as const, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap' as const, minWidth: 0 }}>
 
                         {/* Algo name */}
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: 'rgba(232,232,248,0.85)', whiteSpace: 'nowrap' as const }}>
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--text)', whiteSpace: 'nowrap' as const }}>
                           {w.algo_name}
                         </span>
 
                         {/* Account pill */}
                         {w.account_name && (
-                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'rgba(255,107,0,0.10)', color: 'var(--ox-glow)', border: '0.5px solid rgba(255,107,0,0.28)', whiteSpace: 'nowrap' as const }}>
+                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', whiteSpace: 'nowrap' as const }}>
                             {w.account_name}
                           </span>
                         )}
@@ -1509,22 +1504,22 @@ export default function OrdersPage() {
                     </div>
 
                     {/* ── Tall action buttons ── */}
-                    <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '1px solid var(--border)' }}>
                       {missedBtns.map((btn, bi) => (
                         <button key={bi}
                           disabled={btn.disabled}
                           onClick={btn.action}
                           style={{
                             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            gap: 4, padding: '0 14px', background: btn.bg, border: btn.border ?? 'none',
-                            borderRight: '0.5px solid rgba(255,255,255,0.06)',
+                            gap: 4, padding: '0 14px', background: 'transparent', border: 'none',
+                            borderRight: '1px solid var(--border)',
                             cursor: btn.disabled ? 'not-allowed' : 'pointer',
                             color: btn.col, minWidth: 52, transition: 'all 150ms',
                             opacity: btn.disabled ? 0.3 : 1,
                             pointerEvents: btn.disabled ? 'none' : 'auto',
                           }}
                           onMouseEnter={e => { if (!btn.disabled) e.currentTarget.style.background = btn.hBg }}
-                          onMouseLeave={e => { e.currentTarget.style.background = btn.bg }}>
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
                           <span style={{ fontSize: 9, letterSpacing: '0.5px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{btn.label}</span>
                         </button>
                       ))}
@@ -1533,33 +1528,33 @@ export default function OrdersPage() {
 
                   {/* ── Leg table ── */}
                   {(w.legs || []).length > 0 && (
-                    <div style={{ background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: '0.5px solid var(--bg-border)', borderRadius: '0 0 10px 10px' }}>
-                    <div className="cloud-fill" style={{ borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
+                    <div style={{ overflow: 'hidden' }}>
+                    <div style={{ overflow: 'hidden' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
                           <tr>
                             {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(h => (
-                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'rgba(232,232,248,0.4)', fontWeight: 600, padding: '5px 6px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', verticalAlign: 'middle' }}>{h}</th>
+                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-dim)', fontWeight: 600, padding: '8px 6px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {(w.legs || []).map(leg => (
                             <tr key={leg.leg_number}>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', verticalAlign: 'middle' }}>
+                              <td style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>{leg.leg_number}</td>
+                              <td style={{ textAlign: 'center', padding: '8px 6px', verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3, color: legStatusChip.color, background: legStatusChip.bg, letterSpacing: 0.5 }}>
                                   {legStatusChip.label}
                                 </span>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', fontSize: 11, verticalAlign: 'middle' }}>
-                                <div style={{ color: 'rgba(232,232,248,0.75)' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
+                              <td style={{ textAlign: 'center', padding: '8px 6px', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
+                                <div style={{ color: 'var(--text)' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
                                 <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.lots}</td>
+                              <td style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>{leg.lots}</td>
                               {/* Fill/Ref: show W&T ref+trigger only for actively MONITORING legs */}
-                              <td style={{ textAlign: 'center', padding: '6px 6px', fontSize: 10, verticalAlign: 'middle' }}>
+                              <td style={{ textAlign: 'center', padding: '8px 6px', fontSize: 10, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
                                 {(() => {
                                   const showRefTrigger = w.display_status === 'MONITORING' && leg.wt_enabled && leg.wt_ref_price != null
                                   if (showRefTrigger) {
@@ -1577,7 +1572,7 @@ export default function OrdersPage() {
                                 })()}
                               </td>
                               {['LTP','SL (A/O)','Target','Exit','Reason','P&L'].map(col => (
-                                <td key={col} style={{ textAlign: 'center', padding: '6px 6px', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
+                                <td key={col} style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>—</td>
                               ))}
                             </tr>
                           ))}
@@ -1619,15 +1614,15 @@ export default function OrdersPage() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
                   paddingBottom: '8px', marginBottom: '8px', marginTop: gIdx === 0 ? 0 : '20px',
-                  borderBottom: '0.5px solid rgba(255,107,0,0.15)', userSelect: 'none',
+                  borderBottom: '1px solid var(--border)', userSelect: 'none',
                 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 700, color: 'var(--ox-radiant)', letterSpacing: '1px' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: '12px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase' }}>
                   {instrument}
                 </span>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.38)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
                   {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
                 </span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" opacity="0.55"
                   style={{ marginLeft: 'auto', transition: 'transform 0.2s ease', transform: isCollapsed ? 'rotate(-90deg)' : 'none' }}>
                   <path d="M6 9l6 6 6-6"/>
                 </svg>
@@ -1688,30 +1683,28 @@ export default function OrdersPage() {
                     return (
                       <div key={group.algoId}
                         id={`algo-card-${group.algoId}`}
-                        onMouseEnter={() => setHoveredCard(group.algoId)}
-                        onMouseLeave={() => setHoveredCard(null)}
-                        style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '10px', overflow: 'hidden', border: `0.5px solid ${hoveredCard === group.algoId ? 'rgba(255,107,0,0.45)' : 'rgba(255,107,0,0.22)'}` }}>
+                        style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '20px', overflow: 'hidden', background: 'var(--bg-surface)', boxShadow: 'var(--neu-raised)', border: '1px solid var(--border)' }}>
 
                         {/* ── Algo card header ── */}
-                        <div style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'stretch' }}>
+                        <div style={{ background: 'var(--bg-surface)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
 
                           {/* Status strip */}
                           <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: bar.color, boxShadow: `0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
 
                           {/* Info row */}
-                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap', minWidth: 0 }}>
 
                             {group.terminated && <span style={{ fontSize: '13px' }} title="Algo terminated">⛔</span>}
 
                             {/* Algo name */}
                             <span
                               onClick={() => setSelectedAlgoName(group.algoName)}
-                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px', color: 'rgba(232,232,248,0.85)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
+                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
                               {group.algoName}
                             </span>
 
                             {/* Account pill */}
-                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'rgba(255,107,0,0.10)', color: 'var(--ox-glow)', border: '0.5px solid rgba(255,107,0,0.28)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
                               {group.account || '—'}
                             </span>
 
@@ -1793,7 +1786,7 @@ export default function OrdersPage() {
                           </div>
 
                           {/* ── Tall action buttons ── */}
-                          <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '0.5px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ display: 'flex', alignSelf: 'stretch', borderLeft: '1px solid var(--border)' }}>
                             {BTNS.map((btn, bi) => (
                               <button key={bi}
                                 disabled={btn.disabled}
@@ -1801,15 +1794,15 @@ export default function OrdersPage() {
                                 onClick={btn.action}
                                 style={{
                                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                  gap: 4, padding: '0 14px', background: btn.bg, border: btn.border ?? 'none',
-                                  borderRight: '0.5px solid rgba(255,255,255,0.06)',
+                                  gap: 4, padding: '0 14px', background: 'transparent', border: 'none',
+                                  borderRight: '1px solid var(--border)',
                                   cursor: btn.disabled ? 'not-allowed' : 'pointer',
                                   color: btn.col, minWidth: 52, transition: 'all 150ms',
                                   opacity: btn.disabled ? 0.3 : 1,
                                   pointerEvents: btn.disabled ? 'none' : 'auto',
                                 }}
-                                onMouseEnter={e => { if (!btn.disabled) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = btn.hBg } }}
-                                onMouseLeave={e => { e.currentTarget.style.opacity = btn.disabled ? '0.3' : '1'; e.currentTarget.style.background = btn.bg }}>
+                                onMouseEnter={e => { if (!btn.disabled) e.currentTarget.style.background = btn.hBg }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
                                 <span style={{ fontSize: 9, letterSpacing: '0.5px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{btn.label}</span>
                               </button>
                             ))}
@@ -1831,15 +1824,15 @@ export default function OrdersPage() {
                         )}
 
                         {/* ── Legs table ── */}
-                        <div style={{ border: '0.5px solid rgba(255,255,255,0.07)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'visible', background: 'rgba(14,10,6,0.65)', backdropFilter: 'blur(20px)' }}>
-                          <div className="cloud-fill" style={{ borderRadius: '8px', overflow: 'visible', marginTop: '8px' }}>
+                        <div style={{ overflow: 'visible' }}>
+                          <div style={{ overflow: 'visible' }}>
                             <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
                             <table className="staax-table">
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                               <thead>
                                 <tr>
                                   {HDRS.map(h => (
-                                    <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center' }}>{h}</th>
+                                    <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center', background: 'var(--bg)' }}>{h}</th>
                                   ))}
                                 </tr>
                               </thead>
