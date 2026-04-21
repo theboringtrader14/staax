@@ -158,6 +158,20 @@ function formatSlDef(slType: string | undefined, slValue: number | undefined): s
   }
 }
 
+function formatSlSetting(slType: string | null, slOriginal: number | null): string {
+  if (slOriginal == null) return ''
+  const val = slOriginal % 1 === 0 ? slOriginal.toFixed(0) : slOriginal.toFixed(1)
+  switch (slType) {
+    case 'pts':     return `(I-${val}pt)`
+    case 'pct':     return `(I-${val}%)`
+    case 'tsl':     return `(TSL-${val}%)`
+    case 'tsl_pts': return `(TSL-${val}pt)`
+    case 'u_pts':   return `(U-${val}pt)`
+    case 'u_pct':   return `(U-${val}%)`
+    default:        return `(${val})`
+  }
+}
+
 // ── LegRow ───────────────────────────────────────────────────────────────────
 function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHigh, orbLow, isOrbAlgo }: {
   leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
@@ -239,8 +253,13 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         ) : (
           <>
             {leg.fillPrice != null
-              ? <div style={{ fontWeight: 600 }}>Fill: {leg.fillPrice}{leg.fillTime && <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '5px', fontSize: '10px' }}>{leg.fillTime}</span>}</div>
+              ? <div style={{ fontWeight: 600 }}>Fill: ₹{leg.fillPrice}{leg.fillTime && <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '5px', fontSize: '10px' }}>{leg.fillTime}</span>}</div>
               : <div style={{ color: 'var(--text-dim)' }}>Fill: —</div>}
+            {leg.entryReference != null && (
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                Ref: ₹{leg.entryReference.toFixed(2)}
+              </span>
+            )}
             {leg.refPrice != null && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Ref: {leg.refPrice} · {leg.entryCondition}</div>}
             {leg.refPrice == null && leg.entryCondition && <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{leg.entryCondition}</div>}
             {isOrbAlgo && orbHigh && orbLow && leg.status === 'open' && (
@@ -284,18 +303,35 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
               </div>
             )
           }
-          if (slPrice != null) return (
-            <div style={{ color: 'var(--text-muted)' }}>
-              <div>{formatSL(slPrice, leg.slType)}</div>
-              {leg.slOrig != null && leg.slType && (
-                <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                  {formatSlDef(leg.slType, leg.slOrig)}
+          if (slPrice != null) {
+            const slSetting = formatSlSetting(leg.slType ?? null, leg.slOrig ?? null)
+            return (
+              <div style={{ color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span>{leg.slActual?.toFixed(2) ?? '—'}</span>
+                  {slSetting && (
+                    <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>
+                      {slSetting}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-          )
+              </div>
+            )
+          }
           // Fallback: show definition (slOrig) for waiting/unfilled legs where engine hasn't set slActual yet
-          if (leg.slOrig != null) return <div style={{ color: 'var(--text-dim)' }}>{formatSL(leg.slOrig, leg.slType)}</div>
+          if (leg.slOrig != null) {
+            const slSetting = formatSlSetting(leg.slType ?? null, leg.slOrig)
+            return (
+              <div style={{ color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span>{formatSL(leg.slOrig, leg.slType)}</span>
+                {slSetting && (
+                  <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>
+                    {slSetting}
+                  </span>
+                )}
+              </div>
+            )
+          }
           return <>—</>
         })()}
       </td>
