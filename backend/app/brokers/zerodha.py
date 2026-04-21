@@ -116,6 +116,39 @@ class ZerodhaBroker:
             logger.error(f"Margin fetch failed: {e}")
             return {}
 
+    async def get_full_funds(self) -> dict:
+        """
+        Return structured funds breakdown for the Funds panel.
+
+        Zerodha margins() structure (equity segment):
+          available.cash              — pure cash/bank balance
+          available.collateral        — collateral value
+          utilised.debits             — total debits / margin used
+          available.live_balance      — net available (cash + collateral - debits)
+
+        Returns: { cash, collateral, utilised, net }
+        """
+        try:
+            margins = self.kite.margins()
+            equity  = margins.get("equity", {})
+            avail   = equity.get("available", {})
+            used    = equity.get("utilised",  {})
+
+            cash       = round(float(avail.get("cash",       0)), 2)
+            collateral = round(float(avail.get("collateral", 0)), 2)
+            utilised   = round(float(used.get("debits",      0)), 2)
+            net        = round(float(avail.get("live_balance", cash + collateral - utilised)), 2)
+
+            return {
+                "cash":       cash,
+                "collateral": collateral,
+                "utilised":   utilised,
+                "net":        net,
+            }
+        except Exception as e:
+            logger.error(f"[ZERODHA] get_full_funds error: {e}")
+            return {"cash": None, "collateral": None, "utilised": None, "net": None}
+
     # ── Order Placement ───────────────────────────────────────────────────────
 
     async def place_order(

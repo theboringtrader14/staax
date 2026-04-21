@@ -1387,7 +1387,14 @@ async def get_week_summary(
 
     # ── 1. Fetch all CLOSED orders for these grid entries ────────────────────
     _closed_result = await db.execute(
-        select(Order.grid_entry_id, Order.pnl).where(
+        select(
+            Order.grid_entry_id,
+            Order.pnl,
+            Order.exit_price,
+            Order.fill_price,
+            Order.direction,
+            Order.quantity,
+        ).where(
             and_(*_base_conditions, Order.status == OrderStatus.CLOSED)
         )
     )
@@ -1395,13 +1402,20 @@ async def get_week_summary(
     # Aggregate closed_pnl by trading_date; track which dates have closed orders
     _closed_pnl_by_date: dict = {}   # date_str → float
     _has_closed_by_date: dict = {}   # date_str → bool
-    for _ge_id, _pnl in _closed_result.all():
+    for _ge_id, _pnl, _exit_price, _fill_price_c, _direction_c, _quantity_c in _closed_result.all():
         _td = _ge_date_map.get(str(_ge_id))
         if _td:
             _td_str = _td.isoformat()
             _has_closed_by_date[_td_str] = True
             if _pnl is not None:
                 _closed_pnl_by_date[_td_str] = _closed_pnl_by_date.get(_td_str, 0.0) + _pnl
+            elif _exit_price is not None and _fill_price_c is not None:
+                # Manually SQ'd order: pnl not saved but exit_price is set — compute on the fly
+                _dir_c = (_direction_c or "").lower()
+                _dir_mult = -1 if _dir_c == "sell" else 1
+                _computed = (_exit_price - _fill_price_c) * _dir_mult * (_quantity_c or 1)
+                _closed_pnl_by_date[_td_str] = _closed_pnl_by_date.get(_td_str, 0.0) + _computed
+            # else: truly unknown — skip
 
     # ── 2. Fetch all OPEN orders for these grid entries ───────────────────────
     _open_result = await db.execute(
