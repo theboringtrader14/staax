@@ -1172,13 +1172,13 @@ class AlgoRunner:
         # ── W&T entry_reference: option LTP at arm time ────────────────────────
         # When a leg has W&T enabled and this is the force_direct entry triggered by
         # WTEvaluator, pull the reference price from the arming cache and store it on
-        # the order so the Orders page can show "W&T ref: <price>".
-        _wt_entry_ref: Optional[str] = None
+        # the order as a float so reconciliation and the Orders page can use it directly.
+        _wt_entry_ref: Optional[float] = None
         if leg.wt_enabled and force_direct:
             _ge_id_str_wt = str(grid_entry.id)
             _cached_wt = self._wt_arming_cache.get(_ge_id_str_wt)
             if _cached_wt and _cached_wt.get("reference_price"):
-                _wt_entry_ref = f"W&T ref: {_cached_wt['reference_price']:.2f}"
+                _wt_entry_ref = float(_cached_wt["reference_price"])
 
         order = Order(
             id=uuid.uuid4(),
@@ -1203,6 +1203,12 @@ class AlgoRunner:
             sl_type=leg.sl_type,
             sl_original=leg.sl_value,
         )
+        # BUG1+BUG2 belt-and-suspenders: ensure sl_type and target are always set
+        # even if the constructor's keyword arg is ever changed. sl_type must survive
+        # edge-cases where leg.sl_type is evaluated lazily after session expiry.
+        order.sl_type = leg.sl_type
+        order.sl_original = leg.sl_value
+        order.target = leg.tp_value  # may be overwritten below for ORB-based TP
         db.add(order)
         await db.flush()  # persist PENDING record — order.id now set
         asyncio.create_task(_audit.log_transition(

@@ -1935,6 +1935,11 @@ async def square_off(
             order.exit_price  = exit_price
             order.exit_reason = ExitReason.SQ
             order.exit_time   = now
+            # BUG4: compute pnl on manual PRACTIX SQ
+            if order.fill_price and exit_price:
+                order.pnl = (exit_price - order.fill_price) * (order.quantity or 1) if order.direction == "buy" else (order.fill_price - exit_price) * (order.quantity or 1)
+            else:
+                order.pnl = None
 
             # Deregister from TSL/TTP
             if tsl_engine:
@@ -1971,6 +1976,11 @@ async def square_off(
                 order.exit_price  = exit_price
                 order.exit_reason = ExitReason.SQ
                 order.exit_time   = now
+                # BUG4: compute pnl on manual LIVE SQ
+                if order.fill_price and exit_price:
+                    order.pnl = (exit_price - order.fill_price) * (order.quantity or 1) if order.direction == "buy" else (order.fill_price - exit_price) * (order.quantity or 1)
+                else:
+                    order.pnl = None
 
                 # Deregister from TSL/TTP
                 if tsl_engine:

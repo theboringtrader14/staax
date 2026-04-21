@@ -1039,6 +1039,14 @@ async def terminate_algo(algo_id: str, request: Request, db: AsyncSession = Depe
             order.status = OrderStatus.CLOSED
             order.exit_reason = ExitReason.SQ
             order.exit_time = now
+            # BUG4: compute pnl on TERMINATE SQ
+            _exit_p = order.exit_price
+            if order.fill_price and _exit_p:
+                order.pnl = ((_exit_p - order.fill_price) * (order.quantity or 1)
+                             if order.direction == "buy"
+                             else (order.fill_price - _exit_p) * (order.quantity or 1))
+            else:
+                order.pnl = None
             squared_off.append(str(order.id))
         except Exception as e:
             logger.error(f"[TERMINATE] Unexpected error closing order {order.id}: {e}")
