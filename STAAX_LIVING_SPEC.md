@@ -626,3 +626,232 @@ Animation principle: all draw animations use `calcMode="linear" from="N" to="0"`
 6. **lifex-landing**: GitHub repo + EC2 deploy under lifexos.co.in
 7. **TRAVEX**: Mapbox token env + DNS A records + certbot SSL
 8. **Android EAS build**
+
+---
+
+## Session Notes — 21 April 2026 (v8.11 — Expiry Calendar, Bots Warmup, Orders Revamp, FY Margin, P&L Cross-Day Fix)
+
+### Completed
+
+#### NIFTY Expiry Day Incident (21 Apr)
+- NIFTY weekly expiry day — NF-BTST, NF-TF, NF-STBT1, NF-STBT2 all had open overnight positions
+- Algo engine correctly detected expiry and squared off via `recover_multiday_jobs()`
+- Logged: `[ENGINE] Expiry day for NIFTY — auto-squaring overnight algos`
+
+#### ExpiryCalendar Service
+- `backend/app/engine/expiry_calendar.py` — `is_expiry_day(symbol, date)` utility
+- Supports NIFTY (weekly Thursday), BANKNIFTY (weekly Wednesday), SENSEX (weekly Friday), MIDCPNIFTY (monthly), FINNIFTY (weekly Tuesday)
+- Used by `recover_multiday_jobs()` to auto-square on expiry day instead of next trading day
+
+#### Accounts Drawer — FY Margin Panel
+- **FY Margin tab** added to AccountsDrawer with per-account capital input rows
+- `account_fy_margin` DB table: `account_id`, `fy` (e.g. "2026-27"), `capital`, `margin_pct`, `brokerage_pct`
+- API: `GET/PUT /api/v1/accounts/fy-margin` — FY auto-detected via `getCurrentFY()`
+- Annual auto-stamp: APScheduler `CronTrigger(month=4, day=1, hour=9, minute=5, timezone='Asia/Kolkata')` copies prev-FY rows to new FY at market open
+- Migration `0037_account_fy_margin.py` — applied via `alembic stamp 0037` (table already created by `Base.metadata.create_all`)
+- Angel One funds mapping fixed: `availablecash` + `collateral` → Available, `utiliseddebits` → Used, `net` → Net
+
+#### AccountsDrawer TypeScript Cleanup
+- Removed unused `editMargin`/`setEditMargin`, `editBrok`/`setEditBrok` useState declarations (remnants of old margin panel)
+- Removed unused `saveMargin()` async function
+- Removed unused `getCurrentFY` import and local `isApril` function
+- Build: zero TS errors
+
+#### Bots Engine — Signals Working
+- Migrations applied:
+  - `0038_add_instrument_expiry_to_bot_signals.py` — adds `instrument`, `expiry` columns
+  - `0039_bot_signals_schema_sync.py` — adds `trigger_price`, `bot_order_id`, `error_message`; copies data from old `price`, `order_id` columns (DB had old names, ORM had new)
+- Per-bot warmup endpoint: `POST /api/v1/bots/{bot_id}/warmup`
+- `bot_runner._warmup_single_bot(bot_id)` — fetches historical candles via Angel One, seeds aggregator + channel aggregator, resets strategy state, returns `{candle_count, upper_channel, lower_channel}`
+- Test 2 warmup: 55 candles; Test 3 warmup: 110 candles
+- `chart-data` 500 errors resolved — schema fully synced
+
+#### Orders Page Revamp
+- Design aligned with Algos page — neumorphic cards, consistent light/dark
+- Day tab bar padding matches page content
+- Stat cards layout: two rows of cards (Week P&L, Realized, Unrealized, Net + Open/Closed Algos/Positions, MISSED, ERROR, WAITING)
+- Exit reason labels: human-readable (was raw enum strings)
+
+#### P&L Cross-Day Open MTM Bug Fix
+- **Root cause**: `liveTotalMtm` was a global sum of ALL open positions via `/orders/ltp` poll (returns all open legs across all days). BTST position entered TUE appeared in WED active-tab P&L pill.
+- **Fix**: Replaced with `liveTabMtm` scoped to `safeOrders` (current tab's orders only):
+  ```tsx
+  const liveTabMtm = safeOrders
+    .flatMap(g => g.legs)
+    .filter(l => l.status === 'open')
+    .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
+  ```
+- **Day pill logic**: Past days always use static `weekPnl[day]` (prevents flicker when switching tabs). Active today-tab uses live `liveNetPnlForTab`.
+- **`isPastDay` guard**: `selectedDate < todayDate` — excludes live MTM for past day tabs entirely.
+- **No-activity guard**: `liveNetPnlForTab` returns `null` when tab has no orders (prevents showing ₹0 for empty future days)
+
+### Migrations Applied (21 Apr)
+- `0037_account_fy_margin` — stamped (table pre-exists via create_all)
+- `0038_add_instrument_expiry_to_bot_signals` — applied ✅
+- `0039_bot_signals_schema_sync` — applied ✅
+
+### Commits (21 Apr)
+| Hash | Description |
+|---|---|
+| `a470b51` | fix(accounts): correct AO funds mapping, FY margin panel with per-account inputs and totals |
+| `231652c` | fix(bots): per-bot warmup endpoint, bot_signals schema sync, historical candle seeding |
+| `8669c0a` | fix(orders): scope day-pill P&L to tab's own orders, stop cross-day BTST bleed |
+
+### Pending — Wednesday 22 April 2026
+
+1. **`~/STAXX/start.sh`** — services up, check `curl /api/v1/bots/signals/today`
+2. **BNF algos** — no expiry Wednesday; should trigger normally
+3. **Channel multi-TF fix** — `channel_tf=4h`, warmup must fetch 4h bars (not 45min). TV shows upper=152600/lower=150750, system shows 151222/150400 — discrepancy to resolve
+4. **AccountsDrawer BROKER/MARGIN/RISK tabs** — not visible after latest build, investigate
+5. **MissingGreenlet** — comprehensive snapshot pattern full audit across all engine call sites
+6. **`tp_value → order.target`** — verify P&L calc with BNF-JRN
+7. **EC2 deploy** — push today's commits to production
+8. **TRAVEX `.env` token** — Mapbox token wiring
+9. **Phase B** — AI Algo Creation (Claude Haiku + mic UI)
+
+## Session — 22 April 2026 Full Day (v8.13)
+
+### MissingGreenlet — PERMANENTLY ELIMINATED (multiple commits)
+
+Root causes found and fixed:
+1. ba853b8 — scheduler.py:237 algo.legs[0] lazy load outside session
+2. b3a9172 — INSERT column type mismatch: sl_order_id/status/warning added
+   mid-class in Order model, causing asyncpg positional binding to pass
+   fill_price (float) into String slot → DataError → rollback cascade
+   Also: algo.exit_on_entry_failure and algo.exit_on_margin_error not
+   pre-cached before rollback → fixed
+3. snapshots.py activated — ORM boundary enforced, THE ONE RULE documented
+
+Zero MissingGreenlet in production logs after all 3 fixes.
+
+### Callback Priority Order (72e71f5)
+SLTP → TSL → TTP → W&T → ORB → Bots
+Exits now evaluated before entries on every tick.
+
+### Double-Exit Guard (72e71f5)
+_exiting_orders: set in AlgoRunner prevents MTM + SL firing simultaneously
+on same leg. MTM only closes legs not already being exited by SL.
+
+### Post-Registration SL Check (72e71f5)
+check_now() called immediately after add_position() to catch price moves
+during W&T fill gap without waiting for next tick.
+
+### SL Rejection Handling (72e71f5)
+sl_order_id, sl_order_status, sl_warning fields on Order model.
+Amber warning banner with "Retry SL" button in OrderRow.
+POST /orders/{id}/retry-sl endpoint.
+Market exit fallback when SL-L order rejected by exchange.
+
+### Status Standardization (72e71f5)
+backend: engine/statuses.py — single source of truth for all status constants
+frontend: constants/statuses.ts — ORDER_STATUS, formatExitReason(), formatOrderStatus()
+4 order statuses only: OPEN, CLOSED, MISSED, ERROR (+ CANCELLED for superseded)
+Internal states (WAITING, MONITORING, RETRY) never exposed to UI.
+
+### exit_on_entry_failure → actual broker call (6dcea02)
+_close_order() was DB-only (no broker call) — replaced with
+ExecutionManager.square_off() for partial fill auto-flatten.
+Same fix for exit_on_margin_error path.
+entry_failure_auto_flatten exit reason added.
+
+### Margin keyword narrowing (6dcea02)
+MARGIN_ERROR_KEYWORDS list with 8 precise phrases including:
+"insufficient account balance", "insufficient balance"
+Replaced overly broad "margin" substring match.
+
+### W&T deregister on ERROR (6dcea02)
+wt_evaluator.deregister() called when algo enters ERROR state.
+Prevents phantom W&T triggers on already-failed algos.
+
+### Journey triggers at each level (fbc47df)
+- Trigger selector now at parent→L1, L1→L2, L2→L3 (all levels)
+- Trigger availability based on parent's SL/TP config:
+  SL Hit: only if parent has SL configured
+  TP Hit: only if parent has TP configured
+  Either: only if parent has both
+- journey_config schema: nested trigger field inside each child
+- journey_engine reads nested trigger at each level
+
+### Indexes migration (6b4e813)
+11 indexes added: GridEntry, Order, Trade, AlgoState, AlgoLeg, Algo
+strategy_type enum conversion also caught and applied.
+
+### LTP map eviction (6b4e813)
+evict_stale_tokens() in LTPConsumer, called from daily_system_reset.
+Removes tokens not in active subscriptions — prevents unbounded memory growth.
+
+### RETRY/SQ disabled outside market hours (commit in session)
+is_market_hours from health endpoint used to disable RETRY and SQ buttons.
+PRACTIX accounts: SQ still enabled regardless of market hours.
+Tooltip shown on disabled buttons.
+
+### Orders page — overnight/BTST P&L attribution (66fb940 + 9b569ce)
+Backend: removed carry-forward query that pulled BTST orders into next-day view.
+Now strictly GridEntry.trading_date == target_date.
+Frontend: liveTabMtm excludes is_overnight orders from today's computation.
+Result: NF-BTST (entered TUE) only appears in TUE tab, not WED.
+
+### AccountsDrawer — collateral display fix (9606d3b)
+If |collateral - cash| ≤ ₹100: shows "No pledged holdings" (italic muted)
+Correct for accounts without pledged securities (AO returns cash as collateral)
+
+### DashboardPanel polling backoff
+First failure: one console.warn
+Failures 2-3: silent
+3rd failure: interval slows to 30s
+First success: resets to 5s
+
+### Bots page revamp — single page (3dc80fa)
+Removed 3-tab structure (Bots / Signals / Orders tabs).
+New BotCard per bot:
+  - Pulsing status dot (green=active, amber=stopped, red=error)
+  - Indicator badge (CHANNEL / DTR / TT BANDS)
+  - 28px neumorphic action buttons: ArrowsClockwise, Play/Stop, Gear, Trash
+  - Indicator-aware levels row (DTR→UPP1/LPP1, Channel→Upper/Lower)
+  - Always-visible last 2 signals with ↑/↓ direction, time, price, status
+  - Lazy orders expand per card (fetch on first click, cache, LTP poll while open)
+  - Chart expand preserved (existing Recharts)
+Exchange section headers when >1 exchange.
+Modals restyled: var(--neu-raised-lg) + borderRadius: 24.
+
+### Architecture documentation
+STAAX_ARCHITECTURE_2026-04-22.md created (1365 lines)
+Section 13: Status reference (order statuses, exit reasons)
+Section 14: SLO targets and reliability thresholds
+
+### UI Polish — Orders + Analytics (f799e03)
+OrdersPage:
+  - MISSED/ERROR chip labels: stripped ⏭/⛔ emojis
+  - ⛔ replaced with XCircle Phosphor icon in all error banners
+  - Disabled action buttons: 'none' → 'var(--neu-inset)'
+  - All border/rgba chips converted to neu-inset
+
+AnalyticsPage:
+  - Tab bar: pill buttons → border-bottom style
+  - overflow:hidden removed from outer wrapper (shadow clipping fix)
+  - neuInset stripped from 5 sections (Heatmap table, Health table,
+    gauge well, Best Time chart, Strategy Breakdown table)
+
+### Commit log (22 April)
+
+| Hash | Message |
+|---|---|
+| `3dc80fa` | feat(bots): single-page revamp — no tabs, neumorphic cards, inline signals and orders |
+| `66fb940` | fix(orders): overnight BTST orders only appear under entry date, not today |
+| `f799e03` | ui: chip/icon/button polish across Orders and Analytics pages |
+| `aa6ac18` | ui: full neumorphic revamp of Analytics page |
+| `9606d3b` | fix(accounts): show "No pledged holdings" when collateral ≈ cash |
+| `9b569ce` | fix(orders): exclude overnight legs from liveTabMtm |
+| `9a9e7cf` | fix(ltp_consumer): BFO docstring exchangeType=3 → 4 |
+
+### Pending — Thursday 23 April 2026 (SENSEX expiry)
+
+1. start.sh — watch algos fire cleanly (no MissingGreenlet)
+2. SX-STBT should MISS (SENSEX expiry today)
+3. NF-STBT, NF-BTST, BNF-BTST should trigger normally
+4. EC2 deploy — push all today's commits
+5. Verify BTST P&L in correct day tab after backend restart
+6. Bots warmup on EC2: /api/v1/bots/{id}/warmup for all 3 bots
+7. Channel levels verification vs TradingView after warmup
+8. Seed test bot in local DB for Bots page UI verification
+9. Alembic legacy table drops verification before EC2 migration run
