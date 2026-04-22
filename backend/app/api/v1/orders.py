@@ -100,6 +100,9 @@ def _order_to_dict(order: Order) -> dict:
         "error_message":     order.error_message,
         "created_at":        order.created_at.isoformat() if order.created_at else None,
         "updated_at":        order.updated_at.isoformat() if order.updated_at else None,
+        "sl_order_id":       getattr(order, "sl_order_id",     None),
+        "sl_order_status":   getattr(order, "sl_order_status", None),
+        "sl_warning":        getattr(order, "sl_warning",      None),
     }
 
 
@@ -2313,6 +2316,85 @@ async def retry_specific_legs(
         )
 
     return {"status": "queued", "algo_name": algo.name, "leg_count": len(leg_uuids)}
+
+
+# ── Retry SL endpoint ─────────────────────────────────────────────────────────
+
+@router.post("/{order_id}/retry-sl")
+async def retry_sl_order(order_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Re-place SL exit order when sl_order_status == 'rejected'.
+    Requires the order to still be open (should not be called on closed positions).
+    """
+    import uuid as _uuid_mod
+    try:
+        _oid = _uuid_mod.UUID(order_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid order_id format")
+
+    result = await db.execute(select(Order).where(Order.id == _oid))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found")
+
+    sl_status = getattr(order, "sl_order_status", None)
+    if sl_status != "rejected":
+        raise HTTPException(400, f"Cannot retry SL — current sl_order_status: {sl_status!r}")
+
+    try:
+        # Re-place exit via ExecutionManager (single control point for all broker calls)
+        from app.engine.execution_manager import execution_manager as _em
+        from app.models.account import Account, BrokerType
+        from app.engine.algo_runner import algo_runner as _ar
+
+        # Resolve broker type for this order's account
+        _broker_type = "zerodha"
+        _acc_res = await db.execute(select(Account).where(Account.id == order.account_id))
+        _acc = _acc_res.scalar_one_or_none()
+        if _acc and _acc.broker == BrokerType.ANGELONE:
+            _broker_type = "angelone"
+
+        # Get current LTP as exit price
+        _ltp = 0.0
+        if _ar._ltp_consumer and order.instrument_token:
+            _ltp = _ar._ltp_consumer.get_ltp(int(order.instrument_token))
+        if not _ltp and order.ltp:
+            _ltp = float(order.ltp)
+        if not _ltp and order.sl_actual:
+            _ltp = float(order.sl_actual)
+        if not _ltp:
+            raise HTTPException(400, "Cannot retry SL — no current LTP available")
+
+        broker_resp = await _em.square_off(
+            db              = db,
+            idempotency_key = f"retry-sl:{order.id}",
+            algo_id         = str(order.algo_id),
+            account_id      = str(order.account_id),
+            symbol          = order.symbol,
+            exchange        = order.exchange or "NFO",
+            direction       = order.direction,
+            quantity        = order.quantity,
+            algo_tag        = order.algo_tag or "",
+            is_practix      = order.is_practix,
+            broker_type     = _broker_type,
+            symbol_token    = str(order.instrument_token or ""),
+        )
+
+        order.sl_order_status = "placed"
+        order.sl_warning      = None
+        await db.commit()
+
+        return {"status": "ok", "sl_order_status": "placed"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            order.sl_warning = f"Retry failed: {str(e)[:100]}"
+            await db.commit()
+        except Exception:
+            pass
+        raise HTTPException(500, str(e))
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────

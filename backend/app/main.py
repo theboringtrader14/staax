@@ -247,11 +247,12 @@ async def lifespan(app: FastAPI):
     scheduler_module.set_scheduler(scheduler)
 
     # ── 9. Register LTP callbacks ─────────────────────────────────────────────
-    ltp_consumer.register_callback(orb_tracker.on_tick)
-    ltp_consumer.register_callback(wt_evaluator.on_tick)
-    ltp_consumer.register_callback(tsl_engine_ins.on_tick)
-    ltp_consumer.register_callback(ttp_engine_ins.on_tick)
-    ltp_consumer.register_callback(sl_tp_monitor.on_tick)
+    # Order is intentional — exits before entries, trailing updates before entry signals.
+    ltp_consumer.register_callback(sl_tp_monitor.on_tick)    # exits first — money protection
+    ltp_consumer.register_callback(tsl_engine_ins.on_tick)   # updates sl_actual
+    ltp_consumer.register_callback(ttp_engine_ins.on_tick)   # updates tp_actual
+    ltp_consumer.register_callback(wt_evaluator.on_tick)     # new entries
+    ltp_consumer.register_callback(orb_tracker.on_tick)      # new entries
     logger.info("✅ LTP callbacks registered")
 
     # ── 10. Start scheduler ───────────────────────────────────────────────────

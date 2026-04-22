@@ -1286,6 +1286,41 @@ market conditions while complying with SL-Limit requirements.
 
 ---
 
+## 13. STATUS REFERENCE
+
+### Order Status (per-leg, shown in Orders page only)
+| Status | When it appears |
+|--------|-----------------|
+| OPEN | Order filled, position live and being monitored |
+| CLOSED | Position fully exited for any reason |
+| MISSED | Order never placed — expiry skip, ORB expired, mode guard |
+| ERROR | Placement attempted but failed — strike not found, broker reject, engine error |
+| CANCELLED | Superseded by retry — old error leg, hidden from default view |
+
+### Exit Reason → Display Label
+| DB value | Displayed as | What triggered it |
+|----------|-------------|-------------------|
+| sl | SL Hit | Per-leg SL breached |
+| tsl | TSL Hit | Trailing SL breached |
+| tp | TP Hit | Per-leg TP hit |
+| ttp | TTP Hit | Trailing TP hit |
+| mtm_sl | MTM SL | Combined algo P&L hit MTM stop loss |
+| mtm_tp | MTM TP | Combined algo P&L hit MTM target |
+| auto_sq | Exit Time | Scheduled exit_time job fired |
+| sq | SQ | User clicked SQ button |
+| manual | Manual | Manually marked as squared |
+| terminate | Terminate | User terminated algo |
+| expiry | Expiry | Force closed on expiry day |
+| reconcile | Reconcile | Reconciliation job closed position |
+| btst_exit | BTST Exit | Next-morning BTST exit job |
+| stbt_exit | STBT Exit | Next-morning STBT exit job |
+
+### Internal Engine States (backend only — never shown to user)
+WAITING, MONITORING, RETRY, SQ are internal engine states managed
+by AlgoRunner. They are never exposed in the API or frontend.
+
+---
+
 *End of STAAX_ARCHITECTURE_2026-04-22.md*
 *Generated from code state as of commit ba853b8*
 *Supersedes STAAX_ARCHITECTURE.md*

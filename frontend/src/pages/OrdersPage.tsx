@@ -5,30 +5,9 @@ import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
 import { CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
-
-function formatExitReason(reason: string | null | undefined): string {
-  if (!reason) return '—'
-  switch (reason) {
-    case 'sq':                 return 'SQ'
-    case 'auto_sq':            return 'Exit Time'
-    case 'sl':                 return 'SL Hit'
-    case 'tp':                 return 'TP Hit'
-    case 'tsl':                return 'TSL Hit'
-    case 'mtm_sl':             return 'MTM SL'
-    case 'mtm_tp':             return 'MTM TP'
-    case 'global_sl':          return 'Global SL'
-    case 'btst_exit':          return 'BTST Exit'
-    case 'stbt_exit':          return 'STBT Exit'
-    case 'expiry_force_close': return 'Expiry'
-    case 'kill_switch':        return 'Kill Switch'
-    case 'error':              return 'Error'
-    case 'terminated':         return 'Terminate'
-    case 'reconcile':          return 'Reconcile'
-    default:                   return reason
-  }
-}
 
 // IST time formatters — all timestamps from backend are UTC ISO strings
 const fmtIST = (iso: string | null | undefined): string => {
@@ -54,6 +33,8 @@ interface Leg {
   reentryTypeUsed?: string;   // "re_entry" | "re_execute"
   wtEnabled?: boolean; wtValue?: number; wtUnit?: string; wtDirection?: string; entryReference?: number
   reconcileStatus?: string
+  slWarning?: string
+  slOrderStatus?: string
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
@@ -136,13 +117,13 @@ function getInstrumentFromGroup(group: AlgoGroup): string {
 }
 
 function getAlgoStatus(group: AlgoGroup): AlgoStatus {
-  if (group.terminated) return 'closed'
+  if (group.terminated) return ORDER_STATUS.CLOSED as AlgoStatus
   const legs = group.legs || []
   if (legs.length === 0) return 'waiting'
-  if (legs.some(l => l.status === 'error'))  return 'error'
-  if (legs.some(l => l.status === 'open'))   return 'open'
+  if (legs.some(l => l.status === ORDER_STATUS.ERROR))  return ORDER_STATUS.ERROR as AlgoStatus
+  if (legs.some(l => l.status === ORDER_STATUS.OPEN))   return ORDER_STATUS.OPEN as AlgoStatus
   if (legs.some(l => l.status === 'pending')) return 'pending'
-  if (legs.every(l => l.status === 'closed')) return 'closed'
+  if (legs.every(l => l.status === ORDER_STATUS.CLOSED)) return ORDER_STATUS.CLOSED as AlgoStatus
   return 'no_trade'
 }
 
@@ -195,6 +176,18 @@ function formatSlSetting(slType: string | null, slOriginal: number | null): stri
     case 'orb_low':        return `(ORB-L)`
     case 'orb_range':      return `(ORB-R)`
     default:               return `(${val})`
+  }
+}
+
+async function handleRetrySL(orderId: string) {
+  try {
+    const resp = await fetch(`/api/v1/orders/${orderId}/retry-sl`, { method: 'POST' })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      alert(`Retry SL failed: ${err.detail || resp.statusText}`)
+    }
+  } catch (e) {
+    alert(`Retry SL error: ${e}`)
   }
 }
 
@@ -404,6 +397,44 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         </td>
       </tr>
     )}
+    {leg.slWarning && (
+      <tr>
+        <td colSpan={COLS.length} style={{ padding: '4px 10px 4px 26px', borderBottom: '1px solid var(--bg-border)' }}>
+          <div style={{
+            background: 'var(--bg)',
+            boxShadow: 'var(--neu-inset)',
+            borderLeft: '3px solid #FFAA00',
+            borderRadius: 8,
+            padding: '6px 14px',
+            marginTop: 4,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <span style={{ fontSize: 11, color: '#FFAA00', fontFamily: 'var(--font-mono)', letterSpacing: '0.3px' }}>
+              ⚠ {leg.slWarning}
+            </span>
+            <button
+              onClick={() => handleRetrySL(leg.id)}
+              style={{
+                marginLeft: 'auto',
+                fontSize: 10,
+                color: '#FFAA00',
+                background: 'var(--bg)',
+                boxShadow: 'var(--neu-raised-sm)',
+                border: 'none',
+                borderRadius: 20,
+                padding: '2px 10px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              Retry SL
+            </button>
+          </div>
+        </td>
+      </tr>
+    )}
     </>
   )
 }
@@ -497,6 +528,8 @@ function mapGroup(g: any): AlgoGroup {
       wtUnit:          o.wt_unit ?? undefined,
       wtDirection:     o.wt_direction ?? undefined,
       entryReference:  o.entry_reference ?? undefined,
+      slWarning:       o.sl_warning ?? undefined,
+      slOrderStatus:   o.sl_order_status ?? undefined,
     })}),
   }
 }

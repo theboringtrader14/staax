@@ -1,0 +1,25 @@
+"""Single source of truth for all status and exit reason constants."""
+
+# Order statuses
+ORDER_OPEN      = "open"
+ORDER_CLOSED    = "closed"
+ORDER_MISSED    = "missed"
+ORDER_ERROR     = "error"
+ORDER_CANCELLED = "cancelled"
+
+# Exit reasons
+EXIT_SL         = "sl"
+EXIT_TSL        = "tsl"
+EXIT_TP         = "tp"
+EXIT_TTP        = "ttp"
+EXIT_MTM_SL     = "mtm_sl"
+EXIT_MTM_TP     = "mtm_tp"
+EXIT_AUTO_SQ    = "auto_sq"
+EXIT_SQ         = "sq"
+EXIT_MANUAL     = "manual"
+EXIT_TERMINATE  = "terminate"
+EXIT_EXPIRY     = "expiry"
+EXIT_RECONCILE  = "reconcile"
+EXIT_BTST       = "btst_exit"
+EXIT_STBT       = "stbt_exit"
+EXIT_SUPERSEDED = "superseded_by_retry"

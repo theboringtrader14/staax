@@ -147,6 +147,11 @@ class AlgoRunner:
         # Cleared by daily reset job at midnight.
         self._lot_size_cache: Dict[str, int] = {}
 
+        # Double-exit guard — prevents concurrent SL/TP/MTM callbacks from
+        # squaring the same order more than once when ticks arrive in quick
+        # succession between the is_active=False flag and the broker call.
+        self._exiting_orders: set = set()
+
     def wire_engines(
         self,
         strike_selector:   StrikeSelector,
@@ -1435,6 +1440,10 @@ class AlgoRunner:
                 on_tp=self._make_tp_callback(),
             )
 
+            # Post-registration immediate check — catches fast moves during W&T gap
+            if self._sl_tp_monitor and self._ltp_consumer:
+                await self._sl_tp_monitor.check_now(str(order.id), self._ltp_consumer)
+
             # ── Subscribe underlying token for pts_underlying / pct_underlying ─
             # When SL or TP is based on the underlying index move, we must receive
             # ticks for the underlying token and forward them to SLTPMonitor.
@@ -1804,6 +1813,16 @@ class AlgoRunner:
     def _make_sl_callback(self):
         """Returns an async callback for SLTPMonitor on_sl."""
         async def on_sl_hit(order_id: str, ltp: float, reason: str):
+            if order_id in self._exiting_orders:
+                logger.info(f"[EXIT GUARD] SL suppressed — {order_id} already exiting")
+                return
+            self._exiting_orders.add(order_id)
+            try:
+                await _on_sl_hit_inner(order_id, ltp, reason)
+            finally:
+                self._exiting_orders.discard(order_id)
+
+        async def _on_sl_hit_inner(order_id: str, ltp: float, reason: str):
             async with AsyncSessionLocal() as db:
                 try:
                     result = await db.execute(
@@ -1931,7 +1950,37 @@ class AlgoRunner:
                 f"{algo_id} · MTM {reason.upper()} hit · ₹{total_pnl:,.0f}",
                 algo_name=algo_id, source="engine",
             )
-            await self.exit_all(grid_entry_id, reason=reason)
+            # Double-exit guard: collect open order_ids for this algo and filter
+            # out any that are already being exited by a concurrent SL/TP callback.
+            _order_ids_to_exit: list = []
+            try:
+                async with AsyncSessionLocal() as _guard_db:
+                    from sqlalchemy import select as _sel
+                    _res = await _guard_db.execute(
+                        _sel(Order.id).where(
+                            Order.grid_entry_id == grid_entry_id,
+                            Order.status == OrderStatus.OPEN,
+                        )
+                    )
+                    _all_ids = [str(r) for r in _res.scalars().all()]
+                _order_ids_to_exit = [oid for oid in _all_ids if oid not in self._exiting_orders]
+                _already = [oid for oid in _all_ids if oid in self._exiting_orders]
+                if _already:
+                    logger.info(
+                        f"[EXIT GUARD] MTM {reason} — suppressed {len(_already)} order(s) "
+                        f"already exiting: {_already}"
+                    )
+                for oid in _order_ids_to_exit:
+                    self._exiting_orders.add(oid)
+            except Exception as _guard_err:
+                logger.warning(f"[EXIT GUARD] MTM order fetch failed (proceeding anyway): {_guard_err}")
+                _order_ids_to_exit = []
+
+            try:
+                await self.exit_all(grid_entry_id, reason=reason)
+            finally:
+                for oid in _order_ids_to_exit:
+                    self._exiting_orders.discard(oid)
 
         return on_mtm_breach
 
@@ -2314,6 +2363,11 @@ class AlgoRunner:
         order.exit_time   = datetime.now(IST)        # datetime, not isoformat() string
         order.exit_reason = self._resolve_exit_reason(reason)
         order.pnl         = self._compute_pnl(order, exit_price)
+        # Mark SL order as placed when a SL/TSL exit fires (broker square-off dispatched
+        # by exit_all/on_sl_hit path). broker_order_id is set at entry, not exit.
+        # sl_order_id is filled by the broker square-off caller when it has a response.
+        if reason in ("sl", "tsl", "overnight_sl") and not getattr(order, "sl_order_status", None):
+            order.sl_order_status = "placed"
 
     def _compute_pnl(self, order: Order, exit_price: float) -> Optional[float]:
         if order.fill_price is None or order.fill_price == 0:

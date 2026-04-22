@@ -139,6 +139,41 @@ class SLTPMonitor:
     def update_underlying_ltp(self, token: int, ltp: float):
         self._underlying_ltps[token] = ltp
 
+    async def check_now(self, order_id: str, ltp_consumer=None) -> bool:
+        """
+        Immediately check SL/TP using cached LTP from ltp_consumer.
+        Call right after add_position() to catch fast moves during W&T gap.
+        Returns True if SL or TP was triggered.
+        """
+        m = self._positions.get(order_id)
+        if not m or not m.is_active:
+            return False
+        if ltp_consumer is None:
+            return False
+        current_ltp = ltp_consumer.get_ltp(m.instrument_token)
+        if current_ltp <= 0:
+            return False
+        ul = self._underlying_ltps.get(m.underlying_token)
+        if m.is_sl_hit(current_ltp, ul):
+            m.is_active = False
+            logger.warning(
+                f"[SL-IMMEDIATE] Breach on registration: {order_id} "
+                f"ltp={current_ltp} sl={m.sl_actual:.2f}"
+            )
+            if cb := self._sl_callbacks.get(order_id):
+                await cb(order_id, current_ltp, "sl")
+            return True
+        if m.is_tp_hit(current_ltp, ul):
+            m.is_active = False
+            logger.warning(
+                f"[TP-IMMEDIATE] Breach on registration: {order_id} "
+                f"ltp={current_ltp}"
+            )
+            if cb := self._tp_callbacks.get(order_id):
+                await cb(order_id, current_ltp, "tp")
+            return True
+        return False
+
     async def on_tick(self, token: int, ltp: float, tick: dict):
         for order_id, m in list(self._positions.items()):
             if not m.is_active or m.instrument_token != token:
