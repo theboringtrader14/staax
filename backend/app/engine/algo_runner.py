@@ -642,6 +642,17 @@ class AlgoRunner:
         _order_cache: dict = {}
         entry_error = False
 
+        # G3: Snapshot plain-Python values from ORM objects HERE, before any
+        # per-leg try/except.  After db.rollback() inside the except block SQLAlchemy
+        # marks every ORM object "expired"; a subsequent attribute access (e.g. algo.id)
+        # tries to lazy-load → MissingGreenlet because no greenlet bridge exists outside
+        # the original await context.  Using these cached scalars avoids all lazy loads.
+        _algo_id_str       = str(algo.id)
+        _algo_name_str     = str(algo.name or "")
+        _algo_account_str  = str(algo.account_id) if algo.account_id else ""
+        _ge_id_str         = str(grid_entry.id)
+        _ge_is_practix     = bool(grid_entry.is_practix)
+
         for leg in legs:
             # Capture plain Python values from ORM object before any try/except so that
             # accessing them in the except block (after a rollback expires ORM objects)
@@ -700,20 +711,23 @@ class AlgoRunner:
                         db            = db,
                         action        = "PLACE",
                         status        = "FAILED",
-                        algo_id       = str(algo.id),
-                        account_id    = str(algo.account_id) if algo.account_id else "",
-                        grid_entry_id = str(grid_entry.id),
+                        algo_id       = _algo_id_str,
+                        account_id    = _algo_account_str,
+                        grid_entry_id = _ge_id_str,
                         reason        = str(e),
                         event_type    = "entry_failed",
-                        is_practix    = grid_entry.is_practix,
+                        is_practix    = _ge_is_practix,
                         details       = {"leg": leg_number, "error": str(e)},
                     )
 
                 # Write to event_log so leg failure surfaces in System Log / notification bell
+                # Use pre-captured plain-Python strings — algo/grid_entry ORM objects are
+                # expired after db.rollback() and accessing their attributes would trigger
+                # a lazy load → MissingGreenlet.
                 await _ev.error(
-                    f"{algo.name} · Leg {leg_number} failed: {str(e)[:200]}",
-                    algo_name=algo.name,
-                    algo_id=str(algo.id),
+                    f"{_algo_name_str} · Leg {leg_number} failed: {str(e)[:200]}",
+                    algo_name=_algo_name_str,
+                    algo_id=_algo_id_str,
                     source="engine",
                 )
 
@@ -723,12 +737,12 @@ class AlgoRunner:
                 if _is_margin:
                     if getattr(algo, "exit_on_margin_error", True):
                         logger.warning(
-                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, "
+                            f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, "
                             f"exiting all positions (exit_on_margin_error=True)"
                         )
                         await _ev.error(
-                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, exiting all positions",
-                            algo_name=algo.name, algo_id=str(algo.id), source="engine",
+                            f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, exiting all positions",
+                            algo_name=_algo_name_str, algo_id=_algo_id_str, source="engine",
                         )
                         for placed in placed_orders:
                             _cached_ltp = _order_cache.get(str(placed.id), (0.0,))[0]
@@ -737,19 +751,19 @@ class AlgoRunner:
                                 await self._close_order(db, _p, _cached_ltp, "margin_error")
                         await self._set_error(
                             db, algo_state, grid_entry,
-                            f"Margin error on leg {leg.leg_number}: {str(e)}",
-                            algo_name=algo.name,
+                            f"Margin error on leg {leg_number}: {str(e)}",
+                            algo_name=_algo_name_str,
                         )
                         await db.commit()
                         return
                     else:
                         logger.info(
-                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, "
+                            f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, "
                             f"continuing other legs (exit_on_margin_error=False)"
                         )
                         await _ev.info(
-                            f"[MARGIN_ERROR] {algo.name} — margin error on leg {leg.leg_number}, continuing",
-                            algo_name=algo.name, algo_id=str(algo.id), source="engine",
+                            f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, continuing",
+                            algo_name=_algo_name_str, algo_id=_algo_id_str, source="engine",
                         )
                         continue
 
@@ -763,8 +777,8 @@ class AlgoRunner:
                         if _p:
                             await self._close_order(db, _p, _cached_ltp, "entry_fail")
                     await self._set_error(
-                        db, algo_state, grid_entry, f"Leg {leg.leg_number} failed: {str(e)}",
-                        algo_name=algo.name,
+                        db, algo_state, grid_entry, f"Leg {leg_number} failed: {str(e)}",
+                        algo_name=_algo_name_str,
                     )
                     await db.commit()
                     return
