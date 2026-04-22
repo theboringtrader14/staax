@@ -315,16 +315,30 @@ async def get_bot_chart_data(
 
         # Get strategy levels
         strategy = getattr(bot_runner, '_strategies', {}).get(bot_id)
+        ch_agg   = getattr(bot_runner, '_channel_aggregators', {}).get(bot_id)
         levels = {}
         if strategy:
             if hasattr(strategy, 'upper_pivot') and strategy.upper_pivot is not None:
                 levels['upp1'] = strategy.upper_pivot
             if hasattr(strategy, 'lower_pivot') and strategy.lower_pivot is not None:
                 levels['lpp1'] = strategy.lower_pivot
-            if hasattr(strategy, 'upper_channel') and strategy.upper_channel is not None:
-                levels['upper_channel'] = strategy.upper_channel
-            if hasattr(strategy, 'lower_channel') and strategy.lower_channel is not None:
-                levels['lower_channel'] = strategy.lower_channel
+            # When a separate channel aggregator exists (channel_tf != entry_tf),
+            # compute upper/lower from its higher-TF candles — same logic as on_candle().
+            if ch_agg is not None and hasattr(strategy, '_num'):
+                ch_candles = ch_agg.candles
+                num = strategy._num
+                if len(ch_candles) >= num:
+                    recent = ch_candles[-num:]
+                    levels['upper_channel'] = max(c.high for c in recent)
+                    levels['lower_channel'] = min(c.low  for c in recent)
+                elif hasattr(strategy, 'upper_channel') and strategy.upper_channel is not None:
+                    levels['upper_channel'] = strategy.upper_channel
+                    levels['lower_channel'] = strategy.lower_channel
+            else:
+                if hasattr(strategy, 'upper_channel') and strategy.upper_channel is not None:
+                    levels['upper_channel'] = strategy.upper_channel
+                if hasattr(strategy, 'lower_channel') and strategy.lower_channel is not None:
+                    levels['lower_channel'] = strategy.lower_channel
             if hasattr(strategy, 'highline') and strategy.highline is not None:
                 levels['tt_high'] = strategy.highline
             if hasattr(strategy, 'lowline') and strategy.lowline is not None:

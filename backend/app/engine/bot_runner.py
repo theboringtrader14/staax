@@ -1056,14 +1056,32 @@ class BotRunner:
 
             logger.info("[WARMUP] %s: done — %d candles, %d warmup signals discarded",
                         bot.name, len(feed), discarded)
+
+            # Compute channel levels from ch_agg (higher-TF) when present,
+            # otherwise fall back to the strategy's internal buffer.
+            ch_agg_final = self._channel_aggregators.get(bot_id)
+            if ch_agg_final is not None and hasattr(strategy, '_num'):
+                ch_candles = ch_agg_final.candles
+                num = strategy._num
+                if len(ch_candles) >= num:
+                    recent = ch_candles[-num:]
+                    upper_lvl = max(c.high for c in recent)
+                    lower_lvl = min(c.low  for c in recent)
+                else:
+                    upper_lvl = getattr(strategy, 'upper_channel', None)
+                    lower_lvl = getattr(strategy, 'lower_channel', None)
+            else:
+                upper_lvl = getattr(strategy, 'upper_channel', None)
+                lower_lvl = getattr(strategy, 'lower_channel', None)
+
             return {
                 "status": "ok",
                 "bot_id": bot_id,
                 "bot_name": bot.name,
                 "candle_count": len(feed),
                 "warmup_signals_discarded": discarded,
-                "upper_channel": getattr(strategy, 'upper_channel', None),
-                "lower_channel": getattr(strategy, 'lower_channel', None),
+                "upper_channel": upper_lvl,
+                "lower_channel": lower_lvl,
             }
 
         except Exception as e:

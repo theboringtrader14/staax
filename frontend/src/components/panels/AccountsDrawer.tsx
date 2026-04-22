@@ -94,9 +94,10 @@ export default function AccountsDrawer() {
 
   const fetchAccounts = useCallback(() => {
     accountsAPI.list().then(res => {
-      const data: any[] = res.data || []
+      const raw = res.data
+      const data: any[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.accounts) ? raw.accounts : [])
       if (data.length > 0) setAccounts(mapAccounts(data))
-    }).catch(() => {})
+    }).catch((e) => { console.warn('[AccountsDrawer] accounts list failed', e) })
   }, [])
 
   useEffect(() => { fetchAccounts() }, [fetchAccounts])
@@ -108,21 +109,28 @@ export default function AccountsDrawer() {
   const fetchAllFunds = async () => {
     setAllFundsLoading(true)
     try {
-      const [fundsRes, fyRes] = await Promise.all([accountsAPI.funds(), accountsAPI.getFYMargin()])
+      const fundsRes = await accountsAPI.funds()
       setAllFunds(fundsRes.data?.funds ?? [])
-      // Build FY map keyed by account_id
+    } catch (e) {
+      console.warn('[AccountsDrawer] funds fetch failed', e)
+      setAllFunds([])
+    }
+    try {
+      const fyRes = await accountsAPI.getFYMargin()
       const fyMap: Record<string, { fy_margin: number|null; fy_brokerage: number|null }> = {}
       for (const row of (fyRes.data?.data ?? [])) {
         fyMap[row.account_id] = { fy_margin: row.fy_margin ?? null, fy_brokerage: row.fy_brokerage ?? null }
       }
       setFYMarginData(fyMap)
+    } catch (e) {
+      console.warn('[AccountsDrawer] fy-margin fetch failed', e)
+      // leave fyMarginData at current state — don't crash
+    }
+    try {
       const now = new Date()
       setAllFundsUpdated(now.toTimeString().slice(0, 8))
-    } catch {
-      setAllFunds([])
-    } finally {
-      setAllFundsLoading(false)
-    }
+    } catch (_) {}
+    setAllFundsLoading(false)
   }
 
   useEffect(() => {
@@ -206,14 +214,20 @@ export default function AccountsDrawer() {
       if (edit.margin    !== undefined) payload.fy_margin    = parseFloat(edit.margin)    || 0
       if (edit.brokerage !== undefined) payload.fy_brokerage = parseFloat(edit.brokerage) || 0
       await accountsAPI.saveFYMargin(payload)
-      const fyRes = await accountsAPI.getFYMargin()
-      const fyMap: Record<string, { fy_margin: number|null; fy_brokerage: number|null }> = {}
-      for (const row of (fyRes.data?.data ?? [])) {
-        fyMap[row.account_id] = { fy_margin: row.fy_margin ?? null, fy_brokerage: row.fy_brokerage ?? null }
-      }
-      setFYMarginData(fyMap)
       setFYMarginEdits(e => { const n = { ...e }; delete n[accountId]; return n })
-    } catch { }
+      try {
+        const fyRes = await accountsAPI.getFYMargin()
+        const fyMap: Record<string, { fy_margin: number|null; fy_brokerage: number|null }> = {}
+        for (const row of (fyRes.data?.data ?? [])) {
+          fyMap[row.account_id] = { fy_margin: row.fy_margin ?? null, fy_brokerage: row.fy_brokerage ?? null }
+        }
+        setFYMarginData(fyMap)
+      } catch (e) {
+        console.warn('[AccountsDrawer] fy-margin refresh failed after save', e)
+      }
+    } catch (e) {
+      console.warn('[AccountsDrawer] saveFYMargin failed', e)
+    }
     setSavingFY(s => ({ ...s, [accountId]: false }))
   }
 
