@@ -133,9 +133,7 @@ async def list_orders(
     """
     target_date = _parse_date(trading_date) or datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
-    # Find all GridEntries for this day
-    day_name = target_date.strftime('%a').lower()  # 'mon', 'tue', etc.
-
+    # Find all GridEntries strictly for this trading date
     grid_result = await db.execute(
         select(GridEntry).where(
             GridEntry.trading_date == target_date,
@@ -146,20 +144,7 @@ async def list_orders(
     grid_entry_ids = [e.id for e in grid_entries]
     algo_to_ge: dict = {str(ge.algo_id): ge for ge in grid_entries}
 
-    # Also include open orders from same day_of_week (BTST/STBT/Positional carry-forwards)
-    open_ge_result = await db.execute(
-        select(GridEntry).where(
-            GridEntry.day_of_week == day_name,
-            GridEntry.trading_date != target_date,
-            GridEntry.status != GridStatus.NO_TRADE,
-        )
-    )
-    open_ge_ids = [e.id for e in open_ge_result.scalars().all()]
-
-    # We'll include orders from open_ge_ids only if they have open status
-    all_grid_entry_ids = list(set(grid_entry_ids + open_ge_ids))
-
-    if not all_grid_entry_ids:
+    if not grid_entry_ids:
         return {
             "trading_date": target_date.isoformat(),
             "orders":       [],
@@ -168,15 +153,10 @@ async def list_orders(
             "total":        0,
         }
 
-    # Build query
+    # Build query — strictly this date's grid entries; overnight/BTST orders stay
+    # under their own entry date and never bleed into subsequent days
     conditions = [
-        or_(
-            Order.grid_entry_id.in_(grid_entry_ids),  # today's entries — all statuses
-            and_(
-                Order.grid_entry_id.in_(open_ge_ids),  # carry-forward entries — open only
-                Order.status == OrderStatus.OPEN,
-            )
-        )
+        Order.grid_entry_id.in_(grid_entry_ids)
     ]
     if algo_id:
         conditions.append(Order.algo_id == algo_id)
