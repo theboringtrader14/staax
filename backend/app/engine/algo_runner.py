@@ -652,11 +652,13 @@ class AlgoRunner:
         # marks every ORM object "expired"; a subsequent attribute access (e.g. algo.id)
         # tries to lazy-load → MissingGreenlet because no greenlet bridge exists outside
         # the original await context.  Using these cached scalars avoids all lazy loads.
-        _algo_id_str       = str(algo.id)
-        _algo_name_str     = str(algo.name or "")
-        _algo_account_str  = str(algo.account_id) if algo.account_id else ""
-        _ge_id_str         = str(grid_entry.id)
-        _ge_is_practix     = bool(grid_entry.is_practix)
+        _algo_id_str                 = str(algo.id)
+        _algo_name_str               = str(algo.name or "")
+        _algo_account_str            = str(algo.account_id) if algo.account_id else ""
+        _algo_exit_on_entry_failure  = bool(getattr(algo, "exit_on_entry_failure", False))
+        _algo_exit_on_margin_error   = bool(getattr(algo, "exit_on_margin_error", True))
+        _ge_id_str                   = str(grid_entry.id)
+        _ge_is_practix               = bool(grid_entry.is_practix)
 
         for leg in legs:
             # Capture plain Python values from ORM object before any try/except so that
@@ -740,7 +742,7 @@ class AlgoRunner:
                 _err_lower = str(e).lower()
                 _is_margin = any(kw in _err_lower for kw in ("insufficient margin", "insufficient funds", "margin"))
                 if _is_margin:
-                    if getattr(algo, "exit_on_margin_error", True):
+                    if _algo_exit_on_margin_error:
                         logger.warning(
                             f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, "
                             f"exiting all positions (exit_on_margin_error=True)"
@@ -772,7 +774,7 @@ class AlgoRunner:
                         )
                         continue
 
-                if algo.exit_on_entry_failure:
+                if _algo_exit_on_entry_failure:
                     logger.warning(
                         f"on_entry_fail=exit_all — squaring off {len(placed_orders)} placed legs"
                     )

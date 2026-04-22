@@ -106,11 +106,6 @@ class Order(Base):
     pnl              = Column(Float, nullable=True)
     reconcile_status = Column(String(20), nullable=True)  # null | 'mismatch' | 'missing' | 'price_mismatch'
 
-    # ── SL order tracking ────────────────────────────────────────────────────
-    sl_order_id     = Column(String(50),  nullable=True)   # broker order ID for SL exit order
-    sl_order_status = Column(String(20),  nullable=True)   # placed | rejected | filled | cancelled
-    sl_warning      = Column(String(200), nullable=True)   # shown in Orders page amber warning banner
-
     # ── State ─────────────────────────────────────────────────────────────────
     status        = Column(Enum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.PENDING, index=True)
     journey_level = Column(String(10), nullable=True)   # "1", "1.1", "2.1" etc.
@@ -120,6 +115,15 @@ class Order(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # ── SL order tracking ────────────────────────────────────────────────────
+    # IMPORTANT: These columns MUST remain at the very end of the class so that
+    # SQLAlchemy's INSERT positional binding ($N) aligns with the DB column order
+    # (columns added via ALTER TABLE are appended at the end in PostgreSQL).
+    # Moving these mid-class shifts $N slots and causes asyncpg DataError on INSERT.
+    sl_order_id     = Column(String(50),  nullable=True)   # broker order ID for SL exit order
+    sl_order_status = Column(String(20),  nullable=True)   # placed | rejected | filled | cancelled
+    sl_warning      = Column(String(200), nullable=True)   # shown in Orders page amber warning banner
 
 
 class MarginHistory(Base):
