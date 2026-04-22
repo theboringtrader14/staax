@@ -456,7 +456,17 @@ function mapGroup(g: any): AlgoGroup {
     orbEndTime:   g.orb_end_time ?? null,
     orbHigh:      g.orb_high ?? null,
     orbLow:       g.orb_low  ?? null,
-    legs: (g.orders || []).filter((o: any) => o.status !== 'cancelled').map((o: any): Leg => ({
+    legs: (g.orders || []).filter((o: any) => o.status !== 'cancelled').map((o: any): Leg => {
+      // For auto-squareoff legs (exit_reason='sq'), prefer the algo-configured exit_time
+      // over the actual timestamp — prevents the 15:35 EOD safety-net time from showing
+      // instead of the algo's true exit time (e.g. 15:14 for SX-WIDE).
+      const algoExitTime = g.algo_exit_time as string | undefined
+      const resolvedExitTime = o.exit_time
+        ? (o.exit_reason === 'sq' && algoExitTime
+            ? algoExitTime.slice(0, 5)       // HH:MM from algo config
+            : fmtIST(o.exit_time))            // actual timestamp for all other exits
+        : undefined
+      return ({
       id:              o.id,
       journeyLevel:    o.journey_level || '1',
       status:          (o.status ?? 'pending') as LegStatus,
@@ -477,7 +487,7 @@ function mapGroup(g: any): AlgoGroup {
       exitPrice:       o.exit_price ?? undefined,
       exitPriceManual: o.exit_price_manual ?? undefined,
       exitPriceRaw:    o.exit_price_raw ?? undefined,
-      exitTime:        o.exit_time ? fmtIST(o.exit_time) : undefined,
+      exitTime:        resolvedExitTime,
       exitReason:      o.exit_reason ?? undefined,
       pnl:             o.pnl ?? undefined,
       reentryCount:    o.reentry_count ?? 0,
@@ -487,7 +497,7 @@ function mapGroup(g: any): AlgoGroup {
       wtUnit:          o.wt_unit ?? undefined,
       wtDirection:     o.wt_direction ?? undefined,
       entryReference:  o.entry_reference ?? undefined,
-    })),
+    })}),
   }
 }
 

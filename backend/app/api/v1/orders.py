@@ -215,12 +215,13 @@ async def list_orders(
             algo_meta: dict = {}
             for a, acc in algo_result.all():
                 algo_meta[str(a.id)] = {
-                    "algo_name":  a.name,
-                    "account":    acc.nickname if acc else "",
-                    "mtm_sl":     a.mtm_sl or 0,
-                    "mtm_tp":     a.mtm_tp or 0,
-                    "entry_type": a.entry_type.value if a.entry_type else "",
+                    "algo_name":    a.name,
+                    "account":      acc.nickname if acc else "",
+                    "mtm_sl":       a.mtm_sl or 0,
+                    "mtm_tp":       a.mtm_tp or 0,
+                    "entry_type":   a.entry_type.value if a.entry_type else "",
                     "orb_end_time": a.orb_end_time or None,
+                    "exit_time":    a.exit_time,  # algo-configured exit time (HH:MM) for display
                 }
         except Exception as e:
             logger.warning(f"[orders] groups metadata fetch failed: {e}")
@@ -257,6 +258,7 @@ async def list_orders(
                 logger.warning(f"[orders] latest_error fetch failed for algo {aid}: {e}")
 
             ge = algo_to_ge.get(aid)
+            _algo_exit_time = meta.get("exit_time")  # HH:MM — algo configured exit time
             groups.append({
                 "algo_id":        aid,
                 "algo_name":      meta.get("algo_name", ""),
@@ -269,6 +271,7 @@ async def list_orders(
                 "grid_entry_id":  str(ge.id) if ge else None,
                 "entry_type":     meta.get("entry_type", ""),
                 "orb_end_time":   meta.get("orb_end_time", None),
+                "algo_exit_time": _algo_exit_time,  # algo-configured exit time for display
             })
 
     return {

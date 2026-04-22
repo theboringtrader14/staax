@@ -971,6 +971,7 @@ class AlgoRunner:
 
         # ── Strike selection (always first — needed for both W&T and direct entry) ─
         instrument = None
+        _instrument_exchange = "NFO"  # default; overridden below for BFO (SENSEX/BANKEX options)
         if leg.instrument == "fu":
             # Futures — use underlying directly
             symbol           = f"{leg.underlying}FUT"
@@ -983,6 +984,7 @@ class AlgoRunner:
                 symbol           = original_order.symbol
                 instrument_token = getattr(original_order, "instrument_token", None) or 0
                 ltp              = original_order.fill_price or 0.0
+                _instrument_exchange = getattr(original_order, "exchange", None) or "NFO"
             else:
                 if self._strike_selector:
                     _strike_err: Exception | None = None
@@ -1033,6 +1035,8 @@ class AlgoRunner:
                 symbol           = instrument.get("tradingsymbol", "")
                 instrument_token = instrument.get("instrument_token", 0)
                 ltp              = instrument.get("last_price", 0.0)
+                # Capture exchange for BFO routing (SENSEX/BANKEX options use BFO not NFO)
+                _instrument_exchange = instrument.get("exchange", "NFO")
                 # Store resolved token on the leg so monitors/W&T callbacks
                 # can access leg.instrument_token without AttributeError.
                 leg.instrument_token = instrument_token
@@ -1178,6 +1182,16 @@ class AlgoRunner:
         # ── G3: Write PENDING order before broker call ─────────────────────────
         # Ensures a DB record exists even if the post-broker commit fails.
         fill_price = ltp  # market fill at LTP (set early for the pre-flight record)
+        # Guard: if fill_price is 0 (e.g. Angel One instrument master returns no price),
+        # fall back to live SmartStream LTP to avoid P&L = 0 display issue.
+        if fill_price == 0 and self._ltp_consumer and instrument_token:
+            _live_ltp = self._ltp_consumer.get_ltp(int(instrument_token))
+            if _live_ltp and _live_ltp > 0:
+                fill_price = _live_ltp
+                logger.info(
+                    f"[FILL_PRICE] fill_price was 0 for {symbol} — using live LTP "
+                    f"{fill_price:.2f} from SmartStream as fallback"
+                )
         journey_level = (
             f"{algo_state.reentry_count + 1}"
             if not reentry
@@ -1205,7 +1219,7 @@ class AlgoRunner:
             account_id=algo.account_id,
             algo_tag=algo_tag,
             symbol=symbol,
-            exchange="NFO",
+            exchange=_instrument_exchange,
             direction=direction,
             lots=leg.lots * grid_entry.lot_multiplier,
             lot_size=lot_size,
@@ -1244,7 +1258,7 @@ class AlgoRunner:
                     algo_id         = str(algo.id),
                     account_id      = str(algo.account_id),
                     symbol          = symbol,
-                    exchange        = "NFO",
+                    exchange        = _instrument_exchange,
                     direction       = direction,
                     quantity        = quantity,
                     order_type      = _order_type,
@@ -1264,7 +1278,7 @@ class AlgoRunner:
                     idempotency_key = idempotency_key,
                     algo_id         = str(algo.id),
                     symbol          = symbol,
-                    exchange        = "NFO",
+                    exchange        = _instrument_exchange,
                     direction       = direction,
                     quantity        = quantity,
                     order_type      = _order_type,
@@ -1378,6 +1392,12 @@ class AlgoRunner:
 
         # ── Subscribe LTP ──────────────────────────────────────────────────────
         if self._ltp_consumer and instrument_token:
+            # Register BFO tokens before subscribing so SmartStream uses exchangeType=4 (BFO)
+            # instead of the default exchangeType=2 (NFO). Without this, SENSEX/BANKEX option
+            # ticks are never delivered and LTP stays stuck at fill price (P&L = 0).
+            if _instrument_exchange == "BFO":
+                self._ltp_consumer.register_bfo_tokens([instrument_token])
+                logger.info(f"[BFO] Registered BFO token {instrument_token} for {symbol}")
             self._ltp_consumer.subscribe([instrument_token])
 
         # ── Register SL/TP monitor ─────────────────────────────────────────────
