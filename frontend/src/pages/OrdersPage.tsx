@@ -722,8 +722,12 @@ export default function OrdersPage() {
     return () => { if (retryTimeout) clearTimeout(retryTimeout); ws?.close() }
   }, [])
 
-  // Live LTP polling every 3 seconds when open orders exist
+  // Live LTP polling every 1 second when open orders exist — today only.
+  // Past-day tabs must never trigger LTP polling; their P&L is already finalised
+  // and any setLtpData call would cause unnecessary re-renders / pill flicker.
   useEffect(() => {
+    const isToday = selectedDate === todayDate
+    if (!isToday) return  // don't poll for past days
     const curOrders = ordersByDate[selectedDate] ?? []
     const hasOpenOrders = curOrders.some(g => g.legs.some(l => l.status === 'open'))
     if (!hasOpenOrders) return
@@ -735,7 +739,7 @@ export default function OrdersPage() {
     poll()
     const interval = setInterval(poll, 1000)
     return () => clearInterval(interval)
-  }, [ordersByDate, selectedDate])
+  }, [ordersByDate, selectedDate, todayDate])
 
   // Seed LTP data immediately on mount — prevents ₹0 flash before first poll fires
   useEffect(() => {
