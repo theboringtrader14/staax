@@ -61,6 +61,18 @@ from app.engine import order_audit as _audit
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
+# Explicit margin-error keywords — avoids false-positives from bare "margin" substring.
+MARGIN_ERROR_KEYWORDS = [
+    "insufficient margin",
+    "insufficient funds",
+    "insufficient account balance",
+    "insufficient balance",
+    "margin shortfall",
+    "rms margin",
+    "margin blocked",
+    "not enough margin",
+]
+
 
 class TokenBucketRateLimiter:
     """
@@ -659,6 +671,12 @@ class AlgoRunner:
         _algo_exit_on_margin_error   = bool(getattr(algo, "exit_on_margin_error", True))
         _ge_id_str                   = str(grid_entry.id)
         _ge_is_practix               = bool(grid_entry.is_practix)
+        # Pre-cache broker type for auto-flatten calls (account ORM object expires after rollback)
+        _algo_broker_type            = (
+            "angelone"
+            if account and getattr(account, "broker", None) == BrokerType.ANGELONE
+            else "zerodha"
+        )
 
         for leg in legs:
             # Capture plain Python values from ORM object before any try/except so that
@@ -740,7 +758,7 @@ class AlgoRunner:
 
                 # Margin-error branch — checked before exit_on_entry_failure
                 _err_lower = str(e).lower()
-                _is_margin = any(kw in _err_lower for kw in ("insufficient margin", "insufficient funds", "margin"))
+                _is_margin = any(kw in _err_lower for kw in MARGIN_ERROR_KEYWORDS)
                 if _is_margin:
                     if _algo_exit_on_margin_error:
                         logger.warning(
@@ -755,7 +773,35 @@ class AlgoRunner:
                             _cached_ltp = _order_cache.get(str(placed.id), (0.0,))[0]
                             _p = await db.get(Order, placed.id)
                             if _p:
+                                try:
+                                    if self._execution_manager:
+                                        await self._execution_manager.square_off(
+                                            db              = db,
+                                            idempotency_key = f"auto_flatten:{placed.id}:margin_error",
+                                            algo_id         = str(_p.algo_id),
+                                            account_id      = str(_p.account_id),
+                                            symbol          = _p.symbol,
+                                            exchange        = _p.exchange or "NFO",
+                                            direction       = _p.direction,
+                                            quantity        = _p.quantity,
+                                            algo_tag        = _p.algo_tag or "",
+                                            is_practix      = _p.is_practix,
+                                            broker_type     = "angelone" if (
+                                                getattr(_p, "broker_type", None) == "angelone"
+                                            ) else "zerodha",
+                                            symbol_token    = str(getattr(_p, "instrument_token", None) or ""),
+                                        )
+                                    logger.warning(
+                                        f"[AUTO-FLATTEN] {_algo_name_str} leg {placed.id} squared off — margin_error auto-flatten"
+                                    )
+                                except Exception as _sq_e:
+                                    logger.error(
+                                        f"[AUTO-FLATTEN] FAILED to square off {placed.id}: {_sq_e}. MANUAL INTERVENTION REQUIRED."
+                                    )
                                 await self._close_order(db, _p, _cached_ltp, "margin_error")
+                        # Deregister any armed W&T window for this grid entry
+                        if self._wt_evaluator:
+                            self._wt_evaluator.deregister(_ge_id_str)
                         await self._set_error(
                             db, algo_state, grid_entry,
                             f"Margin error on leg {leg_number}: {str(e)}",
@@ -782,7 +828,33 @@ class AlgoRunner:
                         _cached_ltp = _order_cache.get(str(placed.id), (0.0,))[0]
                         _p = await db.get(Order, placed.id)
                         if _p:
+                            try:
+                                if self._execution_manager:
+                                    await self._execution_manager.square_off(
+                                        db              = db,
+                                        idempotency_key = f"auto_flatten:{placed.id}:entry_failure_auto_flatten",
+                                        algo_id         = str(_p.algo_id),
+                                        account_id      = str(_p.account_id),
+                                        symbol          = _p.symbol,
+                                        exchange        = _p.exchange or "NFO",
+                                        direction       = _p.direction,
+                                        quantity        = _p.quantity,
+                                        algo_tag        = _p.algo_tag or "",
+                                        is_practix      = _p.is_practix,
+                                        broker_type     = _algo_broker_type,
+                                        symbol_token    = str(getattr(_p, "instrument_token", None) or ""),
+                                    )
+                                logger.warning(
+                                    f"[AUTO-FLATTEN] {_algo_name_str} leg {placed.id} squared off — entry_failure_auto_flatten"
+                                )
+                            except Exception as _sq_e:
+                                logger.error(
+                                    f"[AUTO-FLATTEN] FAILED to square off {placed.id}: {_sq_e}. MANUAL INTERVENTION REQUIRED."
+                                )
                             await self._close_order(db, _p, _cached_ltp, "entry_fail")
+                    # Deregister any armed W&T window for this grid entry
+                    if self._wt_evaluator:
+                        self._wt_evaluator.deregister(_ge_id_str)
                     await self._set_error(
                         db, algo_state, grid_entry, f"Leg {leg_number} failed: {str(e)}",
                         algo_name=_algo_name_str,

@@ -16,6 +16,7 @@ export function formatExitReason(reason: string | null | undefined): string {
     btst_exit: 'BTST Exit', stbt_exit: 'STBT Exit',
     global_sl: 'Global SL', expiry_force_close: 'Expiry', kill_switch: 'Kill Switch',
     error: 'Error', terminated: 'Terminate',
+    entry_failure_auto_flatten: 'Auto-Flatten',
   }
   return map[reason] ?? reason
 }
