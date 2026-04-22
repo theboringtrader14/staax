@@ -122,7 +122,6 @@ function CumulativePnlChart({ orders }: { orders: Order[] }) {
   if (chartData.length < 2) return null
 
   const isPositive = chartData[chartData.length - 1].cum >= 0
-  const color = isPositive ? 'var(--green)' : 'var(--red)'
   const colorHex = isPositive ? '#22DD88' : '#FF4444'
   const gradId = `pnlGrad-${isPositive ? 'g' : 'r'}`
 
@@ -331,7 +330,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
             <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '32px', fontSize: 12 }}>No day-breakdown data available.</div>
           )
           return (
-            <div style={neuInset}>
+            <div>
               <table className="staax-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
@@ -379,16 +378,15 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
           scores.length === 0
             ? <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '32px', fontSize: 12 }}>No health data available.</div>
             : <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-                {/* Gauge in inset well */}
-                <div style={{ ...neuInset, flexShrink: 0, minWidth: 164, padding: '12px 8px 8px' }}>
+                {/* Gauge */}
+                <div style={{ flexShrink: 0, minWidth: 164, padding: '12px 8px 8px', textAlign: 'center' }}>
                   <SegmentedArcGauge score={avgScore} />
                   <div style={{ textAlign: 'center', fontSize: 9, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginTop: 4 }}>
                     Avg Score
                   </div>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={neuInset}>
-                    <table className="staax-table" style={{ width: '100%' }}>
+                  <table className="staax-table" style={{ width: '100%' }}>
                       <thead>
                         <tr>
                           <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
@@ -426,7 +424,6 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                         })}
                       </tbody>
                     </table>
-                  </div>
                 </div>
               </div>
         )}
@@ -438,7 +435,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         return (
           <div style={{ ...neuCard, marginBottom: 12 }}>
             <div style={secLabel}>Best Time to Trade</div>
-            <div style={{ ...neuInset, padding: '16px 12px 8px' }}>
+            <div style={{ padding: '0 4px' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 80 }}>
                 {timeSlots.map((slot: any) => {
                   const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 56))
@@ -482,7 +479,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
         {stratRows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-mute)', fontSize: 12 }}>No data yet for FY {fy}</div>
         ) : (
-          <div style={neuInset}>
+          <div>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
@@ -951,7 +948,7 @@ export default function AnalyticsPage() {
   }, [isPractixMode, fy])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
 
       {/* Page header */}
       <div className="page-header">
@@ -964,19 +961,18 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Tab bar — neumorphic pill style */}
-      <div style={{ display: 'flex', gap: 8, paddingBottom: 14, flexShrink: 0 }}>
+      {/* Tab bar — border-bottom style */}
+      <div style={{ display: 'flex', borderBottom: '0.5px solid var(--border)', flexShrink: 0 }}>
         {TABS.map(tab => (
           <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
             style={{
-              height: 32, padding: '0 18px',
-              borderRadius: 100, border: 'none', cursor: 'pointer',
+              padding: '10px 20px', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
               fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
-              background: 'var(--bg)',
-              boxShadow: activeTab === tab ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+              background: 'transparent',
               color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
-              transition: 'box-shadow 0.15s, color 0.15s',
+              transition: 'color 0.15s, border-bottom-color 0.15s',
             }}>
             {tab}
           </button>
@@ -984,7 +980,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 2px 24px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : (

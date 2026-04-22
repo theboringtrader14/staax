@@ -4,7 +4,7 @@ import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/serv
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
-import { CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, XCircle } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
@@ -1517,8 +1517,8 @@ export default function OrdersPage() {
                             MONITORING: { color: '#0EA5A0', bg: 'rgba(14,165,160,0.12)', label: 'MONITORING' },
                             SCHEDULED:  { color: '#3B82F6', bg: 'rgba(59,130,246,0.12)', label: '⏰ SCHEDULED'  },
                             WAITING:    { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: '⏳ WAITING'    },
-                            MISSED:     { color: '#C2610C', bg: 'rgba(194,97,12,0.12)',   label: '⏭ MISSED'     },
-                            ERROR:      { color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   label: '⛔ ERROR'      },
+                            MISSED:     { color: '#C2610C', bg: 'rgba(194,97,12,0.12)',   label: 'MISSED'        },
+                            ERROR:      { color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   label: 'ERROR'         },
                           }
                           const c = chipStyles[ds] || chipStyles['WAITING']
                           return <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
@@ -1545,8 +1545,9 @@ export default function OrdersPage() {
                       {(isError || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error)) && (
                         <div style={{ padding: '0 14px 10px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {isError && (w.error_message || w.latest_error?.reason) && (
-                            <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const }}>
-                              ⛔ {w.error_message || w.latest_error?.reason}
+                            <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                              <XCircle size={12} weight="fill" style={{ flexShrink: 0, marginTop: 1 }} />
+                              {w.error_message || w.latest_error?.reason}
                             </span>
                           )}
                           {!isError && !isMissed && isFeedErr && (
@@ -1556,8 +1557,9 @@ export default function OrdersPage() {
                             <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
                           )}
                           {!isError && !isMissed && w.latest_error && !isFeedErr && !isOrbExpired && (
-                            <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const }}>
-                              ⛔ {w.latest_error.reason || ''}
+                            <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                              <XCircle size={12} weight="fill" style={{ flexShrink: 0, marginTop: 1 }} />
+                              {w.latest_error.reason || ''}
                             </span>
                           )}
                           {isOrbWindowPast && (
@@ -1588,11 +1590,11 @@ export default function OrdersPage() {
                           style={{
                             height: 28, padding: '0 10px', borderRadius: 100, border: 'none',
                             background: 'var(--bg)',
-                            boxShadow: 'var(--neu-raised-sm)',
+                            boxShadow: btn.disabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                             fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
                             color: btn.col,
-                            cursor: btn.disabled ? 'default' : 'pointer',
-                            opacity: btn.disabled ? 0.38 : 1,
+                            cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                            opacity: btn.disabled ? 0.35 : 1,
                             letterSpacing: '0.5px',
                             transition: 'box-shadow 0.12s',
                             whiteSpace: 'nowrap' as const,
@@ -1777,7 +1779,7 @@ export default function OrdersPage() {
                           {/* Info row */}
                           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap', minWidth: 0 }}>
 
-                            {group.terminated && <span style={{ fontSize: '13px' }} title="Algo terminated">⛔</span>}
+                            {group.terminated && <span title="Algo terminated" style={{ display: 'flex', alignItems: 'center' }}><XCircle size={14} weight="fill" color="#EF4444" /></span>}
 
                             {/* Algo name */}
                             <span
@@ -1793,7 +1795,7 @@ export default function OrdersPage() {
 
                             {/* Status chip — show "Pending..." during retry to suppress stale ERROR */}
                             {isRetrying ? (
-                              <span className="tag" style={{ color: '#06B6D4', background: 'rgba(6,182,212,0.12)', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
                                 ↻ Pending...
                               </span>
                             ) : (
@@ -1803,7 +1805,7 @@ export default function OrdersPage() {
                             )}
                             {/* ORB capture indicator */}
                             {isOrbAlgo && !isOrbMissed && algoSt === 'waiting' && (
-                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.10)', border: '0.5px solid rgba(245,158,11,0.30)', padding: '1px 8px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 600 }}>
+                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                 📡 Capturing ORB
                               </span>
                             )}
@@ -1823,7 +1825,7 @@ export default function OrdersPage() {
                               const firstMsg = errLegs[0]?.errorMessage
                               const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
                               return (
-                                <span title={firstMsg || undefined} className="chip chip-error" style={{ fontSize: '10px', cursor: firstMsg ? 'help' : 'default' }}>
+                                <span title={firstMsg || undefined} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#EF4444', whiteSpace: 'nowrap', cursor: firstMsg ? 'help' : 'default' }}>
                                   ⚠ {errLegs.length} LEG{errLegs.length > 1 ? 'S' : ''} FAILED{shortMsg}
                                 </span>
                               )
@@ -1834,10 +1836,10 @@ export default function OrdersPage() {
                               {/* Inline status pill — before sparkline */}
                               {group.inlineStatus && (
                                 <span style={{
-                                  fontSize: '10px', fontWeight: 600, color: group.inlineColor,
-                                  padding: '2px 8px', borderRadius: '100px',
-                                  background: `${group.inlineColor}18`,
-                                  border: `0.5px solid ${group.inlineColor}44`,
+                                  fontSize: '10px', fontWeight: 700, color: group.inlineColor,
+                                  padding: '2px 10px', borderRadius: '100px',
+                                  background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+                                  fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
                                   whiteSpace: 'nowrap' as const,
                                   animation: 'fadeIn 0.15s ease',
                                 }}>
@@ -1879,7 +1881,7 @@ export default function OrdersPage() {
                                 style={{
                                   height: 28, padding: '0 10px', borderRadius: 100, border: 'none',
                                   background: 'var(--bg)',
-                                  boxShadow: btn.disabled ? 'none' : 'var(--neu-raised-sm)',
+                                  boxShadow: btn.disabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                                   fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
                                   color: btn.disabled ? 'var(--text-mute)' : btn.col,
                                   cursor: btn.disabled ? 'not-allowed' : 'pointer',
@@ -1906,9 +1908,11 @@ export default function OrdersPage() {
                             borderRadius: 6, padding: '6px 10px',
                             fontSize: 11, color: '#FF4444',
                             fontFamily: 'var(--font-mono)',
-                            marginTop: 6
+                            marginTop: 6,
+                            display: 'flex', alignItems: 'flex-start', gap: 4,
                           }}>
-                            ⛔ {group.latest_error.timestamp ? new Date(group.latest_error.timestamp).toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}) : ''} — {group.latest_error.reason}
+                            <XCircle size={12} weight="fill" style={{ flexShrink: 0, marginRight: 4 }} />
+                            {group.latest_error.timestamp ? new Date(group.latest_error.timestamp).toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}) : ''} — {group.latest_error.reason}
                           </div>
                         )}
 
