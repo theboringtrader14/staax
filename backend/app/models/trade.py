@@ -14,10 +14,10 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id         = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
-    account_id       = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
-    algo_id          = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False)
-    trading_date     = Column(String(10), nullable=False)  # YYYY-MM-DD
+    order_id         = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False, index=True)
+    account_id       = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False, index=True)
+    algo_id          = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False, index=True)
+    trading_date     = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD
     financial_year   = Column(String(10), nullable=False)  # e.g. "2024-25"
     realised_pnl     = Column(Float, nullable=False)
     exit_reason      = Column(String(20), nullable=True)

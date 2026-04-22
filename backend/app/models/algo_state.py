@@ -47,12 +47,12 @@ class AlgoState(Base):
 
     id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     grid_entry_id  = Column(UUID(as_uuid=True), ForeignKey("grid_entries.id"), nullable=False, unique=True)
-    algo_id        = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False)
-    account_id     = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
-    trading_date   = Column(String(10), nullable=False)   # YYYY-MM-DD
+    algo_id        = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False, index=True)
+    account_id     = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False, index=True)
+    trading_date   = Column(String(10), nullable=False, index=True)   # YYYY-MM-DD
 
     # ── Current state ─────────────────────────────────────────────────────────
-    status         = Column(Enum(AlgoRunStatus, values_callable=lambda x: [e.value for e in x]), default=AlgoRunStatus.INACTIVE, nullable=False)
+    status         = Column(Enum(AlgoRunStatus, values_callable=lambda x: [e.value for e in x]), default=AlgoRunStatus.INACTIVE, nullable=False, index=True)
     is_practix     = Column(Boolean, default=True)
 
     # ── Timestamps ────────────────────────────────────────────────────────────

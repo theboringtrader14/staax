@@ -56,7 +56,7 @@ class Algo(Base):
 
     id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name         = Column(String(100), unique=True, nullable=False)   # e.g. "AWS-1"
-    account_id   = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
+    account_id   = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False, index=True)
     strategy_mode = Column(Enum(StrategyMode, values_callable=lambda x: [e.value for e in x]), nullable=False)
     entry_type   = Column(Enum(EntryType, values_callable=lambda x: [e.value for e in x]), nullable=False)            # direct or orb only
     order_type   = Column(Enum(OrderType, values_callable=lambda x: [e.value for e in x]), default=OrderType.MARKET)
@@ -128,7 +128,7 @@ class AlgoLeg(Base):
     __tablename__ = "algo_legs"
 
     id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    algo_id    = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False)
+    algo_id    = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False, index=True)
     leg_number = Column(Integer, nullable=False)    # display order: 1, 2, 3...
     direction  = Column(String(4), nullable=False)  # "buy" or "sell"
     instrument = Column(String(5), nullable=False)  # "ce", "pe", "fu"

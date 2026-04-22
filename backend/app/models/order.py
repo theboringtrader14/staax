@@ -38,10 +38,10 @@ class Order(Base):
     __tablename__ = "orders"
 
     id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    grid_entry_id  = Column(UUID(as_uuid=True), ForeignKey("grid_entries.id"), nullable=False)
-    algo_id        = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False)
-    leg_id         = Column(UUID(as_uuid=True), ForeignKey("algo_legs.id"), nullable=False)
-    account_id     = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
+    grid_entry_id  = Column(UUID(as_uuid=True), ForeignKey("grid_entries.id"), nullable=False, index=True)
+    algo_id        = Column(UUID(as_uuid=True), ForeignKey("algos.id"), nullable=False, index=True)
+    leg_id         = Column(UUID(as_uuid=True), ForeignKey("algo_legs.id"), nullable=False, index=True)
+    account_id     = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False, index=True)
 
     # ── Broker details ────────────────────────────────────────────────────────
     broker_order_id = Column(String(100), nullable=True)   # ID from broker API
@@ -105,7 +105,7 @@ class Order(Base):
     reconcile_status = Column(String(20), nullable=True)  # null | 'mismatch' | 'missing' | 'price_mismatch'
 
     # ── State ─────────────────────────────────────────────────────────────────
-    status        = Column(Enum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.PENDING)
+    status        = Column(Enum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.PENDING, index=True)
     journey_level = Column(String(10), nullable=True)   # "1", "1.1", "2.1" etc.
     error_message    = Column(Text, nullable=True)
     retry_count      = Column(Integer, default=0)

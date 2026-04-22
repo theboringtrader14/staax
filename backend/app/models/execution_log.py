@@ -16,13 +16,13 @@ class ExecutionLog(Base):
     __tablename__ = "execution_logs"
 
     id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    timestamp  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    timestamp  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
     # Context — nullable so logs survive even partial data
-    account_id    = Column(UUID(as_uuid=True), ForeignKey("accounts.id",      ondelete="SET NULL"), nullable=True)
-    algo_id       = Column(UUID(as_uuid=True), ForeignKey("algos.id",         ondelete="SET NULL"), nullable=True)
-    order_id      = Column(UUID(as_uuid=True), ForeignKey("orders.id",        ondelete="SET NULL"), nullable=True)
-    grid_entry_id = Column(UUID(as_uuid=True), ForeignKey("grid_entries.id",  ondelete="SET NULL"), nullable=True)
+    account_id    = Column(UUID(as_uuid=True), ForeignKey("accounts.id",      ondelete="SET NULL"), nullable=True, index=True)
+    algo_id       = Column(UUID(as_uuid=True), ForeignKey("algos.id",         ondelete="SET NULL"), nullable=True, index=True)
+    order_id      = Column(UUID(as_uuid=True), ForeignKey("orders.id",        ondelete="SET NULL"), nullable=True, index=True)
+    grid_entry_id = Column(UUID(as_uuid=True), ForeignKey("grid_entries.id",  ondelete="SET NULL"), nullable=True, index=True)
     algo_tag      = Column(String(150), nullable=True)
 
     # What happened

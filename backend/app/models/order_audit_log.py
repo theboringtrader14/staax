@@ -22,8 +22,8 @@ class OrderAuditLog(Base):
     # Identifiers — stored as strings, no FK constraints
     order_id      = Column(String(36), nullable=True, index=True)
     algo_id       = Column(String(36), nullable=True, index=True)
-    grid_entry_id = Column(String(36), nullable=True)
-    account_id    = Column(String(36), nullable=True)
+    grid_entry_id = Column(String(36), nullable=True, index=True)
+    account_id    = Column(String(36), nullable=True, index=True)
 
     # Transition
     from_status   = Column(String(20), nullable=True)   # e.g. "pending"
