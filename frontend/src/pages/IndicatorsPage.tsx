@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts'
+import { ArrowsClockwise, Play, Stop, Gear, Trash, CaretDown, CaretUp } from '@phosphor-icons/react'
 import { accountsAPI, botsAPI } from '@/services/api'
 import axios from 'axios'
 import { useStore } from '@/store'
@@ -37,8 +38,38 @@ const TIMEFRAMES = [
 ]
 const CHANNEL_TFS = ['1', '3', '5', '15', '30', '60', '120', '240', 'D']
 
+// ── Style constants ────────────────────────────────────────────────────────────
+const neuCard: CSSProperties = {
+  background: 'var(--bg)',
+  boxShadow: 'var(--neu-raised)',
+  borderRadius: 20,
+  border: '1px solid var(--border)',
+  marginBottom: 12,
+  overflow: 'hidden',
+}
 
+const iconBtn = (active = false): CSSProperties => ({
+  width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+  background: 'var(--bg)',
+  boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: 'var(--text-dim)', transition: 'box-shadow 0.12s',
+  flexShrink: 0,
+})
 
+const neuChip = (color: string): CSSProperties => ({
+  background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100,
+  padding: '2px 10px', fontSize: 10, fontWeight: 700,
+  fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
+  color, whiteSpace: 'nowrap',
+})
+
+const secLabel: CSSProperties = {
+  fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)',
+  fontWeight: 700, textTransform: 'uppercase', marginBottom: 8,
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 type Bot = {
   id: string; name: string; account_id: string; instrument: string
   exchange: string; expiry: string; indicator: string
@@ -61,7 +92,7 @@ type BotSignal = {
   status: string; bot_order_id: string | null; error_message: string | null; fired_at: string | null
 }
 
-// ── Platform-style confirm modal ──────────────────────────────────────────────
+// ── ConfirmModal ───────────────────────────────────────────────────────────────
 function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCancel }: {
   title: string; desc: string; confirmLabel: string; confirmColor: string
   onConfirm: () => void; onCancel: () => void
@@ -71,10 +102,10 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
   const btnVariant = isDanger ? 'btn-danger' : isWarn ? 'btn-warn' : 'btn-primary'
   return (
     <div className="modal-overlay">
-      <div className="modal-box cloud-fill" style={{ maxWidth: '380px' }}>
-        <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '8px' }}>{title}</div>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>{desc}</div>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 24, padding: '28px 24px', maxWidth: 380, width: '90vw' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text)' }}>{title}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 20 }}>{desc}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
           <button className={`btn ${btnVariant}`} onClick={onConfirm}>{confirmLabel}</button>
         </div>
@@ -83,7 +114,7 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
   )
 }
 
-// ── Edit Bot Modal ─────────────────────────────────────────────────────────────
+// ── EditBotModal ───────────────────────────────────────────────────────────────
 function EditBotModal({ bot, accounts, onSave, onClose }: {
   bot: Bot; accounts: any[]; onSave: (id: string, data: any) => void; onClose: () => void
 }) {
@@ -96,62 +127,45 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
   })
   const u = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
   const ind = INDICATORS.find(i => i.value === bot.indicator)
+  const labelStyle: CSSProperties = { fontSize: 11, color: 'var(--text-mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box cloud-fill" style={{ maxWidth: '420px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontWeight: 700, fontSize: '15px' }}>Edit Bot — {bot.name}</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 24, padding: '28px 24px', maxWidth: 420, width: '90vw' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>Edit Bot — {bot.name}</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mute)', fontSize: 18 }}>×</button>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Bot Name</label>
-            <input className="staax-input" value={form.name} onChange={e => u('name', e.target.value)} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div><label style={labelStyle}>Bot Name</label><input className="staax-input" value={form.name} onChange={e => u('name', e.target.value)} /></div>
+          <div><label style={labelStyle}>Account</label>
+            <StaaxSelect value={form.account_id} onChange={v => u('account_id', v)}
+              options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
           </div>
-          <div>
-            <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Account</label>
-            <StaaxSelect
-              value={form.account_id}
-              onChange={v => u('account_id', v)}
-              options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))}
-              width="100%"
-            />
+          <div><label style={labelStyle}>Timeframe</label>
+            <StaaxSelect value={String(form.timeframe_mins)} onChange={v => u('timeframe_mins', parseInt(v))}
+              options={TIMEFRAMES.map(t => ({ value: String(t.value), label: t.label }))} width="100%" />
           </div>
-          <div>
-            <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Timeframe</label>
-            <StaaxSelect
-              value={String(form.timeframe_mins)}
-              onChange={v => u('timeframe_mins', parseInt(v))}
-              options={TIMEFRAMES.map(t => ({ value: String(t.value), label: t.label }))}
-              width="100%"
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Lot Size</label>
+          <div><label style={labelStyle}>Lot Size</label>
             <input className="staax-input" type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
           </div>
           {ind?.params.includes('channel_candles') && (
             <div>
-              <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Channel Timeframe</label>
-              <StaaxSelect
-                value={form.channel_tf}
-                onChange={v => u('channel_tf', v)}
-                options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))}
-                width="100%"
-              />
-              <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginTop: '10px', marginBottom: '6px' }}>Number of Candles</label>
+              <label style={labelStyle}>Channel Timeframe</label>
+              <StaaxSelect value={form.channel_tf} onChange={v => u('channel_tf', v)}
+                options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))} width="100%" />
+              <label style={{ ...labelStyle, marginTop: 10 }}>Number of Candles</label>
               <input className="staax-input" type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
             </div>
           )}
           {ind?.params.includes('tt_lookback') && (
             <div>
-              <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>LookBack (1–10)</label>
+              <label style={labelStyle}>LookBack (1–10)</label>
               <input className="staax-input" type="number" min={1} max={10} value={form.tt_lookback} onChange={e => u('tt_lookback', parseInt(e.target.value) || 5)} />
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={() => onSave(bot.id, form)}>Save Changes</button>
         </div>
@@ -160,7 +174,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
   )
 }
 
-// ── 5-Step Bot Configurator ───────────────────────────────────────────────────
+// ── BotConfigurator ────────────────────────────────────────────────────────────
 function BotConfigurator({ accounts, onSave, onClose }: {
   accounts: any[]; onSave: (data: any) => Promise<void>; onClose: () => void
 }) {
@@ -197,34 +211,38 @@ function BotConfigurator({ accounts, onSave, onClose }: {
     finally { setSaving(false) }
   }
 
+  const selStyle = (active: boolean): CSSProperties => ({
+    width: '100%', padding: '14px 16px', borderRadius: 12, marginBottom: 8,
+    border: `2px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+    background: active ? 'rgba(255,107,0,0.08)' : 'var(--bg)',
+    boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+    color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s',
+  })
+  const labelStyle: CSSProperties = { fontSize: 11, color: 'var(--text-mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }
+
   return (
     <div className="modal-overlay">
-      <div className="modal-box cloud-fill" style={{ maxWidth: '480px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontWeight: 700, fontSize: '15px' }}>Create Bot</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}>×</button>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 24, padding: '28px 24px', maxWidth: 480, width: '90vw' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>Create Bot</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mute)', fontSize: 18 }}>×</button>
         </div>
-        {/* Progress */}
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
           {steps.map(s => (
             <div key={s.n} style={{ flex: 1 }}>
-              <div style={{ height: '3px', borderRadius: '2px', background: step >= s.n ? 'var(--indigo)' : 'var(--bg-border)', transition: 'background 0.2s' }}/>
-              <div style={{ fontSize: '9px', color: step >= s.n ? 'var(--indigo)' : 'var(--text-dim)', marginTop: '4px', textAlign: 'center' }}>{s.label}</div>
+              <div style={{ height: 3, borderRadius: 2, background: step >= s.n ? 'var(--accent)' : 'var(--border)', transition: 'background 0.2s' }} />
+              <div style={{ fontSize: 9, color: step >= s.n ? 'var(--accent)' : 'var(--text-mute)', marginTop: 4, textAlign: 'center' }}>{s.label}</div>
             </div>
           ))}
         </div>
 
         {step === 1 && (
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Choose Instrument</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Choose Instrument</div>
             {INSTRUMENTS.map(inst => (
-              <button key={inst.value} onClick={() => u('instrument', inst.value)}
-                style={{ width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '8px',
-                  border: `2px solid ${form.instrument === inst.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
-                  background: form.instrument === inst.value ? 'var(--indigo-dim)' : 'var(--bg-secondary)',
-                  color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
+              <button key={inst.value} onClick={() => u('instrument', inst.value)} style={selStyle(form.instrument === inst.value)}>
                 <div style={{ fontWeight: 700 }}>{inst.label}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{inst.exchange}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>{inst.exchange}</div>
               </button>
             ))}
           </div>
@@ -232,16 +250,12 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 2 && (
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Choose Indicator</div>
-            {INDICATORS.map(ind => (
-              <button key={ind.value} onClick={() => u('indicator', ind.value)}
-                style={{ width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '8px',
-                  border: `2px solid ${form.indicator === ind.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
-                  background: form.indicator === ind.value ? 'var(--indigo-dim)' : 'var(--bg-secondary)',
-                  color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
-                <div style={{ fontWeight: 700 }}>{ind.label}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {ind.params.length === 0 ? 'No parameters required' : `Configurable parameters`}
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Choose Indicator</div>
+            {INDICATORS.map(ind2 => (
+              <button key={ind2.value} onClick={() => u('indicator', ind2.value)} style={selStyle(form.indicator === ind2.value)}>
+                <div style={{ fontWeight: 700 }}>{ind2.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
+                  {ind2.params.length === 0 ? 'No parameters required' : 'Configurable parameters'}
                 </div>
               </button>
             ))}
@@ -250,32 +264,22 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 3 && (
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Choose Timeframe</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {/* Row 1: minutes */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Choose Timeframe</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {TIMEFRAMES.filter(tf => tf.value < 60).map(tf => (
-                <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
-                  style={{ padding: '14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
-                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
-                    background: form.timeframe_mins === tf.value ? 'rgba(255,107,0,0.08)' : 'var(--bg-secondary)',
-                    color: form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--text)',
-                    cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
-                  {tf.label}
-                </button>
+                  <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
+                    style={{ ...selStyle(form.timeframe_mins === tf.value), padding: '14px', textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
+                    {tf.label}
+                  </button>
                 ))}
               </div>
-              {/* Row 2: hours */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {TIMEFRAMES.filter(tf => tf.value >= 60).map(tf => (
-                <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
-                  style={{ padding: '14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
-                    border: `2px solid ${form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--bg-border)'}`,
-                    background: form.timeframe_mins === tf.value ? 'rgba(255,107,0,0.08)' : 'var(--bg-secondary)',
-                    color: form.timeframe_mins === tf.value ? 'var(--indigo)' : 'var(--text)',
-                    cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
-                  {tf.label}
-                </button>
+                  <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
+                    style={{ ...selStyle(form.timeframe_mins === tf.value), padding: '14px', textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
+                    {tf.label}
+                  </button>
                 ))}
               </div>
             </div>
@@ -284,33 +288,26 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 4 && (
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Indicator Parameters</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Indicator Parameters</div>
             {ind?.params.length === 0 ? (
-              <div style={{ padding: '20px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
-                DTR Strategy uses fixed mathematical constants.<br/>No configuration needed.
+              <div style={{ padding: 20, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 12, color: 'var(--text-mute)', fontSize: 12, textAlign: 'center' }}>
+                DTR Strategy uses fixed mathematical constants.<br />No configuration needed.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {ind?.params.includes('channel_candles') && (
                   <>
-                    <div>
-                      <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Timeframe for Channel Calculation</label>
-                      <StaaxSelect
-                        value={form.channel_tf}
-                        onChange={v => u('channel_tf', v)}
-                        options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))}
-                        width="100%"
-                      />
+                    <div><label style={labelStyle}>Timeframe for Channel Calculation</label>
+                      <StaaxSelect value={form.channel_tf} onChange={v => u('channel_tf', v)}
+                        options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))} width="100%" />
                     </div>
-                    <div>
-                      <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Number of Candles</label>
+                    <div><label style={labelStyle}>Number of Candles</label>
                       <input className="staax-input" type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
                     </div>
                   </>
                 )}
                 {ind?.params.includes('tt_lookback') && (
-                  <div>
-                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>LookBack Period (1–10)</label>
+                  <div><label style={labelStyle}>LookBack Period (1–10)</label>
                     <input className="staax-input" type="number" min={1} max={10} value={form.tt_lookback} onChange={e => u('tt_lookback', parseInt(e.target.value) || 5)} />
                   </div>
                 )}
@@ -320,44 +317,37 @@ function BotConfigurator({ accounts, onSave, onClose }: {
         )}
 
         {step === 5 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600 }}>Final Configuration</div>
-            <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: '11px', color: 'var(--text-muted)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span>Instrument</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{form.instrument}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span>Indicator</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{INDICATORS.find(i => i.value === form.indicator)?.label}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Timeframe</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{TIMEFRAMES.find(t => t.value === form.timeframe_mins)?.label}</span>
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Final Configuration</div>
+            <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 12, padding: '10px 14px', fontSize: 11, color: 'var(--text-mute)' }}>
+              {[
+                ['Instrument', form.instrument],
+                ['Indicator', INDICATORS.find(i => i.value === form.indicator)?.label],
+                ['Timeframe', TIMEFRAMES.find(t => t.value === form.timeframe_mins)?.label],
+              ].map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span>{k}</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{v}</span>
+                </div>
+              ))}
             </div>
-            <div>
-              <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Bot Name</label>
+            <div><label style={labelStyle}>Bot Name</label>
               <input className="staax-input" type="text" placeholder="e.g. GOLDM DTR 1H" value={form.name} onChange={e => u('name', e.target.value)} />
             </div>
-            <div>
-              <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Account</label>
-              <StaaxSelect
-                value={form.account_id}
-                onChange={v => u('account_id', v)}
-                options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))}
-                width="100%"
-              />
+            <div><label style={labelStyle}>Account</label>
+              <StaaxSelect value={form.account_id} onChange={v => u('account_id', v)}
+                options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
             </div>
-            <div>
-              <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' }}>Lot Size</label>
+            <div><label style={labelStyle}>Lot Size</label>
               <input className="staax-input" type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
             </div>
-            <div style={{ background: 'var(--indigo-dim)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '11px', color: 'var(--indigo)' }}>
-              Expiry auto-set to current active contract ({autoExpiry()}). Rollover is automatic when &le;5 market days remain.
+            <div style={{ background: 'rgba(255,107,0,0.08)', borderRadius: 10, padding: '8px 12px', fontSize: 11, color: 'var(--accent)' }}>
+              Expiry auto-set to current active contract ({autoExpiry()}). Rollover is automatic when ≤5 market days remain.
             </div>
-            {error && <div style={{ fontSize: '12px', color: 'var(--red)' }}>{error}</div>}
+            {error && <div style={{ fontSize: 12, color: 'var(--red)' }}>{error}</div>}
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '24px', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 8 }}>
           <button className="btn btn-ghost" onClick={step === 1 ? onClose : () => setStep(s => s - 1)}>
             {step === 1 ? 'Cancel' : '← Back'}
           </button>
@@ -373,69 +363,109 @@ function BotConfigurator({ accounts, onSave, onClose }: {
   )
 }
 
-// ── Icon button style helper ──────────────────────────────────────────────────
-const iconBtnStyle: React.CSSProperties = {
-  width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  borderRadius: '6px', background: 'transparent', border: '0.5px solid rgba(255,255,255,0.06)',
-  cursor: 'pointer', color: 'rgba(255,255,255,0.4)', fontSize: '13px', transition: 'all 0.15s',
-}
-
-// ── New BotCard ───────────────────────────────────────────────────────────────
-function BotCard({ bot, accounts, signals, allBotOrders, ltpMap, onUpdate, onArchive, onUnarchive, onDelete }: {
+// ── BotCard ────────────────────────────────────────────────────────────────────
+function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onDelete, onWarmup }: {
   bot: Bot; accounts: any[]
   signals: BotSignal[]
-  allBotOrders: BotOrder[]
-  ltpMap: Record<string, number>
   onUpdate: (id: string, data: any) => void
   onArchive: (id: string) => void
   onUnarchive: (id: string) => void
   onDelete: (id: string) => void
+  onWarmup: (id: string) => Promise<void>
 }) {
   const [editBot, setEditBot]     = useState(false)
   const [showDel, setShowDel]     = useState(false)
   const [showArch, setShowArch]   = useState(false)
+  const [warmingUp, setWarmingUp] = useState(false)
+
+  // Chart
   const [showChart, setShowChart] = useState(false)
   const [chartData, setChartData] = useState<{ candles: any[]; levels: any; signals: any[]; ltp: number | null } | null>(null)
   const [chartLoading, setChartLoading] = useState(false)
 
-  // Status color logic
-  const statusColor = bot.status === 'live'     ? 'var(--green)'
-                    : bot.status === 'active'   ? '#FF6B00'
-                    : bot.status === 'inactive' ? 'rgba(255,255,255,0.15)'
-                    : '#FF4444'
+  // Orders (lazy, per-card)
+  const [showOrders, setShowOrders] = useState(false)
+  const [orders, setOrders]         = useState<BotOrder[]>([])
+  const [ordersLoaded, setOrdersLoaded] = useState(false)
+  const [ordersLoading, setOrdersLoading] = useState(false)
 
-  const isLive   = bot.status === 'live'
-  const canStop  = bot.status === 'live' || bot.status === 'active'
-  const canStart = bot.status === 'inactive'
+  // LTP for expanded orders
+  const [ltpMap, setLtpMap] = useState<Record<string, number>>({})
+  const ltpTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const isActive   = bot.status === 'live' || bot.status === 'active'
+  const canStop    = isActive
+  const canStart   = bot.status === 'inactive'
+  const isArchived = bot.is_archived
+
+  const statusColor = bot.status === 'live'     ? '#22DD88'
+                    : bot.status === 'active'   ? '#FF6B00'
+                    : bot.status === 'inactive' ? '#FFAA00'
+                    : '#FF4444'
 
   const statusLabel = bot.status === 'live' ? 'LIVE'
                     : bot.status === 'active' ? 'ACTIVE'
                     : bot.status === 'inactive' ? 'INACTIVE'
                     : 'ERROR'
 
-  const statusChipStyle: React.CSSProperties = bot.status === 'live'
-    ? { background: 'rgba(34,221,136,0.15)', color: '#22DD88', border: '0.5px solid rgba(34,221,136,0.4)' }
-    : bot.status === 'active'
-    ? { background: 'rgba(255,107,0,0.15)', color: '#FF6B00', border: '0.5px solid rgba(255,107,0,0.4)' }
-    : bot.status === 'inactive'
-    ? { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)', border: '0.5px solid rgba(255,255,255,0.1)' }
-    : { background: 'rgba(255,68,68,0.15)', color: '#FF4444', border: '0.5px solid rgba(255,68,68,0.4)' }
+  const indicatorLabel = bot.indicator === 'channel' ? 'CHANNEL'
+                       : bot.indicator === 'tt_bands' ? 'TT BANDS'
+                       : 'DTR'
 
-  // Last signal for this bot
-  const botSignals = signals
-    .filter(s => s.bot_id === bot.id)
+  // Last 2 signals for this bot
+  const botSignals = [...signals]
     .sort((a, b) => {
       const ta = a.fired_at ? new Date(a.fired_at).getTime() : 0
       const tb = b.fired_at ? new Date(b.fired_at).getTime() : 0
       return tb - ta
     })
-  const lastSignal = botSignals[0] ?? null
+    .slice(0, 2)
+  const hasFiredToday = signals.some(s => s.status === 'fired')
 
-  // Open order for this bot
-  const openOrder = allBotOrders.find(o => o.status === 'open' && (o as any).bot_id === bot.id)
-    ?? allBotOrders.find(o => o.status === 'open' && o.bot_name === bot.name)
+  // Levels from chart data
+  const levels = chartData?.levels ?? null
 
-  // Live P&L from ltpMap
+  // LTP polling for expanded orders
+  useEffect(() => {
+    if (!showOrders) {
+      if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null }
+      return
+    }
+    const openSymbols = [...new Set(orders.filter(o => o.status === 'open').map(o => o.instrument))]
+    if (openSymbols.length === 0) return
+    const fetchLtps = () => {
+      openSymbols.forEach(sym => {
+        apiGet(`/bots/ltp?symbol=${sym}`)
+          .then(r => { if (r.data?.ltp != null) setLtpMap(prev => ({ ...prev, [sym]: r.data.ltp })) })
+          .catch(() => {})
+      })
+    }
+    fetchLtps()
+    ltpTimerRef.current = setInterval(fetchLtps, 5000)
+    return () => { if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null } }
+  }, [showOrders, orders])
+
+  const handleToggleOrders = async () => {
+    if (!showOrders && !ordersLoaded) {
+      setOrdersLoading(true)
+      try {
+        const r = await botsAPI.botOrders(bot.id)
+        setOrders(r.data || [])
+        setOrdersLoaded(true)
+      } catch {}
+      setOrdersLoading(false)
+    }
+    setShowOrders(v => !v)
+  }
+
+  const handleWarmup = async () => {
+    setWarmingUp(true)
+    try { await onWarmup(bot.id) } catch {}
+    setWarmingUp(false)
+  }
+
+  // Open order for live P&L
+  const openOrder = orders.find(o => o.status === 'open')
   let livePnl: number | null = null
   if (openOrder && openOrder.entry_price != null) {
     const ltp = ltpMap[openOrder.instrument]
@@ -443,204 +473,284 @@ function BotCard({ bot, accounts, signals, allBotOrders, ltpMap, onUpdate, onArc
       livePnl = openOrder.direction === 'BUY'
         ? (ltp - openOrder.entry_price) * openOrder.lots
         : (openOrder.entry_price - ltp) * openOrder.lots
-    } else if (openOrder.pnl != null) {
-      livePnl = openOrder.pnl
     }
   }
 
-  // Levels from chart data (loaded on chart expand) or null
-  const levels = chartData?.levels ?? null
+  const openOrderCount = orders.filter(o => o.status === 'open').length
+
+  const metaParts = [
+    bot.instrument, bot.exchange,
+    `${bot.timeframe_mins}min`,
+    bot.indicator === 'channel' && bot.channel_tf ? `${bot.channel_tf}h channel` : null,
+    `${bot.lots} lot${bot.lots !== 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ')
 
   return (
     <>
-      <div className="card cloud-fill" style={{
-        position: 'relative', overflow: 'hidden',
-        borderLeft: `4px solid ${statusColor}`,
-        padding: '14px 16px',
-        display: 'flex', flexDirection: 'column', gap: '10px',
-        opacity: bot.is_archived ? 0.6 : 1,
-      }}>
-        {/* Row 1: header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {isLive && (
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--green)', display: 'inline-block', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
-            )}
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 700, color: 'var(--ox-radiant)' }}>
-              {bot.name}
-            </span>
-            <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,107,0,0.15)', color: '#FF6B00', border: '0.5px solid rgba(255,107,0,0.3)', flexShrink: 0 }}>
-              {bot.indicator.toUpperCase()}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', ...statusChipStyle }}>{statusLabel}</span>
-            <button title="Settings" onClick={() => setEditBot(true)} style={iconBtnStyle}>⚙</button>
+      <div style={{ ...neuCard, opacity: isArchived ? 0.6 : 1 }}>
+
+        {/* ── ROW 1: Header ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', flexWrap: 'wrap' }}>
+
+          {/* Status dot */}
+          <span style={{
+            width: 10, height: 10, borderRadius: '50%', background: statusColor,
+            display: 'inline-block', flexShrink: 0,
+            animation: isActive ? 'pulse 1.5s infinite' : 'none',
+          }} />
+
+          {/* Bot name */}
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+            {bot.name}
+          </span>
+
+          {/* Indicator badge */}
+          <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-dim)' }}>
+            {indicatorLabel}
+          </span>
+
+          {/* Status chip */}
+          <span style={neuChip(statusColor)}>{statusLabel}</span>
+
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+
+            {/* Warmup */}
+            <button title="Warmup — reload historical candles" onClick={handleWarmup} disabled={warmingUp}
+              style={{ ...iconBtn(warmingUp), color: warmingUp ? 'var(--accent)' : 'var(--text-dim)' }}>
+              <ArrowsClockwise size={14} style={{ animation: warmingUp ? 'spin 0.8s linear infinite' : 'none' }} />
+            </button>
+
+            {/* Play / Stop */}
             {canStop && (
-              <button title="Stop" onClick={() => onUpdate(bot.id, { status: 'inactive' })} style={{ ...iconBtnStyle, color: '#FF4444' }}>■</button>
+              <button title="Stop bot" onClick={() => onUpdate(bot.id, { status: 'inactive' })}
+                style={{ ...iconBtn(), color: '#FF4444' }}>
+                <Stop size={14} weight="fill" />
+              </button>
             )}
-            {canStart && (
-              <button title="Start" onClick={() => onUpdate(bot.id, { status: 'active' })} style={{ ...iconBtnStyle, color: 'var(--green)' }}>▶</button>
+            {canStart && !isArchived && (
+              <button title="Start bot" onClick={() => onUpdate(bot.id, { status: 'active' })}
+                style={{ ...iconBtn(), color: '#22DD88' }}>
+                <Play size={14} weight="fill" />
+              </button>
             )}
-            {bot.is_archived ? (
-              <button title="Unarchive" onClick={() => onUnarchive(bot.id)} style={{ ...iconBtnStyle, fontSize: '10px', color: 'var(--accent-amber)' }}>↩</button>
+
+            {/* Settings */}
+            <button title="Edit bot" onClick={() => setEditBot(true)} style={iconBtn()}>
+              <Gear size={14} />
+            </button>
+
+            {/* Archive / Unarchive */}
+            {isArchived ? (
+              <button title="Unarchive" onClick={() => onUnarchive(bot.id)}
+                style={{ ...iconBtn(), color: 'var(--accent-amber)' }}>
+                ↩
+              </button>
             ) : (
-              <button title="Archive" onClick={() => setShowArch(true)} style={iconBtnStyle}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button title="Archive" onClick={() => setShowArch(true)} style={iconBtn()}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
                 </svg>
               </button>
             )}
-            <button title="Delete" onClick={() => setShowDel(true)} style={iconBtnStyle}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-              </svg>
+
+            {/* Delete */}
+            <button title="Delete bot" onClick={() => setShowDel(true)}
+              style={{ ...iconBtn(), color: '#EF4444' }}>
+              <Trash size={14} />
             </button>
           </div>
         </div>
 
-        {/* Row 2: metadata */}
-        <div style={{ fontSize: '11px', color: 'var(--gs-muted)' }}>
-          {bot.instrument} · {bot.exchange} · {bot.timeframe_mins}min
-          {bot.lots > 1 && <span> · {bot.lots} lots</span>}
+        {/* ── ROW 2: Meta ── */}
+        <div style={{ padding: '0 16px 12px', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+          {metaParts}
         </div>
 
-        {/* Divider */}
-        <div style={{ height: '0.5px', background: 'var(--ox-border)' }} />
-
-        {/* Row 3: levels + position + P&L */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        {/* ── ROW 3: Levels + Position + P&L ── */}
+        <div style={{ padding: '0 16px 12px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           {/* Levels */}
-          <div style={{ display: 'flex', gap: '16px', fontSize: '11px' }}>
-            {bot.indicator === 'dtr' && <>
-              <span><span style={{ color: 'var(--gs-muted)' }}>UPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels?.upp1 ? levels.upp1.toLocaleString('en-IN') : '—'}</span></span>
-              <span><span style={{ color: 'var(--gs-muted)' }}>LPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels?.lpp1 ? levels.lpp1.toLocaleString('en-IN') : '—'}</span></span>
+          <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+            {bot.indicator === 'dtr' && levels && <>
+              <span><span style={{ color: 'var(--text-mute)' }}>UPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.upp1?.toLocaleString('en-IN') ?? '—'}</span></span>
+              <span><span style={{ color: 'var(--text-mute)' }}>LPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.lpp1?.toLocaleString('en-IN') ?? '—'}</span></span>
             </>}
-            {bot.indicator === 'channel' && <>
-              <span><span style={{ color: 'var(--gs-muted)' }}>Upper </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels?.upper_channel?.toLocaleString('en-IN') ?? '—'}</span></span>
-              <span><span style={{ color: 'var(--gs-muted)' }}>Lower </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels?.lower_channel?.toLocaleString('en-IN') ?? '—'}</span></span>
+            {bot.indicator === 'channel' && levels && <>
+              <span><span style={{ color: 'var(--text-mute)' }}>Upper </span><span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>{levels.upper_channel?.toLocaleString('en-IN') ?? '—'}</span></span>
+              <span><span style={{ color: 'var(--text-mute)' }}>Lower </span><span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{levels.lower_channel?.toLocaleString('en-IN') ?? '—'}</span></span>
             </>}
-            {bot.indicator === 'tt_bands' && <>
-              <span><span style={{ color: 'var(--gs-muted)' }}>High </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels?.tt_high?.toLocaleString('en-IN') ?? '—'}</span></span>
-              <span><span style={{ color: 'var(--gs-muted)' }}>Low </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels?.tt_low?.toLocaleString('en-IN') ?? '—'}</span></span>
+            {bot.indicator === 'tt_bands' && levels && <>
+              <span><span style={{ color: 'var(--text-mute)' }}>High </span><span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>{levels.tt_high?.toLocaleString('en-IN') ?? '—'}</span></span>
+              <span><span style={{ color: 'var(--text-mute)' }}>Low </span><span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{levels.tt_low?.toLocaleString('en-IN') ?? '—'}</span></span>
             </>}
+            {!levels && <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>— warmup to see levels</span>}
           </div>
 
-          {/* Position chip */}
-          {openOrder ? (
-            <span style={{
-              fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
-              background: openOrder.direction === 'BUY' ? 'rgba(34,221,136,0.15)' : 'rgba(255,68,68,0.15)',
-              color: openOrder.direction === 'BUY' ? '#22DD88' : '#FF4444',
-              border: `0.5px solid ${openOrder.direction === 'BUY' ? 'rgba(34,221,136,0.4)' : 'rgba(255,68,68,0.4)'}`,
-              fontFamily: 'var(--font-mono)', fontWeight: 700,
-            }}>
-              {openOrder.direction === 'BUY' ? 'LONG' : 'SHORT'} @{openOrder.entry_price?.toLocaleString('en-IN') ?? '—'}
-            </span>
-          ) : (
-            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>FLAT</span>
-          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+            {/* Position chip */}
+            {openOrder ? (
+              <span style={neuChip(openOrder.direction === 'BUY' ? '#22DD88' : '#FF4444')}>
+                {openOrder.direction === 'BUY' ? 'LONG' : 'SHORT'} @{openOrder.entry_price?.toLocaleString('en-IN') ?? '—'}
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>FLAT</span>
+            )}
 
-          {/* P&L chip */}
-          {openOrder && livePnl != null && (
-            <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: livePnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {livePnl >= 0 ? '+' : ''}&#8377;{Math.round(livePnl).toLocaleString('en-IN')}
-            </span>
+            {/* P&L */}
+            {livePnl != null && (
+              <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 700, color: livePnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {livePnl >= 0 ? '+' : ''}₹{Math.round(livePnl).toLocaleString('en-IN')}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Divider ── */}
+        <div style={{ height: 1, background: 'var(--border)', margin: '0 0' }} />
+
+        {/* ── ROW 4: Signals (always visible) ── */}
+        <div style={{ padding: '10px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: botSignals.length > 0 ? 8 : 0 }}>
+            <span style={secLabel}>Signals</span>
+            {hasFiredToday && (
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block', animation: 'pulse 1.5s infinite', marginBottom: 8 }} />
+            )}
+          </div>
+          {botSignals.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {botSignals.map(sig => {
+                const isBuy = sig.direction === 'BUY' || sig.direction === 'buy'
+                const statusColor2 = sig.status === 'fired' ? '#22DD88' : sig.status === 'error' ? '#FF4444' : '#F59E0B'
+                return (
+                  <div key={sig.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                    <span style={{ color: isBuy ? '#22DD88' : '#FF4444', fontWeight: 700, fontSize: 13 }}>{isBuy ? '↑' : '↓'}</span>
+                    <span style={{ color: isBuy ? '#22DD88' : '#FF4444', fontWeight: 700 }}>{isBuy ? 'BUY' : 'SELL'}</span>
+                    <span style={{ color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
+                      {sig.fired_at ? new Date(sig.fired_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}
+                    </span>
+                    {sig.trigger_price != null && (
+                      <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>₹{sig.trigger_price.toLocaleString('en-IN')}</span>
+                    )}
+                    <span style={neuChip(statusColor2)}>{sig.status.toUpperCase()}</span>
+                    {sig.reason && <span style={{ fontSize: 10, color: 'var(--text-mute)', marginLeft: 2 }}>{sig.reason}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: 'var(--text-mute)', fontStyle: 'italic' }}>No signals today</span>
           )}
         </div>
 
-        {/* Divider */}
-        <div style={{ height: '0.5px', background: 'var(--ox-border)' }} />
+        {/* ── Divider ── */}
+        <div style={{ height: 1, background: 'var(--border)' }} />
 
-        {/* Row 4: last signal */}
-        {lastSignal ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', flexWrap: 'wrap' }}>
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 700, fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Last Signal</span>
-            <span style={{ color: 'rgba(255,255,255,0.4)' }}>
-              {lastSignal.fired_at ? new Date(lastSignal.fired_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}
+        {/* ── ROW 5: Orders toggle ── */}
+        <button
+          onClick={handleToggleOrders}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)' }}
+        >
+          <span>Orders</span>
+          {ordersLoading && <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>Loading…</span>}
+          {!ordersLoading && openOrderCount > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--green)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
+              {openOrderCount} open
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.3)' }}>·</span>
-            <span style={{ color: 'rgba(255,255,255,0.5)' }}>{lastSignal.reason ?? '—'}</span>
-            <span style={{ color: 'rgba(255,255,255,0.3)' }}>·</span>
-            <span style={{ color: lastSignal.direction === 'BUY' || lastSignal.direction === 'buy' ? '#2DD4BF' : '#FF4444', fontWeight: 700 }}>
-              {lastSignal.direction?.toUpperCase() ?? '—'} {(lastSignal.direction === 'buy' || lastSignal.direction === 'BUY') ? '▲' : '▼'} {lastSignal.trigger_price?.toLocaleString('en-IN') ?? ''}
-            </span>
+          )}
+          <span style={{ marginLeft: 'auto', color: 'var(--text-mute)' }}>
+            {showOrders ? <CaretUp size={12} /> : <CaretDown size={12} />}
+          </span>
+        </button>
+
+        {showOrders && (
+          <div style={{ padding: '0 0 12px' }}>
+            {orders.length === 0 ? (
+              <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--text-mute)', fontStyle: 'italic' }}>No orders yet</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 64px 88px 88px 80px 64px', gap: '0', minWidth: 520, fontSize: 10 }}>
+                  {/* Header */}
+                  {['#', 'Symbol', 'Side', 'Entry ₹', 'Exit ₹', 'P&L', 'Status'].map(h => (
+                    <div key={h} style={{ padding: '4px 8px', color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '0.5px solid var(--border)' }}>{h}</div>
+                  ))}
+                  {/* Rows */}
+                  {[...orders].sort((a, b) => {
+                    const ta = a.entry_time ? new Date(a.entry_time).getTime() : 0
+                    const tb = b.entry_time ? new Date(b.entry_time).getTime() : 0
+                    return tb - ta
+                  }).map((o, i) => {
+                    const ltp = ltpMap[o.instrument]
+                    const livePnlRow = o.status === 'open' && ltp != null && o.entry_price != null
+                      ? (o.direction === 'BUY' ? (ltp - o.entry_price) * o.lots : (o.entry_price - ltp) * o.lots)
+                      : null
+                    const displayPnl = livePnlRow ?? o.pnl ?? null
+                    const statusColor3 = o.status === 'open' ? '#22DD88' : o.status === 'error' ? '#FF4444' : 'var(--text-dim)'
+                    return [
+                      <div key={`${o.id}-n`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{i + 1}</div>,
+                      <div key={`${o.id}-s`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.instrument}</div>,
+                      <div key={`${o.id}-d`}  style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--border)' }}>
+                        <span style={neuChip(o.direction === 'BUY' ? '#22DD88' : '#FF4444')}>{o.direction}</span>
+                      </div>,
+                      <div key={`${o.id}-e`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</div>,
+                      <div key={`${o.id}-x`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</div>,
+                      <div key={`${o.id}-p`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: displayPnl != null ? (displayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>
+                        {displayPnl != null ? `${displayPnl >= 0 ? '+' : ''}₹${Math.round(displayPnl).toLocaleString('en-IN')}` : '—'}
+                        {livePnlRow != null && <span style={{ fontSize: 8, marginLeft: 3, opacity: 0.6 }}>●</span>}
+                      </div>,
+                      <div key={`${o.id}-st`} style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--border)' }}>
+                        <span style={{ ...neuChip(statusColor3), fontSize: 9 }}>{o.status.toUpperCase()}</span>
+                      </div>,
+                    ]
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.2)' }}>No signals today</div>
         )}
 
-        {/* Chart toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {/* ── ROW 6: Chart toggle ── */}
+        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
           <button
             onClick={async () => {
               if (!showChart && !chartData) {
                 setChartLoading(true)
-                try {
-                  const res = await apiGet(`/bots/${bot.id}/chart-data?limit=100`)
-                  setChartData(res.data)
-                } catch {}
+                try { const res = await apiGet(`/bots/${bot.id}/chart-data?limit=100`); setChartData(res.data) } catch {}
                 setChartLoading(false)
               }
               setShowChart(v => !v)
             }}
-            style={{ fontSize: '11px', color: 'var(--gs-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0' }}
+            style={{ fontSize: 11, color: 'var(--text-mute)', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
           >
-            {chartLoading ? 'Loading...' : showChart ? 'Chart ▲' : 'Chart ▼'}
+            {chartLoading ? 'Loading...' : showChart ? <><CaretUp size={11} /> Chart</> : <><CaretDown size={11} /> Chart</>}
           </button>
         </div>
 
-        {/* Chart */}
         {showChart && chartData && (
-          <div style={{ marginTop: '4px', height: '200px' }}>
+          <div style={{ padding: '0 8px 12px', height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData.candles} margin={{ top: 4, right: 4, bottom: 4, left: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis
-                  dataKey="time"
+                <XAxis dataKey="time"
                   tickFormatter={(t) => new Date(t * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                  tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }}
-                  minTickGap={40}
-                />
-                <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} domain={['auto', 'auto']} />
-                <Line type="monotone" dataKey="value" stroke="#FF6B00" strokeWidth={1.5} dot={false} />
-
-                {/* Level lines */}
-                {chartData.levels?.upp1 && (
-                  <ReferenceLine y={chartData.levels.upp1} stroke="#2DD4BF" strokeDasharray="4 2"
-                    label={{ value: `UPP1 ${chartData.levels.upp1?.toLocaleString('en-IN')}`, position: 'insideTopLeft', fontSize: 9, fill: '#2DD4BF' }} />
-                )}
-                {chartData.levels?.lpp1 && (
-                  <ReferenceLine y={chartData.levels.lpp1} stroke="#2DD4BF" strokeDasharray="4 2"
-                    label={{ value: `LPP1 ${chartData.levels.lpp1?.toLocaleString('en-IN')}`, position: 'insideTopLeft', fontSize: 9, fill: '#2DD4BF' }} />
-                )}
-                {chartData.levels?.upper_channel && (
-                  <ReferenceLine y={chartData.levels.upper_channel} stroke="#2DD4BF" strokeDasharray="4 2" />
-                )}
-                {chartData.levels?.lower_channel && (
-                  <ReferenceLine y={chartData.levels.lower_channel} stroke="#2DD4BF" strokeDasharray="4 2" />
-                )}
-                {chartData.levels?.tt_high && (
-                  <ReferenceLine y={chartData.levels.tt_high} stroke="#2DD4BF" strokeDasharray="4 2" />
-                )}
-                {chartData.levels?.tt_low && (
-                  <ReferenceLine y={chartData.levels.tt_low} stroke="#2DD4BF" strokeDasharray="4 2" />
-                )}
-
-                {/* LTP line */}
-                {chartData.ltp && (
-                  <ReferenceLine y={chartData.ltp} stroke="#FF6B00" strokeWidth={1}
-                    label={{ value: `LTP ${chartData.ltp?.toLocaleString('en-IN')}`, position: 'insideTopRight', fontSize: 9, fill: '#FF6B00' }} />
-                )}
-
-                {/* Signal markers */}
+                  tick={{ fontSize: 9, fill: 'var(--text-mute)' }} minTickGap={40} />
+                <YAxis tick={{ fontSize: 9, fill: 'var(--text-mute)' }} domain={['auto', 'auto']} />
+                <Line type="monotone" dataKey="value" stroke="var(--accent)" strokeWidth={1.5} dot={false} />
+                {chartData.levels?.upp1           && <ReferenceLine y={chartData.levels.upp1}           stroke="#2DD4BF" strokeDasharray="4 2" label={{ value: `UPP1 ${chartData.levels.upp1?.toLocaleString('en-IN')}`,           position: 'insideTopLeft', fontSize: 9, fill: '#2DD4BF' }} />}
+                {chartData.levels?.lpp1           && <ReferenceLine y={chartData.levels.lpp1}           stroke="#2DD4BF" strokeDasharray="4 2" label={{ value: `LPP1 ${chartData.levels.lpp1?.toLocaleString('en-IN')}`,           position: 'insideTopLeft', fontSize: 9, fill: '#2DD4BF' }} />}
+                {chartData.levels?.upper_channel  && <ReferenceLine y={chartData.levels.upper_channel}  stroke="#22DD88" strokeDasharray="4 2" />}
+                {chartData.levels?.lower_channel  && <ReferenceLine y={chartData.levels.lower_channel}  stroke="#FF4444" strokeDasharray="4 2" />}
+                {chartData.levels?.tt_high        && <ReferenceLine y={chartData.levels.tt_high}        stroke="#22DD88" strokeDasharray="4 2" />}
+                {chartData.levels?.tt_low         && <ReferenceLine y={chartData.levels.tt_low}         stroke="#FF4444" strokeDasharray="4 2" />}
+                {chartData.ltp && <ReferenceLine y={chartData.ltp} stroke="var(--accent)" strokeWidth={1}
+                  label={{ value: `LTP ${chartData.ltp?.toLocaleString('en-IN')}`, position: 'insideTopRight', fontSize: 9, fill: 'var(--accent)' }} />}
                 {chartData.signals.filter((s: any) => s.time > 0 && s.price).map((sig: any, i: number) => (
-                  <ReferenceDot key={i} x={sig.time} y={sig.price}
-                    r={4}
-                    fill={sig.direction === 'buy' ? '#2DD4BF' : '#FF4444'}
-                    stroke="none"
-                    label={{ value: sig.direction === 'buy' ? '▲' : '▼', position: sig.direction === 'buy' ? 'top' : 'bottom', fontSize: 10, fill: sig.direction === 'buy' ? '#2DD4BF' : '#FF4444' }}
-                  />
+                  <ReferenceDot key={i} x={sig.time} y={sig.price} r={4}
+                    fill={sig.direction === 'buy' ? '#2DD4BF' : '#FF4444'} stroke="none"
+                    label={{ value: sig.direction === 'buy' ? '▲' : '▼', position: sig.direction === 'buy' ? 'top' : 'bottom', fontSize: 10, fill: sig.direction === 'buy' ? '#2DD4BF' : '#FF4444' }} />
                 ))}
               </ComposedChart>
             </ResponsiveContainer>
@@ -672,22 +782,15 @@ function BotCard({ bot, accounts, signals, allBotOrders, ltpMap, onUpdate, onArc
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function IndicatorsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
-  const [activeTab, setActiveTab] = useState<'Bots' | 'Signals' | 'Orders'>(
-    () => (localStorage.getItem('indicatorsTab') as 'Bots' | 'Signals' | 'Orders') || 'Bots'
-  )
-  const [orderSubTab, setOrderSubTab] = useState<'today' | 'open' | 'all'>('today')
-  const [bots, setBots]             = useState<Bot[]>([])
-  const [accounts, setAccounts]     = useState<any[]>([])
+  const [bots, setBots]           = useState<Bot[]>([])
+  const [accounts, setAccounts]   = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [loading, setLoading]       = useState(true)
-  const [allBotOrders, setAllBotOrders] = useState<BotOrder[]>([])
-  const [signals, setSignals]       = useState<BotSignal[]>([])
-  const signalTimerRef              = useRef<ReturnType<typeof setInterval> | null>(null)
-  const ordersTimerRef              = useRef<ReturnType<typeof setInterval> | null>(null)
-  const ltpTimerRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [ltpMap, setLtpMap]         = useState<Record<string, number>>({})
+  const [loading, setLoading]     = useState(true)
+  const [signals, setSignals]     = useState<BotSignal[]>([])
+  const signalTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Load bots + accounts on mount
   useEffect(() => {
     Promise.all([
       apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])),
@@ -695,57 +798,19 @@ export default function IndicatorsPage() {
     ]).finally(() => setLoading(false))
   }, [isPractixMode])
 
+  // Load signals + start 30s refresh
   const fetchSignals = () => {
     botsAPI.signalsToday()
       .then(r => setSignals(r.data?.signals || []))
       .catch(() => {})
   }
-
-  // Load today's signals on mount; re-fetch + 30s refresh when on Signals tab
   useEffect(() => {
     fetchSignals()
-    if (activeTab === 'Signals') {
-      signalTimerRef.current = setInterval(fetchSignals, 30000)
-      return () => { if (signalTimerRef.current) clearInterval(signalTimerRef.current) }
-    }
-  }, [activeTab])
+    signalTimerRef.current = setInterval(fetchSignals, 30000)
+    return () => { if (signalTimerRef.current) clearInterval(signalTimerRef.current) }
+  }, [isPractixMode])
 
-  // Fetch all bot orders via single global endpoint
-  const fetchAllBotOrders = () => {
-    botsAPI.orders()
-      .then(r => setAllBotOrders(r.data || []))
-      .catch(() => {})
-  }
-
-  useEffect(() => {
-    fetchAllBotOrders()
-  }, [])
-
-  // 30s auto-refresh for Orders tab
-  useEffect(() => {
-    if (activeTab !== 'Orders') return
-    ordersTimerRef.current = setInterval(fetchAllBotOrders, 30000)
-    return () => { if (ordersTimerRef.current) clearInterval(ordersTimerRef.current) }
-  }, [activeTab])
-
-  // 5s LTP polling for live P&L on open orders (always active — needed for Bots tab P&L too)
-  useEffect(() => {
-    const fetchLtps = () => {
-      const symbols = [...new Set(allBotOrders.filter(o => o.status === 'open').map((o: any) => o.instrument as string))]
-      symbols.forEach(sym => {
-        apiGet(`/bots/ltp?symbol=${sym}`)
-          .then(r => { if (r.data?.ltp != null) setLtpMap(prev => ({ ...prev, [sym]: r.data.ltp })) })
-          .catch(() => {})
-      })
-    }
-    if (allBotOrders.some(o => o.status === 'open')) {
-      fetchLtps()
-      ltpTimerRef.current = setInterval(fetchLtps, 5000)
-    }
-    return () => { if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null } }
-  }, [allBotOrders])
-
-  // WebSocket subscription to /ws/notifications — refresh signals on bot signal fire
+  // WebSocket — refresh signals on bot signal fire
   useEffect(() => {
     const wsUrl = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000')
       .replace('http://', 'ws://')
@@ -754,301 +819,135 @@ export default function IndicatorsPage() {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
-        // Refresh signals immediately when a bot signal fires
-        if (msg.type === 'notification' && msg.data?.algo_name) {
-          fetchSignals()
-          fetchAllBotOrders()
-        }
+        if (msg.type === 'notification' && msg.data?.algo_name) fetchSignals()
       } catch {}
     }
-    ws.onerror = () => {} // silent — WS is best-effort
+    ws.onerror = () => {}
     return () => { ws.close() }
   }, [])
 
+  // Handlers
   const handleSave = async (form: any) => {
     const res = await apiPost('/bots/', { ...form, is_practix: isPractixMode })
     setBots(prev => [res.data, ...prev])
     setShowCreate(false)
   }
-
   const handleUpdate = async (id: string, data: any) => {
     await apiPatch(`/bots/${id}`, data)
     setBots(prev => prev.map(b => b.id === id ? { ...b, ...data } : b))
   }
-
   const handleArchive = async (id: string) => {
     await apiPost(`/bots/${id}/archive`, {})
     setBots(prev => prev.map(b => b.id === id ? { ...b, is_archived: true, status: 'inactive' } : b))
   }
-
   const handleUnarchive = async (id: string) => {
     await apiPatch(`/bots/${id}`, { is_archived: false, status: 'active' })
     setBots(prev => prev.map(b => b.id === id ? { ...b, is_archived: false, status: 'active' } : b))
   }
-
   const handleDelete = async (id: string) => {
     await apiDel(`/bots/${id}`)
     setBots(prev => prev.filter(b => b.id !== id))
   }
-
+  const handleWarmup = async (id: string) => {
+    await apiPost(`/bots/${id}/warmup`, {})
+  }
   const handleRefresh = () => {
     setLoading(true)
     Promise.all([
       apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])),
       fetchSignals(),
-      fetchAllBotOrders(),
     ]).finally(() => setLoading(false))
   }
 
   const activeBots   = bots.filter(b => !b.is_archived)
   const archivedBots = bots.filter(b => b.is_archived)
+  const runningCount = activeBots.filter(b => b.status === 'live' || b.status === 'active').length
 
-  // Orders filtering + sorting
-  const filteredOrders = orderSubTab === 'open'  ? allBotOrders.filter(o => o.status === 'open')
-                       : orderSubTab === 'today' ? allBotOrders.filter(o => {
-                           if (!o.entry_time) return false
-                           const d = new Date(o.entry_time)
-                           const today = new Date()
-                           return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
-                         })
-                       : allBotOrders
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
-    const ta = a.entry_time ? new Date(a.entry_time).getTime() : 0
-    const tb = b.entry_time ? new Date(b.entry_time).getTime() : 0
-    return tb - ta
+  // Group active bots by exchange for section headers
+  const exchanges = [...new Set(activeBots.map(b => b.exchange))].sort()
+  const multiExchange = exchanges.length > 1
+
+  const botCardProps = (bot: Bot) => ({
+    key: bot.id,
+    bot, accounts,
+    signals: signals.filter(s => s.bot_id === bot.id),
+    onUpdate: handleUpdate,
+    onArchive: handleArchive,
+    onUnarchive: handleUnarchive,
+    onDelete: handleDelete,
+    onWarmup: handleWarmup,
   })
 
   return (
-    <div>
-      {/* Header */}
-      <div className="page-header">
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
+
+      {/* Page header */}
+      <div className="page-header" style={{ flexShrink: 0 }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--ox-radiant)' }}>
-            Bots
-          </h1>
-          <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '3px' }}>
-            {loading ? 'Loading...' : `${activeBots.filter(b => b.status === 'live').length} running · ${activeBots.length} total`}
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>Bots</h1>
+          <p style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 3 }}>
+            {loading ? 'Loading...' : `${runningCount} running · ${activeBots.length} total`}
           </p>
         </div>
-        <div className="page-header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="page-header-actions">
           {archivedBots.length > 0 && (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }} onClick={() => setShowArchived(v => !v)}>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setShowArchived(v => !v)}>
               {showArchived ? 'Hide' : 'Show'} Archived ({archivedBots.length})
             </button>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={handleRefresh}>&#8635; Refresh</button>
+          <button className="btn btn-ghost btn-sm" onClick={handleRefresh}>↻ Refresh</button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Bot</button>
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display: 'flex', borderTop: '0.5px solid var(--ox-border)', borderBottom: '0.5px solid var(--ox-border)' }}>
-        {(['Bots', 'Signals', 'Orders'] as const).map(tab => {
-          const hasDot = (tab === 'Signals' && signals.some(s => s.status === 'fired')) ||
-                         (tab === 'Orders' && allBotOrders.some(o => o.status === 'open'))
-          return (
-            <button key={tab} onClick={() => { setActiveTab(tab); localStorage.setItem('indicatorsTab', tab) }} style={{
-              flex: 1, padding: '12px 0', fontSize: '12px', fontWeight: 600,
-              fontFamily: 'var(--font-display)',
-              background: activeTab === tab ? 'rgba(255,107,0,0.08)' : 'transparent',
-              border: 'none', cursor: 'pointer', position: 'relative',
-              color: activeTab === tab ? '#FF6B00' : 'rgba(255,255,255,0.4)',
-              borderBottom: activeTab === tab ? '2px solid #FF6B00' : '2px solid transparent',
-              transition: 'all 0.15s ease',
-            }}>
-              {tab}
-              {hasDot && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', marginLeft: '5px', verticalAlign: 'middle' }} />}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* BOTS TAB */}
-      {activeTab === 'Bots' && (
-        <>
-          {!loading && activeBots.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: '32px', marginBottom: '12px' }}>&#9671;</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-muted)' }}>No bots yet</div>
-              <div style={{ fontSize: '12px', marginBottom: '20px' }}>Create a bot to start running indicator-based strategies</div>
-              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Create Your First Bot</button>
-            </div>
-          )}
-
-          {activeBots.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginTop: '16px' }}>
-              {activeBots.map(bot => (
-                <BotCard key={bot.id} bot={bot} accounts={accounts}
-                  signals={signals} allBotOrders={allBotOrders} ltpMap={ltpMap}
-                  onUpdate={handleUpdate} onArchive={handleArchive}
-                  onUnarchive={handleUnarchive} onDelete={handleDelete} />
-              ))}
-            </div>
-          )}
-
-          {/* Archived bots */}
-          {showArchived && archivedBots.length > 0 && (
-            <>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', marginTop: '24px' }}>Archived Bots</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-                {archivedBots.map(bot => (
-                  <BotCard key={bot.id} bot={bot} accounts={accounts}
-                    signals={signals} allBotOrders={allBotOrders} ltpMap={ltpMap}
-                    onUpdate={handleUpdate} onArchive={handleArchive}
-                    onUnarchive={handleUnarchive} onDelete={handleDelete} />
-                ))}
-              </div>
-            </>
-          )}
-        </>
-      )}
-
-      {/* SIGNALS TAB */}
-      {activeTab === 'Signals' && (
-        <div style={{ marginTop: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(232,232,248,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Last 7 Days · {signals.length} signals
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto' }}>auto-refresh 30s</span>
+      {/* Scrollable body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 2px 24px' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
+        ) : activeBots.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-mute)' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>◇</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No bots yet</div>
+            <div style={{ fontSize: 12, marginBottom: 20 }}>Create a bot to start running indicator-based strategies</div>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Create Your First Bot</button>
           </div>
-          <table className="staax-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Bot</th>
-                <th>Symbol</th>
-                <th>Direction</th>
-                <th>Price</th>
-                <th>Reason</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {signals.map(s => (
-                <tr key={s.id}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--gs-muted)', whiteSpace: 'nowrap' }}>
-                    {s.fired_at ? new Date(s.fired_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}
-                  </td>
-                  <td style={{ fontWeight: 600, color: 'var(--ox-radiant)' }}>{s.bot_name ?? s.bot_id.slice(0, 8)}</td>
-                  <td style={{ fontSize: '11px' }}>{s.instrument}</td>
-                  <td>
-                    <span style={{ color: (s.direction === 'buy' || s.direction === 'BUY') ? '#2DD4BF' : '#FF4444', fontWeight: 700 }}>
-                      {s.direction?.toUpperCase() ?? '—'} {(s.direction === 'buy' || s.direction === 'BUY') ? '▲' : '▼'}
-                    </span>
-                  </td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>{s.trigger_price?.toLocaleString('en-IN') ?? '—'}</td>
-                  <td style={{ color: 'var(--gs-muted)', fontSize: '11px' }}>{s.reason}</td>
-                  <td>
-                    <span style={{
-                      fontSize: '10px', padding: '1px 6px', borderRadius: '4px',
-                      background: s.status === 'fired' ? 'rgba(34,221,136,0.15)' : s.status === 'error' ? 'rgba(255,68,68,0.15)' : 'rgba(255,255,255,0.08)',
-                      color: s.status === 'fired' ? '#22DD88' : s.status === 'error' ? '#FF4444' : 'rgba(255,255,255,0.4)',
-                    }}>
-                      {s.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {signals.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255,255,255,0.2)', fontSize: '13px' }}>No signals today</div>
-          )}
-        </div>
-      )}
-
-      {/* ORDERS TAB */}
-      {activeTab === 'Orders' && (
-        <div style={{ marginTop: '16px' }}>
-          {/* Sub-tabs */}
-          <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-            {(['today', 'open', 'all'] as const).map(sub => (
-              <button key={sub} onClick={() => setOrderSubTab(sub)} style={{
-                padding: '5px 14px', fontSize: '11px', fontWeight: 600, borderRadius: '6px',
-                background: orderSubTab === sub ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.04)',
-                border: `0.5px solid ${orderSubTab === sub ? 'rgba(255,107,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                color: orderSubTab === sub ? '#FF6B00' : 'rgba(255,255,255,0.4)',
-                cursor: 'pointer', textTransform: 'capitalize',
-              }}>
-                {sub === 'today' ? 'Today' : sub === 'open' ? 'Open' : 'All'}
-                {sub === 'open' && allBotOrders.some(o => o.status === 'open') && (
-                  <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'var(--green)', marginLeft: '5px', verticalAlign: 'middle' }} />
-                )}
-              </button>
-            ))}
-            <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto', alignSelf: 'center' }}>orders 30s · ltp 5s</span>
-          </div>
-
-          <table className="staax-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>Bot Name</th>
-                <th>Symbol</th>
-                <th>Side</th>
-                <th>Entry &#8377;</th>
-                <th>Exit &#8377;</th>
-                <th>P&amp;L</th>
-                <th>Entry Time</th>
-                <th>Exit Time</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedOrders.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '12px' }}>No orders</td></tr>
-              ) : sortedOrders.map(o => {
-                const livePnlOrder = o.status === 'open' && ltpMap[o.instrument] != null && o.entry_price != null
-                  ? (o.direction === 'BUY'
-                      ? (ltpMap[o.instrument] - o.entry_price) * o.lots
-                      : (o.entry_price - ltpMap[o.instrument]) * o.lots)
-                  : null
-                const displayPnl = livePnlOrder ?? o.pnl ?? null
+        ) : (
+          <>
+            {multiExchange ? (
+              exchanges.map(exchange => {
+                const group = activeBots.filter(b => b.exchange === exchange)
+                if (group.length === 0) return null
                 return (
-                  <tr key={o.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--ox-radiant)', fontSize: '11px' }}>
-                      {o.bot_name}
-                      {' '}
-                      <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, fontWeight: 700,
-                        background: o.is_practix ? 'rgba(255,179,0,0.12)' : 'rgba(34,221,136,0.12)',
-                        color: o.is_practix ? '#FFB300' : '#22DD88' }}>
-                        {o.is_practix ? 'PRACTIX' : 'LIVE'}
+                  <div key={exchange}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid var(--border)', marginTop: 16 }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700, color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                        {exchange}
                       </span>
-                    </td>
-                    <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.instrument}</td>
-                    <td>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                        color: o.direction === 'BUY' ? '#22DD88' : '#FF4444',
-                        background: o.direction === 'BUY' ? 'rgba(34,221,136,0.12)' : 'rgba(255,68,68,0.12)' }}>
-                        {o.direction}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.entry_price != null ? `&#8377;${o.entry_price.toLocaleString('en-IN')}` : '—'}</td>
-                    <td style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>{o.exit_price != null ? `&#8377;${o.exit_price.toLocaleString('en-IN')}` : '—'}</td>
-                    <td style={{ fontSize: '11px', fontWeight: 600 }}>
-                      {displayPnl != null ? (
-                        <span style={{ color: displayPnl >= 0 ? '#22DD88' : '#FF4444' }}>
-                          {displayPnl >= 0 ? '+' : ''}&#8377;{Math.round(displayPnl).toLocaleString('en-IN')}
-                          {livePnlOrder != null && <span style={{ fontSize: 8, marginLeft: 4, opacity: 0.55, fontWeight: 400 }}>LIVE</span>}
-                        </span>
-                      ) : <span style={{ color: 'var(--text-dim)' }}>—</span>}
-                    </td>
-                    <td style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      {o.entry_time ? new Date(o.entry_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
-                    </td>
-                    <td style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      {o.exit_time ? new Date(o.exit_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: o.status === 'open' ? '#22DD88' : 'var(--text-dim)' }}>{o.status?.toUpperCase()}</span>
-                    </td>
-                  </tr>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{group.length} bot{group.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {group.map(bot => <BotCard {...botCardProps(bot)} />)}
+                  </div>
                 )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+              })
+            ) : (
+              activeBots.map(bot => <BotCard {...botCardProps(bot)} />)
+            )}
+
+            {/* Archived section */}
+            {showArchived && archivedBots.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700, color: 'var(--accent-amber)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                    Archived
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{archivedBots.length} bot{archivedBots.length !== 1 ? 's' : ''}</span>
+                </div>
+                {archivedBots.map(bot => <BotCard {...botCardProps(bot)} />)}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {showCreate && (
         <BotConfigurator accounts={accounts} onSave={handleSave} onClose={() => setShowCreate(false)} />
