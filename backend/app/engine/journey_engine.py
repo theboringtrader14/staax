@@ -174,10 +174,15 @@ class JourneyEngine:
             if child_order:
                 # Register child's journey for next level if configured
                 if child_leg.journey_config:
+                    # Read the nested trigger from child's own config dict (set by frontend)
+                    # This is the trigger controlling what exit of the child spawns grandchild.
+                    nested_config = child_leg.journey_config
+                    nested_trigger = nested_config.get("child", {}).get("trigger", "either")
                     algo_runner._journey_engine.register(
                         str(child_order.id),
                         child_leg.journey_config,
                         depth=depth + 1,
+                        journey_trigger=nested_trigger,
                     )
                 await db.commit()
                 logger.info(f"✅ Journey child placed: {child_order.symbol} depth={depth}")

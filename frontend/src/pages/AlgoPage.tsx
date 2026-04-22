@@ -60,6 +60,7 @@ interface JourneyChild {
   tp_enabled: boolean; tp_type: string; tp_value: string
   tsl_enabled: boolean; tsl_x: string; tsl_y: string; tsl_unit: string
   ttp_enabled: boolean; ttp_x: string; ttp_y: string; ttp_unit: string
+  trigger: string  // 'sl' | 'tp' | 'either' — what exit of THIS child spawns its own child
   child?: JourneyChild
 }
 const mkReentry = (): ReentryVals => ({ type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, maxSl: '1', maxTp: '1' })
@@ -73,6 +74,7 @@ const mkJourneyChild = (): JourneyChild => ({
   tp_enabled: false, tp_type: 'pts_instrument', tp_value: '',
   tsl_enabled: false, tsl_x: '', tsl_y: '', tsl_unit: 'pts',
   ttp_enabled: false, ttp_x: '', ttp_y: '', ttp_unit: 'pts',
+  trigger: 'either',
   child: undefined,
 })
 
@@ -119,6 +121,7 @@ const fromJourneyConfig = (jc: any): JourneyChild => {
     ttp_x:         c.ttp_x != null ? String(c.ttp_x) : '',
     ttp_y:         c.ttp_y != null ? String(c.ttp_y) : '',
     ttp_unit:      c.ttp_unit || 'pts',
+    trigger:       c.trigger || 'either',
     child:         c.journey_config ? fromJourneyConfig(c.journey_config) : undefined,
   }
 }
@@ -279,6 +282,21 @@ function JourneyChildPanel({ child, depth, onChange }: {
   const cs = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)', outline: 'none' as const, padding: '0 8px' }
   const csSt = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
   const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
+
+  // Auto-reset this child's trigger when its own SL/TP availability changes
+  useEffect(() => {
+    if (depth >= 3) return  // L3 has no child trigger to reset
+    const childHasSL = !!(child.sl_enabled && parseFloat(child.sl_value) > 0)
+    const childHasTP = !!(child.tp_enabled && parseFloat(child.tp_value) > 0)
+    const t = child.trigger || 'either'
+    const slInvalid = t === 'sl' && !childHasSL
+    const tpInvalid = t === 'tp' && !childHasTP
+    const eitherInvalid = t === 'either' && (!childHasSL || !childHasTP)
+    if (slInvalid || tpInvalid || eitherInvalid) {
+      const reset = childHasTP ? 'tp' : childHasSL ? 'sl' : 'either'
+      onChange({ ...child, trigger: reset })
+    }
+  }, [child.sl_enabled, child.sl_value, child.tp_enabled, child.tp_value]) // eslint-disable-line react-hooks/exhaustive-deps
   const childExpiryOpts = MONTHLY_ONLY_CODES.has(child.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
   const depthColor = depth === 1 ? '#CC4400' : depth === 2 ? '#F59E0B' : '#0ea66e'
   const depthLabel = depth === 1 ? 'Child' : depth === 2 ? 'Grandchild' : 'Great-grandchild'
@@ -415,9 +433,44 @@ function JourneyChildPanel({ child, depth, onChange }: {
               </div>
             )
           })()}
-        {depth < 3 && (
-          <JourneyChildPanel child={child.child || mkJourneyChild()} depth={depth + 1} onChange={c => u('child', c)} />
-        )}
+        {depth < 3 && (() => {
+          // Trigger selector: controls what exit of THIS child spawns its own grandchild
+          // Availability is based on THIS child's own SL/TP config
+          const childHasSL = !!(child.sl_enabled && parseFloat(child.sl_value) > 0)
+          const childHasTP = !!(child.tp_enabled && parseFloat(child.tp_value) > 0)
+          const childTrigger = child.trigger || 'either'
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, marginRight: '2px' }}>Trigger on:</span>
+                {JOURNEY_TRIGGER_OPTS.map(opt => {
+                  const active = childTrigger === opt.value
+                  const isDisabled = (opt.value === 'sl' && !childHasSL) || (opt.value === 'tp' && !childHasTP) || (opt.value === 'either' && (!childHasSL || !childHasTP))
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => { if (!isDisabled) u('trigger', opt.value) }}
+                      title={isDisabled ? `Enable ${opt.label} on this leg to use this trigger` : undefined}
+                      style={{
+                        height: '24px', padding: '0 8px', borderRadius: '5px', fontSize: '10px', fontWeight: 600,
+                        border: 'none', transition: 'all 0.12s',
+                        background: 'var(--bg)',
+                        boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                        color: active ? opt.color : 'var(--text-dim)',
+                        opacity: isDisabled ? 0.35 : 1,
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        pointerEvents: isDisabled ? 'none' : 'auto',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <JourneyChildPanel child={child.child || mkJourneyChild()} depth={depth + 1} onChange={c => u('child', c)} />
+            </>
+          )
+        })()}
       </>)}
     </div>
   )
@@ -433,8 +486,26 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   const [open, setOpen] = useState(false)
   const j = leg.journey || mkJourneyChild()
   const hasJourney = j.enabled
-  const showTriggerChips = hasJourney && leg.active.sl && leg.active.tp
+
+  // Parent leg SL/TP availability
+  const parentHasSL = !!(leg.active.sl && leg.vals.sl.type && parseFloat(leg.vals.sl.value) > 0)
+  const parentHasTP = !!(leg.active.tp && leg.vals.tp.type && parseFloat(leg.vals.tp.value) > 0)
+
   const currentTrigger = leg.journey_trigger || 'either'
+
+  // Auto-reset trigger when parent SL/TP availability changes
+  useEffect(() => {
+    if (!hasJourney) return
+    const t = leg.journey_trigger || 'either'
+    const slInvalid = t === 'sl' && !parentHasSL
+    const tpInvalid = t === 'tp' && !parentHasTP
+    const eitherInvalid = t === 'either' && (!parentHasSL || !parentHasTP)
+    if (slInvalid || tpInvalid || eitherInvalid) {
+      const reset = parentHasTP ? 'tp' : parentHasSL ? 'sl' : 'either'
+      onUpdate(leg.id, { journey_trigger: reset })
+    }
+  }, [leg.active.sl, leg.vals.sl.value, leg.active.tp, leg.vals.tp.value]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
       <button onClick={() => setOpen((o: boolean) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
@@ -443,21 +514,26 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
         </span>
       </button>
       {open && (<>
-        {showTriggerChips && (
+        {hasJourney && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: '5px 0 4px' }}>
             <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, marginRight: '2px' }}>Trigger on:</span>
             {JOURNEY_TRIGGER_OPTS.map(opt => {
               const active = currentTrigger === opt.value
+              const isDisabled = (opt.value === 'sl' && !parentHasSL) || (opt.value === 'tp' && !parentHasTP) || (opt.value === 'either' && (!parentHasSL || !parentHasTP))
               return (
                 <button
                   key={opt.value}
-                  onClick={() => onUpdate(leg.id, { journey_trigger: opt.value })}
+                  onClick={() => { if (!isDisabled) onUpdate(leg.id, { journey_trigger: opt.value }) }}
+                  title={isDisabled ? `Enable ${opt.label} on parent leg to use this trigger` : undefined}
                   style={{
                     height: '28px', padding: '0 10px', borderRadius: '6px', fontSize: '10px', fontWeight: 600,
-                    cursor: 'pointer', border: 'none', transition: 'all 0.12s',
+                    border: 'none', transition: 'all 0.12s',
                     background: 'var(--bg)',
                     boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                     color: active ? opt.color : 'var(--text-dim)',
+                    opacity: isDisabled ? 0.35 : 1,
+                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                    pointerEvents: isDisabled ? 'none' : 'auto',
                   }}
                 >
                   {opt.label}
@@ -959,6 +1035,7 @@ export default function AlgoPage() {
         reentry_on_tp:   j.re_enabled ? j.reentry.onTp  : false,
         reentry_max:     j.re_enabled ? (parseInt(j.reentry.maxSl) || 0) : 0,
         reentry_ltp_mode: j.re_enabled ? j.reentry.ltpMode : null,
+        trigger:         j.trigger || 'either',   // what exit of THIS child spawns grandchild
         journey_config: j.child?.enabled ? buildJourneyConfig(j.child, depth + 1) : null,
       }
     }
