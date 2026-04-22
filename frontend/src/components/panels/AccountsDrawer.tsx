@@ -463,16 +463,25 @@ export default function AccountsDrawer() {
 
                       {/* Funds grid */}
                       <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {([
-                          { label: 'Cash',      value: f.cash,      color: '#0ea66e' },
-                          { label: 'Collateral',value: f.collateral, color: '#4488FF' },
-                          { label: 'Utilised',  value: f.utilised,  color: '#F59E0B' },
-                        ] as const).map(row => (
-                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{row.label}</span>
-                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: row.color }}>{fmt(row.value)}</span>
-                          </div>
-                        ))}
+                        {/* Collateral ≈ cash → no pledged holdings, AO returns cash as collateral */}
+                        {(() => {
+                          const hasPledged = f.collateral !== null && f.cash !== null && Math.abs(f.collateral - f.cash) > 100
+                          return ([
+                            { label: 'Cash',       value: f.cash,     color: '#0ea66e' },
+                            { label: hasPledged ? 'Collateral' : 'Collateral',
+                              value: hasPledged ? f.collateral : null,
+                              color: '#4488FF',
+                              note: hasPledged ? undefined : 'No pledged holdings' },
+                            { label: 'Utilised',   value: f.utilised, color: '#F59E0B' },
+                          ] as { label: string; value: number | null; color: string; note?: string }[]).map(row => (
+                            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{row.label}</span>
+                              {row.note
+                                ? <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>{row.note}</span>
+                                : <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: row.color }}>{fmt(row.value)}</span>}
+                            </div>
+                          ))
+                        })()}
                         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Net Available</span>
                           <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--font-mono)', color: netColor }}>
