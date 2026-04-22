@@ -219,10 +219,20 @@ class AlgoScheduler:
             d += timedelta(days=1)
         return d
 
-    def schedule_algo_jobs(self, grid_entry_id: str, algo: Algo, trading_date: date):
+    def schedule_algo_jobs(
+        self,
+        grid_entry_id: str,
+        algo: Algo,
+        trading_date: date,
+        first_leg_underlying: str = "",
+    ):
         """
         Schedule entry, exit, and ORB-end jobs for one algo for today.
         Called during _job_activate_all for each active GridEntry.
+
+        first_leg_underlying: underlying name of the first leg (e.g. "BANKNIFTY").
+        Must be passed by the caller — DO NOT access algo.legs here because lazy
+        relationship loading on an async ORM object raises MissingGreenlet.
         """
         if trading_date in NSE_HOLIDAYS_2026_27:
             logger.info(f"[SCHEDULER] Skipping {algo.name} — NSE holiday on {trading_date}")
@@ -232,10 +242,10 @@ class AlgoScheduler:
 
         # Entry time job (Direct algos only — ORB/W&T have their own triggers)
         if algo.entry_type == EntryType.DIRECT and algo.entry_time:
-            # Expiry skip — STBT/BTST must not enter on expiry day
-            _underlying_for_skip = ""
-            if hasattr(algo, 'legs') and algo.legs:
-                _underlying_for_skip = getattr(algo.legs[0], 'underlying', '')
+            # Expiry skip — STBT/BTST must not enter on expiry day.
+            # Use the pre-fetched first_leg_underlying passed by the caller — never
+            # access algo.legs here (lazy load raises MissingGreenlet in async context).
+            _underlying_for_skip = first_leg_underlying
             _skip, _skip_reason = _should_skip_on_expiry(
                 str(algo.strategy_mode.value if hasattr(algo.strategy_mode, 'value') else algo.strategy_mode or ''),
                 _underlying_for_skip,
@@ -673,8 +683,13 @@ class AlgoScheduler:
                     # Update GridEntry status
                     grid_entry.status = GridStatus.ALGO_ACTIVE
 
-                    # Schedule per-algo time-based jobs
-                    self.schedule_algo_jobs(str(grid_entry.id), algo, today)
+                    # Schedule per-algo time-based jobs.
+                    # Pass _act_underlying (already fetched above) so schedule_algo_jobs
+                    # never needs to lazy-load algo.legs — that raises MissingGreenlet.
+                    self.schedule_algo_jobs(
+                        str(grid_entry.id), algo, today,
+                        first_leg_underlying=_act_underlying,
+                    )
 
                     # Register ORB windows with AlgoRunner.
                     # Capture all needed ORM values as plain Python strings/ints HERE

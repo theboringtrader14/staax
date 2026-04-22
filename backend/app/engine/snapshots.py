@@ -9,6 +9,12 @@ FIELD NAMES match the actual STAAX models as of 2026-04-21:
   - GridEntry   → app/models/grid.py
   - Account     → app/models/account.py
   - Order       → app/models/order.py
+
+THE ONE RULE:
+  ORM objects may ONLY exist inside `async with AsyncSession() as session:` blocks.
+  They may NEVER be stored in memory, passed to callbacks, or accessed after the
+  session closes.  Use these snapshots (plain Python dataclasses) everywhere outside
+  the session boundary.
 """
 from dataclasses import dataclass, field
 from typing import Optional
@@ -106,6 +112,32 @@ class GridEntrySnapshot:
     is_practix: bool
     is_archived: bool
     status: str
+    # ── Flat algo fields (copied from Algo at snapshot time) ──────────────────
+    # Runtime code uses these directly — never re-query DB after snapshot.
+    algo_name: str = ""
+    strategy_mode: str = "intraday"   # "intraday" | "btst" | "stbt" | "positional"
+    entry_type: str = "direct"         # "direct" | "orb"
+    is_overnight: bool = False
+    entry_time: Optional[str] = None
+    exit_time: Optional[str] = None
+    next_day_exit_time: Optional[str] = None
+    orb_start_time: Optional[str] = None
+    orb_end_time: Optional[str] = None
+    mtm_sl: Optional[float] = None
+    mtm_tp: Optional[float] = None
+    mtm_unit: str = "amt"
+    entry_delay_buy_secs: int = 0
+    entry_delay_sell_secs: int = 0
+    exit_delay_buy_secs: int = 0
+    exit_delay_sell_secs: int = 0
+    exit_on_margin_error: bool = True
+    exit_on_entry_failure: bool = False
+    # ── Flat account fields (copied from Account at snapshot time) ────────────
+    broker_type: str = "angelone"     # "angelone" | "zerodha"
+    account_nickname: str = ""
+    # ── Legs (flat list of LegSnapshot) ──────────────────────────────────────
+    legs: list = field(default_factory=list)    # list[LegSnapshot]
+    # ── Legacy: full nested snapshot (kept for backward compat) ──────────────
     algo: Optional[AlgoSnapshot] = None
 
 
@@ -114,6 +146,8 @@ class AccountSnapshot:
     id: str
     nickname: str
     broker: str             # "zerodha" | "angelone"
+    broker_type: str        # alias for broker — use this in new code
+    is_practix: bool        # True for paper-trading accounts
     client_id: str
     api_key: Optional[str]
     api_secret: Optional[str]
@@ -250,8 +284,12 @@ def snapshot_grid_entry(ge, algo_snapshot: "AlgoSnapshot | None" = None) -> Grid
     """
     Convert GridEntry ORM to GridEntrySnapshot. MUST be called inside an open session.
     Pass a pre-built AlgoSnapshot if available to avoid redundant attribute access.
+
+    NOTE: This variant only captures GridEntry scalar fields + the passed algo_snapshot.
+    For a fully self-contained snapshot that includes flat algo/account/legs fields,
+    use snapshot_grid_entry_full(ge, algo, account, legs) instead.
     """
-    return GridEntrySnapshot(
+    snap = GridEntrySnapshot(
         id=str(ge.id),
         algo_id=str(ge.algo_id),
         account_id=str(ge.account_id),
@@ -264,14 +302,109 @@ def snapshot_grid_entry(ge, algo_snapshot: "AlgoSnapshot | None" = None) -> Grid
         status=str(ge.status.value if hasattr(ge.status, 'value') else ge.status or 'no_trade'),
         algo=algo_snapshot,
     )
+    # Populate flat algo fields from nested snapshot if provided
+    if algo_snapshot is not None:
+        _et = algo_snapshot.entry_type
+        _sm = algo_snapshot.strategy_mode
+        snap.algo_name = algo_snapshot.name
+        snap.strategy_mode = _sm
+        snap.entry_type = _et
+        snap.is_overnight = _sm in ('btst', 'stbt', 'positional')
+        snap.entry_time = algo_snapshot.entry_time
+        snap.exit_time = algo_snapshot.exit_time
+        snap.next_day_exit_time = algo_snapshot.next_day_exit_time
+        snap.orb_start_time = algo_snapshot.orb_start_time
+        snap.orb_end_time = algo_snapshot.orb_end_time
+        snap.mtm_sl = algo_snapshot.mtm_sl
+        snap.mtm_tp = algo_snapshot.mtm_tp
+        snap.mtm_unit = algo_snapshot.mtm_unit
+        snap.entry_delay_buy_secs = algo_snapshot.entry_delay_buy_secs
+        snap.entry_delay_sell_secs = algo_snapshot.entry_delay_sell_secs
+        snap.exit_delay_buy_secs = algo_snapshot.exit_delay_buy_secs
+        snap.exit_delay_sell_secs = algo_snapshot.exit_delay_sell_secs
+        snap.exit_on_margin_error = algo_snapshot.exit_on_margin_error
+        snap.exit_on_entry_failure = algo_snapshot.exit_on_entry_failure
+        snap.legs = algo_snapshot.legs
+    return snap
 
 
-def snapshot_account(account) -> AccountSnapshot:
+def snapshot_grid_entry_full(ge, algo, account, legs) -> GridEntrySnapshot:
+    """
+    Build a fully self-contained GridEntrySnapshot.
+    MUST be called inside an open SQLAlchemy async session — all ORM attribute
+    reads happen here so the caller can safely close the session afterwards.
+
+    Parameters
+    ----------
+    ge      : GridEntry ORM instance
+    algo    : Algo ORM instance (related to ge)
+    account : Account ORM instance (related to algo)
+    legs    : list[AlgoLeg] ORM instances (related to algo, pre-loaded)
+
+    Returns
+    -------
+    GridEntrySnapshot — entirely plain Python, no ORM references, safe to use
+    outside a session in callbacks, APScheduler jobs, and monitors.
+    """
+    _et = str(algo.entry_type.value if hasattr(algo.entry_type, 'value') else algo.entry_type or 'direct')
+    _sm = str(algo.strategy_mode.value if hasattr(algo.strategy_mode, 'value') else algo.strategy_mode or 'intraday')
+    _broker = str(account.broker.value if hasattr(account.broker, 'value') else account.broker or 'angelone') if account else 'angelone'
+
+    # Build leg snapshots inside the session
+    leg_snaps = [snapshot_leg(leg, algo_entry_type=_et) for leg in (legs or [])]
+
+    # Build algo snapshot (includes legs)
+    algo_snap = snapshot_algo(algo, legs=legs)
+
+    return GridEntrySnapshot(
+        id=str(ge.id),
+        algo_id=str(ge.algo_id),
+        account_id=str(ge.account_id),
+        trading_date=ge.trading_date,
+        day_of_week=ge.day_of_week or '',
+        lot_multiplier=int(ge.lot_multiplier or 1),
+        is_enabled=bool(ge.is_enabled),
+        is_practix=bool(ge.is_practix),
+        is_archived=bool(ge.is_archived),
+        status=str(ge.status.value if hasattr(ge.status, 'value') else ge.status or 'no_trade'),
+        # Flat algo fields
+        algo_name=algo.name or '',
+        strategy_mode=_sm,
+        entry_type=_et,
+        is_overnight=_sm in ('btst', 'stbt', 'positional'),
+        entry_time=algo.entry_time,
+        exit_time=algo.exit_time,
+        next_day_exit_time=algo.next_day_exit_time,
+        orb_start_time=algo.orb_start_time,
+        orb_end_time=algo.orb_end_time,
+        mtm_sl=float(algo.mtm_sl) if algo.mtm_sl is not None else None,
+        mtm_tp=float(algo.mtm_tp) if algo.mtm_tp is not None else None,
+        mtm_unit=str(algo.mtm_unit or 'amt'),
+        entry_delay_buy_secs=int(algo.entry_delay_buy_secs or 0),
+        entry_delay_sell_secs=int(algo.entry_delay_sell_secs or 0),
+        exit_delay_buy_secs=int(algo.exit_delay_buy_secs or 0),
+        exit_delay_sell_secs=int(algo.exit_delay_sell_secs or 0),
+        exit_on_margin_error=bool(algo.exit_on_margin_error),
+        exit_on_entry_failure=bool(algo.exit_on_entry_failure),
+        # Flat account fields
+        broker_type=_broker,
+        account_nickname=account.nickname or '' if account else '',
+        # Legs
+        legs=leg_snaps,
+        # Legacy nested snapshots (for callers that still use .algo)
+        algo=algo_snap,
+    )
+
+
+def snapshot_account(account, is_practix: bool = False) -> AccountSnapshot:
     """Convert Account ORM to AccountSnapshot. MUST be called inside an open session."""
+    _broker = str(account.broker.value if hasattr(account.broker, 'value') else account.broker or 'angelone')
     return AccountSnapshot(
         id=str(account.id),
         nickname=account.nickname or '',
-        broker=str(account.broker.value if hasattr(account.broker, 'value') else account.broker or 'angelone'),
+        broker=_broker,
+        broker_type=_broker,     # alias — use broker_type in new code
+        is_practix=is_practix,
         client_id=account.client_id or '',
         api_key=account.api_key,
         api_secret=account.api_secret,
