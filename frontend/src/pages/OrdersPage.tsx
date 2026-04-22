@@ -1,6 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { algosAPI, ordersAPI, holidaysAPI, accountsAPI } from '@/services/api'
+import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
@@ -192,12 +192,13 @@ async function handleRetrySL(orderId: string) {
 }
 
 // ── LegRow ───────────────────────────────────────────────────────────────────
-function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHigh, orbLow, isOrbAlgo }: {
+function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHigh, orbLow, isOrbAlgo, isMarketHours }: {
   leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
   onEditExit?: (orderId: string, price: number) => void
   orbHigh?: number | null
   orbLow?: number | null
   isOrbAlgo?: boolean
+  isMarketHours?: boolean
 }) {
   const st  = STATUS_STYLE[leg.status] ?? STATUS_STYLE['pending']
   const ltp = liveLtp ?? leg.ltp
@@ -416,6 +417,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
             </span>
             <button
               onClick={() => handleRetrySL(leg.id)}
+              disabled={!isMarketHours}
               style={{
                 marginLeft: 'auto',
                 fontSize: 10,
@@ -425,9 +427,11 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
                 border: 'none',
                 borderRadius: 20,
                 padding: '2px 10px',
-                cursor: 'pointer',
+                cursor: isMarketHours ? 'pointer' : 'not-allowed',
                 fontFamily: 'var(--font-mono)',
+                opacity: isMarketHours ? 1 : 0.35,
               }}
+              title={!isMarketHours ? 'Market is closed — retry not available' : undefined}
             >
               Retry SL
             </button>
@@ -658,6 +662,7 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(() => {
     try { return sessionStorage.getItem('staax_status_filter') ?? null } catch { return null }
   })
+  const [isMarketHours, setIsMarketHours] = useState(false)
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -683,6 +688,21 @@ export default function OrdersPage() {
         setFetchedAccounts(list.filter((a: any) => a.nickname).map((a: any) => ({ id: a.id, nickname: a.nickname })))
       })
       .catch(() => {})
+  }, [])
+
+  // Poll market hours every 60s
+  useEffect(() => {
+    const checkMarket = async () => {
+      try {
+        const h = await systemAPI.health()
+        setIsMarketHours(!!h?.data?.is_market_hours)
+      } catch {
+        setIsMarketHours(false)
+      }
+    }
+    checkMarket()
+    const interval = setInterval(checkMarket, 60_000)
+    return () => clearInterval(interval)
   }, [])
 
   // Fetch holidays once on mount
@@ -1440,9 +1460,9 @@ export default function OrdersPage() {
               }
 
               // All entries in the waiting list are retryable — they haven't entered yet.
-              // Only block for ORB window past or already retrying.
+              // Only block for ORB window past, already retrying, or market closed.
               const isOrbRetryBlocked = isOrbWindowPast || (isOrbAlgo && isMissed)
-              const canRetry  = !isRetrying && !isOrbRetryBlocked
+              const canRetry  = !isRetrying && !isOrbRetryBlocked && isMarketHours
               const retryLabel = isOrbRetryBlocked ? 'ORB ✕' : 'RETRY'
               const retryCol   = isOrbRetryBlocked ? 'var(--text-mute)' : '#F59E0B'
               const retryBg    = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.05)'
@@ -1730,11 +1750,13 @@ export default function OrdersPage() {
                     const retryBtnLabel = isRetrying ? '↻' : (loading[`retry-${gi}`] ? '↻' : 'RETRY')
                     const retryBtnCol   = isRetrying ? 'rgba(6,182,212,0.7)' : (canRetry ? '#F59E0B' : '#6B6B6B')
                     const retryBtnBg    = isRetrying ? 'rgba(6,182,212,0.06)' : (canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)')
+                    const canSQ    = (isMarketHours || isPractixMode) && !isTerminated && !isClosed && hasOpenLegs
+                    const canRetryFinal = canRetry && isMarketHours
                     const BTNS = [
                       { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: isTerminated || isClosed || !hasOpenLegs, title: undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed — SQ not available' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetry || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!canRetry ? 'Available when algo is in error or missed state' : undefined)), action: doSmartRetry },
+                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed — retry not available' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
                       { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
@@ -1916,6 +1938,7 @@ export default function OrdersPage() {
                                       orbHigh={group.orbHigh}
                                       orbLow={group.orbLow}
                                       isOrbAlgo={group.entryType === 'orb'}
+                                      isMarketHours={isMarketHours}
                                     />
                                   )
                                 })}
