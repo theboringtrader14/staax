@@ -152,21 +152,29 @@ export default function DashboardPanel() {
   useEffect(() => { accountsAPI.list().then(res => setAccounts(res.data)).catch(() => {}) }, [])
 
   useEffect(() => {
-    eventsAPI.list(50).then(res => {
-      const entries: any[] = res.data || []
-      const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
-      const lines: string[] = []
-      let lastSep = ''
-      for (const e of entries) {
-        const eDay = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
-        const eDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
-        if (eDay !== todayStr && eDate && eDay !== lastSep) { lines.push('── ' + eDate + ' ──'); lastSep = eDay }
-        const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
-        const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
-        lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
+    const fetchLogs = async () => {
+      try {
+        const res = await eventsAPI.list(50)
+        const entries: any[] = res.data || []
+        const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
+        const lines: string[] = []
+        let lastSep = ''
+        for (const e of entries) {
+          const eDay = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
+          const eDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
+          if (eDay !== todayStr && eDate && eDay !== lastSep) { lines.push('── ' + eDate + ' ──'); lastSep = eDay }
+          const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
+          const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
+          lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
+        }
+        setLog([...lines])
+      } catch (e) {
+        console.warn('log fetch failed', e)
       }
-      if (lines.length) setLog(p => [...lines, ...p])
-    }).catch(() => {})
+    }
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => { refetchHealth(); const t = setInterval(refetchHealth, 30000); return () => clearInterval(t) }, [])

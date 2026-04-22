@@ -14,10 +14,11 @@ from app.core.database import Base
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING = "pending"
-    OPEN    = "open"
-    CLOSED  = "closed"
-    ERROR   = "error"
+    PENDING    = "pending"
+    OPEN       = "open"
+    CLOSED     = "closed"
+    ERROR      = "error"
+    CANCELLED  = "cancelled"
 
 
 class ExitReason(str, enum.Enum):
@@ -29,9 +30,10 @@ class ExitReason(str, enum.Enum):
     GLOBAL_SL  = "global_sl"
     SQ         = "sq"          # manual square off
     AUTO_SQ    = "auto_sq"     # auto square off at exit_time
-    ERROR      = "error"
-    BTST_EXIT  = "btst_exit"   # next-day exit for BTST
-    STBT_EXIT  = "stbt_exit"   # next-day exit for STBT
+    ERROR              = "error"
+    BTST_EXIT          = "btst_exit"          # next-day exit for BTST
+    STBT_EXIT          = "stbt_exit"          # next-day exit for STBT
+    SUPERSEDED_BY_RETRY = "superseded_by_retry"  # error order cancelled on user RETRY
 
 
 class Order(Base):

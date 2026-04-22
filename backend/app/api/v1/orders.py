@@ -12,7 +12,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, update
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timedelta, timezone
@@ -1004,12 +1004,16 @@ async def get_waiting_algos(
         today_ist_date_for_status = datetime.now(ZoneInfo("Asia/Kolkata")).date()
         is_past_date = algo_trading_date < today_ist_date_for_status
 
+        # Only show MONITORING when algo actually has W&T legs configured.
+        # Prevents algos like NF-BTST (wt_enabled=False) from showing MONITORING after retry.
+        _has_wt_legs_flag = any(ld.get("wt_enabled") for ld in legs_data)
+
         # Priority order (top = highest priority):
         if _state.error_message or (hasattr(_state, 'status') and str(_state.status).endswith('error')):
             _display_status = "ERROR"
         elif _is_missed or _is_orb_missed or is_past_date:
             _display_status = "MISSED"
-        elif (_wt_monitor_armed or _just_retried) and not is_past_date:
+        elif (_wt_monitor_armed or (_just_retried and _has_wt_legs_flag)) and not is_past_date:
             _display_status = "MONITORING"
         elif _is_orb_monitoring and not is_past_date:
             _display_status = "MONITORING"
@@ -2136,6 +2140,14 @@ async def retry_entry(
     if algo_state:
         algo_state.status = AlgoRunStatus.WAITING
         algo_state.closed_at = None
+    await db.commit()
+
+    # Mark existing error orders as superseded — prevents duplicate rows in SX-WIDE after RETRY
+    await db.execute(
+        update(Order)
+        .where(Order.grid_entry_id == ge.id, Order.status == OrderStatus.ERROR)
+        .values(status=OrderStatus.CANCELLED, exit_reason=ExitReason.SUPERSEDED_BY_RETRY)
+    )
     await db.commit()
 
     # Record explicit retry timestamp — used by /waiting to suppress effectively-missed

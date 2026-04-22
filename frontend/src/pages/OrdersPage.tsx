@@ -246,10 +246,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         )}
       </td>
       <td style={{ width: COLS[1], ...C }}>
-        {isWtWaiting
-          ? <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: '#D97706', fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>W&amp;T</span>
-          : <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
-        }
+        <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
             ⚠ SYNC
@@ -459,7 +456,7 @@ function mapGroup(g: any): AlgoGroup {
     orbEndTime:   g.orb_end_time ?? null,
     orbHigh:      g.orb_high ?? null,
     orbLow:       g.orb_low  ?? null,
-    legs: (g.orders || []).map((o: any): Leg => ({
+    legs: (g.orders || []).filter((o: any) => o.status !== 'cancelled').map((o: any): Leg => ({
       id:              o.id,
       journeyLevel:    o.journey_level || '1',
       status:          (o.status ?? 'pending') as LegStatus,
