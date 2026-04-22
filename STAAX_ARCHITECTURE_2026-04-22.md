@@ -1321,6 +1321,48 @@ by AlgoRunner. They are never exposed in the API or frontend.
 
 ---
 
+## 14. SLO Targets & Operational Thresholds
+
+### 14.1 Tick-to-Signal Latency
+| Path | Target | Alarm |
+|------|--------|-------|
+| SmartStream tick → Redis write | < 5ms | > 20ms |
+| Redis write → SLTPMonitor check | < 10ms | > 50ms |
+| SL breach → order dispatch | < 50ms | > 200ms |
+| W&T threshold → entry dispatch | < 100ms | > 500ms |
+
+### 14.2 Order Fill Latency
+| Leg type | Target fill | Max acceptable |
+|----------|-------------|----------------|
+| Market order (NFO) | < 500ms | 2s |
+| Market order (BFO) | < 1s | 3s |
+| SL-M order placement | < 200ms | 1s |
+
+### 14.3 System Availability
+| Component | Target uptime | Recovery action |
+|-----------|---------------|-----------------|
+| Backend API | 99.5% (market hours) | Auto-restart via systemd |
+| SmartStream WS | Best-effort | Reconnect with 5s backoff |
+| PostgreSQL | 99.9% | RDS Multi-AZ failover |
+| Redis | 99.5% | Restart; ltp_map rebuilt from ticks |
+
+### 14.4 Data Integrity
+- All orders have a DB record before broker dispatch
+- All fills reconciled against broker trade book within 5 minutes of market close
+- MTM P&L accuracy: within ±0.5% of broker's own P&L report
+- No duplicate orders: `_exiting_orders` guard + DB unique constraint on (algo_id, entry_time, status='open')
+
+### 14.5 Alert Thresholds
+| Metric | Warning | Critical |
+|--------|---------|----------|
+| MissingGreenlet errors | 1/hour | 1/min |
+| Consecutive order rejections | 3 | 5 |
+| LTP staleness (no tick for token) | 30s | 2min |
+| Memory growth | 200MB/hour | 500MB/hour |
+| Unhandled exceptions in tick pipeline | 5/min | 20/min |
+
+---
+
 *End of STAAX_ARCHITECTURE_2026-04-22.md*
 *Generated from code state as of commit ba853b8*
 *Supersedes STAAX_ARCHITECTURE.md*

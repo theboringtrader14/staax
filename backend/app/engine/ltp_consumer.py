@@ -146,7 +146,7 @@ class AngelOneTickerAdapter:
         logger.info(f"[AO] Registered {len(tokens)} MCX tokens: {tokens}")
 
     def register_bfo_tokens(self, tokens: List[str]):
-        """Register tokens that belong to BSE F&O (exchangeType=3). Call before subscribing."""
+        """Register tokens that belong to BSE F&O (exchangeType=4). Call before subscribing."""
         self._bfo_tokens.update(tokens)
         logger.info(f"[AO] Registered {len(tokens)} BFO tokens: {tokens}")
 
@@ -421,7 +421,7 @@ class LTPConsumer:
     # ── Subscription ──────────────────────────────────────────────────────────
 
     def register_bfo_tokens(self, tokens: List[int]):
-        """Mark tokens as BFO (BSE F&O, exchangeType=3). Call before subscribe()."""
+        """Mark tokens as BFO (BSE F&O, exchangeType=4). Call before subscribe()."""
         self._bfo_token_set.update(tokens)
         if self._angel_adapter:
             self._angel_adapter.register_bfo_tokens([str(t) for t in tokens])

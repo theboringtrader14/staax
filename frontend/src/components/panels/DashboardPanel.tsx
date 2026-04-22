@@ -151,6 +151,10 @@ export default function DashboardPanel() {
 
   useEffect(() => { accountsAPI.list().then(res => setAccounts(res.data)).catch(() => {}) }, [])
 
+  const logFailures   = useRef(0)
+  const logIntervalMs = useRef(5000)
+  const logTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     const fetchLogs = async () => {
       try {
@@ -168,13 +172,20 @@ export default function DashboardPanel() {
           lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
         }
         setLog([...lines])
+        // Reset backoff on success
+        if (logFailures.current > 0) {
+          logFailures.current = 0
+          logIntervalMs.current = 5000
+        }
       } catch (e) {
-        console.warn('log fetch failed', e)
+        if (logFailures.current === 0) console.warn('[DashboardPanel] log fetch failed', e)
+        logFailures.current += 1
+        if (logFailures.current >= 3) logIntervalMs.current = 30000
       }
+      logTimerRef.current = setTimeout(fetchLogs, logIntervalMs.current)
     }
     fetchLogs()
-    const interval = setInterval(fetchLogs, 5000)
-    return () => clearInterval(interval)
+    return () => { if (logTimerRef.current) clearTimeout(logTimerRef.current) }
   }, [])
 
   useEffect(() => { refetchHealth(); const t = setInterval(refetchHealth, 30000); return () => clearInterval(t) }, [])
@@ -186,11 +197,29 @@ export default function DashboardPanel() {
     }).catch(() => {})
   }, [])
 
+  const svcFailures   = useRef(0)
+  const svcIntervalMs = useRef(5000)
+  const svcTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
-    const poll = () => servicesAPI.status().then(res => {
-      setServices(prev => prev.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s }))
-    }).catch(() => {})
-    poll(); const t = setInterval(poll, 5000); return () => clearInterval(t)
+    const poll = async () => {
+      try {
+        const res = await servicesAPI.status()
+        setServices(prev => prev.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s }))
+        // Reset backoff on success
+        if (svcFailures.current > 0) {
+          svcFailures.current = 0
+          svcIntervalMs.current = 5000
+        }
+      } catch (e) {
+        if (svcFailures.current === 0) console.warn('[DashboardPanel] services poll failed', e)
+        svcFailures.current += 1
+        if (svcFailures.current >= 3) svcIntervalMs.current = 30000
+      }
+      svcTimerRef.current = setTimeout(poll, svcIntervalMs.current)
+    }
+    poll()
+    return () => { if (svcTimerRef.current) clearTimeout(svcTimerRef.current) }
   }, [])
 
   // ── Derived ───────────────────────────────────────────────────
