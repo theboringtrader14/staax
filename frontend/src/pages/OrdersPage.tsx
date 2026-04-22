@@ -35,6 +35,7 @@ interface Leg {
   reconcileStatus?: string
   slWarning?: string
   slOrderStatus?: string
+  isOvernight?: boolean   // true for BTST/STBT — exclude from today's liveTabMtm
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
@@ -534,6 +535,7 @@ function mapGroup(g: any): AlgoGroup {
       entryReference:  o.entry_reference ?? undefined,
       slWarning:       o.sl_warning ?? undefined,
       slOrderStatus:   o.sl_order_status ?? undefined,
+      isOvernight:     o.is_overnight ?? false,
     })}),
   }
 }
@@ -816,11 +818,12 @@ export default function OrdersPage() {
   const safeOrders  = ordersByDate[selectedDate] ?? []
   const safeWaiting = waitingByDate[selectedDate] ?? []
 
-  // Tab-scoped live MTM — only open orders belonging to the ACTIVE tab's date.
-  // Prevents cross-day bleed: a BTST position entered TUE must NOT inflate WED's pill.
+  // Tab-scoped live MTM — only open orders ENTERED on this tab's date.
+  // Exclude is_overnight legs (BTST/STBT entered a prior day) — they show on this
+  // tab for visibility but their live MTM belongs to the entry-date tab, not today.
   const liveTabMtm = safeOrders
     .flatMap(g => g.legs)
-    .filter(l => l.status === 'open')
+    .filter(l => l.status === 'open' && !l.isOvernight)
     .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
 
   const buildRows = (legs: Leg[]) => {
