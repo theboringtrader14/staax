@@ -611,6 +611,18 @@ class LTPConsumer:
     def _on_reconnect(self, ws, attempts):
         logger.info(f"🔄 Reconnecting (attempt {attempts})")
 
+    def evict_stale_tokens(self) -> int:
+        """Remove tokens from _ltp_map and _ltp_timestamps that are no longer subscribed.
+        Call at EOD after daily_system_reset. Returns count of evicted tokens."""
+        active = set(self._subscribed_tokens)
+        stale = set(self._ltp_map.keys()) - active
+        for t in stale:
+            self._ltp_map.pop(t, None)
+            self._ltp_timestamps.pop(t, None)
+        if stale:
+            logger.info(f"[LTP] Evicted {len(stale)} stale tokens from cache. Active: {len(self._ltp_map)}")
+        return len(stale)
+
 
 class LTPCache:
     """Redis-backed LTP cache. All monitors read from here."""

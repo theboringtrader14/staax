@@ -740,3 +740,13 @@ async def daily_system_reset():
         logger.info("[DAILY RESET] Lot size cache cleared")
     except Exception as _e:
         logger.warning(f"[DAILY RESET] Lot size cache clear failed: {_e}")
+
+    # Evict stale tokens from LTP in-memory cache (tokens no longer subscribed)
+    try:
+        import app.main as _main_mod
+        _ltp = getattr(_main_mod, "ltp_consumer", None)
+        if _ltp:
+            _evicted = _ltp.evict_stale_tokens()
+            logger.info(f"[DAILY RESET] LTP eviction complete — {_evicted} stale tokens removed")
+    except Exception as _e:
+        logger.warning(f"[DAILY RESET] LTP eviction failed: {_e}")
