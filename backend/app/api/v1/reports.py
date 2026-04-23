@@ -277,13 +277,13 @@ async def error_analytics(
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
-    """Historical error/failure analytics — reads from event_log table.
+    """Historical error/failure analytics — reads from event_log + orders tables.
 
     Returns row-level events with date, algo_name, error_type (prefix), message,
     plus by_day and by_type aggregations.
     """
     from app.models.event_log import EventLog
-    from sqlalchemy import or_, cast, Date as SADate
+    from sqlalchemy import or_
 
     ERROR_PREFIXES = (
         "[ERROR]", "[MARGIN_ERROR]", "[TOKEN_ERROR]",
@@ -292,10 +292,15 @@ async def error_analytics(
 
     fy_start, fy_end = _fy_range(fy)
 
+    # ── Source 1: event_log with error prefixes or "failed" keyword ──
     conditions = [
         EventLog.ts >= fy_start,
         EventLog.ts <= fy_end,
-        or_(*[EventLog.msg.like(f"{prefix}%") for prefix in ERROR_PREFIXES]),
+        or_(
+            *[EventLog.msg.like(f"{prefix}%") for prefix in ERROR_PREFIXES],
+            EventLog.msg.like("% failed%"),
+            EventLog.msg.like("%[ORB_EXPIRED]%"),
+        ),
     ]
     if account_id:
         conditions.append(EventLog.account_id == account_id)
@@ -311,11 +316,16 @@ async def error_analytics(
         for p in ERROR_PREFIXES:
             if msg.startswith(p):
                 return p
+        if "failed" in msg.lower():
+            return "[LEG_FAILED]"
+        if "ORB_EXPIRED" in msg:
+            return "[ORB_EXPIRED]"
         return "[ERROR]"
 
     rows = []
     by_day: dict = {}
     by_type: dict = {}
+    seen_order_ids: set = set()
 
     for r in raw:
         date_str = r.ts.date().isoformat() if r.ts else None
@@ -329,6 +339,46 @@ async def error_analytics(
         if date_str:
             by_day[date_str] = by_day.get(date_str, 0) + 1
         by_type[prefix] = by_type.get(prefix, 0) + 1
+
+    # ── Source 2: orders with status='error' (catches silent failures not in event_log) ──
+    order_conds = [
+        Order.status == 'error',
+        Order.created_at >= fy_start,
+        Order.created_at <= fy_end,
+    ]
+    if is_practix is not None:
+        order_conds.append(Order.is_practix == is_practix)
+    if account_id:
+        import uuid as _uuid
+        try:
+            order_conds.append(Order.account_id == _uuid.UUID(account_id))
+        except ValueError:
+            pass
+
+    err_orders_res = await db.execute(
+        select(Order).where(*order_conds).order_by(Order.created_at.desc())
+    )
+    err_orders = err_orders_res.scalars().all()
+
+    for o in err_orders:
+        if str(o.id) in seen_order_ids:
+            continue
+        seen_order_ids.add(str(o.id))
+        date_str = o.created_at.date().isoformat() if o.created_at else None
+        prefix   = "[ORDER_ERROR]"
+        msg      = o.error_message or f"{o.symbol} {o.direction} order failed (status=error)"
+        rows.append({
+            "date":       date_str,
+            "algo_name":  o.algo_tag or "unknown",
+            "error_type": prefix,
+            "message":    msg,
+        })
+        if date_str:
+            by_day[date_str] = by_day.get(date_str, 0) + 1
+        by_type[prefix] = by_type.get(prefix, 0) + 1
+
+    # Sort combined rows by date descending
+    rows.sort(key=lambda x: x["date"] or "", reverse=True)
 
     return {
         "rows":         rows,

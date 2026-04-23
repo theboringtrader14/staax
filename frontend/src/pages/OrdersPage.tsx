@@ -1275,7 +1275,7 @@ export default function OrdersPage() {
           void kpiCard
 
           return (
-            <div style={{ padding: '8px 0 6px' }}>
+            <div style={{ padding: '6px 0 6px' }}>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
                 {[
                   { f: 'open',    label: 'Open Algos',   val: openAlgosCount,   color: openAlgosCount   > 0 ? '#0ea66e' : 'var(--text-mute)' },
@@ -1367,7 +1367,7 @@ export default function OrdersPage() {
       </div>{/* end fixed zone */}
 
       {/* ── Scroll zone ── */}
-      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '6px 28px 24px' }}>
+      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '0 28px 24px' }}>
 
         {/* Live MTM wired to header — strip removed */}
 
@@ -1468,11 +1468,11 @@ export default function OrdersPage() {
               const retryBg    = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.05)'
               const retryHBg   = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.14)'
               const missedBtns = [
-                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
-                { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true, action: undefined },
-                { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true, action: undefined },
+                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: false, action: undefined },
+                { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true,  action: undefined },
+                { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true,  action: undefined },
                 { label: retryLabel, col: retryCol, bg: retryBg, hBg: retryHBg, border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
-                { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, action: undefined },
+                { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: false, action: undefined },
               ]
 
               return (
@@ -1755,11 +1755,11 @@ export default function OrdersPage() {
                     const canSQ    = isMarketHours && !isTerminated && !isClosed && hasOpenLegs
                     const canRetryFinal = canRetry && isMarketHours
                     const BTNS = [
-                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
-                      { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed — SQ not available' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
-                      { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed — retry not available' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
-                      { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
+                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: false,                                        title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
+                      { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed || !isMarketHours,   title: !isTerminated && !isClosed && !isMarketHours ? 'Market is closed' : undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
+                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
+                      { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: false,      title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
                     return (

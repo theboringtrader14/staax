@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
-import { Lightning, LightningSlash, Archive, Copy, Trash } from '@phosphor-icons/react'
+import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning } from '@phosphor-icons/react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
@@ -105,11 +105,16 @@ export default function GridPage() {
   const [autoFillToast, setAutoFillToast] = useState('')
   const [cardMults,       setCardMults]       = useState<Record<string,number>>({})
   const [filterAccount,   setFilterAccount]   = useState('all')
+  const [statFilter,      setStatFilter]      = useState<string|null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [showDeferModal, setShowDeferModal] = useState(false)
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
   const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
+  const [stickyHeader,   setStickyHeader]   = useState<string|null>(null)
+
+  const listScrollRef    = useRef<HTMLDivElement>(null)
+  const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
 
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
@@ -221,6 +226,18 @@ export default function GridPage() {
   }, [isPractixMode, activeAccount])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const handleListScroll = useCallback(() => {
+    if (!listScrollRef.current) return
+    const containerTop = listScrollRef.current.getBoundingClientRect().top
+    let activeGroup: string | null = null
+    for (const key of INSTRUMENT_ORDER) {
+      const el = groupHeaderRefs.current.get(key)
+      if (!el) continue
+      if (el.getBoundingClientRect().top <= containerTop) activeGroup = key
+    }
+    setStickyHeader(activeGroup)
+  }, [])
 
 
   // ── Day pill toggle ───────────────────────────────────────────────────────────
@@ -351,21 +368,32 @@ export default function GridPage() {
     .filter(a => filterAccount === 'all' || a.account === filterAccount)
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  const statFilteredAlgos = statFilter === null ? visibleAlgos : visibleAlgos.filter(a => {
+    if (statFilter === 'buy_only')   return a.legs.length > 0 && a.legs.every(l => l.d === 'B')
+    if (statFilter === 'sell_only')  return a.legs.length > 0 && a.legs.every(l => l.d === 'S')
+    if (statFilter === 'both')       return a.legs.some(l => l.d === 'B') && a.legs.some(l => l.d === 'S')
+    if (statFilter === 'intraday')   return !a.strategy_mode || a.strategy_mode === 'intraday'
+    if (statFilter === 'stbt_btst')  return a.strategy_mode === 'stbt' || a.strategy_mode === 'btst'
+    if (statFilter === 'positional') return a.strategy_mode === 'positional'
+    return true
+  })
+
   // ── Group by primary instrument ───────────────────────────────────────────────
   const groupedAlgos: Record<string, Algo[]> = {}
-  for (const algo of visibleAlgos) {
+  for (const algo of statFilteredAlgos) {
     const key = ABBR_TO_UNDERLYING[algo.legs[0]?.i] || 'OTHER'
     if (!groupedAlgos[key]) groupedAlgos[key] = []
     groupedAlgos[key].push(algo)
   }
   const groupKeys = INSTRUMENT_ORDER.filter(k => groupedAlgos[k]?.length > 0)
 
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ flexShrink:0, paddingBottom:'4px', paddingLeft:'28px', paddingRight:'28px' }}>
+      <div style={{ flexShrink:0, paddingLeft:'28px', paddingRight:'28px' }}>
         <div className="page-header">
           <div>
             <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--accent)' }}>Algos</h1>
@@ -458,13 +486,127 @@ export default function GridPage() {
         </div>
       )}
 
-      {/* ── Algo cards outer container ─────── */}
-      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column' }}>
-        <div className="no-scrollbar" style={{ flex:1, overflowY:'auto', padding:'16px 28px 24px' }}>
+      {/* ── Stats summary cards — fixed, not scrollable ────────────────────── */}
+      {visibleAlgos.length > 0 && (() => {
+        const buyOnly    = visibleAlgos.filter(a => a.legs.length > 0 && a.legs.every(l => l.d === 'B')).length
+        const sellOnly   = visibleAlgos.filter(a => a.legs.length > 0 && a.legs.every(l => l.d === 'S')).length
+        const bothDir    = visibleAlgos.filter(a => a.legs.some(l => l.d === 'B') && a.legs.some(l => l.d === 'S')).length
+        const intraday   = visibleAlgos.filter(a => !a.strategy_mode || a.strategy_mode === 'intraday').length
+        const stbtBtst   = visibleAlgos.filter(a => a.strategy_mode === 'stbt' || a.strategy_mode === 'btst').length
+        const positional = visibleAlgos.filter(a => a.strategy_mode === 'positional').length
 
-          {visibleAlgos.length === 0 && (
+        const insData = INSTRUMENT_ORDER
+          .map(ins => ({ ins, count: groupedAlgos[ins]?.length || 0 }))
+          .filter(x => x.count > 0)
+        const maxIns = Math.max(...insData.map(x => x.count), 1)
+        const INS_SHORT: Record<string,string> = {
+          NIFTY:'NF', BANKNIFTY:'BN', FINNIFTY:'FN', SENSEX:'SX', MIDCAPNIFTY:'MN', OTHER:'OTH',
+        }
+
+        const kpiCards = [
+          { key:'buy_only',   label:'Buy Only',    count:buyOnly,    color:'#22C55E' },
+          { key:'sell_only',  label:'Sell Only',   count:sellOnly,   color:'#EF4444' },
+          { key:'both',       label:'Buy & Sell',  count:bothDir,    color:'var(--accent)' },
+          { key:'intraday',   label:'Intraday',    count:intraday,   color:'var(--accent)' },
+          { key:'stbt_btst',  label:'STBT / BTST', count:stbtBtst,   color:'#F59E0B' },
+          { key:'positional', label:'Positional',  count:positional, color:'#8B5CF6' },
+        ]
+
+        return (
+          <div style={{ flexShrink:0, padding:'0 28px 14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr) 2fr', gap:10 }}>
+              {kpiCards.map(({ key, label, count, color }) => {
+                const isActive = statFilter === key
+                return (
+                  <div key={key}
+                    onClick={() => setStatFilter(isActive ? null : key)}
+                    style={{
+                      background:'var(--bg)',
+                      boxShadow: isActive ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                      borderRadius:14, padding:'12px 14px',
+                      cursor:'pointer', transition:'box-shadow 0.15s',
+                    }}>
+                    <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color: isActive ? color : 'var(--text-mute)', marginBottom:8, fontFamily:'var(--font-display)', transition:'color 0.15s' }}>
+                      {label}
+                    </div>
+                    <div style={{ fontSize:22, fontWeight:800, lineHeight:1, fontFamily:'var(--font-mono)', color }}>
+                      {count}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* By Index bar chart */}
+              <div style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', borderRadius:14, padding:'12px 16px' }}>
+                <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-mute)', marginBottom:8, fontFamily:'var(--font-display)' }}>
+                  By Index
+                </div>
+                <div style={{ display:'flex', alignItems:'flex-end', gap:8, height:52 }}>
+                  {insData.map(({ ins, count:cnt }) => {
+                    const barH = Math.max(cnt / maxIns * 36, 6)
+                    return (
+                      <div key={ins} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                        <span style={{ fontSize:8, fontWeight:800, color:'var(--accent)', fontFamily:'var(--font-mono)', lineHeight:1 }}>{cnt}</span>
+                        <div style={{ width:'100%', height:barH, borderRadius:'3px 3px 0 0',
+                          background:'linear-gradient(to top, rgba(229,90,0,0.45), rgba(229,90,0,0.9))',
+                          transition:'height 0.4s cubic-bezier(0.4,0,0.2,1)',
+                          flexShrink:0,
+                        }} />
+                        <span style={{ fontSize:8, fontWeight:700, color:'var(--text-mute)', fontFamily:'var(--font-display)' }}>{INS_SHORT[ins] || ins.slice(0,2)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Algo cards outer container ─────── */}
+      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', position:'relative' }}>
+
+        {/* ── Sticky group header overlay — rendered above scroll container, bypasses compositor z-index issues ── */}
+        {stickyHeader && (() => {
+          const groupAlgos = groupedAlgos[stickyHeader] || []
+          const isCollapsed = collapsedGroups.has(stickyHeader)
+          return (
+            <div style={{
+              position:'absolute', top:0, left:0, right:0, zIndex:100,
+              backgroundColor:'var(--bg)',
+              padding:'14px 28px 0',
+              borderBottom:'0.5px solid rgba(0,0,0,0.05)',
+            }}>
+              <div
+                onClick={() => setCollapsedGroups(prev => {
+                  const next = new Set(prev)
+                  if (next.has(stickyHeader)) next.delete(stickyHeader); else next.add(stickyHeader)
+                  return next
+                })}
+                style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
+                  paddingBottom:'8px',
+                  borderBottom:'0.5px solid rgba(255,107,0,0.15)', userSelect:'none',
+                }}>
+                <span style={{ fontFamily:'var(--font-display)', fontSize:'13px', fontWeight:700, color:'#FF6B00', letterSpacing:'1px' }}>
+                  {stickyHeader}
+                </span>
+                <span style={{ fontSize:'11px', color:'var(--text-mute)' }}>
+                  {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
+                </span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"
+                  style={{ marginLeft:'auto', transition:'transform 0.2s ease', transform: isCollapsed ? 'rotate(-90deg)' : 'none' }}>
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </div>
+            </div>
+          )
+        })()}
+
+        <div ref={listScrollRef} className="no-scrollbar" style={{ flex:1, overflowY:'auto', padding:'14px 28px 24px' }} onScroll={handleListScroll}>
+
+          {statFilteredAlgos.length === 0 && (
             <div style={{ padding:'64px 24px', textAlign:'center', color:'var(--text-dim)', fontSize:'13px' }}>
-              No algos to show. Create an algo to get started.
+              {statFilter ? 'No algos match this filter.' : 'No algos to show. Create an algo to get started.'}
             </div>
           )}
 
@@ -476,13 +618,19 @@ export default function GridPage() {
 
                 {/* ── Group header ── */}
                 <div
+                  ref={el => { if (el) groupHeaderRefs.current.set(instrument, el); else groupHeaderRefs.current.delete(instrument) }}
+                  style={{
+                    paddingTop: gIdx === 0 ? 0 : '20px',
+                    marginBottom:'8px',
+                  }}>
+                <div
                   onClick={() => setCollapsedGroups(prev => {
                     const next = new Set(prev)
                     if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
                     return next
                   })}
                   style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
-                    paddingBottom:'8px', marginBottom:'8px', marginTop: gIdx === 0 ? 0 : '20px',
+                    paddingBottom:'8px',
                     borderBottom:'0.5px solid rgba(255,107,0,0.15)', userSelect:'none',
                   }}>
                   <span style={{ fontFamily:'var(--font-display)', fontSize:'13px', fontWeight:700, color:'#FF6B00', letterSpacing:'1px' }}>
@@ -496,6 +644,7 @@ export default function GridPage() {
                     <path d="M6 9l6 6 6-6"/>
                   </svg>
                 </div>
+                </div>{/* end sticky wrapper */}
 
                 {/* ── Group cards ── */}
                   {!isCollapsed && <div style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px' }}>
@@ -509,10 +658,10 @@ export default function GridPage() {
                           style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:20,
                             background:'var(--bg)', border:'none',
                             boxShadow:'var(--neu-raised)',
-                            transition:'transform 0.18s ease, box-shadow 0.18s ease',
+                            transition:'box-shadow 0.18s ease',
                           }}
-                          onMouseEnter={e => { const d=e.currentTarget; d.style.transform='translateY(-2px)'; d.style.boxShadow='var(--neu-raised-lg)' }}
-                          onMouseLeave={e => { const d=e.currentTarget; d.style.transform='none'; d.style.boxShadow='var(--neu-raised)' }}>
+                          onMouseEnter={e => { e.currentTarget.style.boxShadow='var(--neu-raised-lg)' }}
+                          onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised)' }}>
 
                           {/* ── Main row ── */}
                           <div className="algo-card" style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
@@ -554,14 +703,14 @@ export default function GridPage() {
                               {/* ── Entry / Exit time ── */}
                                 <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'90px', flexShrink:0 }}>
                                   <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                                    <span style={{ color:'var(--ox-radiant)', fontSize:'10px' }}>▶</span>
+                                    <Play size={10} weight="fill" style={{ color:'var(--ox-radiant)', flexShrink:0 }} />
                                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
                                   </div>
                                   <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-                                    <span style={{ color:'var(--text-dim)', fontSize:'10px' }}>⏹</span>
+                                    <Stop size={10} weight="fill" style={{ color:'var(--text-dim)', flexShrink:0 }} />
                                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--text-dim)' }}>{algo.xt}</span>
                                     {(['stbt','btst'].includes(algo.strategy_mode||'')) && (
-                                      <span title="Next-day exit time" style={{ fontSize:'9px', color:'var(--accent-amber)', cursor:'help' }}>⚠</span>
+                                      <Warning size={11} weight="fill" style={{ color:'var(--accent-amber)', cursor:'help', flexShrink:0 }} />
                                     )}
                                   </div>
                                 </div>
