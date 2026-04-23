@@ -73,43 +73,43 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
       <div className="modal-box" style={{ maxWidth: '600px', width: '95vw', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 20, color: 'var(--ox-radiant)' }}>{algoName}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 20, color: 'var(--accent)' }}>{algoName}</div>
             {data?.algo_id && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(232,232,248,0.45)', background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '2px 8px' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 6, padding: '3px 10px' }}>
                 {data.algo_id}
               </span>
             )}
             {data?.account_nickname && (
-              <span style={{ fontSize: '11px', fontWeight: 600, background: 'rgba(255,107,0,0.12)', color: 'var(--ox-radiant)', border: '0.5px solid rgba(255,107,0,0.35)', padding: '2px 9px', borderRadius: '20px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--accent)', padding: '3px 10px', borderRadius: '20px' }}>
                 {data.account_nickname}
               </span>
             )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '20px', lineHeight: 1, flexShrink: 0 }}>×</button>
+          <button onClick={onClose} style={{ background: 'var(--bg)', border: 'none', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '18px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
         {loading ? (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>Loading…</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-mute)', textAlign: 'center', padding: '24px 0' }}>Loading…</div>
         ) : error || !data ? (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>Failed to load strategy details</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-mute)', textAlign: 'center', padding: '24px 0' }}>Failed to load strategy details</div>
         ) : (
           <div className="no-scrollbar" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {hasSchedule && (
               <div>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Schedule</div>
-                <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: '18px' }}>
-                  {data.entry_type && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry Type</div><div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize' }}>{data.entry_type}</div></div>}
-                  {data.strategy_mode && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Strategy</div><div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize' }}>{data.strategy_mode}</div></div>}
+                <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '8px', padding: '12px 16px', display: 'flex', flexWrap: 'wrap', gap: '18px' }}>
+                  {data.entry_type && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry Type</div><div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize', color: 'var(--text)' }}>{data.entry_type}</div></div>}
+                  {data.strategy_mode && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Strategy</div><div style={{ fontSize: '12px', fontWeight: 600, textTransform: 'capitalize', color: 'var(--text)' }}>{data.strategy_mode}</div></div>}
                   {data.entry_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Entry</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--indigo)' }}>{data.entry_time}</div></div>}
-                  {data.exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{data.exit_time}</div></div>}
-                  {data.next_day_exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Next Day Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>{data.next_day_exit_time}</div></div>}
+                  {data.exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-mute)' }}>{data.exit_time}</div></div>}
+                  {data.next_day_exit_time && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>Next Day Exit</div><div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-mute)' }}>{data.next_day_exit_time}</div></div>}
                 </div>
               </div>
             )}
             {hasRisk && (
               <div>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Risk</div>
-                <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '10px 14px', display: 'flex', gap: '24px' }}>
+                <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '8px', padding: '12px 16px', display: 'flex', gap: '24px' }}>
                   {data.mtm_sl != null && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Stop Loss</div><div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--red)' }}>₹{Math.abs(data.mtm_sl).toLocaleString('en-IN')}</div></div>}
                   {data.mtm_tp != null && <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>MTM Target</div><div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green)' }}>₹{data.mtm_tp.toLocaleString('en-IN')}</div></div>}
                 </div>
@@ -118,7 +118,7 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
             {legs.length > 0 && (
               <div>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Legs ({legs.length})</div>
-                <div style={{ border: '1px solid var(--bg-border)', borderRadius: '6px', overflow: 'hidden' }}>
+                <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '8px', overflow: 'hidden', padding: '4px' }}>
                   <table className="staax-table" style={{ width: '100%' }}>
                     <thead>
                       <tr>
@@ -133,11 +133,11 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
                           <td style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{leg.leg_number ?? i + 1}</td>
                           <td style={{ fontSize: '11px', fontWeight: 600 }}>{leg.underlying || '—'}</td>
                           <td style={{ fontSize: '11px', fontWeight: 700, color: (leg.direction || '').toUpperCase() === 'BUY' ? 'var(--green)' : 'var(--red)' }}>{(leg.direction || '').toUpperCase() || '—'}</td>
-                          <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{leg.expiry || '—'}</td>
-                          <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{leg.strike_type || '—'}</td>
+                          <td style={{ fontSize: '11px', color: 'var(--text-mute)' }}>{leg.expiry || '—'}</td>
+                          <td style={{ fontSize: '11px', color: 'var(--text-mute)' }}>{leg.strike_type || '—'}</td>
                           <td style={{ fontSize: '11px' }}>{leg.lots ?? '—'}</td>
-                          {hasSL && <td style={{ fontSize: '11px', color: 'var(--amber)' }}>{fmtSL(leg)}</td>}
-                          {hasTP && <td style={{ fontSize: '11px', color: 'var(--green)' }}>{fmtTP(leg)}</td>}
+                          {hasSL && <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--accent)' }}>{fmtSL(leg)}</td>}
+                          {hasTP && <td style={{ fontSize: '11px', fontWeight: 600, color: 'var(--green)' }}>{fmtTP(leg)}</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -149,7 +149,7 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
         )}
 
         <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
+          <button onClick={onClose} style={{ background: 'var(--bg)', border: 'none', boxShadow: 'var(--neu-raised-sm)', borderRadius: '8px', padding: '8px 20px', cursor: 'pointer', color: 'var(--text)', fontSize: '13px', fontWeight: 600 }}>Close</button>
         </div>
       </div>
     </div>

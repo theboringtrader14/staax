@@ -371,7 +371,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                                 <span onClick={() => setSelectedAlgo(s.algo_name)} style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}>{s.algo_name}</span>
                               </td>
                               <td style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>
-                                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 100, color: g.color, background: g.bg }}>{s.grade}</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100, color: g.color, background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>{s.grade}</span>
                               </td>
                               <td style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 8px' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>

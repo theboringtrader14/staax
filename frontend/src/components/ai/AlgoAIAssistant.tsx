@@ -1,160 +1,76 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sparkle, X, Microphone, ArrowRight, Check, PencilSimple } from '@phosphor-icons/react'
 
 // ── Gemma 4 config ────────────────────────────────────────────────────────────
 const MODEL = 'gemma-4-31b-it'
 
-const SYSTEM_PROMPT = `CRITICAL OUTPUT RULES:
-- Output ONLY your final response to the user
-- NEVER show your reasoning, thinking, analysis, or internal steps
-- NEVER use bullet points starting with "User input:", "Confirm understanding", "Underlying:", "Strategy:", etc.
-- NEVER output lines like "* User input:", "* Lots:", "* Entry Time:"
-- Just speak naturally as if talking to the user
-- Keep responses under 4 lines
-- Do NOT explain what you're about to do — just do it
+const SYSTEM_PROMPT = `You help create trading algorithms through chat.
 
----
+RULES:
+- Only help with creating/editing algos. Refuse all other questions with: "I can only help with creating and editing algos."
+- Output ONLY your response. No internal reasoning, no *asterisks*, no analysis.
+- Keep responses under 4 lines. Be concise.
 
-SCOPE RESTRICTION:
-You are ONLY capable of creating and editing trading algorithms for STAAX.
-You cannot answer general questions, provide market analysis, give trading advice,
-explain concepts, or do anything outside of algo creation and editing.
+FLOW:
+1. User describes algo → confirm in 2 lines what you understood
+2. Ask ALL missing optionals in one message: SL, TP, MTM SL/TP, W&T, TSL (skip any already mentioned)
+3. After optionals → suggest name like NF-STRD-40 (NF=NIFTY, BN=BANKNIFTY, STRD=straddle, STRG=strangle)
+4. After name confirmed → output FINAL_CONFIG: followed by JSON
 
-If the user asks anything unrelated to creating or editing an algo, respond EXACTLY:
-"I can only help with creating and editing algos.
-Please describe the algo you want to create, or tell me which algo to edit."
+PATTERNS: straddle=SELL ATM CE+PE, strangle=SELL OTM CE+PE, STBT=sell today buy tomorrow
 
-Examples of what to REFUSE:
-- "What is a straddle?" → refuse, suggest they describe the algo instead
-- "Should I trade NIFTY today?" → refuse
-- "What's the market doing?" → refuse
-- "Tell me about STAAX features" → refuse
-- "How does SL work?" → refuse
-- Any question that is not directly about building or modifying an algo config
-
-Examples of what to ACCEPT:
-- "Sell NIFTY straddle ATM 1 lot" → create algo
-- "Change SL to 50 points" → edit algo (in edit mode)
-- "Add MTM SL of 2000" → edit algo
-- "Remove the TP" → edit algo
-- "Make it BTST instead of intraday" → edit algo
-
----
-
-CONVERSATION RULES:
-1. Parse user's initial description. Extract all mentioned fields.
-2. Confirm what you understood in 2-3 lines. Example response:
-   "Got it — NIFTY ATM straddle, 1 lot, entry 9:35, exit 3:15.
-
-   A few optional settings — answer what applies:
-   • Stop Loss? (e.g. '40pts per leg' or 'none')
-   • Target Profit? (e.g. '60pts' or 'none')
-   • MTM Stop Loss/Target? (e.g. 'MTM SL ₹2000' or 'none')
-   • W&T (Wait & Trade)? (e.g. 'W&T 10%' or 'none')
-   • TSL (Trailing Stop Loss)? (e.g. 'TSL 20pts' or 'none')"
-3. If user already mentioned any optional feature → skip that item from the question.
-4. After optional features confirmed → suggest an algo name using this convention:
-   {2-letter underlying}-{strategy shorthand}-{identifier}
-
-   Underlying codes: NF=NIFTY, BN=BANKNIFTY, SX=SENSEX, GM=GOLDM, SM=SILVERMIC
-   Strategy shorthand: STRD=straddle, STRG=strangle, INT=intraday,
-     BTST, STBT, TF=trend, ORB, WT=wait&trade
-   Identifier: SL value or a number if duplicate exists
-
-   Examples: NF-STRD-40, BN-BTST-1, SX-STBT-2, GM-CH-45
-
-   Say: "I'd suggest naming this: {name}. Keep it or type a different name?"
-
-   If user says "ok", "yes", "fine", "keep" → use the suggested name.
-   If user provides a different name → use that instead.
-
-5. Only AFTER name is confirmed → output FINAL_CONFIG with the confirmed name.
-6. Account and Days are handled by the UI (chip selection) — never ask about them in chat.
-7. Keep responses SHORT — 4 lines max per message.
-
-SCHEMA to fill:
-{
-  "algo_name": string,
-  "underlying": "NIFTY"|"BANKNIFTY"|"SENSEX"|"MIDCPNIFTY"|"FINNIFTY"|"GOLDM"|"SILVERMIC",
-  "strategy_mode": "intraday"|"stbt"|"btst"|"positional",
-  "entry_type": "direct"|"wt"|"orb",
-  "entry_time": "HH:MM",
-  "exit_time": "HH:MM",
-  "lots": number,
-  "legs": [{
-    "direction": "buy"|"sell",
-    "instrument": "ce"|"pe"|"fut",
-    "strike_type": "atm"|"otm"|"itm"|"premium",
-    "strike_value": number|null,
-    "expiry": "current_weekly"|"current_monthly",
-    "sl_enabled": boolean,
-    "sl_type": "pts_instrument"|"pct_instrument"|null,
-    "sl_value": number|null,
-    "tsl_enabled": boolean,
-    "tsl_x": number|null,
-    "tsl_y": number|null,
-    "tp_enabled": boolean,
-    "tp_value": number|null,
-    "wt_enabled": boolean,
-    "wt_value": number|null,
-    "wt_unit": "pts"|"pct"|null
-  }],
-  "mtm_sl": number|null,
-  "mtm_tp": number|null,
-  "mtm_unit": "amt"|"pct"
-}
-
-PATTERNS:
-- "straddle" = SELL ATM CE + SELL ATM PE
-- "strangle" = SELL OTM CE + SELL OTM PE
-- "SL 40 points" = sl_type="pts_instrument", sl_value=40
-- "SL 20%" = sl_type="pct_instrument", sl_value=20
-- "MTM SL 2000" = mtm_sl=2000, mtm_unit="amt"
-- "W&T 10%" = wt_enabled=true, wt_value=10, wt_unit="pct"
-- "TSL 20pts" = tsl_enabled=true, tsl_y=20 (trail by 20)
-- STBT/BTST detected from words like "sell today buy tomorrow"
-- Entry time: "9:35", "market open"→"09:15", "half past nine"→"09:30"
-
-When all info collected AND name confirmed, output EXACTLY:
-FINAL_CONFIG:
-{...json...}
-
-For EDIT mode — when user describes a change:
-- Read existing config
-- Apply ONLY the described changes
-- Output FINAL_CONFIG with ALL fields (merge of old + new)
-- Then show 2-line summary of what changed`
+FINAL_CONFIG JSON format:
+{"algo_name":"","underlying":"NIFTY","strategy_mode":"intraday","entry_type":"direct","entry_time":"09:35","exit_time":"15:15","lots":1,"legs":[{"direction":"sell","instrument":"ce","strike_type":"atm","expiry":"current_weekly","sl_enabled":false,"sl_type":null,"sl_value":null,"tsl_enabled":false,"tp_enabled":false,"wt_enabled":false}],"mtm_sl":null,"mtm_tp":null}`
 
 // ── Clean chain-of-thought from Gemma responses ──────────────────────────────
 function cleanResponse(text: string): string {
-  // If response has "Confirmation:" marker, extract from there
-  const confIdx = text.indexOf('Confirmation:')
-  if (confIdx !== -1) {
-    let cleaned = text.substring(confIdx + 'Confirmation:'.length).trim()
-    cleaned = cleaned.replace(/^["']|["']$/g, '')
-    return cleaned
+  // APPROACH 1: Extract quoted response blocks (Gemma often puts actual response in quotes)
+  const quotedBlocks = text.match(/"([^"]{20,})"/g)
+  if (quotedBlocks && quotedBlocks.length > 0) {
+    // Get the last substantial quoted block (the actual response)
+    const lastQuote = quotedBlocks[quotedBlocks.length - 1]
+    const clean = lastQuote.slice(1, -1).trim()
+    // Make sure it looks like a real response, not reasoning
+    if (clean.length > 20 && !clean.includes('FLOW') && !clean.includes('Step ')) {
+      return clean
+    }
   }
 
-  // Remove lines that look like internal reasoning
+  // APPROACH 2: Remove all lines starting with * or containing known reasoning patterns
   const lines = text.split('\n')
   const cleanLines = lines.filter(line => {
-    const trimmed = line.trim()
-    return !trimmed.startsWith('* User input:') &&
-           !trimmed.startsWith('* Underlying:') &&
-           !trimmed.startsWith('* Strategy:') &&
-           !trimmed.startsWith('* Lots:') &&
-           !trimmed.startsWith('* Entry Time:') &&
-           !trimmed.startsWith('* Exit Time:') &&
-           !trimmed.startsWith('* Strategy Mode:') &&
-           !trimmed.startsWith('* Confirm understanding') &&
-           !trimmed.startsWith('* Ask for optional') &&
-           !trimmed.startsWith('**User input:**') &&
-           !trimmed.startsWith('**Underlying:**') &&
-           !trimmed.startsWith('**Strategy:**') &&
-           !trimmed.match(/^\*\*?[A-Z][a-z]+:?\*?\*?:?\s/)  // catches "**Field:**" or "* Field:" patterns
+    const t = line.trim()
+    if (!t) return false
+    if (t.startsWith('*')) return false  // ALL asterisk lines are reasoning
+    if (t.startsWith('Goal:')) return false
+    if (t.startsWith('Step ')) return false
+    if (t.match(/^[0-9]+\./)) return false  // Numbered steps like "1. Parse..."
+    if (t.includes('FLOW')) return false
+    if (t.includes('No internal reasoning')) return false
+    if (t.includes('Only help with algos')) return false
+    if (t.includes('Concise?')) return false
+    if (t.includes('No analysis')) return false
+    if (t.includes('RULES:')) return false
+    if (t.includes('PATTERNS:')) return false
+    if (t.includes('confirm in 2 lines')) return false
+    if (t.includes('Ask missing optionals')) return false
+    if (t.includes('suggest name like')) return false
+    if (t.includes('output FINAL_CONFIG')) return false
+    if (t.includes('Understood.')) return false
+    return true
   })
 
-  return cleanLines.join('\n').trim()
+  let cleaned = cleanLines.join('\n').trim()
+
+  // Remove surrounding quotes if the whole response is quoted
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.slice(1, -1)
+  }
+
+  if (cleaned.length > 10) return cleaned
+
+  // APPROACH 3: Fallback — return everything but stripped of asterisks
+  return text.replace(/\*[^*]*\*/g, '').replace(/^\s*\*\s*/gm, '').trim()
 }
 
 // ── Validate config has required fields ──────────────────────────────────────
@@ -194,9 +110,11 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
   const [selectedDays,     setSelectedDays]     = useState<string[]>([])
   const [isListening,      setIsListening]      = useState(false)
 
-  const chatRef    = useRef<HTMLDivElement>(null)
-  const inputRef   = useRef<HTMLInputElement>(null)
-  const historyRef = useRef<{ role: string; parts: { text: string }[] }[]>([])
+  const chatRef      = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLInputElement>(null)
+  const historyRef   = useRef<{ role: string; parts: { text: string }[] }[]>([])
+  const isSendingRef = useRef(false)
+  const lastSendRef  = useRef(0)  // timestamp to debounce
 
   // Auto-scroll
   useEffect(() => {
@@ -228,7 +146,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
   // Gemma API call — prepend system prompt as conversation turns (no system_instruction)
   async function callGemma(userHistory: { role: string; parts: { text: string }[] }[]) {
     const systemTurn = { role: 'user', parts: [{ text: SYSTEM_PROMPT }] }
-    const systemAck  = { role: 'model', parts: [{ text: 'Understood. I will help create and edit trading algorithms for STAAX.' }] }
+    const systemAck  = { role: 'model', parts: [{ text: 'Understood. I will help create trading algorithms.' }] }
     const contents   = [systemTurn, systemAck, ...userHistory]
 
     const res = await fetch(
@@ -238,73 +156,118 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents,
-          generationConfig: { temperature: 0.1, maxOutputTokens: 800 },
+          generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
         }),
       }
     )
-    if (!res.ok) throw new Error(`API ${res.status}`)
+    if (!res.ok) {
+      console.error('[AI] API error status:', res.status)
+      throw new Error(`API ${res.status}`)
+    }
     const d = await res.json()
-    return d.candidates?.[0]?.content?.parts?.[0]?.text || 'Could not process. Please try again.'
+
+    // Debug logging
+    console.log('[AI] API response structure:', JSON.stringify(d).substring(0, 400))
+
+    if (d.error) {
+      console.error('[AI] API error:', d.error)
+      return `Error: ${d.error.message || 'Unknown error'}`
+    }
+
+    const text = d.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text) {
+      console.error('[AI] No text in response. Full response:', JSON.stringify(d).substring(0, 300))
+      // Try alternative paths
+      const alt = d.candidates?.[0]?.output || d.text || d.response
+      if (alt) return alt
+      // Check for blocked content
+      if (d.candidates?.[0]?.finishReason === 'SAFETY') {
+        return 'Response blocked by safety filter. Please rephrase your request.'
+      }
+    }
+
+    return text || 'Could not process. Please try again.'
   }
 
-  async function handleSend() {
+  const handleSend = useCallback(async () => {
+    // Triple guard: ref flag + timestamp debounce + isLoading state
+    const now = Date.now()
+    if (isSendingRef.current || isLoading || now - lastSendRef.current < 500) {
+      console.log('[AI] blocked by guard:', { isSending: isSendingRef.current, isLoading, timeDiff: now - lastSendRef.current })
+      return
+    }
+    isSendingRef.current = true
+    lastSendRef.current = now
+
     const userMsg = input.trim()
-    if (!userMsg || isLoading || chatDone) {
-      console.log('[AI] blocked:', { userMsg: !!userMsg, isLoading, chatDone })
+    if (!userMsg || chatDone) {
+      console.log('[AI] blocked:', { userMsg: !!userMsg, chatDone })
+      isSendingRef.current = false
       return
     }
 
-    console.log('[AI] sending:', userMsg, 'history:', historyRef.current.length)
+    console.log('[AI] sending:', userMsg, 'history length:', historyRef.current.length)
 
+    // Clear input and show user message immediately
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', text: userMsg, ts: _ts() }])
+    const ts = _ts()
+    setMessages(prev => [...prev, { role: 'user', text: userMsg, ts }])
     setIsLoading(true)
 
+    // Add to history ref
     historyRef.current = [...historyRef.current, { role: 'user', parts: [{ text: userMsg }] }]
+    console.log('[AI] history after add:', historyRef.current.length)
 
     try {
       const rawResponse = await callGemma(historyRef.current)
       const response = cleanResponse(rawResponse)
 
-      console.log('[AI] raw response:', rawResponse.substring(0, 200))
-      console.log('[AI] cleaned response:', response.substring(0, 200))
+      console.log('[AI] raw response:', rawResponse.substring(0, 300))
+      console.log('[AI] cleaned response:', response.substring(0, 300))
 
+      // Add model response to history
       historyRef.current = [...historyRef.current, { role: 'model', parts: [{ text: rawResponse }] }]
+      console.log('[AI] history after response:', historyRef.current.length)
 
-      // Only trigger FINAL_CONFIG if it's on its own line (not in reasoning)
-      const finalConfigMatch = response.match(/^FINAL_CONFIG:\s*$/m) || response.includes('\nFINAL_CONFIG:')
+      // Strict FINAL_CONFIG detection: must be followed by actual JSON
+      const configIdx = response.lastIndexOf('FINAL_CONFIG:')
+      let configParsed = false
 
-      if (finalConfigMatch && response.includes('FINAL_CONFIG:')) {
-        const jsonStr = response.split('FINAL_CONFIG:')[1].trim()
-        try {
-          // Try to extract just the JSON part (stop at first closing brace that balances)
-          let braceCount = 0
-          let jsonEnd = 0
-          for (let i = 0; i < jsonStr.length; i++) {
-            if (jsonStr[i] === '{') braceCount++
-            if (jsonStr[i] === '}') braceCount--
-            if (braceCount === 0 && jsonStr[i] === '}') {
-              jsonEnd = i + 1
-              break
+      if (configIdx !== -1) {
+        const jsonStr = response.substring(configIdx + 'FINAL_CONFIG:'.length).trim()
+        // Only proceed if it actually starts with JSON object
+        if (jsonStr.startsWith('{')) {
+          try {
+            // Extract balanced JSON
+            let braceCount = 0
+            let jsonEnd = 0
+            for (let i = 0; i < jsonStr.length; i++) {
+              if (jsonStr[i] === '{') braceCount++
+              if (jsonStr[i] === '}') braceCount--
+              if (braceCount === 0 && jsonStr[i] === '}') {
+                jsonEnd = i + 1
+                break
+              }
             }
-          }
-          const cleanJson = jsonStr.substring(0, jsonEnd)
-          const config = JSON.parse(cleanJson)
+            if (jsonEnd > 0) {
+              const cleanJson = jsonStr.substring(0, jsonEnd)
+              const config = JSON.parse(cleanJson)
 
-          // Only accept if it's a valid complete config
-          if (isValidConfig(config)) {
-            setParsedConfig(config)
-            setChatDone(true)
-            setMessages(prev => [...prev, { role: 'assistant', text: 'Got it! Choose your account and trading days below.', ts: _ts() }])
-          } else {
-            // Config incomplete, show response and continue conversation
-            setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
+              // Only accept if it's a valid complete config
+              if (isValidConfig(config)) {
+                setParsedConfig(config)
+                setChatDone(true)
+                setMessages(prev => [...prev, { role: 'assistant', text: 'Got it! Choose your account and trading days below.', ts: _ts() }])
+                configParsed = true
+              }
+            }
+          } catch (e) {
+            console.log('[AI] JSON parse error:', e)
           }
-        } catch (e) {
-          console.log('[AI] JSON parse error:', e)
-          setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
         }
-      } else {
+      }
+
+      if (!configParsed) {
         setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
       }
     } catch (e) {
@@ -312,8 +275,9 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
       setMessages(prev => [...prev, { role: 'assistant', text: 'Network error. Please try again.', ts: _ts() }])
     } finally {
       setIsLoading(false)
+      isSendingRef.current = false
     }
-  }
+  }, [input, isLoading, chatDone])
 
   function handleVoice() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
