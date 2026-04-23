@@ -18,6 +18,7 @@ Kill Switch integration:
     - If global_kill_switch.disabled is True → skip reconnect (engine is halted)
 """
 import logging
+import time as _time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -78,12 +79,10 @@ class BrokerReconnectManager:
             return
 
         # ── Check feed staleness ──────────────────────────────────────────────
-        # NOTE: LTPConsumer does not expose 'last_tick_time' or '_started_at'.
-        # getattr falls back to None for both, so this block always falls through
-        # to reconnect after STALE_THRESHOLD_SECONDS. Harmless in practice because
-        # the Zerodha ticker has its own built-in reconnect logic.
-        last_tick = getattr(self._ltp_consumer, 'last_tick_time', None)
-        now = datetime.now(timezone.utc)
+        # NOTE: last_tick_time and _started_at are time.monotonic() floats —
+        # compare with _time.monotonic(), NOT datetime objects.
+        last_tick  = getattr(self._ltp_consumer, 'last_tick_time', None)
+        now_mono   = _time.monotonic()
 
         if last_tick is None:
             # Never received a tick since start — check if ticker has been
@@ -91,11 +90,11 @@ class BrokerReconnectManager:
             started_at = getattr(self._ltp_consumer, '_started_at', None)
             if started_at is None:
                 return
-            if (now - started_at).total_seconds() < STALE_THRESHOLD_SECONDS:
+            if (now_mono - started_at) < STALE_THRESHOLD_SECONDS:
                 return   # Give it time on first start
             # Fall through to reconnect
         else:
-            elapsed = (now - last_tick).total_seconds()
+            elapsed = now_mono - last_tick
             if elapsed < STALE_THRESHOLD_SECONDS:
                 # Feed is healthy
                 self._consecutive_failures = 0
@@ -169,18 +168,15 @@ class BrokerReconnectManager:
 
     def get_status(self) -> dict:
         """Return current reconnect manager status — for health checks."""
-        last_tick = getattr(self._ltp_consumer, 'last_tick_time', None)
-        now       = datetime.now(timezone.utc)
-
-        feed_age_seconds = (
-            (now - last_tick).total_seconds() if last_tick else None
-        )
+        last_tick        = getattr(self._ltp_consumer, 'last_tick_time', None)
+        now_mono         = _time.monotonic()
+        feed_age_seconds = (now_mono - last_tick) if last_tick is not None else None
 
         return {
             "reconnect_count":        self._reconnect_count,
             "consecutive_failures":   self._consecutive_failures,
             "last_reconnect_at":      self._last_reconnect_at.isoformat() if self._last_reconnect_at else None,
-            "feed_age_seconds":       feed_age_seconds,
+            "feed_age_seconds":       round(feed_age_seconds, 1) if feed_age_seconds is not None else None,
             "feed_healthy":           (
                 feed_age_seconds is not None
                 and feed_age_seconds < STALE_THRESHOLD_SECONDS

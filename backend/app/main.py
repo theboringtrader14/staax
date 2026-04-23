@@ -929,17 +929,20 @@ async def _auto_start_market_feed(app: "FastAPI") -> None:
 
             # Start market feed with the first valid account
             if not market_feed_started:
-                # Skip if SmartStream adapter was already created by _ao_startup_auto_login.
-                # Check adapter existence, not _running — start() runs in an executor thread
-                # and _running may still be False when we arrive here (race condition).
+                # Skip ONLY if SmartStream is already connected (_connected=True means _on_open fired).
+                # If adapter exists but _connected=False, fall through and create a fresh adapter —
+                # the previous one failed to connect and needs to be replaced.
                 _ao_check = getattr(ltp_consumer, "_angel_adapter", None)
-                if _ao_check:
-                    if getattr(_ao_check, "_running", False):
-                        logger.info("[STARTUP MF] SmartStream already running (started during auto-login) — skipping")
-                    else:
-                        logger.info("[STARTUP MF] SmartStream adapter already initializing (started during auto-login) — skipping duplicate start")
+                if _ao_check and getattr(_ao_check, "_connected", False):
+                    logger.info("[STARTUP MF] SmartStream already connected (started during auto-login) — skipping")
                     market_feed_started = True
                     continue
+                if _ao_check and not getattr(_ao_check, "_connected", False):
+                    logger.warning("[STARTUP MF] Existing SmartStream adapter is NOT connected — replacing with fresh adapter")
+                    try:
+                        _ao_check.stop()
+                    except Exception:
+                        pass
                 if not feed_token:
                     logger.warning(
                         f"[STARTUP MF] {ao_acc.nickname}: feed_token is EMPTY — "

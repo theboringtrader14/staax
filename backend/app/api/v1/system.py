@@ -398,6 +398,107 @@ async def smartstream_start(request: Request, db: AsyncSession = Depends(get_db)
     }
 
 
+@router.post("/smartstream/reconnect")
+async def smartstream_reconnect(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Force SmartStream reconnect — stops existing adapter (if any) and starts fresh.
+    Use when connected=false and /smartstream/start reports already_running (stale state).
+    Returns {status, connected, message}.
+    """
+    from app.models.account import Account, BrokerType
+    from app.engine.ltp_consumer import AngelOneTickerAdapter
+    from app.api.v1.services import _service_states, ServiceStatus
+    from app.engine.bot_runner import MCX_TOKENS as _MCX_TOKENS
+    from sqlalchemy import select
+    from datetime import date, timezone
+    import asyncio as _aio
+    import concurrent.futures as _cf
+    from app.core.config import settings as _settings
+
+    ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+    if not ltp_consumer:
+        raise HTTPException(status_code=503, detail="ltp_consumer not initialised — restart backend")
+
+    # Stop existing adapter so _on_close doesn't interfere
+    existing = getattr(ltp_consumer, "_angel_adapter", None)
+    if existing:
+        try:
+            existing.stop()
+        except Exception as _se:
+            logger.debug(f"[SMARTSTREAM-RECONNECT] Stop existing adapter: {_se}")
+
+    _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
+        (_settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+        (_settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (_settings.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+    ] if k}
+
+    result = await db.execute(
+        select(Account).where(Account.broker == BrokerType.ANGELONE, Account.is_active == True)
+    )
+    ao_accounts = result.scalars().all()
+
+    chosen_acc = chosen_key = None
+    for acc in ao_accounts:
+        if not acc.access_token or not acc.token_generated_at:
+            continue
+        if acc.token_generated_at.astimezone(timezone.utc).date() != date.today():
+            continue
+        if not (acc.feed_token or ""):
+            continue
+        bkey = _CLIENT_ID_TO_BROKER_KEY.get(acc.client_id)
+        if not bkey:
+            continue
+        chosen_acc  = acc
+        chosen_key  = bkey
+        break
+
+    if not chosen_acc:
+        return {"status": "no_feed_token", "connected": False,
+                "message": "No AO account with a valid feed_token for today — login first"}
+
+    ao_broker = getattr(request.app.state, chosen_key, None)
+    if ao_broker:
+        await ao_broker.load_token(chosen_acc.access_token, chosen_acc.feed_token or "", "")
+
+    new_adapter = AngelOneTickerAdapter(
+        auth_token  = chosen_acc.access_token,
+        api_key     = chosen_acc.api_key or "",
+        client_code = chosen_acc.client_id,
+        feed_token  = chosen_acc.feed_token or "",
+    )
+    ltp_consumer.set_angel_adapter(new_adapter)
+
+    all_tokens: list = []
+    try:
+        all_tokens.extend(int(t) for t in AngelOneTickerAdapter.INDEX_TOKENS.values())
+    except Exception as e:
+        logger.warning(f"[SMARTSTREAM-RECONNECT] Index token build failed: {e}")
+    try:
+        mcx_int_tokens = list(_MCX_TOKENS.values())
+        all_tokens.extend(mcx_int_tokens)
+        new_adapter.register_mcx_tokens([str(t) for t in mcx_int_tokens])
+    except Exception as e:
+        logger.warning(f"[SMARTSTREAM-RECONNECT] MCX token registration failed: {e}")
+
+    loop     = _aio.get_event_loop()
+    executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="ao_smartstream_reconnect")
+    loop.run_in_executor(executor, lambda: new_adapter.start(
+        tokens  = [str(t) for t in all_tokens],
+        loop    = loop,
+        on_tick = ltp_consumer._process_ticks,
+    ))
+
+    _service_states["ws"] = ServiceStatus.RUNNING
+    logger.warning(f"[SMARTSTREAM-RECONNECT] Forced reconnect via {chosen_acc.nickname} ({len(all_tokens)} tokens)")
+
+    return {
+        "status":    "reconnecting",
+        "connected": False,   # will become True when _on_open fires (~1-3s)
+        "message":   f"SmartStream reconnect initiated — {len(all_tokens)} tokens via {chosen_acc.nickname}",
+    }
+
+
 @router.post("/start-market-feed")
 async def start_market_feed(request: Request, db: AsyncSession = Depends(get_db)):
     """

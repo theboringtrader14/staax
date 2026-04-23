@@ -784,14 +784,12 @@ export default function OrdersPage() {
     return () => { if (retryTimeout) clearTimeout(retryTimeout); ws?.close() }
   }, [])
 
-  // Live LTP polling every 1 second when open orders exist — today only.
-  // Past-day tabs must never trigger LTP polling; their P&L is already finalised
-  // and any setLtpData call would cause unnecessary re-renders / pill flicker.
+  // Live LTP polling every 1 second when today has open orders.
+  // Runs regardless of which day tab is active so the today pill stays live
+  // even when the user is viewing a past-day tab (no flicker on tab switch).
   useEffect(() => {
-    const isToday = selectedDate === todayDate
-    if (!isToday) return  // don't poll for past days
-    const curOrders = ordersByDate[selectedDate] ?? []
-    const hasOpenOrders = curOrders.some(g => g.legs.some(l => l.status === 'open'))
+    const todayOrders = ordersByDate[todayDate] ?? []
+    const hasOpenOrders = todayOrders.some(g => g.legs.some(l => l.status === 'open'))
     if (!hasOpenOrders) return
     const poll = () => {
       ordersAPI.ltp()
@@ -801,7 +799,7 @@ export default function OrdersPage() {
     poll()
     const interval = setInterval(poll, 1000)
     return () => clearInterval(interval)
-  }, [ordersByDate, selectedDate, todayDate])
+  }, [ordersByDate, todayDate])
 
   // Seed LTP data immediately on mount — prevents ₹0 flash before first poll fires
   useEffect(() => {
@@ -819,13 +817,6 @@ export default function OrdersPage() {
   const safeWaiting = waitingByDate[selectedDate] ?? []
 
   // Tab-scoped live MTM — only open orders ENTERED on this tab's date.
-  // Exclude is_overnight legs (BTST/STBT entered a prior day) — they show on this
-  // tab for visibility but their live MTM belongs to the entry-date tab, not today.
-  const liveTabMtm = safeOrders
-    .flatMap(g => g.legs)
-    .filter(l => l.status === 'open' && !l.isOvernight)
-    .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
-
   const buildRows = (legs: Leg[]) => {
     const r: { leg: Leg; isChild: boolean }[] = []
     for (const p of (legs || []).filter(l => !l.parentId)) {
@@ -1139,18 +1130,21 @@ export default function OrdersPage() {
   // Past-day detection — ISO date string compare is safe (both are YYYY-MM-DD)
   const isPastDay = selectedDate < todayDate
 
-  // Live net P&L for the active day tab — mirrors NET P&L card computation exactly
-  const _tabRealized = (accountFilter === 'all'
-    ? (ordersByDate[selectedDate] ?? [])
-    : (ordersByDate[selectedDate] ?? []).filter(g => g.account === accountFilter)
-  ).flatMap(g => g.legs.filter(l => l.status === 'closed' && l.pnl != null))
-   .reduce((s, l) => s + (l.pnl ?? 0), 0)
-  // Use tab-scoped MTM (not global liveTotalMtm) so a BTST entered yesterday
-  // does not bleed into today's tab P&L.
-  const _hasTabActivity = safeOrders.some(g => g.legs.length > 0)
-  const liveNetPnlForTab = _hasTabActivity
-    ? _tabRealized + (isPastDay ? 0 : liveTabMtm)
-    : null
+  // Always-live P&L for today's pill — computed from ordersByDate[todayDate] + ltpData
+  // so the THU tab shows fresh P&L even when another day tab is active.
+  const liveTodayPnl = useMemo(() => {
+    const todayOrders = accountFilter === 'all'
+      ? (ordersByDate[todayDate] ?? [])
+      : (ordersByDate[todayDate] ?? []).filter(g => g.account === accountFilter)
+    if (!todayOrders.some(g => g.legs.length > 0)) return null
+    const realized = todayOrders.flatMap(g => g.legs)
+      .filter(l => l.status === 'closed' && l.pnl != null)
+      .reduce((s, l) => s + (l.pnl ?? 0), 0)
+    const openMtm = todayOrders.flatMap(g => g.legs)
+      .filter(l => l.status === 'open' && !l.isOvernight)
+      .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
+    return realized + openMtm
+  }, [ordersByDate, todayDate, ltpData, accountFilter])
 
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
@@ -1315,9 +1309,10 @@ export default function OrdersPage() {
                 const date      = weekDates[day]
                 const isActive  = selectedDate === date
                 const isHoliday = date ? holidayDates.has(date) : false
-                // Past days: always use static weekPnl (prevents flicker when switching tabs).
-                // Today (non-past active): use live scoped P&L.
-                const pnl       = (isActive && !isPastDay) ? liveNetPnlForTab : (weekPnl[day] ?? null)
+                // Today: always show live P&L (regardless of active tab) — no flicker on switch.
+                // Past days: always use static weekPnl.
+                const isDayToday = date === todayDate
+                const pnl       = isDayToday ? liveTodayPnl : (weekPnl[day] ?? null)
                 const rupee     = '\u20B9'
                 return (
                   <button
