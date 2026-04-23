@@ -462,7 +462,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
   const canStart   = bot.status === 'inactive'
   const isArchived = bot.is_archived
 
-  const statusColor = bot.status === 'live'     ? '#22DD88'
+  const statusColor = bot.status === 'live'     ? 'var(--green)'
                     : bot.status === 'active'   ? '#FF6B00'
                     : bot.status === 'inactive' ? '#FFAA00'
                     : '#FF4444'
@@ -579,7 +579,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
             )}
             {canStart && !isArchived && (
               <button title="Start bot" onClick={() => onUpdate(bot.id, { status: 'active' })}
-                style={{ ...iconBtn(), color: '#22DD88' }}>
+                style={{ ...iconBtn(), color: 'var(--green)' }}>
                 <Play size={14} weight="fill" />
               </button>
             )}
@@ -623,7 +623,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
             {openOrder ? (
-              <span style={neuChip(openOrder.direction === 'BUY' ? '#22DD88' : '#FF4444')}>
+              <span style={neuChip(openOrder.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>
                 {openOrder.direction === 'BUY' ? 'LONG' : 'SHORT'} @{openOrder.entry_price?.toLocaleString('en-IN') ?? '—'}
               </span>
             ) : (
@@ -645,11 +645,11 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {botSignals.map(sig => {
                 const isBuy = sig.direction === 'BUY' || sig.direction === 'buy'
-                const statusColor2 = sig.status === 'fired' ? '#22DD88' : sig.status === 'error' ? '#FF4444' : '#F59E0B'
+                const statusColor2 = sig.status === 'fired' ? 'var(--green)' : sig.status === 'error' ? '#FF4444' : '#F59E0B'
                 return (
                   <div key={sig.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                    <span style={{ color: isBuy ? '#22DD88' : '#FF4444', fontWeight: 700, fontSize: 12, width: 10, flexShrink: 0 }}>{isBuy ? '↑' : '↓'}</span>
-                    <span style={{ color: isBuy ? '#22DD88' : '#FF4444', fontWeight: 700 }}>{isBuy ? 'BUY' : 'SELL'}</span>
+                    <span style={{ color: isBuy ? 'var(--green)' : '#FF4444', fontWeight: 700, fontSize: 12, width: 10, flexShrink: 0 }}>{isBuy ? '↑' : '↓'}</span>
+                    <span style={{ color: isBuy ? 'var(--green)' : '#FF4444', fontWeight: 700 }}>{isBuy ? 'BUY' : 'SELL'}</span>
                     <span style={{ color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
                       {sig.fired_at ? new Date(sig.fired_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}
                     </span>
@@ -668,7 +668,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
         {/* ── ROW 4: Orders toggle ── */}
         <button
           onClick={handleToggleOrders}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'transparent', border: 'none', borderTop: '0.5px solid var(--border)', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)' }}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px 8px 34px', background: 'transparent', border: 'none', borderTop: '0.5px solid var(--border)', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)' }}
         >
           <span>Orders</span>
           {ordersLoading && <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>Loading…</span>}
@@ -684,46 +684,61 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
         </button>
 
         {showOrders && (
-          <div style={{ padding: '0 0 12px' }}>
+          <div style={{ padding: '0 16px 8px 34px' }}>
             {orders.length === 0 ? (
-              <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--text-mute)', fontStyle: 'italic' }}>No orders yet</div>
+              <div style={{ padding: '8px 0', fontSize: 11, color: 'var(--text-mute)', fontStyle: 'italic' }}>No orders yet</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 64px 88px 88px 80px 64px', gap: '0', minWidth: 520, fontSize: 10 }}>
-                  {/* Header */}
-                  {['#', 'Symbol', 'Side', 'Entry ₹', 'Exit ₹', 'P&L', 'Status'].map(h => (
-                    <div key={h} style={{ padding: '4px 8px', color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '0.5px solid var(--border)' }}>{h}</div>
-                  ))}
-                  {/* Rows */}
-                  {[...orders].sort((a, b) => {
-                    const ta = a.entry_time ? new Date(a.entry_time).getTime() : 0
-                    const tb = b.entry_time ? new Date(b.entry_time).getTime() : 0
-                    return tb - ta
-                  }).map((o, i) => {
-                    const ltp = ltpMap[o.instrument]
-                    const livePnlRow = o.status === 'open' && ltp != null && o.entry_price != null
-                      ? (o.direction === 'BUY' ? (ltp - o.entry_price) * o.lots : (o.entry_price - ltp) * o.lots)
-                      : null
-                    const displayPnl = livePnlRow ?? o.pnl ?? null
-                    const statusColor3 = o.status === 'open' ? '#22DD88' : o.status === 'error' ? '#FF4444' : 'var(--text-dim)'
-                    return [
-                      <div key={`${o.id}-n`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{i + 1}</div>,
-                      <div key={`${o.id}-s`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.instrument}</div>,
-                      <div key={`${o.id}-d`}  style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--border)' }}>
-                        <span style={neuChip(o.direction === 'BUY' ? '#22DD88' : '#FF4444')}>{o.direction}</span>
-                      </div>,
-                      <div key={`${o.id}-e`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</div>,
-                      <div key={`${o.id}-x`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</div>,
-                      <div key={`${o.id}-p`}  style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: displayPnl != null ? (displayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>
-                        {displayPnl != null ? `${displayPnl >= 0 ? '+' : ''}₹${Math.round(displayPnl).toLocaleString('en-IN')}` : '—'}
-                        {livePnlRow != null && <span style={{ fontSize: 8, marginLeft: 3, opacity: 0.6 }}>●</span>}
-                      </div>,
-                      <div key={`${o.id}-st`} style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--border)' }}>
-                        <span style={{ ...neuChip(statusColor3), fontSize: 9 }}>{o.status.toUpperCase()}</span>
-                      </div>,
-                    ]
-                  })}
-                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '23%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '12%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {['#', 'SYMBOL', 'SIDE', 'ENTRY ₹', 'EXIT ₹', 'P&L', 'STATUS'].map(h => (
+                        <th key={h} style={{ padding: '4px 6px', color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '0.5px solid var(--border)', textAlign: 'left', fontFamily: 'var(--font-display)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...orders].sort((a, b) => {
+                      const ta = a.entry_time ? new Date(a.entry_time).getTime() : 0
+                      const tb = b.entry_time ? new Date(b.entry_time).getTime() : 0
+                      return tb - ta
+                    }).map((o, i) => {
+                      const ltp = ltpMap[o.instrument]
+                      const livePnlRow = o.status === 'open' && ltp != null && o.entry_price != null
+                        ? (o.direction === 'BUY' ? (ltp - o.entry_price) * o.lots : (o.entry_price - ltp) * o.lots)
+                        : null
+                      const displayPnl = livePnlRow ?? o.pnl ?? null
+                      const statusColor3 = o.status === 'open' ? 'var(--green)' : o.status === 'error' ? '#FF4444' : 'var(--text-dim)'
+                      return (
+                        <tr key={o.id}>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{i + 1}</td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.instrument}</td>
+                          <td style={{ padding: '5px 6px', borderBottom: '0.5px solid var(--border)' }}>
+                            <span style={neuChip(o.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>{o.direction}</span>
+                          </td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: displayPnl != null ? (displayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>
+                            {displayPnl != null ? `${displayPnl >= 0 ? '+' : ''}₹${Math.round(displayPnl).toLocaleString('en-IN')}` : '—'}
+                            {livePnlRow != null && <span style={{ fontSize: 8, marginLeft: 3, opacity: 0.6 }}>●</span>}
+                          </td>
+                          <td style={{ padding: '5px 6px', borderBottom: '0.5px solid var(--border)' }}>
+                            <span style={{ ...neuChip(statusColor3), fontSize: 9 }}>{o.status.toUpperCase()}</span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

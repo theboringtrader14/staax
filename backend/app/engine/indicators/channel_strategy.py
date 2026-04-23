@@ -78,6 +78,12 @@ class ChannelStrategy:
             upper = self.upper_channel
             lower = self.lower_channel
 
+        # Guard: channel levels not yet computed — no signal until warmed up
+        if not upper or not lower:
+            self._completed.append(candle)
+            self._prev_close = candle.close
+            return None
+
         curr = candle.close
         prev = self._prev_close
 

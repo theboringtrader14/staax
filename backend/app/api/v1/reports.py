@@ -342,7 +342,7 @@ async def error_analytics(
 
     # ── Source 2: orders with status='error' (catches silent failures not in event_log) ──
     order_conds = [
-        Order.status == 'error',
+        Order.status == OrderStatus.ERROR,
         Order.created_at >= fy_start,
         Order.created_at <= fy_end,
     ]
@@ -360,6 +360,9 @@ async def error_analytics(
     )
     err_orders = err_orders_res.scalars().all()
 
+    # Recent list — enriched with order fields where available
+    recent: list = []
+
     for o in err_orders:
         if str(o.id) in seen_order_ids:
             continue
@@ -373,19 +376,57 @@ async def error_analytics(
             "error_type": prefix,
             "message":    msg,
         })
+        recent.append({
+            "id":            str(o.id),
+            "algo":          o.algo_tag or "unknown",
+            "symbol":        o.symbol or "—",
+            "error_message": msg,
+            "created_at":    o.created_at.isoformat() if o.created_at else None,
+        })
         if date_str:
             by_day[date_str] = by_day.get(date_str, 0) + 1
         by_type[prefix] = by_type.get(prefix, 0) + 1
 
     # Sort combined rows by date descending
     rows.sort(key=lambda x: x["date"] or "", reverse=True)
+    recent.sort(key=lambda x: x["created_at"] or "", reverse=True)
+
+    # per_algo aggregation
+    per_algo_dict: dict = {}
+    for row in rows:
+        name = row["algo_name"]
+        if name not in per_algo_dict:
+            per_algo_dict[name] = {"errors": 0, "last_error": None}
+        per_algo_dict[name]["errors"] += 1
+        d = row["date"]
+        if d and (per_algo_dict[name]["last_error"] is None or d > per_algo_dict[name]["last_error"]):
+            per_algo_dict[name]["last_error"] = d
+    per_algo = sorted(
+        [{"algo": k, "errors": v["errors"], "last_error": v["last_error"]} for k, v in per_algo_dict.items()],
+        key=lambda x: -x["errors"],
+    )
+
+    # Total orders for error rate
+    from sqlalchemy import func as _func
+    tot_conds = [Order.created_at >= fy_start, Order.created_at <= fy_end]
+    if is_practix is not None:
+        tot_conds.append(Order.is_practix == is_practix)
+    tot_res = await db.execute(select(_func.count(Order.id)).where(*tot_conds))
+    total_orders = tot_res.scalar() or 0
+    error_rate_pct = round(len(rows) / total_orders * 100, 1) if total_orders > 0 else 0.0
 
     return {
-        "rows":         rows,
-        "by_day":       [{"date": d, "count": c} for d, c in sorted(by_day.items(), reverse=True)],
-        "by_type":      [{"error_type": t, "count": c} for t, c in sorted(by_type.items(), key=lambda x: -x[1])],
-        "total_errors": len(rows),
-        "fy":           fy,
+        # Frontend-expected fields
+        "per_algo":       per_algo,
+        "recent":         recent[:20],
+        "total_errors":   len(rows),
+        "total_orders":   total_orders,
+        "error_rate_pct": error_rate_pct,
+        # Raw data for future use
+        "rows":    rows,
+        "by_day":  [{"date": d, "count": c} for d, c in sorted(by_day.items(), reverse=True)],
+        "by_type": [{"error_type": t, "count": c} for t, c in sorted(by_type.items(), key=lambda x: -x[1])],
+        "fy":      fy,
     }
 
 
@@ -396,11 +437,11 @@ async def slippage_analytics(
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
-    """Historical slippage analytics — fill price vs reference price."""
+    """Historical slippage analytics — fill price vs LTP at entry (trigger price)."""
     from app.models.algo import Algo
     conditions = _base_query(fy, account_id, is_practix)
     conditions.append(Order.fill_price.isnot(None))
-    conditions.append(Order.entry_reference.isnot(None))
+    conditions.append(Order.ltp.isnot(None))
 
     result = await db.execute(
         select(Order, Algo.name.label('algo_name'))
@@ -415,7 +456,7 @@ async def slippage_analytics(
     for r in rows:
         o = r.Order
         try:
-            ref = float(o.entry_reference)
+            ref = float(o.ltp)
             fill = float(o.fill_price)
             slip = (fill - ref) if o.direction == 'buy' else (ref - fill)
             slip_inr = slip * (o.quantity or 1)

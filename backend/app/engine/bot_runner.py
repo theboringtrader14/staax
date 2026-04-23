@@ -206,15 +206,19 @@ class BotRunner:
                 )
                 rows = rows_result.scalars().all()
                 for row in rows:
-                    self._last_signal[str(row.bot_id)] = f"{row.signal_type}:{row.direction.lower()}"
+                    # Use same format as live dedup key: "type:direction:candle_ts"
+                    _cts = row.candle_timestamp.isoformat() if row.candle_timestamp else ""
+                    self._last_signal[str(row.bot_id)] = f"{row.signal_type}:{row.direction.lower()}:{_cts}"
                 logger.info(f"[BOT] Seeded _last_signal for {len(rows)} bot(s) from DB")
 
-                # FIX: if a bot has an open position, force _last_signal to "entry:buy"
-                # so subsequent exit signals are never deduped against a prior exit
+                # FIX: if a bot has an open position, reset _last_signal so exit signals
+                # are never blocked by a stale entry key from a prior session
                 for bot_id, pos in self._positions.items():
-                    if pos is not None and self._last_signal.get(bot_id) == "exit:sell":
-                        self._last_signal[bot_id] = "entry:buy"
-                        logger.info(f"[BOT] Corrected _last_signal for bot {bot_id}: open position but last signal was exit:sell → reset to entry:buy")
+                    if pos is not None:
+                        last = self._last_signal.get(bot_id, "")
+                        if last.startswith("exit:"):
+                            self._last_signal[bot_id] = "entry:buy:"
+                            logger.info(f"[BOT] Corrected _last_signal for bot {bot_id}: open position but last signal was exit → reset to entry:buy:")
         except Exception as _e:
             logger.warning(f"[BOT] Could not seed _last_signal from DB: {_e}")
 
@@ -391,18 +395,25 @@ class BotRunner:
 
         # ── Order decision (entry / exit) ─────────────────────────────────────
         has_position = self._positions.get(bot_id) is not None
-        # Include candle timestamp in dedup key so re-entry on a new candle is not suppressed
-        _candle_ts = candle.ts.isoformat() if hasattr(candle, 'ts') and candle.ts else str(getattr(candle, 'close_time', ''))
-        sig_key      = f"{signal.type}:{signal.direction}:{_candle_ts}"
+        # Include candle timestamp in dedup key so re-entry on a new candle is not suppressed.
+        # If candle.ts is None (should not happen after warmup fix), skip in-memory dedup
+        # so a missing timestamp never blocks a legitimate future signal.
+        _candle_ts = candle.ts.isoformat() if (hasattr(candle, 'ts') and candle.ts) else (
+            getattr(candle, 'close_time', None) or ''
+        )
+        sig_key = f"{signal.type}:{signal.direction}:{_candle_ts}" if _candle_ts else None
+
+        # sig_key is None when candle has no timestamp — skip in-memory dedup in that case
+        def _is_duplicate(key) -> bool:
+            return key is not None and self._last_signal.get(bot_id) == key
 
         acted = False
         if signal.type == "entry" and signal.direction == "buy" and not has_position:
-            # Dedup: skip if we already acted on a buy entry this candle run
-            if self._last_signal.get(bot_id) != sig_key:
+            if not _is_duplicate(sig_key):
                 try:
                     await self._enter_trade(bot, current_price, signal)
-                    self._last_signal[bot_id] = sig_key
-                    # Only mark signal as fired if order placement succeeded
+                    if sig_key:
+                        self._last_signal[bot_id] = sig_key
                     await self._save_signal(bot, signal, status="fired", candle=candle)
                     acted = True
                 except Exception as e:
@@ -414,11 +425,11 @@ class BotRunner:
             else:
                 logger.debug("[BOT] Dedup: skipping duplicate %s signal for %s", sig_key, bot.name)
         elif signal.type in ("entry", "exit") and signal.direction == "sell" and has_position:
-            if self._last_signal.get(bot_id) != sig_key:
+            if not _is_duplicate(sig_key):
                 try:
                     await self._exit_trade(bot, current_price)
-                    self._last_signal[bot_id] = sig_key
-                    # Only mark signal as fired if order placement succeeded
+                    if sig_key:
+                        self._last_signal[bot_id] = sig_key
                     await self._save_signal(bot, signal, status="fired", candle=candle)
                     acted = True
                 except Exception as e:
@@ -456,7 +467,7 @@ class BotRunner:
             from sqlalchemy import select as _select
             import uuid as uuid_lib
 
-            candle_ts = getattr(candle, "timestamp", None) or getattr(candle, "close_time", None)
+            candle_ts = getattr(candle, "ts", None) or getattr(candle, "timestamp", None) or getattr(candle, "close_time", None)
 
             async with AsyncSessionLocal() as db:
                 # DB-level dedup: skip if identical signal for this candle already exists

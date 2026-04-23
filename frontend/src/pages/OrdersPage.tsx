@@ -1322,7 +1322,7 @@ export default function OrdersPage() {
                     onClick={() => date && setSelectedDate(date)}
                     style={{
                       flex: 1, padding: '12px 0', textAlign: 'center' as const,
-                      background: isActive ? 'var(--bg)' : 'transparent',
+                      background: isActive ? 'linear-gradient(to top, rgba(255,107,0,0.09), transparent)' : 'transparent',
                       border: 'none',
                       borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
                       color: isActive ? 'var(--accent)' : 'var(--text-dim)',
@@ -1367,7 +1367,7 @@ export default function OrdersPage() {
       </div>{/* end fixed zone */}
 
       {/* ── Scroll zone ── */}
-      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '0 28px 24px' }}>
+      <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '16px 28px 24px' }}>
 
         {/* Live MTM wired to header — strip removed */}
 
