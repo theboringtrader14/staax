@@ -451,19 +451,23 @@ export default function GridPage() {
             {/* AI Algo Builder */}
             <button
               onClick={() => { setAiEditAlgo(null); setShowAI(true) }}
+              className="ai-btn-glow"
               style={{
                 height:32, padding:'0 14px', borderRadius:100,
                 background:'var(--bg)', border:'none',
                 color:'var(--text-dim)', fontSize:12, fontWeight:600,
                 fontFamily:'Inter, sans-serif', cursor:'pointer',
-                boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
+                boxShadow:'var(--neu-raised-sm)',
                 flexShrink:0, display:'flex', alignItems:'center', gap:5,
+                animation:'aiGlow 3s ease-in-out infinite',
+                transition:'transform 0.15s',
               }}
+              onMouseEnter={e => { e.currentTarget.style.transform='scale(1.05)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform='scale(1)' }}
               onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
               onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
             >
-              <Sparkle size={13} weight="fill" color="var(--accent)" />
+              <Sparkle size={13} weight="fill" color="var(--accent)" style={{ animation:'sparkleRotate 2.5s ease-in-out infinite' }} />
               AI
             </button>
 
@@ -854,6 +858,18 @@ export default function GridPage() {
                                   0%, 100% { opacity: 1; transform: scale(1); }
                                   50% { opacity: 0.3; transform: scale(0.6); }
                                 }
+                                @keyframes aiGlow {
+                                  0%, 100% { box-shadow: var(--neu-raised-sm), 0 0 6px rgba(255,107,0,0.2); }
+                                  50% { box-shadow: var(--neu-raised-sm), 0 0 14px rgba(255,107,0,0.4); }
+                                }
+                                @keyframes sparkleRotate {
+                                  0%, 100% { transform: scale(1) rotate(0deg); }
+                                  50% { transform: scale(1.15) rotate(12deg); }
+                                }
+                                @keyframes chatCirclePulse {
+                                  0%, 100% { opacity: 0.7; }
+                                  50% { opacity: 0.4; }
+                                }
                               `}</style>
 
 
@@ -877,7 +893,7 @@ export default function GridPage() {
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <ChatCircle size={18} weight="regular" />
+                                <ChatCircle size={18} weight="regular" style={{ animation:'chatCirclePulse 3s ease-in-out infinite' }} />
                               </button>
 
                               {/* GO LIVE / DEMOTE */}

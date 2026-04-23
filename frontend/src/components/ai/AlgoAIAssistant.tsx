@@ -1,12 +1,34 @@
 import { useState, useEffect, useRef } from 'react'
 import { Sparkle, X, Microphone, ArrowRight, Check, PencilSimple } from '@phosphor-icons/react'
 
-// ── Gemma config ──────────────────────────────────────────────────────────────
-const MODEL   = 'gemma-3-27b-it'
-const API_KEY = import.meta.env.VITE_GOOGLE_AI_KEY
+// ── Gemma 4 config ────────────────────────────────────────────────────────────
+const MODEL = 'gemma-4-31b-it'
 
-const SYSTEM_PROMPT = `You are an AI assistant for STAAX algo trading platform.
-Help users create and edit trading algorithms through conversation.
+const SYSTEM_PROMPT = `SCOPE RESTRICTION:
+You are ONLY capable of creating and editing trading algorithms for STAAX.
+You cannot answer general questions, provide market analysis, give trading advice,
+explain concepts, or do anything outside of algo creation and editing.
+
+If the user asks anything unrelated to creating or editing an algo, respond EXACTLY:
+"I can only help with creating and editing algos.
+Please describe the algo you want to create, or tell me which algo to edit."
+
+Examples of what to REFUSE:
+- "What is a straddle?" → refuse, suggest they describe the algo instead
+- "Should I trade NIFTY today?" → refuse
+- "What's the market doing?" → refuse
+- "Tell me about STAAX features" → refuse
+- "How does SL work?" → refuse
+- Any question that is not directly about building or modifying an algo config
+
+Examples of what to ACCEPT:
+- "Sell NIFTY straddle ATM 1 lot" → create algo
+- "Change SL to 50 points" → edit algo (in edit mode)
+- "Add MTM SL of 2000" → edit algo
+- "Remove the TP" → edit algo
+- "Make it BTST instead of intraday" → edit algo
+
+---
 
 CONVERSATION RULES:
 1. Parse user's initial description. Extract all mentioned fields.
@@ -19,14 +41,28 @@ CONVERSATION RULES:
    • W&T (Wait & Trade)? (e.g. 'W&T 10%' or 'none')
    • TSL (Trailing Stop Loss)? (e.g. 'TSL 20pts' or 'none')"
 4. If user already mentioned any of these → skip that item from the question.
-5. After optional features confirmed → DO NOT ask more questions.
-   Instead output READY_FOR_ACCOUNT marker.
-6. Account and Days are handled by the UI (chip selection) — never ask about them in chat.
-7. Keep responses SHORT — 4 lines max per message.
+5. After optional features confirmed → suggest an algo name using this convention:
+   {2-letter underlying}-{strategy shorthand}-{identifier}
+
+   Underlying codes: NF=NIFTY, BN=BANKNIFTY, SX=SENSEX, GM=GOLDM, SM=SILVERMIC
+   Strategy shorthand: STRD=straddle, STRG=strangle, INT=intraday,
+     BTST, STBT, TF=trend, ORB, WT=wait&trade
+   Identifier: SL value or a number if duplicate exists
+
+   Examples: NF-STRD-40, BN-BTST-1, SX-STBT-2, GM-CH-45
+
+   Say: "I'd suggest naming this: {name}. Keep it or type a different name?"
+
+   If user says "ok", "yes", "fine", "keep" → use the suggested name.
+   If user provides a different name → use that instead.
+
+6. Only AFTER name is confirmed → output FINAL_CONFIG with the confirmed name.
+7. Account and Days are handled by the UI (chip selection) — never ask about them in chat.
+8. Keep responses SHORT — 4 lines max per message.
 
 SCHEMA to fill:
 {
-  "algo_name": string (auto-generate from underlying+strategy if not given),
+  "algo_name": string,
   "underlying": "NIFTY"|"BANKNIFTY"|"SENSEX"|"MIDCPNIFTY"|"FINNIFTY"|"GOLDM"|"SILVERMIC",
   "strategy_mode": "intraday"|"stbt"|"btst"|"positional",
   "entry_type": "direct"|"wt"|"orb",
@@ -67,7 +103,7 @@ PATTERNS:
 - STBT/BTST detected from words like "sell today buy tomorrow"
 - Entry time: "9:35", "market open"→"09:15", "half past nine"→"09:30"
 
-When all info collected, output EXACTLY:
+When all info collected AND name confirmed, output EXACTLY:
 FINAL_CONFIG:
 {...json...}
 
@@ -134,22 +170,26 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
     return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
   }
 
-  async function callGemma(history: { role: string; parts: { text: string }[] }[]) {
+  // Gemma API call — prepend system prompt as conversation turns (no system_instruction)
+  async function callGemma(userHistory: { role: string; parts: { text: string }[] }[]) {
+    const systemTurn = { role: 'user', parts: [{ text: SYSTEM_PROMPT }] }
+    const systemAck  = { role: 'model', parts: [{ text: 'Understood. I will help create and edit trading algorithms for STAAX.' }] }
+    const contents   = [systemTurn, systemAck, ...userHistory]
+
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${import.meta.env.VITE_GOOGLE_AI_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: history,
+          contents,
           generationConfig: { temperature: 0.1, maxOutputTokens: 800 },
         }),
       }
     )
     if (!res.ok) throw new Error(`API ${res.status}`)
     const d = await res.json()
-    return d.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, could not process.'
+    return d.candidates?.[0]?.content?.parts?.[0]?.text || 'Could not process. Please try again.'
   }
 
   async function handleSend() {
@@ -262,12 +302,13 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
           borderBottom: '1px solid var(--border)',
           flexShrink: 0,
         }}>
-          <Sparkle size={15} weight="fill" color="var(--accent)" style={{ marginRight: 8, flexShrink: 0 }} />
+          <Sparkle size={15} weight="fill" color="var(--accent)" style={{ marginRight: 8, flexShrink: 0, animation: 'aiShimmer 3s ease-in-out infinite' }} />
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
             {mode === 'create' ? 'AI Algo Builder' : 'Edit with AI'}
           </span>
-          <span style={{ marginLeft: 8, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1.5 }}>
-            Gemma 3
+          <span style={{ marginLeft: 8, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', animation: 'aiDotBlink 2s ease-in-out infinite' }} />
+            GEMMA 4
           </span>
           <button
             onClick={onClose}
@@ -289,7 +330,14 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
           style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}
         >
           {messages.map((m, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            <div
+              key={i}
+              style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
+                animation: m.role === 'user' ? 'aiSlideInRight 0.2s ease-out' : 'aiSlideInLeft 0.2s ease-out',
+              }}
+            >
               <div style={{
                 maxWidth: '82%',
                 background: m.role === 'user' ? 'rgba(255,107,0,0.07)' : 'var(--bg)',
@@ -314,14 +362,13 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
 
           {/* Loading dots */}
           {isLoading && (
-            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', animation: 'aiSlideInLeft 0.2s ease-out' }}>
               <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '14px 14px 14px 4px', padding: '10px 14px', display: 'flex', gap: 5, alignItems: 'center' }}>
                 {[0, 1, 2].map(i => (
                   <span key={i} style={{
-                    width: 5, height: 5, borderRadius: '50%',
+                    width: 6, height: 6, borderRadius: '50%',
                     background: 'var(--accent)', display: 'inline-block',
-                    animation: `aiDotBounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-                    opacity: 0.6,
+                    animation: `aiDotPulse 0.9s ease-in-out ${i * 0.15}s infinite`,
                   }} />
                 ))}
               </div>
@@ -495,9 +542,25 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
 
         {/* ── Keyframe animations ──────────────────────────────────── */}
         <style>{`
-          @keyframes aiDotBounce {
-            0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
-            40% { transform: translateY(-5px); opacity: 1; }
+          @keyframes aiShimmer {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3) drop-shadow(0 0 3px rgba(255,107,0,0.5)); }
+          }
+          @keyframes aiDotBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+          }
+          @keyframes aiDotPulse {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.3); opacity: 1; }
+          }
+          @keyframes aiSlideInLeft {
+            from { transform: translateX(-16px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+          }
+          @keyframes aiSlideInRight {
+            from { transform: translateX(16px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
           }
           @keyframes aiListenPulse {
             0%, 100% { box-shadow: var(--neu-inset), 0 0 0 0 rgba(255,107,0,0.45); }
