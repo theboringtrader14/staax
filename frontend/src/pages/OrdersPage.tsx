@@ -1461,9 +1461,8 @@ export default function OrdersPage() {
 
               // All entries in the waiting list are retryable — they haven't entered yet.
               // Only block for ORB window past, already retrying, or market closed.
-              // PRACTIX mode always allows retry (paper trading, no broker dependency).
               const isOrbRetryBlocked = isOrbWindowPast || (isOrbAlgo && isMissed)
-              const canRetry  = !isRetrying && !isOrbRetryBlocked && (isMarketHours || isPractixMode)
+              const canRetry  = !isRetrying && !isOrbRetryBlocked && isMarketHours
               const retryLabel = isOrbRetryBlocked ? 'ORB ✕' : 'RETRY'
               const retryCol   = isOrbRetryBlocked ? 'var(--text-mute)' : '#F59E0B'
               const retryBg    = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.05)'
@@ -1753,13 +1752,13 @@ export default function OrdersPage() {
                     const retryBtnLabel = isRetrying ? '↻' : (loading[`retry-${gi}`] ? '↻' : 'RETRY')
                     const retryBtnCol   = isRetrying ? 'rgba(6,182,212,0.7)' : (canRetry ? '#F59E0B' : '#6B6B6B')
                     const retryBtnBg    = isRetrying ? 'rgba(6,182,212,0.06)' : (canRetry ? 'rgba(245,158,11,0.05)' : 'rgba(100,100,100,0.04)')
-                    const canSQ    = (isMarketHours || isPractixMode) && !isTerminated && !isClosed && hasOpenLegs
-                    const canRetryFinal = canRetry && (isMarketHours || isPractixMode)
+                    const canSQ    = isMarketHours && !isTerminated && !isClosed && hasOpenLegs
+                    const canRetryFinal = canRetry && isMarketHours
                     const BTNS = [
                       { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: isTerminated,                              title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
                       { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed — SQ not available' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed,                 title: undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
-                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && !isPractixMode && canRetry ? 'Market is closed — switch to PRACTIX to retry' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
+                      { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed — retry not available' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
                       { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: undefined, action: () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) },
                     ]
 
