@@ -43,13 +43,12 @@ const neuCard: CSSProperties = {
   background: 'var(--bg)',
   boxShadow: 'var(--neu-raised)',
   borderRadius: 20,
-  border: '1px solid var(--border)',
   marginBottom: 12,
   overflow: 'hidden',
 }
 
 const iconBtn = (active = false): CSSProperties => ({
-  width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+  width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer',
   background: 'var(--bg)',
   boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -67,6 +66,29 @@ const neuChip = (color: string): CSSProperties => ({
 const secLabel: CSSProperties = {
   fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)',
   fontWeight: 700, textTransform: 'uppercase', marginBottom: 8,
+}
+
+// Neumorphic input style (replaces dark staax-input in modals)
+const neuInputStyle: CSSProperties = {
+  background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', outline: 'none',
+  borderRadius: 12, color: 'var(--text)', padding: '0 14px',
+  height: 42, fontSize: 13, fontFamily: 'var(--font-body)', width: '100%',
+}
+
+// Ghost/secondary button
+const ghostBtn: CSSProperties = {
+  height: 36, padding: '0 20px', borderRadius: 100, border: 'none', cursor: 'pointer',
+  background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+  fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
+  color: 'var(--text-dim)', transition: 'box-shadow 0.12s',
+}
+
+// Primary accent button
+const primaryBtn: CSSProperties = {
+  height: 36, padding: '0 22px', borderRadius: 100, border: 'none', cursor: 'pointer',
+  background: 'var(--accent)', color: '#fff',
+  fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-display)',
+  boxShadow: '0 2px 8px rgba(255,107,0,0.35)', transition: 'opacity 0.12s',
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -97,17 +119,21 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
   title: string; desc: string; confirmLabel: string; confirmColor: string
   onConfirm: () => void; onCancel: () => void
 }) {
-  const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444')
-  const isWarn   = confirmColor?.includes('amber') || confirmColor?.includes('f59e0b') || confirmColor?.includes('215,123')
-  const btnVariant = isDanger ? 'btn-danger' : isWarn ? 'btn-warn' : 'btn-primary'
+  const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444') || confirmColor?.includes('FF4444')
+  const isWarn   = confirmColor?.includes('amber') || confirmColor?.includes('f59e0b')
+  const confirmBtnStyle: CSSProperties = {
+    ...primaryBtn,
+    background: isDanger ? '#EF4444' : isWarn ? 'var(--accent-amber)' : 'var(--accent)',
+    boxShadow: isDanger ? '0 2px 8px rgba(239,68,68,0.35)' : isWarn ? '0 2px 8px rgba(245,158,11,0.35)' : '0 2px 8px rgba(255,107,0,0.35)',
+  }
   return (
     <div className="modal-overlay">
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 24, padding: '28px 24px', maxWidth: 380, width: '90vw' }}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text)' }}>{title}</div>
-        <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 20 }}>{desc}</div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className={`btn ${btnVariant}`} onClick={onConfirm}>{confirmLabel}</button>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 20, padding: '28px 24px', maxWidth: 360, width: '90vw' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>{title}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 24 }}>{desc}</div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button style={ghostBtn} onClick={onCancel}>Cancel</button>
+          <button style={confirmBtnStyle} onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>
@@ -131,13 +157,13 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
 
   return (
     <div className="modal-overlay">
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 24, padding: '28px 24px', maxWidth: 420, width: '90vw' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 20, padding: '28px 24px', maxWidth: 420, width: '90vw' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>Edit Bot — {bot.name}</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mute)', fontSize: 18 }}>×</button>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Edit Bot — {bot.name}</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mute)', fontSize: 20, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div><label style={labelStyle}>Bot Name</label><input className="staax-input" value={form.name} onChange={e => u('name', e.target.value)} /></div>
+          <div><label style={labelStyle}>Bot Name</label><input style={neuInputStyle} value={form.name} onChange={e => u('name', e.target.value)} /></div>
           <div><label style={labelStyle}>Account</label>
             <StaaxSelect value={form.account_id} onChange={v => u('account_id', v)}
               options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
@@ -147,7 +173,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
               options={TIMEFRAMES.map(t => ({ value: String(t.value), label: t.label }))} width="100%" />
           </div>
           <div><label style={labelStyle}>Lot Size</label>
-            <input className="staax-input" type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
+            <input style={neuInputStyle} type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
           </div>
           {ind?.params.includes('channel_candles') && (
             <div>
@@ -155,19 +181,19 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
               <StaaxSelect value={form.channel_tf} onChange={v => u('channel_tf', v)}
                 options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))} width="100%" />
               <label style={{ ...labelStyle, marginTop: 10 }}>Number of Candles</label>
-              <input className="staax-input" type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
+              <input style={neuInputStyle} type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
             </div>
           )}
           {ind?.params.includes('tt_lookback') && (
             <div>
               <label style={labelStyle}>LookBack (1–10)</label>
-              <input className="staax-input" type="number" min={1} max={10} value={form.tt_lookback} onChange={e => u('tt_lookback', parseInt(e.target.value) || 5)} />
+              <input style={neuInputStyle} type="number" min={1} max={10} value={form.tt_lookback} onChange={e => u('tt_lookback', parseInt(e.target.value) || 5)} />
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => onSave(bot.id, form)}>Save Changes</button>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button style={ghostBtn} onClick={onClose}>Cancel</button>
+          <button style={primaryBtn} onClick={() => onSave(bot.id, form)}>Save Changes</button>
         </div>
       </div>
     </div>
@@ -213,35 +239,40 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
   const selStyle = (active: boolean): CSSProperties => ({
     width: '100%', padding: '14px 16px', borderRadius: 12, marginBottom: 8,
-    border: `2px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-    background: active ? 'rgba(255,107,0,0.08)' : 'var(--bg)',
+    border: 'none',
+    background: 'var(--bg)',
     boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-    color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s',
+    color: active ? 'var(--accent)' : 'var(--text)', cursor: 'pointer', textAlign: 'left',
+    transition: 'box-shadow 0.12s, color 0.12s',
   })
-  const labelStyle: CSSProperties = { fontSize: 11, color: 'var(--text-mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }
+  const labelStyle: CSSProperties = { fontSize: 10, color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 6 }
 
   return (
     <div className="modal-overlay">
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 24, padding: '28px 24px', maxWidth: 480, width: '90vw' }}>
+      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 20, padding: '28px 24px', maxWidth: 480, width: '90vw' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>Create Bot</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mute)', fontSize: 18 }}>×</button>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Create Bot</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mute)', fontSize: 20, lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
+
+        {/* Step progress — all 5 bars neu-inset */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
           {steps.map(s => (
             <div key={s.n} style={{ flex: 1 }}>
-              <div style={{ height: 3, borderRadius: 2, background: step >= s.n ? 'var(--accent)' : 'var(--border)', transition: 'background 0.2s' }} />
-              <div style={{ fontSize: 9, color: step >= s.n ? 'var(--accent)' : 'var(--text-mute)', marginTop: 4, textAlign: 'center' }}>{s.label}</div>
+              <div style={{ height: 4, borderRadius: 4, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: step >= s.n ? '100%' : '0%', background: 'var(--accent)', borderRadius: 4, transition: 'width 0.3s ease' }} />
+              </div>
+              <div style={{ fontSize: 9, color: step >= s.n ? 'var(--accent)' : 'var(--text-mute)', marginTop: 4, textAlign: 'center', fontWeight: step >= s.n ? 700 : 400 }}>{s.label}</div>
             </div>
           ))}
         </div>
 
         {step === 1 && (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Choose Instrument</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Choose Instrument</div>
             {INSTRUMENTS.map(inst => (
               <button key={inst.value} onClick={() => u('instrument', inst.value)} style={selStyle(form.instrument === inst.value)}>
-                <div style={{ fontWeight: 700 }}>{inst.label}</div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{inst.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>{inst.exchange}</div>
               </button>
             ))}
@@ -250,10 +281,10 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 2 && (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Choose Indicator</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Choose Indicator</div>
             {INDICATORS.map(ind2 => (
               <button key={ind2.value} onClick={() => u('indicator', ind2.value)} style={selStyle(form.indicator === ind2.value)}>
-                <div style={{ fontWeight: 700 }}>{ind2.label}</div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{ind2.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
                   {ind2.params.length === 0 ? 'No parameters required' : 'Configurable parameters'}
                 </div>
@@ -264,12 +295,12 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 3 && (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Choose Timeframe</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Choose Timeframe</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {TIMEFRAMES.filter(tf => tf.value < 60).map(tf => (
                   <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
-                    style={{ ...selStyle(form.timeframe_mins === tf.value), padding: '14px', textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
+                    style={{ ...selStyle(form.timeframe_mins === tf.value), padding: '16px 14px', textAlign: 'center', fontSize: 13, fontWeight: 600, marginBottom: 0 }}>
                     {tf.label}
                   </button>
                 ))}
@@ -277,7 +308,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {TIMEFRAMES.filter(tf => tf.value >= 60).map(tf => (
                   <button key={tf.value} onClick={() => u('timeframe_mins', tf.value)}
-                    style={{ ...selStyle(form.timeframe_mins === tf.value), padding: '14px', textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
+                    style={{ ...selStyle(form.timeframe_mins === tf.value), padding: '16px 14px', textAlign: 'center', fontSize: 13, fontWeight: 600, marginBottom: 0 }}>
                     {tf.label}
                   </button>
                 ))}
@@ -288,7 +319,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 4 && (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Indicator Parameters</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Indicator Parameters</div>
             {ind?.params.length === 0 ? (
               <div style={{ padding: 20, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 12, color: 'var(--text-mute)', fontSize: 12, textAlign: 'center' }}>
                 DTR Strategy uses fixed mathematical constants.<br />No configuration needed.
@@ -302,13 +333,13 @@ function BotConfigurator({ accounts, onSave, onClose }: {
                         options={CHANNEL_TFS.map(t => ({ value: t, label: t === 'D' ? 'Daily' : `${t} min` }))} width="100%" />
                     </div>
                     <div><label style={labelStyle}>Number of Candles</label>
-                      <input className="staax-input" type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
+                      <input style={neuInputStyle} type="number" min={1} value={form.channel_candles} onChange={e => u('channel_candles', parseInt(e.target.value) || 1)} />
                     </div>
                   </>
                 )}
                 {ind?.params.includes('tt_lookback') && (
                   <div><label style={labelStyle}>LookBack Period (1–10)</label>
-                    <input className="staax-input" type="number" min={1} max={10} value={form.tt_lookback} onChange={e => u('tt_lookback', parseInt(e.target.value) || 5)} />
+                    <input style={neuInputStyle} type="number" min={1} max={10} value={form.tt_lookback} onChange={e => u('tt_lookback', parseInt(e.target.value) || 5)} />
                   </div>
                 )}
               </div>
@@ -318,29 +349,29 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
         {step === 5 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Final Configuration</div>
-            <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 12, padding: '10px 14px', fontSize: 11, color: 'var(--text-mute)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>Final Configuration</div>
+            <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 12, padding: '12px 14px', fontSize: 12, color: 'var(--text-mute)' }}>
               {[
                 ['Instrument', form.instrument],
                 ['Indicator', INDICATORS.find(i => i.value === form.indicator)?.label],
                 ['Timeframe', TIMEFRAMES.find(t => t.value === form.timeframe_mins)?.label],
               ].map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                   <span>{k}</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{v}</span>
                 </div>
               ))}
             </div>
             <div><label style={labelStyle}>Bot Name</label>
-              <input className="staax-input" type="text" placeholder="e.g. GOLDM DTR 1H" value={form.name} onChange={e => u('name', e.target.value)} />
+              <input style={neuInputStyle} type="text" placeholder="e.g. GOLDM DTR 1H" value={form.name} onChange={e => u('name', e.target.value)} />
             </div>
             <div><label style={labelStyle}>Account</label>
               <StaaxSelect value={form.account_id} onChange={v => u('account_id', v)}
                 options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
             </div>
             <div><label style={labelStyle}>Lot Size</label>
-              <input className="staax-input" type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
+              <input style={neuInputStyle} type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
             </div>
-            <div style={{ background: 'rgba(255,107,0,0.08)', borderRadius: 10, padding: '8px 12px', fontSize: 11, color: 'var(--accent)' }}>
+            <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 10, padding: '10px 14px', fontSize: 11, color: 'var(--accent)' }}>
               Expiry auto-set to current active contract ({autoExpiry()}). Rollover is automatic when ≤5 market days remain.
             </div>
             {error && <div style={{ fontSize: 12, color: 'var(--red)' }}>{error}</div>}
@@ -348,13 +379,13 @@ function BotConfigurator({ accounts, onSave, onClose }: {
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 8 }}>
-          <button className="btn btn-ghost" onClick={step === 1 ? onClose : () => setStep(s => s - 1)}>
+          <button style={ghostBtn} onClick={step === 1 ? onClose : () => setStep(s => s - 1)}>
             {step === 1 ? 'Cancel' : '← Back'}
           </button>
           {step < 5
-            ? <button className="btn btn-primary" onClick={() => setStep(s => s + 1)} disabled={!canNext()}>Next →</button>
-            : <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canNext()}>
-                {saving ? 'Creating...' : '✓ Create Bot'}
+            ? <button style={{ ...primaryBtn, opacity: !canNext() ? 0.45 : 1 }} onClick={() => canNext() && setStep(s => s + 1)} disabled={!canNext()}>Next →</button>
+            : <button style={{ ...primaryBtn, opacity: (saving || !canNext()) ? 0.45 : 1 }} onClick={handleSave} disabled={saving || !canNext()}>
+                {saving ? 'Creating…' : '✓ Create Bot'}
               </button>
           }
         </div>
@@ -516,7 +547,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
           <div style={{ flex: 1 }} />
 
           {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
 
             {/* Warmup */}
             <button title="Warmup — reload historical candles" onClick={handleWarmup} disabled={warmingUp}
@@ -851,13 +882,6 @@ export default function IndicatorsPage() {
   const handleWarmup = async (id: string) => {
     await apiPost(`/bots/${id}/warmup`, {})
   }
-  const handleRefresh = () => {
-    setLoading(true)
-    Promise.all([
-      apiGet(`/bots/?is_practix=${isPractixMode}`).then(r => setBots(r.data || [])),
-      fetchSignals(),
-    ]).finally(() => setLoading(false))
-  }
 
   const activeBots   = bots.filter(b => !b.is_archived)
   const archivedBots = bots.filter(b => b.is_archived)
@@ -891,34 +915,16 @@ export default function IndicatorsPage() {
         </div>
         <div className="page-header-actions">
           {archivedBots.length > 0 && (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setShowArchived(v => !v)}>
+            <button style={{ ...ghostBtn, height: 30, fontSize: 11 }} onClick={() => setShowArchived(v => !v)}>
               {showArchived ? 'Hide' : 'Show'} Archived ({archivedBots.length})
             </button>
           )}
-          <button onClick={handleRefresh} style={{
-            height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
-            background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
-            fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
-            color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6,
-            transition: 'box-shadow 0.12s',
-          }}
-          onMouseDown={e => (e.currentTarget.style.boxShadow = 'var(--neu-inset)')}
-          onMouseUp={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}
-          onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}>
-            <ArrowsClockwise size={13} />
-            Refresh
-          </button>
-          <button onClick={() => setShowCreate(true)} style={{
-            height: 32, padding: '0 16px', borderRadius: 40, border: 'none', cursor: 'pointer',
-            background: 'var(--accent)', color: '#fff',
-            fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
-            boxShadow: '0 2px 8px rgba(255,107,0,0.35)',
-          }}>+ New Bot</button>
+          <button onClick={() => setShowCreate(true)} style={primaryBtn}>+ New Bot</button>
         </div>
       </div>
 
       {/* Scrollable body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 2px 24px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 32px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : activeBots.length === 0 ? (
