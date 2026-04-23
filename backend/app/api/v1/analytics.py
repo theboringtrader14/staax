@@ -114,15 +114,15 @@ async def get_advanced_metrics(
     - Max Loss Streak (consecutive losing days)
     - Total Trading Days
     """
-    # Query completed orders
-    query = select(Order).where(Order.status == "complete")
+    # Query completed (closed) orders — "complete" is not a valid status; "closed" is.
+    query = select(Order).where(Order.status == "closed")
     if algo_id:
         # Filter by algo via join with GridEntry → Algo
         from app.models.grid import GridEntry
         query = (
             select(Order)
             .join(GridEntry, Order.grid_entry_id == GridEntry.id)
-            .where(GridEntry.algo_id == algo_id, Order.status == "complete")
+            .where(GridEntry.algo_id == algo_id, Order.status == "closed")
         )
 
     result = await db.execute(query)

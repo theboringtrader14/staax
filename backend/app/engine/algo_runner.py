@@ -1277,15 +1277,14 @@ class AlgoRunner:
             else f"{algo_state.journey_level or '1'}.{algo_state.reentry_count}"
         )
         # ── W&T entry_reference: option LTP at arm time ────────────────────────
-        # When a leg has W&T enabled and this is the force_direct entry triggered by
-        # WTEvaluator, pull the reference price from the arming cache and store it on
-        # the order as a float so reconciliation and the Orders page can use it directly.
-        _wt_entry_ref: Optional[float] = None
+        # entry_reference is VARCHAR(100) — MUST be stored as a string.
+        # reports.py converts back to float via float(o.entry_reference).
+        _wt_entry_ref: Optional[str] = None
         if leg.wt_enabled and force_direct:
             _ge_id_str_wt = str(grid_entry.id)
             _cached_wt = self._wt_arming_cache.get(_ge_id_str_wt)
             if _cached_wt and _cached_wt.get("reference_price"):
-                _wt_entry_ref = float(_cached_wt["reference_price"])
+                _wt_entry_ref = str(float(_cached_wt["reference_price"]))
             # Clear cache here (not in on_wt_entry) — entry fires 2s after callback,
             # so clearing early caused entry_reference to always be null.
             self._wt_arming_cache.pop(_ge_id_str_wt, None)

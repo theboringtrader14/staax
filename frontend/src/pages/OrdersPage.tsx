@@ -1132,6 +1132,8 @@ export default function OrdersPage() {
 
   // Always-live P&L for today's pill — computed from ordersByDate[todayDate] + ltpData
   // so the THU tab shows fresh P&L even when another day tab is active.
+  // Do NOT filter isOvernight — STBT/BTST entered today live in today's date bucket
+  // and must be included. The date bucket already excludes yesterday's overnight entries.
   const liveTodayPnl = useMemo(() => {
     const todayOrders = accountFilter === 'all'
       ? (ordersByDate[todayDate] ?? [])
@@ -1141,7 +1143,7 @@ export default function OrdersPage() {
       .filter(l => l.status === 'closed' && l.pnl != null)
       .reduce((s, l) => s + (l.pnl ?? 0), 0)
     const openMtm = todayOrders.flatMap(g => g.legs)
-      .filter(l => l.status === 'open' && !l.isOvernight)
+      .filter(l => l.status === 'open')
       .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
     return realized + openMtm
   }, [ordersByDate, todayDate, ltpData, accountFilter])
