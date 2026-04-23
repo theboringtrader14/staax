@@ -91,10 +91,10 @@ function NeuBtn({
   const ref = useRef<HTMLButtonElement>(null)
 
   const variantStyle: CSSProperties =
-    variant === 'accent' ? { background: 'var(--accent)',       color: '#fff' } :
-    variant === 'danger' ? { background: '#EF4444',             color: '#fff' } :
-    variant === 'warn'   ? { background: 'var(--accent-amber)', color: '#fff' } :
-                           { background: 'var(--bg)',           color: 'var(--text-dim)' }
+    variant === 'accent' ? { background: 'var(--bg)', color: 'var(--accent)'       } :
+    variant === 'danger' ? { background: 'var(--bg)', color: '#EF4444'             } :
+    variant === 'warn'   ? { background: 'var(--bg)', color: 'var(--accent-amber)' } :
+                           { background: 'var(--bg)', color: 'var(--text-dim)'     }
 
   const raisedShadow = 'var(--neu-raised-sm)'
   const insetShadow  = 'var(--neu-inset)'
