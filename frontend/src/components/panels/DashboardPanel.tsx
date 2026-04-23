@@ -509,7 +509,7 @@ export default function DashboardPanel() {
             {/* Label row with date nav */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const }}>
-                Engine Log{logDate !== todayIST() ? ` — ${fmtLogDate(logDate)}` : ''}
+                Engine Log
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {/* Prev day */}
@@ -518,21 +518,28 @@ export default function DashboardPanel() {
                   background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
                   fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>‹</button>
-                {/* Today pill */}
-                {logDate !== todayIST() && (
-                  <button onClick={() => setLogDate(todayIST())} style={{
-                    height: 22, padding: '0 8px', borderRadius: 100, border: 'none', cursor: 'pointer',
-                    background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
-                    fontSize: 9, fontWeight: 600, color: 'var(--accent)',
-                  }}>Today</button>
-                )}
-                {/* Next day (disabled on today) */}
+                {/* Date pill — always visible; neu-inset; click on past date jumps to today */}
+                <span
+                  onClick={logDate !== todayIST() ? () => setLogDate(todayIST()) : undefined}
+                  style={{
+                    height: 22, padding: '0 8px', borderRadius: 100,
+                    background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+                    fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                    color: logDate !== todayIST() ? 'var(--accent)' : 'var(--text-mute)',
+                    cursor: logDate !== todayIST() ? 'pointer' : 'default',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    userSelect: 'none',
+                  }}
+                >
+                  {logDate === todayIST() ? 'Today' : fmtLogDate(logDate)}
+                </span>
+                {/* Next day — always rendered, disabled on today */}
                 <button onClick={() => setLogDate(d => offsetDate(d, 1))} disabled={logDate >= todayIST()} style={{
                   width: 22, height: 22, borderRadius: '50%', border: 'none',
                   cursor: logDate >= todayIST() ? 'not-allowed' : 'pointer',
                   background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
                   fontSize: 11, color: logDate >= todayIST() ? 'var(--text-mute)' : 'var(--text-dim)',
-                  opacity: logDate >= todayIST() ? 0.4 : 1,
+                  opacity: logDate >= todayIST() ? 0.3 : 1,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>›</button>
               </div>
