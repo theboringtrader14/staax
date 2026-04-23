@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { algosAPI, gridAPI } from '@/services/api'
+import { algosAPI, gridAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
-import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning } from '@phosphor-icons/react'
+import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning, Sparkle, ChatCircle } from '@phosphor-icons/react'
+import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
@@ -112,6 +113,9 @@ export default function GridPage() {
   const [deferDay,       setDeferDay]       = useState('')
   const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
   const [stickyHeader,   setStickyHeader]   = useState<string|null>(null)
+  const [showAI,         setShowAI]         = useState(false)
+  const [aiEditAlgo,     setAiEditAlgo]     = useState<Algo|null>(null)
+  const [aiAccounts,     setAiAccounts]     = useState<{id:string,nickname:string,broker:string}[]>([])
 
   const listScrollRef    = useRef<HTMLDivElement>(null)
   const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -133,6 +137,13 @@ export default function GridPage() {
   }, [grid, todayDay])
 
   const flashError = (msg: string) => { setOpError(msg); setTimeout(() => setOpError(''), 3500) }
+
+  // ── Load accounts for AI assistant ───────────────────────────────────────────
+  useEffect(() => {
+    accountsAPI.list()
+      .then(res => setAiAccounts((res.data || []).map((a: any) => ({ id: a.id, nickname: a.nickname, broker: a.broker }))))
+      .catch(() => {})
+  }, [])
 
   // ── Load data ─────────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -435,6 +446,25 @@ export default function GridPage() {
                   {archived.length}
                 </span>
               )}
+            </button>
+
+            {/* AI Algo Builder */}
+            <button
+              onClick={() => { setAiEditAlgo(null); setShowAI(true) }}
+              style={{
+                height:32, padding:'0 14px', borderRadius:100,
+                background:'var(--bg)', border:'none',
+                color:'var(--text-dim)', fontSize:12, fontWeight:600,
+                fontFamily:'Inter, sans-serif', cursor:'pointer',
+                boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
+                flexShrink:0, display:'flex', alignItems:'center', gap:5,
+              }}
+              onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+              onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+            >
+              <Sparkle size={13} weight="fill" color="var(--accent)" />
+              AI
             </button>
 
             {/* New Algo */}
@@ -834,6 +864,22 @@ export default function GridPage() {
                               display:'flex', alignSelf:'stretch', gap:8, alignItems:'center',
                               padding:'0 16px',
                             }}>
+                              {/* AI Edit */}
+                              <button
+                                onClick={() => { setAiEditAlgo(algo); setShowAI(true) }}
+                                title="Edit with AI"
+                                style={{
+                                  display:'flex', alignItems:'center', justifyContent:'center',
+                                  width:40, height:40, borderRadius:12,
+                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
+                                  cursor:'pointer', color:'var(--accent)', transition:'box-shadow 0.12s',
+                                }}
+                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
+                                <ChatCircle size={18} weight="regular" />
+                              </button>
+
                               {/* GO LIVE / DEMOTE */}
                               <button
                                 onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
@@ -915,6 +961,24 @@ export default function GridPage() {
         </div>
       </div>
 
+
+      {/* ── AI Algo Assistant ────────────────────────────────────────────── */}
+      {showAI && (
+        <AlgoAIAssistant
+          mode={aiEditAlgo ? 'edit' : 'create'}
+          existingAlgo={aiEditAlgo || undefined}
+          accounts={aiAccounts}
+          onComplete={(config, accountId, days) => {
+            setShowAI(false)
+            if (aiEditAlgo) {
+              nav(`/algo/${aiEditAlgo.id}`, { state: { aiConfig: config, accountId, days } })
+            } else {
+              nav('/algo/new', { state: { aiConfig: config, accountId, days } })
+            }
+          }}
+          onClose={() => setShowAI(false)}
+        />
+      )}
 
       {/* ── Archive confirm modal ─────────────────────────────────────────── */}
       {archConfirm && (() => {

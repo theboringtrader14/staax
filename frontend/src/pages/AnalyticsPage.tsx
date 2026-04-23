@@ -152,33 +152,6 @@ function CumulativePnlChart({ orders }: { orders: Order[] }) {
 }
 
 
-// ── Segmented Arc Gauge ────────────────────────────────────────────────────────
-function SegmentedArcGauge({ score }: { score: number }) {
-  const s = Math.max(0, Math.min(100, score))
-  const color = s >= 70 ? '#0EA66E' : s >= 40 ? '#f59e0b' : '#FF4444'
-  const grade = s >= 70 ? 'A' : s >= 40 ? 'B' : s < 20 ? 'D' : 'C'
-  const arcPath = 'M 8 88 A 72 72 0 1 0 152 88'
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <svg width="160" height="90" viewBox="0 0 160 90" style={{ display: 'block', margin: '0 auto' }}>
-        <path d={arcPath} fill="none" stroke="var(--border)" strokeWidth="11" strokeLinecap="round" />
-        <path d={arcPath} fill="none" stroke={color} strokeWidth="11"
-          pathLength="100" strokeDasharray={`${s} 100`}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
-        <text x="80" y="60" textAnchor="middle" dominantBaseline="middle"
-          style={{ fontSize: '26px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
-          {s}
-        </text>
-        <text x="80" y="78" textAnchor="middle"
-          style={{ fontSize: '11px', fontWeight: 700, fill: color, fontFamily: 'inherit' }}>
-          {grade}
-        </text>
-      </svg>
-    </div>
-  )
-}
-
 
 // ── Summary Stat Card ──────────────────────────────────────────────────────────
 function SummaryCard({ label, value, sub, valueColor, onClick }: {

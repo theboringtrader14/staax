@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { algosAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
+import { Sparkle } from '@phosphor-icons/react'
+import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 
 const INST_CODES: Record<string, string> = { NF: 'NIFTY', BN: 'BANKNIFTY', SX: 'SENSEX', MN: 'MIDCAPNIFTY', FN: 'FINNIFTY' }
 const EXPIRY_OPTIONS = [
@@ -688,13 +690,21 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
   )
 }
 
+const UNDERLYING_TO_CODE: Record<string, string> = {
+  NIFTY: 'NF', BANKNIFTY: 'BN', SENSEX: 'SX',
+  MIDCPNIFTY: 'MN', MIDCAPNIFTY: 'MN', FINNIFTY: 'FN',
+  GOLDM: 'GOLDM', SILVERMIC: 'SILVERMIC',
+}
+
 export default function AlgoPage() {
   const navigate        = useNavigate()
+  const location        = useLocation()
   const { id }          = useParams<{ id: string }>()
   const isPractixMode   = useStore(s => s.isPractixMode)
   const isEdit      = !!id
   // Account list — populated from API on mount
   const [accountOptions, setAccountOptions] = useState<{ id: string; label: string }[]>([])
+  const [showAI,         setShowAI]         = useState(false)
 
   const [legs, setLegs]             = useState<Leg[]>([mkLeg(1)])
   const [recurringDays, setRecurringDays] = useState<string[]>([])
@@ -866,6 +876,11 @@ export default function AlgoPage() {
         if (mappedLegs.length > 0 && (a.legs || [])[0]?.orb_range_source) {
           setOrbRangeSource((a.legs || [])[0].orb_range_source)
         }
+        // Apply AI config on top of loaded algo (edit via AI from GridPage)
+        if (location.state?.aiConfig) {
+          applyAIConfig(location.state.aiConfig, location.state.accountId, location.state.days)
+          window.history.replaceState({}, '')
+        }
         // Mark loaded after React processes all setters above
         setTimeout(() => { formLoadedRef.current = true }, 0)
       })
@@ -879,6 +894,72 @@ export default function AlgoPage() {
       })
       .catch(() => {})
   }, [id, isEdit])
+
+  // ── AI config application ────────────────────────────────────────────────────
+  function applyAIConfig(config: any, accountId?: string | null, days?: string[]) {
+    const code = UNDERLYING_TO_CODE[config.underlying?.toUpperCase() || ''] || 'NF'
+    if (config.algo_name)     setAlgoName(config.algo_name)
+    if (config.strategy_mode) setStratMode(config.strategy_mode)
+    if (config.entry_type)    setEntryType(config.entry_type)
+    if (config.entry_time) {
+      const t = config.entry_time
+      setEntryTime(t.length === 5 ? `${t}:00` : t)
+    }
+    if (config.exit_time) {
+      const t = config.exit_time
+      setExitTime(t.length === 5 ? `${t}:00` : t)
+    }
+    if (accountId) setAccount(accountId)
+    if (days?.length) setRecurringDays(days.map((d: string) => d.toUpperCase()))
+    if (config.mtm_sl != null) setMtmSL(String(config.mtm_sl))
+    if (config.mtm_tp != null) setMtmTP(String(config.mtm_tp))
+    if (config.mtm_unit)       setMtmUnit(config.mtm_unit)
+
+    if (Array.isArray(config.legs) && config.legs.length > 0) {
+      const mapped: Leg[] = config.legs.map((l: any, i: number) => {
+        const isOpt   = l.instrument !== 'fut'
+        let strikeMode = 'leg'
+        let strikeType = (l.strike_type || 'atm').toLowerCase()
+        let premiumVal = ''
+        if (l.strike_type === 'premium') {
+          strikeMode = 'premium'; strikeType = 'atm'
+          premiumVal = l.strike_value != null ? String(l.strike_value) : ''
+        } else if (l.strike_type === 'otm' && l.strike_value) {
+          strikeType = `OTM${l.strike_value}`
+        } else if (l.strike_type === 'itm' && l.strike_value) {
+          strikeType = `ITM${l.strike_value}`
+        }
+        const base = mkLeg(i + 1)
+        return {
+          ...base,
+          instType:   isOpt ? 'OP' : 'FU',
+          instCode:   code,
+          direction:  (l.direction || 'buy').toUpperCase(),
+          optType:    isOpt ? (l.instrument || 'ce').toUpperCase() : 'CE',
+          strikeMode, strikeType, premiumVal,
+          lots:       String(config.lots || l.lots || 1),
+          expiry:     l.expiry || 'current_weekly',
+          active: { ...base.active, sl: !!l.sl_enabled, tsl: !!l.tsl_enabled, tp: !!l.tp_enabled, wt: !!l.wt_enabled },
+          vals: {
+            ...base.vals,
+            sl:  { type: l.sl_type  || 'pts_instrument', value: l.sl_value  != null ? String(l.sl_value)  : '' },
+            tsl: { x: l.tsl_x != null ? String(l.tsl_x) : '', y: l.tsl_y != null ? String(l.tsl_y) : '', unit: 'pts' },
+            tp:  { type: 'pts_instrument',               value: l.tp_value  != null ? String(l.tp_value)  : '' },
+            wt:  { direction: 'up', value: l.wt_value != null ? String(l.wt_value) : '', unit: l.wt_unit || 'pts' },
+          },
+        }
+      })
+      setLegs(mapped)
+    }
+  }
+
+  // Apply AI config from navigation state (new algo)
+  useEffect(() => {
+    if (!isEdit && location.state?.aiConfig) {
+      applyAIConfig(location.state.aiConfig, location.state.accountId, location.state.days)
+      window.history.replaceState({}, '')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addLeg    = () => setLegs(l => [...l, mkLeg(l.length + 1)])
   const removeLeg = (id: string) => setLegs(l => l.filter(x => x.id !== id).map((x, i) => ({ ...x, no: i + 1 })))
@@ -1112,6 +1193,19 @@ export default function AlgoPage() {
 
   return (
     <div className="algo-page" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 24px' }}>
+      {/* AI Algo Assistant modal */}
+      {showAI && (
+        <AlgoAIAssistant
+          mode={isEdit ? 'edit' : 'create'}
+          existingAlgo={isEdit ? { name: algoName, strategy_mode: stratMode, et: entryTime, xt: exitTime, legs: [] } : undefined}
+          accounts={accountOptions.map(a => ({ id: a.id, nickname: a.label.split(' (')[0], broker: a.label.includes('Zerodha') ? 'zerodha' : 'angel' }))}
+          onComplete={(config, accountId, days) => {
+            setShowAI(false)
+            applyAIConfig(config, accountId, days)
+          }}
+          onClose={() => setShowAI(false)}
+        />
+      )}
       <style>{`
         .staax-time-input::-webkit-calendar-picker-indicator { display: none !important; opacity: 0 !important; width: 0 !important; }
         .staax-time-input::-webkit-inner-spin-button { display: none !important; }
@@ -1131,6 +1225,10 @@ export default function AlgoPage() {
           {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
           {saveError  && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveError}</span>}
+          <button onClick={() => setShowAI(true)} style={{ height: '34px', padding: '0 14px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Sparkle size={13} weight="fill" color="var(--accent)" />
+            Describe
+          </button>
           <button onClick={() => navigate('/grid')} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', border: 'none', background: 'var(--bg)', boxShadow: saving ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: '#0ea66e', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : (isEdit ? 'Update Algo' : 'Save Algo')}</button>
         </div>
