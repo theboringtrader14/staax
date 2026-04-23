@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
-import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning, Sparkle, ChatCircle } from '@phosphor-icons/react'
+import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning, Sparkle } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -893,7 +893,7 @@ export default function GridPage() {
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <ChatCircle size={18} weight="regular" style={{ animation:'chatCirclePulse 3s ease-in-out infinite' }} />
+                                <Sparkle size={16} weight="fill" color="var(--accent)" style={{ animation:'chatCirclePulse 3s ease-in-out infinite' }} />
                               </button>
 
                               {/* GO LIVE / DEMOTE */}

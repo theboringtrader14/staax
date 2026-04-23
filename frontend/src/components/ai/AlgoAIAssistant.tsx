@@ -4,7 +4,18 @@ import { Sparkle, X, Microphone, ArrowRight, Check, PencilSimple } from '@phosph
 // ── Gemma 4 config ────────────────────────────────────────────────────────────
 const MODEL = 'gemma-4-31b-it'
 
-const SYSTEM_PROMPT = `SCOPE RESTRICTION:
+const SYSTEM_PROMPT = `CRITICAL OUTPUT RULES:
+- Output ONLY your final response to the user
+- NEVER show your reasoning, thinking, analysis, or internal steps
+- NEVER use bullet points starting with "User input:", "Confirm understanding", "Underlying:", "Strategy:", etc.
+- NEVER output lines like "* User input:", "* Lots:", "* Entry Time:"
+- Just speak naturally as if talking to the user
+- Keep responses under 4 lines
+- Do NOT explain what you're about to do — just do it
+
+---
+
+SCOPE RESTRICTION:
 You are ONLY capable of creating and editing trading algorithms for STAAX.
 You cannot answer general questions, provide market analysis, give trading advice,
 explain concepts, or do anything outside of algo creation and editing.
@@ -32,16 +43,17 @@ Examples of what to ACCEPT:
 
 CONVERSATION RULES:
 1. Parse user's initial description. Extract all mentioned fields.
-2. Confirm what you understood in 2-3 lines.
-3. Ask ALL optional missing features in ONE grouped message:
-   "A few optional settings — answer what applies:
+2. Confirm what you understood in 2-3 lines. Example response:
+   "Got it — NIFTY ATM straddle, 1 lot, entry 9:35, exit 3:15.
+
+   A few optional settings — answer what applies:
    • Stop Loss? (e.g. '40pts per leg' or 'none')
    • Target Profit? (e.g. '60pts' or 'none')
    • MTM Stop Loss/Target? (e.g. 'MTM SL ₹2000' or 'none')
    • W&T (Wait & Trade)? (e.g. 'W&T 10%' or 'none')
    • TSL (Trailing Stop Loss)? (e.g. 'TSL 20pts' or 'none')"
-4. If user already mentioned any of these → skip that item from the question.
-5. After optional features confirmed → suggest an algo name using this convention:
+3. If user already mentioned any optional feature → skip that item from the question.
+4. After optional features confirmed → suggest an algo name using this convention:
    {2-letter underlying}-{strategy shorthand}-{identifier}
 
    Underlying codes: NF=NIFTY, BN=BANKNIFTY, SX=SENSEX, GM=GOLDM, SM=SILVERMIC
@@ -56,9 +68,9 @@ CONVERSATION RULES:
    If user says "ok", "yes", "fine", "keep" → use the suggested name.
    If user provides a different name → use that instead.
 
-6. Only AFTER name is confirmed → output FINAL_CONFIG with the confirmed name.
-7. Account and Days are handled by the UI (chip selection) — never ask about them in chat.
-8. Keep responses SHORT — 4 lines max per message.
+5. Only AFTER name is confirmed → output FINAL_CONFIG with the confirmed name.
+6. Account and Days are handled by the UI (chip selection) — never ask about them in chat.
+7. Keep responses SHORT — 4 lines max per message.
 
 SCHEMA to fill:
 {
@@ -112,6 +124,49 @@ For EDIT mode — when user describes a change:
 - Apply ONLY the described changes
 - Output FINAL_CONFIG with ALL fields (merge of old + new)
 - Then show 2-line summary of what changed`
+
+// ── Clean chain-of-thought from Gemma responses ──────────────────────────────
+function cleanResponse(text: string): string {
+  // If response has "Confirmation:" marker, extract from there
+  const confIdx = text.indexOf('Confirmation:')
+  if (confIdx !== -1) {
+    let cleaned = text.substring(confIdx + 'Confirmation:'.length).trim()
+    cleaned = cleaned.replace(/^["']|["']$/g, '')
+    return cleaned
+  }
+
+  // Remove lines that look like internal reasoning
+  const lines = text.split('\n')
+  const cleanLines = lines.filter(line => {
+    const trimmed = line.trim()
+    return !trimmed.startsWith('* User input:') &&
+           !trimmed.startsWith('* Underlying:') &&
+           !trimmed.startsWith('* Strategy:') &&
+           !trimmed.startsWith('* Lots:') &&
+           !trimmed.startsWith('* Entry Time:') &&
+           !trimmed.startsWith('* Exit Time:') &&
+           !trimmed.startsWith('* Strategy Mode:') &&
+           !trimmed.startsWith('* Confirm understanding') &&
+           !trimmed.startsWith('* Ask for optional') &&
+           !trimmed.startsWith('**User input:**') &&
+           !trimmed.startsWith('**Underlying:**') &&
+           !trimmed.startsWith('**Strategy:**') &&
+           !trimmed.match(/^\*\*?[A-Z][a-z]+:?\*?\*?:?\s/)  // catches "**Field:**" or "* Field:" patterns
+  })
+
+  return cleanLines.join('\n').trim()
+}
+
+// ── Validate config has required fields ──────────────────────────────────────
+function isValidConfig(config: any): boolean {
+  return config &&
+         typeof config.algo_name === 'string' &&
+         typeof config.underlying === 'string' &&
+         typeof config.entry_time === 'string' &&
+         typeof config.exit_time === 'string' &&
+         Array.isArray(config.legs) &&
+         config.legs.length > 0
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Message {
@@ -194,7 +249,13 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
 
   async function handleSend() {
     const userMsg = input.trim()
-    if (!userMsg || isLoading || chatDone) return
+    if (!userMsg || isLoading || chatDone) {
+      console.log('[AI] blocked:', { userMsg: !!userMsg, isLoading, chatDone })
+      return
+    }
+
+    console.log('[AI] sending:', userMsg, 'history:', historyRef.current.length)
+
     setInput('')
     setMessages(prev => [...prev, { role: 'user', text: userMsg, ts: _ts() }])
     setIsLoading(true)
@@ -202,23 +263,52 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
     historyRef.current = [...historyRef.current, { role: 'user', parts: [{ text: userMsg }] }]
 
     try {
-      const response = await callGemma(historyRef.current)
-      historyRef.current = [...historyRef.current, { role: 'model', parts: [{ text: response }] }]
+      const rawResponse = await callGemma(historyRef.current)
+      const response = cleanResponse(rawResponse)
 
-      if (response.includes('FINAL_CONFIG:')) {
+      console.log('[AI] raw response:', rawResponse.substring(0, 200))
+      console.log('[AI] cleaned response:', response.substring(0, 200))
+
+      historyRef.current = [...historyRef.current, { role: 'model', parts: [{ text: rawResponse }] }]
+
+      // Only trigger FINAL_CONFIG if it's on its own line (not in reasoning)
+      const finalConfigMatch = response.match(/^FINAL_CONFIG:\s*$/m) || response.includes('\nFINAL_CONFIG:')
+
+      if (finalConfigMatch && response.includes('FINAL_CONFIG:')) {
         const jsonStr = response.split('FINAL_CONFIG:')[1].trim()
         try {
-          const config = JSON.parse(jsonStr)
-          setParsedConfig(config)
-          setChatDone(true)
-          setMessages(prev => [...prev, { role: 'assistant', text: 'Got it! Choose your account and trading days below.', ts: _ts() }])
-        } catch {
+          // Try to extract just the JSON part (stop at first closing brace that balances)
+          let braceCount = 0
+          let jsonEnd = 0
+          for (let i = 0; i < jsonStr.length; i++) {
+            if (jsonStr[i] === '{') braceCount++
+            if (jsonStr[i] === '}') braceCount--
+            if (braceCount === 0 && jsonStr[i] === '}') {
+              jsonEnd = i + 1
+              break
+            }
+          }
+          const cleanJson = jsonStr.substring(0, jsonEnd)
+          const config = JSON.parse(cleanJson)
+
+          // Only accept if it's a valid complete config
+          if (isValidConfig(config)) {
+            setParsedConfig(config)
+            setChatDone(true)
+            setMessages(prev => [...prev, { role: 'assistant', text: 'Got it! Choose your account and trading days below.', ts: _ts() }])
+          } else {
+            // Config incomplete, show response and continue conversation
+            setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
+          }
+        } catch (e) {
+          console.log('[AI] JSON parse error:', e)
           setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
         }
       } else {
         setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
       }
-    } catch {
+    } catch (e) {
+      console.error('[AI] error:', e)
       setMessages(prev => [...prev, { role: 'assistant', text: 'Network error. Please try again.', ts: _ts() }])
     } finally {
       setIsLoading(false)
