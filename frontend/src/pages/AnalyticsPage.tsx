@@ -207,7 +207,7 @@ function SummaryCard({ label, value, sub, valueColor, onClick }: {
       <div style={{ fontSize: 9, textTransform: 'uppercase', color: 'var(--text-mute)', marginBottom: 6, fontWeight: 700, letterSpacing: '0.1em', fontFamily: 'var(--font-display)' }}>
         {label}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word', color: valueColor || 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+      <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2, wordBreak: 'break-word', color: valueColor || 'var(--accent)', fontFamily: 'var(--font-display)' }}>
         {value}
       </div>
       {sub && <div style={{ fontSize: 10, color: subColor, marginTop: 4 }}>{sub}</div>}
@@ -961,18 +961,18 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Tab bar — border-bottom style */}
-      <div style={{ display: 'flex', borderBottom: '0.5px solid var(--border)', flexShrink: 0 }}>
+      {/* Tab bar — neumorphic pill style */}
+      <div style={{ flexShrink: 0, padding: '10px 0', borderBottom: '0.5px solid var(--border)', display: 'flex', gap: 6 }}>
         {TABS.map(tab => (
           <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
             style={{
-              padding: '10px 20px', border: 'none', cursor: 'pointer',
-              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+              height: 32, padding: '0 18px', borderRadius: 100, border: 'none', cursor: 'pointer',
               fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
-              background: 'transparent',
+              background: 'var(--bg)',
+              boxShadow: activeTab === tab ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
               color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
-              transition: 'color 0.15s, border-bottom-color 0.15s',
+              transition: 'box-shadow 0.15s, color 0.15s',
             }}>
             {tab}
           </button>

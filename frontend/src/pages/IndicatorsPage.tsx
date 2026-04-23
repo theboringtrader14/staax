@@ -895,8 +895,25 @@ export default function IndicatorsPage() {
               {showArchived ? 'Hide' : 'Show'} Archived ({archivedBots.length})
             </button>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={handleRefresh}>↻ Refresh</button>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Bot</button>
+          <button onClick={handleRefresh} style={{
+            height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+            background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+            fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
+            color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6,
+            transition: 'box-shadow 0.12s',
+          }}
+          onMouseDown={e => (e.currentTarget.style.boxShadow = 'var(--neu-inset)')}
+          onMouseUp={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}
+          onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}>
+            <ArrowsClockwise size={13} />
+            Refresh
+          </button>
+          <button onClick={() => setShowCreate(true)} style={{
+            height: 32, padding: '0 16px', borderRadius: 40, border: 'none', cursor: 'pointer',
+            background: 'var(--accent)', color: '#fff',
+            fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
+            boxShadow: '0 2px 8px rgba(255,107,0,0.35)',
+          }}>+ New Bot</button>
         </div>
       </div>
 
@@ -905,11 +922,20 @@ export default function IndicatorsPage() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : activeBots.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-mute)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>◇</div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No bots yet</div>
-            <div style={{ fontSize: 12, marginBottom: 20 }}>Create a bot to start running indicator-based strategies</div>
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Create Your First Bot</button>
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{ fontSize: 32, marginBottom: 12, color: 'var(--text-mute)' }}>◇</div>
+            <div style={{ fontSize: 16, fontWeight: 500, fontFamily: 'var(--font-display)', color: 'var(--text-dim)', marginBottom: 6 }}>No bots yet</div>
+            <div style={{ fontSize: 12, color: 'var(--text-mute)', marginBottom: 24 }}>Create a bot to start running indicator-based strategies</div>
+            <button onClick={() => setShowCreate(true)} style={{
+              height: 36, padding: '0 20px', borderRadius: 40, border: 'none', cursor: 'pointer',
+              background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+              fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
+              color: 'var(--text-dim)', transition: 'box-shadow 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.boxShadow = 'var(--neu-inset)')}
+            onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}>
+              + Create Your First Bot
+            </button>
           </div>
         ) : (
           <>
