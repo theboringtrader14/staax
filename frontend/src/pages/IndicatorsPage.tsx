@@ -942,7 +942,7 @@ export default function IndicatorsPage() {
   })
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)', padding: '0 var(--page-h-pad)' }}>
 
       {/* Page header */}
       <div className="page-header" style={{ flexShrink: 0 }}>
@@ -963,7 +963,7 @@ export default function IndicatorsPage() {
       </div>
 
       {/* Scrollable body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 32px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 32px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : activeBots.length === 0 ? (
