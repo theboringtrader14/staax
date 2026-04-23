@@ -75,20 +75,63 @@ const neuInputStyle: CSSProperties = {
   height: 42, fontSize: 13, fontFamily: 'var(--font-body)', width: '100%',
 }
 
-// Ghost/secondary button
-const ghostBtn: CSSProperties = {
-  height: 36, padding: '0 20px', borderRadius: 100, border: 'none', cursor: 'pointer',
-  background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
-  fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
-  color: 'var(--text-dim)', transition: 'box-shadow 0.12s',
+// ── Neumorphic pill button — raised resting, inset on press ─────────────────────
+function NeuBtn({
+  children, onClick, disabled = false,
+  variant = 'ghost', height = 36, fontSize = 12, style: extraStyle,
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+  disabled?: boolean
+  variant?: 'ghost' | 'accent' | 'danger' | 'warn'
+  height?: number
+  fontSize?: number
+  style?: CSSProperties
+}) {
+  const ref = useRef<HTMLButtonElement>(null)
+
+  const variantStyle: CSSProperties =
+    variant === 'accent' ? { background: 'var(--accent)',       color: '#fff' } :
+    variant === 'danger' ? { background: '#EF4444',             color: '#fff' } :
+    variant === 'warn'   ? { background: 'var(--accent-amber)', color: '#fff' } :
+                           { background: 'var(--bg)',           color: 'var(--text-dim)' }
+
+  const raisedShadow = 'var(--neu-raised-sm)'
+  const insetShadow  = 'var(--neu-inset)'
+
+  const base: CSSProperties = {
+    height, padding: '0 22px', borderRadius: 100, border: 'none',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize, fontWeight: 700, fontFamily: 'var(--font-display)',
+    boxShadow: raisedShadow,
+    opacity: disabled ? 0.45 : 1,
+    transition: 'box-shadow 0.12s, opacity 0.12s',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    ...variantStyle,
+    ...extraStyle,
+  }
+
+  return (
+    <button
+      ref={ref}
+      style={base}
+      disabled={disabled}
+      onClick={onClick}
+      onMouseDown={() => { if (!disabled && ref.current) ref.current.style.boxShadow = insetShadow }}
+      onMouseUp={()   => { if (ref.current) ref.current.style.boxShadow = raisedShadow }}
+      onMouseLeave={() => { if (ref.current) ref.current.style.boxShadow = raisedShadow }}
+    >
+      {children}
+    </button>
+  )
 }
 
-// Primary accent button
-const primaryBtn: CSSProperties = {
-  height: 36, padding: '0 22px', borderRadius: 100, border: 'none', cursor: 'pointer',
-  background: 'var(--accent)', color: '#fff',
-  fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-display)',
-  boxShadow: '0 2px 8px rgba(255,107,0,0.35)', transition: 'opacity 0.12s',
+// Keep static ghostBtn for the Archived toggle (no ref needed there)
+const ghostBtn: CSSProperties = {
+  height: 30, padding: '0 16px', borderRadius: 100, border: 'none', cursor: 'pointer',
+  background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+  fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
+  color: 'var(--text-dim)', transition: 'box-shadow 0.12s',
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -121,19 +164,15 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
 }) {
   const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444') || confirmColor?.includes('FF4444')
   const isWarn   = confirmColor?.includes('amber') || confirmColor?.includes('f59e0b')
-  const confirmBtnStyle: CSSProperties = {
-    ...primaryBtn,
-    background: isDanger ? '#EF4444' : isWarn ? 'var(--accent-amber)' : 'var(--accent)',
-    boxShadow: isDanger ? '0 2px 8px rgba(239,68,68,0.35)' : isWarn ? '0 2px 8px rgba(245,158,11,0.35)' : '0 2px 8px rgba(255,107,0,0.35)',
-  }
+  const confirmVariant: 'danger' | 'warn' | 'accent' = isDanger ? 'danger' : isWarn ? 'warn' : 'accent'
   return (
     <div className="modal-overlay">
       <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 20, padding: '28px 24px', maxWidth: 360, width: '90vw' }}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>{title}</div>
         <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 24 }}>{desc}</div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button style={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button style={confirmBtnStyle} onClick={onConfirm}>{confirmLabel}</button>
+          <NeuBtn onClick={onCancel}>Cancel</NeuBtn>
+          <NeuBtn variant={confirmVariant} onClick={onConfirm}>{confirmLabel}</NeuBtn>
         </div>
       </div>
     </div>
@@ -192,8 +231,8 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
           )}
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
-          <button style={ghostBtn} onClick={onClose}>Cancel</button>
-          <button style={primaryBtn} onClick={() => onSave(bot.id, form)}>Save Changes</button>
+          <NeuBtn onClick={onClose}>Cancel</NeuBtn>
+          <NeuBtn variant="accent" onClick={() => onSave(bot.id, form)}>Save Changes</NeuBtn>
         </div>
       </div>
     </div>
@@ -379,14 +418,14 @@ function BotConfigurator({ accounts, onSave, onClose }: {
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 8 }}>
-          <button style={ghostBtn} onClick={step === 1 ? onClose : () => setStep(s => s - 1)}>
+          <NeuBtn onClick={step === 1 ? onClose : () => setStep(s => s - 1)}>
             {step === 1 ? 'Cancel' : '← Back'}
-          </button>
+          </NeuBtn>
           {step < 5
-            ? <button style={{ ...primaryBtn, opacity: !canNext() ? 0.45 : 1 }} onClick={() => canNext() && setStep(s => s + 1)} disabled={!canNext()}>Next →</button>
-            : <button style={{ ...primaryBtn, opacity: (saving || !canNext()) ? 0.45 : 1 }} onClick={handleSave} disabled={saving || !canNext()}>
+            ? <NeuBtn variant="accent" disabled={!canNext()} onClick={() => canNext() && setStep(s => s + 1)}>Next →</NeuBtn>
+            : <NeuBtn variant="accent" disabled={saving || !canNext()} onClick={handleSave}>
                 {saving ? 'Creating…' : '✓ Create Bot'}
-              </button>
+              </NeuBtn>
           }
         </div>
       </div>
@@ -919,7 +958,7 @@ export default function IndicatorsPage() {
               {showArchived ? 'Hide' : 'Show'} Archived ({archivedBots.length})
             </button>
           )}
-          <button onClick={() => setShowCreate(true)} style={primaryBtn}>+ New Bot</button>
+          <NeuBtn variant="accent" onClick={() => setShowCreate(true)}>+ New Bot</NeuBtn>
         </div>
       </div>
 
@@ -932,16 +971,7 @@ export default function IndicatorsPage() {
             <div style={{ fontSize: 32, marginBottom: 12, color: 'var(--text-mute)' }}>◇</div>
             <div style={{ fontSize: 16, fontWeight: 500, fontFamily: 'var(--font-display)', color: 'var(--text-dim)', marginBottom: 6 }}>No bots yet</div>
             <div style={{ fontSize: 12, color: 'var(--text-mute)', marginBottom: 24 }}>Create a bot to start running indicator-based strategies</div>
-            <button onClick={() => setShowCreate(true)} style={{
-              height: 36, padding: '0 20px', borderRadius: 40, border: 'none', cursor: 'pointer',
-              background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
-              fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
-              color: 'var(--text-dim)', transition: 'box-shadow 0.15s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.boxShadow = 'var(--neu-inset)')}
-            onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}>
-              + Create Your First Bot
-            </button>
+            <NeuBtn onClick={() => setShowCreate(true)}>+ Create Your First Bot</NeuBtn>
           </div>
         ) : (
           <>
