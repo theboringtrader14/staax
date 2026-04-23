@@ -750,7 +750,7 @@ export default function GridPage() {
                                 </div>
 
                               {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'12px' }}
+                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'auto' }}
                                 onClick={e => e.stopPropagation()}>
                                   <button onClick={() => changeCardMult(algo.id, mult - 1)}
                                     style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
@@ -768,7 +768,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', width:'252px', flexShrink:0, justifyContent:'center', marginLeft:'12px' }}>
+                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', width:'252px', flexShrink:0, justifyContent:'center', marginLeft:'16px' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isInRecurring = algo.recurringDays.includes(day)
                                   const cell = grid[algo.id]?.[day]
@@ -878,7 +878,7 @@ export default function GridPage() {
                             {/* ── Right panel — neumorphic icon buttons ── */}
                             <div className="algo-card-actions" onClick={e => e.stopPropagation()} style={{
                               display:'flex', alignSelf:'stretch', gap:8, alignItems:'center',
-                              padding:'0 16px',
+                              padding:'0 20px',
                             }}>
                               {/* AI Edit */}
                               <button
