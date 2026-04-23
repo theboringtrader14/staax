@@ -208,7 +208,7 @@ export const holidaysAPI = {
 }
 
 export const eventsAPI = {
-  list:   (limit = 100) => api.get('/events/', { params: { limit } }),
+  list:   (limit = 100, date?: string) => api.get('/events/', { params: date ? { limit, date } : { limit } }),
   export: () => api.get('/events/export', { responseType: 'blob' }),
 }
 

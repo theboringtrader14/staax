@@ -91,6 +91,18 @@ function NeuBtn({ children, onClick, disabled, accent, danger, style: extraStyle
 }
 
 // ── Component ──────────────────────────────────────────────────
+function todayIST(): string {
+  return new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
+}
+function offsetDate(base: string, days: number): string {
+  const d = new Date(base + 'T00:00:00+05:30')
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
+}
+function fmtLogDate(d: string): string {
+  return new Date(d + 'T00:00:00+05:30').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
+}
+
 export default function DashboardPanel() {
   const isDashboardOpen    = useStore(s => s.isDashboardOpen)
   const setIsDashboardOpen = useStore(s => s.setIsDashboardOpen)
@@ -101,6 +113,7 @@ export default function DashboardPanel() {
   const [health, setHealth]                 = useState<any>(null)
   const [log, setLog]                       = useState<string[]>(['STAAX ready.'])
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
+  const [logDate, setLogDate]               = useState<string>(todayIST())
 
   const [showKillConfirm, setKillModal]  = useState(false)
   const [killActivated, setKillActived]  = useState(false)
@@ -154,39 +167,40 @@ export default function DashboardPanel() {
   const logFailures   = useRef(0)
   const logIntervalMs = useRef(5000)
   const logTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const logDateRef    = useRef(logDate)
+  useEffect(() => { logDateRef.current = logDate }, [logDate])
 
   useEffect(() => {
+    if (logTimerRef.current) clearTimeout(logTimerRef.current)
+    logFailures.current   = 0
+    logIntervalMs.current = 5000
+
     const fetchLogs = async () => {
       try {
-        const res = await eventsAPI.list(50)
+        const res = await eventsAPI.list(100, logDateRef.current)
         const entries: any[] = res.data || []
-        const todayStr = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' })
         const lines: string[] = []
-        let lastSep = ''
         for (const e of entries) {
-          const eDay = e.ts ? new Date(e.ts).toLocaleDateString('sv', { timeZone: 'Asia/Kolkata' }) : todayStr
-          const eDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
-          if (eDay !== todayStr && eDate && eDay !== lastSep) { lines.push('── ' + eDate + ' ──'); lastSep = eDay }
           const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
           const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
           lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
         }
+        if (lines.length === 0) lines.push('No events for this date.')
         setLog([...lines])
-        // Reset backoff on success
-        if (logFailures.current > 0) {
-          logFailures.current = 0
-          logIntervalMs.current = 5000
-        }
+        if (logFailures.current > 0) { logFailures.current = 0; logIntervalMs.current = 5000 }
       } catch (e) {
         if (logFailures.current === 0) console.warn('[DashboardPanel] log fetch failed', e)
         logFailures.current += 1
         if (logFailures.current >= 3) logIntervalMs.current = 30000
       }
-      logTimerRef.current = setTimeout(fetchLogs, logIntervalMs.current)
+      // Only poll for today; past dates are static
+      if (logDateRef.current === todayIST()) {
+        logTimerRef.current = setTimeout(fetchLogs, logIntervalMs.current)
+      }
     }
     fetchLogs()
     return () => { if (logTimerRef.current) clearTimeout(logTimerRef.current) }
-  }, [])
+  }, [logDate])
 
   useEffect(() => { refetchHealth(); const t = setInterval(refetchHealth, 30000); return () => clearInterval(t) }, [])
 
@@ -492,7 +506,37 @@ export default function DashboardPanel() {
 
           {/* ── Engine Log ── */}
           <div style={{ padding: '14px 16px 16px' }}>
-            {sectionLabel('Engine Log')}
+            {/* Label row with date nav */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const }}>
+                Engine Log{logDate !== todayIST() ? ` — ${fmtLogDate(logDate)}` : ''}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {/* Prev day */}
+                <button onClick={() => setLogDate(d => offsetDate(d, -1))} style={{
+                  width: 22, height: 22, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                  background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                  fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>‹</button>
+                {/* Today pill */}
+                {logDate !== todayIST() && (
+                  <button onClick={() => setLogDate(todayIST())} style={{
+                    height: 22, padding: '0 8px', borderRadius: 100, border: 'none', cursor: 'pointer',
+                    background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                    fontSize: 9, fontWeight: 600, color: 'var(--accent)',
+                  }}>Today</button>
+                )}
+                {/* Next day (disabled on today) */}
+                <button onClick={() => setLogDate(d => offsetDate(d, 1))} disabled={logDate >= todayIST()} style={{
+                  width: 22, height: 22, borderRadius: '50%', border: 'none',
+                  cursor: logDate >= todayIST() ? 'not-allowed' : 'pointer',
+                  background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                  fontSize: 11, color: logDate >= todayIST() ? 'var(--text-mute)' : 'var(--text-dim)',
+                  opacity: logDate >= todayIST() ? 0.4 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>›</button>
+              </div>
+            </div>
             <div style={{ borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', overflow: 'hidden', padding: '10px 0' }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, padding: '0 12px', height: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                 {dedupeLog(log).map((line, i) => {

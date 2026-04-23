@@ -2,6 +2,7 @@
 Event Log API — retrieve and export the persistent notification/event log.
 Used by the frontend notification panel for persistence + QA debugging export.
 """
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -11,16 +12,27 @@ import json
 
 router = APIRouter()
 
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
 @router.get("/")
 async def list_events(
     limit: int = Query(default=100, le=500),
     level: str = Query(default=None),
+    date:  str = Query(default=None),   # YYYY-MM-DD in IST; omit for all recent
     db: AsyncSession = Depends(get_db)
 ):
-    """List recent events — used by notification panel on page load."""
+    """List events — supports date filter for historical log navigation."""
     q = select(EventLog).order_by(desc(EventLog.ts)).limit(limit)
     if level:
         q = q.where(EventLog.level == level)
+    if date:
+        try:
+            day_start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=IST)
+            day_end   = day_start + timedelta(days=1)
+            q = q.where(EventLog.ts >= day_start).where(EventLog.ts < day_end)
+        except ValueError:
+            pass
     result = await db.execute(q)
     rows = result.scalars().all()
     return [

@@ -994,10 +994,13 @@ async def get_waiting_algos(
         # Prevents algos like NF-BTST (wt_enabled=False) from showing MONITORING after retry.
         _has_wt_legs_flag = any(ld.get("wt_enabled") for ld in legs_data)
 
+        # expiry_skip is a deliberate skip, not an engine failure — show MISSED not ERROR.
+        _is_expiry_skip = bool(_state.error_message and _state.error_message.startswith('expiry_skip'))
+
         # Priority order (top = highest priority):
-        if _state.error_message or (hasattr(_state, 'status') and str(_state.status).endswith('error')):
+        if (_state.error_message and not _is_expiry_skip) or (hasattr(_state, 'status') and str(_state.status).endswith('error')):
             _display_status = "ERROR"
-        elif _is_missed or _is_orb_missed or is_past_date:
+        elif _is_missed or _is_orb_missed or is_past_date or _is_expiry_skip:
             _display_status = "MISSED"
         elif (_wt_monitor_armed or (_just_retried and _has_wt_legs_flag)) and not is_past_date:
             _display_status = "MONITORING"
