@@ -574,7 +574,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
           }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: '#FF6B00', fontVariantNumeric: 'lining-nums tabular-nums', whiteSpace: 'nowrap' }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--accent)', fontVariantNumeric: 'lining-nums tabular-nums', whiteSpace: 'nowrap' }}>
                 {bot.name}
               </span>
               <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 6, padding: '2px 7px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-dim)', flexShrink: 0 }}>
