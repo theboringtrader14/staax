@@ -1302,67 +1302,68 @@ export default function OrdersPage() {
           )
         })()}
 
-        {/* Date navigation + MTM summary bar — breaks out of 28px padding to go edge-to-edge */}
-        <div style={{ borderBottom: '0.5px solid var(--border)', borderTop: '0.5px solid var(--border)', margin: '12px 0 0' }}>
-          {/* Day tabs — full width */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0' }}>
-            <div style={{ display: 'flex', flex: 1 }}>
-              {(showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']).map(day => {
-                const date      = weekDates[day]
-                const isActive  = selectedDate === date
-                const isHoliday = date ? holidayDates.has(date) : false
-                // Today: always show live P&L (regardless of active tab) — no flicker on switch.
-                // Past days: always use static weekPnl.
-                const isDayToday = date === todayDate
-                const pnl       = isDayToday ? liveTodayPnl : (weekPnl[day] ?? null)
-                const rupee     = '\u20B9'
-                return (
-                  <button
-                    key={day}
-                    onClick={() => date && setSelectedDate(date)}
-                    style={{
-                      flex: 1, padding: '12px 0', textAlign: 'center' as const,
-                      background: 'none',
-                      border: 'none',
-                      borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                      color: isActive ? 'var(--accent)' : 'var(--text-dim)',
-                      fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
-                      letterSpacing: '1px', textTransform: 'uppercase' as const,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px',
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {day}{isHoliday && <span style={{ fontSize: '9px' }}>🏛</span>}
+        {/* Date navigation — neumorphic pill trough */}
+        <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0 0', gap: 10 }}>
+          {/* Day tabs pill trough */}
+          <div style={{
+            display: 'flex', flex: 1,
+            background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+            borderRadius: 100, padding: '4px', gap: 2,
+          }}>
+            {(showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']).map(day => {
+              const date      = weekDates[day]
+              const isActive  = selectedDate === date
+              const isHoliday = date ? holidayDates.has(date) : false
+              const isDayToday = date === todayDate
+              const pnl       = isDayToday ? liveTodayPnl : (weekPnl[day] ?? null)
+              const rupee     = '\u20B9'
+              return (
+                <button
+                  key={day}
+                  onClick={() => date && setSelectedDate(date)}
+                  style={{
+                    flex: 1, padding: '8px 4px', textAlign: 'center' as const,
+                    border: 'none', borderRadius: 100,
+                    background: isActive ? 'var(--bg)' : 'transparent',
+                    boxShadow: isActive ? 'var(--neu-raised-sm)' : 'none',
+                    color: isActive ? 'var(--accent)' : 'var(--text-dim)',
+                    fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
+                    letterSpacing: '1px', textTransform: 'uppercase' as const,
+                    cursor: 'pointer', transition: 'all 0.2s ease',
+                    display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {day}{isHoliday && <span style={{ fontSize: '9px' }}>🏛</span>}
+                  </span>
+                  {isHoliday ? (
+                    <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
+                  ) : pnl != null ? (
+                    <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
                     </span>
-                    {isHoliday ? (
-                      <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
-                    ) : pnl != null ? (
-                      <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                        {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '10px', color: 'var(--text-mute)' }}>—</span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-            <div
-              onClick={() => setShowWeekends(!showWeekends)}
-              style={{
-                padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-                fontSize: 11, fontFamily: 'var(--font-display)',
-                marginLeft: 12, flexShrink: 0,
-                background: 'var(--bg)',
-                boxShadow: showWeekends ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-                border: 'none',
-                color: showWeekends ? 'var(--accent)' : 'var(--text-dim)',
-                whiteSpace: 'nowrap' as const, userSelect: 'none' as const,
-                transition: 'all 0.15s ease',
-              }}
-            >Weekends</div>
+                  ) : (
+                    <span style={{ fontSize: '10px', color: 'var(--text-mute)' }}>—</span>
+                  )}
+                </button>
+              )
+            })}
           </div>
+          {/* Weekends pill — unchanged */}
+          <div
+            onClick={() => setShowWeekends(!showWeekends)}
+            style={{
+              padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+              fontSize: 11, fontFamily: 'var(--font-display)',
+              flexShrink: 0,
+              background: 'var(--bg)',
+              boxShadow: showWeekends ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+              border: 'none',
+              color: showWeekends ? 'var(--accent)' : 'var(--text-dim)',
+              whiteSpace: 'nowrap' as const, userSelect: 'none' as const,
+              transition: 'all 0.15s ease',
+            }}
+          >Weekends</div>
         </div>
 
       </div>{/* end fixed zone */}

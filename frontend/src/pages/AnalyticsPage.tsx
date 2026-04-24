@@ -918,20 +918,24 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ flexShrink: 0, display: 'flex', borderBottom: '1px solid var(--border)', margin: '0 28px' }}>
+      {/* Tab bar — neumorphic pill trough */}
+      <div style={{
+        flexShrink: 0, display: 'flex', margin: '0 28px 20px',
+        background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+        borderRadius: 100, padding: '4px', gap: 2,
+      }}>
         {TABS.map(tab => (
           <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
             style={{
-              flex: 1, padding: '10px 0', textAlign: 'center', border: 'none', cursor: 'pointer',
+              flex: 1, padding: '8px 0', textAlign: 'center', border: 'none', cursor: 'pointer',
               fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)',
               letterSpacing: '1px', textTransform: 'uppercase',
-              background: 'none',
-              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+              borderRadius: 100,
+              background: activeTab === tab ? 'var(--bg)' : 'transparent',
+              boxShadow: activeTab === tab ? 'var(--neu-raised-sm)' : 'none',
               color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
               transition: 'all 0.2s ease',
-              marginBottom: -1,
             }}>
             {tab}
           </button>
