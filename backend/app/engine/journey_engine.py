@@ -121,31 +121,28 @@ class JourneyEngine:
         order: Order,
         exit_reason: str,
         algo_runner,         # AlgoRunner instance — avoid circular import
-    ):
+    ) -> bool:
         """
         Called from AlgoRunner exit callbacks (SL, TP, TSL, TTP, manual SQ).
-        If order has journey_config registered, fires child leg.
+        Returns True if a child leg was fired, False otherwise.
         """
         # MTM, global SL, and kill switch exits are algo-level — no child should fire
         ALGO_LEVEL_EXITS = {"mtm_sl", "mtm_tp", "global_sl", "auto_sq"}
         if exit_reason in ALGO_LEVEL_EXITS:
-            logger.info(f"[JOURNEY] Skipping child — algo-level exit: {exit_reason}")
-            return
+            return False
 
         entry = self._watched.pop(str(order.id), None)
         if not entry:
-            return
+            return False
 
         # ── journey_trigger gate ─────────────────────────────────────────────
         journey_trigger = entry.get("journey_trigger", "either")
         SL_EXITS = {'sl', 'tsl', 'overnight_sl'}
         TP_EXITS = {'tp', 'tsl_tp', 'mtm_tp'}
         if journey_trigger == 'sl' and exit_reason not in SL_EXITS:
-            logger.info(f"[JOURNEY] Skipping child — trigger=sl, exit={exit_reason} not in SL exits")
-            return
+            return False
         if journey_trigger == 'tp' and exit_reason not in TP_EXITS:
-            logger.info(f"[JOURNEY] Skipping child — trigger=tp, exit={exit_reason} not in TP exits")
-            return
+            return False
         # 'either' falls through
 
         config = entry["config"]
@@ -174,8 +171,6 @@ class JourneyEngine:
             if child_order:
                 # Register child's journey for next level if configured
                 if child_leg.journey_config:
-                    # Read the nested trigger from child's own config dict (set by frontend)
-                    # This is the trigger controlling what exit of the child spawns grandchild.
                     nested_config = child_leg.journey_config
                     nested_trigger = nested_config.get("child", {}).get("trigger", "either")
                     algo_runner._journey_engine.register(
@@ -186,8 +181,10 @@ class JourneyEngine:
                     )
                 await db.commit()
                 logger.info(f"✅ Journey child placed: {child_order.symbol} depth={depth}")
+                return True
         except Exception as e:
             logger.error(f"Journey child entry failed: {e}")
+        return False
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────

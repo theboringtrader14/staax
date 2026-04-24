@@ -1801,8 +1801,9 @@ class AlgoRunner:
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason in ("auto_sq", "all_legs_closed", "btst_exit", "stbt_exit"):
+                        _exit_label = "BTST EXIT" if reason == "btst_exit" else ("STBT EXIT" if reason == "stbt_exit" else "EXIT TIME")
                         await _ev.info(
-                            f"{_algo_name} · {_sym} AUTO SQ @ {ltp:.2f} | P&L {_pnl_str}",
+                            f"{_algo_name} · {_sym} {_exit_label} @ {ltp:.2f} | P&L {_pnl_str}",
                             algo_name=_algo_name, source="engine",
                         )
                     elif reason in ("terminate", "sq"):
@@ -1923,11 +1924,12 @@ class AlgoRunner:
 
                     # Journey: fire child leg before commit
                     if self._journey_engine and order:
-                        await self._journey_engine.on_exit(db, order, "sl", self)
-                        await _ev.info(
-                            f"[JOURNEY] {_algo_name} — child leg fired after sl on {order.symbol}",
-                            algo_name=_algo_name, source="engine",
-                        )
+                        _child_fired = await self._journey_engine.on_exit(db, order, "sl", self)
+                        if _child_fired:
+                            await _ev.info(
+                                f"[JOURNEY] {_algo_name} — child leg fired after sl on {order.symbol}",
+                                algo_name=_algo_name, source="engine",
+                            )
 
                     await db.commit()
 
@@ -1988,11 +1990,12 @@ class AlgoRunner:
 
                     # Journey: fire child leg before commit
                     if self._journey_engine and order:
-                        await self._journey_engine.on_exit(db, order, "tp", self)
-                        await _ev.info(
-                            f"[JOURNEY] {_algo_name} — child leg fired after tp on {order.symbol}",
-                            algo_name=_algo_name, source="engine",
-                        )
+                        _child_fired = await self._journey_engine.on_exit(db, order, "tp", self)
+                        if _child_fired:
+                            await _ev.info(
+                                f"[JOURNEY] {_algo_name} — child leg fired after tp on {order.symbol}",
+                                algo_name=_algo_name, source="engine",
+                            )
 
                     await db.commit()
 
