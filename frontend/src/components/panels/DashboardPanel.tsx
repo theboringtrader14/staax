@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Warning, ProhibitInset } from '@phosphor-icons/react'
+import { Warning, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
@@ -123,22 +123,23 @@ export default function DashboardPanel() {
   const [killedIds, setKilledIds]        = useState<string[]>([])
   const [lateWarning, setLateWarning]    = useState(false)
 
-  const addLog = (msg: string) => {
+  type LogLevel = 'ok' | 'err' | 'wrn' | 'inf'
+  const addLog = (msg: string, lvl: LogLevel = 'inf') => {
     const ts = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    setLog(l => ['[' + ts + '] ' + msg, ...l.slice(0, 49)])
+    setLog(l => ['[' + ts + '] [' + lvl + '] ' + msg, ...l.slice(0, 49)])
   }
   const setSvc   = (id: string, st: ServiceStatus) => setServices(s => s.map(x => x.id === id ? { ...x, status: st } : x))
-  const startSvc = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'…'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog('✅ '+id+' running') } catch { setSvc(id,'stopped'); addLog('⛔ '+id+' failed') } }
-  const stopSvc  = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'…'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog('⛔ '+id+' stopped') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
+  const startSvc = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'…'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog(id+' running', 'ok') } catch { setSvc(id,'stopped'); addLog(id+' failed', 'err') } }
+  const stopSvc  = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'…'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog(id+' stopped', 'err') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
 
   const doStartAll = async () => {
     setLateWarning(false); addLog('Starting all services…')
     try {
       await servicesAPI.startAll()
-      addLog('✅ All services running.')
+      addLog('All services running.', 'ok')
       const res = await servicesAPI.status()
       setServices(p => p.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s }))
-    } catch { addLog('⛔ Start all failed') }
+    } catch { addLog('Start all failed', 'err') }
   }
   const startAll = async () => { if (isPast9am()) { setLateWarning(true); return }; await doStartAll() }
   const stopAll  = async () => {
@@ -148,15 +149,15 @@ export default function DashboardPanel() {
   }
 
   const handleKill = async () => {
-    setKillLoading(true); addLog('⚠️ KILL SWITCH ACTIVATED')
+    setKillLoading(true); addLog('KILL SWITCH ACTIVATED', 'wrn')
     try {
       const res = await systemAPI.activateKillSwitch(selKill)
       const d = res.data
       setKillActived(true)
       setKilledIds(p => Array.from(new Set([...p, ...(selKill.length > 0 ? selKill : (accounts as any[]).map((a:any) => a.id))])))
       setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
-      addLog('[CRITICAL] KILL — ' + (d.positions_squared ?? 0) + ' pos, ' + (d.orders_cancelled ?? 0) + ' orders')
-    } catch (err: any) { addLog('⛔ Kill failed — ' + (err?.response?.data?.detail || 'unknown')) }
+      addLog('[CRITICAL] KILL — ' + (d.positions_squared ?? 0) + ' pos, ' + (d.orders_cancelled ?? 0) + ' orders', 'err')
+    } catch (err: any) { addLog('Kill failed — ' + (err?.response?.data?.detail || 'unknown'), 'err') }
     finally { setKillLoading(false); setKillModal(false) }
   }
 
@@ -182,8 +183,8 @@ export default function DashboardPanel() {
         const lines: string[] = []
         for (const e of entries) {
           const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
-          const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
-          lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
+          const lvl: LogLevel = e.level === 'success' ? 'ok' : e.level === 'error' ? 'err' : e.level === 'warn' ? 'wrn' : 'inf'
+          lines.push('[' + ts + '] [' + lvl + '] ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
         }
         if (lines.length === 0) lines.push('No events for this date.')
         setLog([...lines])
@@ -551,13 +552,28 @@ export default function DashboardPanel() {
                   if (isSep) return (
                     <div key={i} style={{ color: 'rgba(255,107,0,0.3)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
                   )
-                  const isOk  = line.includes('✅')
-                  const isErr = line.includes('⛔')
-                  const isWrn = line.includes('⚠')
+                  // Parse structured format: [HH:MM:SS] [lvl] rest
+                  const m = line.match(/^(\[\d{2}:\d{2}:\d{2}\])\s+\[(ok|err|wrn|inf)\]\s+(.*)$/)
+                  if (m) {
+                    const [, stamp, lvl, rest] = m
+                    const col = lvl === 'ok' ? '#0ea66e' : lvl === 'err' ? '#FF5555' : lvl === 'wrn' ? '#b45309' : 'var(--text-mute)'
+                    const ico = lvl === 'ok'  ? <CheckCircle size={10} weight="fill" color="#0ea66e" style={{ flexShrink: 0, marginTop: 2 }} />
+                              : lvl === 'err' ? <XCircle     size={10} weight="fill" color="#FF5555" style={{ flexShrink: 0, marginTop: 2 }} />
+                              : lvl === 'wrn' ? <Warning     size={10} weight="fill" color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />
+                              : null
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, lineHeight: 1.6, padding: '0.5px 0' }}>
+                        <span style={{ color: 'var(--text-mute)', flexShrink: 0 }}>{stamp}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0, width: 12 }}>
+                          {ico ?? <span style={{ color: 'var(--text-mute)' }}>·</span>}
+                        </span>
+                        <span style={{ color: col }}>{rest}</span>
+                      </div>
+                    )
+                  }
+                  // Fallback (e.g. 'STAAX ready.' init line)
                   return (
-                    <div key={i} style={{ color: isOk ? '#0ea66e' : isErr ? '#FF5555' : isWrn ? '#b45309' : 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>
-                      {line}
-                    </div>
+                    <div key={i} style={{ color: 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>{line}</div>
                   )
                 })}
               </div>

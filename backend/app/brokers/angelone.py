@@ -846,8 +846,10 @@ class AngelOneBroker(BaseBroker):
                 except (TypeError, ValueError):
                     return 0.0
 
-            cash             = _f("availablecash")
+            # AO's availablecash = cash + collateral (pledged MF) already included.
+            # Subtract collateral to get the pure free liquid cash.
             collateral       = _f("collateral")
+            cash             = round(max(0.0, _f("availablecash") - collateral), 2)
             utilised         = _f("utilisedpayout")
             # Use AO's own net field; fall back to computing if not present
             raw_net = d.get("net")

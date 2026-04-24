@@ -389,6 +389,29 @@ async def get_all_funds(request: Request, db: AsyncSession = Depends(get_db)):
     return {"funds": funds}
 
 
+@router.get("/fy-margin")
+async def get_fy_margin(db: AsyncSession = Depends(get_db)):
+    """Return FY margin + brokerage for all accounts for the current FY."""
+    fy_start = _current_fy_start()
+    result = await db.execute(
+        select(AccountFYMargin).where(AccountFYMargin.fy_start == fy_start)
+    )
+    rows = result.scalars().all()
+    return {
+        "fy_start": fy_start.isoformat(),
+        "data": [
+            {
+                "account_id":   str(r.account_id),
+                "fy_margin":    float(r.fy_margin)    if r.fy_margin    is not None else None,
+                "fy_brokerage": float(r.fy_brokerage) if r.fy_brokerage is not None else None,
+                "stamped_at":   r.stamped_at.isoformat() if r.stamped_at else None,
+                "updated_at":   r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
 @router.get("/{account_id}")
 async def get_account(account_id: str, db: AsyncSession = Depends(get_db)):
     """Fetch a single account by ID. Used for edit form pre-fill."""
@@ -793,29 +816,6 @@ class FYMarginUpdate(BaseModel):
     account_id:   str
     fy_margin:    Optional[float] = None
     fy_brokerage: Optional[float] = None
-
-
-@router.get("/fy-margin")
-async def get_fy_margin(db: AsyncSession = Depends(get_db)):
-    """Return FY margin + brokerage for all accounts for the current FY."""
-    fy_start = _current_fy_start()
-    result = await db.execute(
-        select(AccountFYMargin).where(AccountFYMargin.fy_start == fy_start)
-    )
-    rows = result.scalars().all()
-    return {
-        "fy_start": fy_start.isoformat(),
-        "data": [
-            {
-                "account_id":   str(r.account_id),
-                "fy_margin":    float(r.fy_margin)    if r.fy_margin    is not None else None,
-                "fy_brokerage": float(r.fy_brokerage) if r.fy_brokerage is not None else None,
-                "stamped_at":   r.stamped_at.isoformat() if r.stamped_at else None,
-                "updated_at":   r.updated_at.isoformat() if r.updated_at else None,
-            }
-            for r in rows
-        ],
-    }
 
 
 @router.post("/fy-margin")
