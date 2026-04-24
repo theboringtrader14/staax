@@ -194,6 +194,7 @@ async def list_bot_orders(bot_id: str, db: AsyncSession = Depends(get_db)):
     orders = result.scalars().all()
     return [{
         "id":           str(o.id),
+        "instrument":   o.instrument,
         "direction":    o.direction,
         "lots":         o.lots,
         "entry_price":  o.entry_price,

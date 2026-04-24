@@ -691,17 +691,19 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '23%' }} />
-                    <col style={{ width: '10%' }} />
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '4%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '16%' }} />
                     <col style={{ width: '14%' }} />
-                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '9%' }} />
                   </colgroup>
                   <thead>
                     <tr>
-                      {['#', 'SYMBOL', 'SIDE', 'ENTRY ₹', 'EXIT ₹', 'P&L', 'STATUS'].map(h => (
+                      {['#', 'SYMBOL', 'SIDE', 'DATE', 'TIME', 'ENTRY ₹', 'EXIT ₹', 'P&L', 'STATUS'].map(h => (
                         <th key={h} style={{ padding: '4px 6px', color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '0.5px solid var(--border)', textAlign: 'left', fontFamily: 'var(--font-display)' }}>{h}</th>
                       ))}
                     </tr>
@@ -721,10 +723,12 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
                       return (
                         <tr key={o.id}>
                           <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{i + 1}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.instrument}</td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.instrument || '—'}</td>
                           <td style={{ padding: '5px 6px', borderBottom: '0.5px solid var(--border)' }}>
                             <span style={neuChip(o.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>{o.direction}</span>
                           </td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)', whiteSpace: 'nowrap' }}>{o.entry_time ? new Date(o.entry_time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' }) : '—'}</td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)', whiteSpace: 'nowrap' }}>{o.entry_time ? new Date(o.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}</td>
                           <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</td>
                           <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</td>
                           <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: displayPnl != null ? (displayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>

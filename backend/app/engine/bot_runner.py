@@ -272,7 +272,9 @@ class BotRunner:
         else:
             self._strategies[bot_id] = None
 
-        self._positions[bot_id] = None
+        # Only reset position if not already restored from DB (load_bots restores open positions first)
+        if bot_id not in self._positions:
+            self._positions[bot_id] = None
 
         # Subscribe instrument to LTP feed
         self._subscribe_bot(bot)

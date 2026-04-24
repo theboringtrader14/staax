@@ -73,6 +73,7 @@ class AngelOneTickerAdapter:
         self._reconnect_count               = 0
         self._last_reconnect_at: Optional[str] = None
         self._on_reconnect_callbacks: List[Callable] = []  # fired on every _on_open
+        self._force_stopped: bool           = False   # True when restart() closes intentionally
 
         # Debug: log credential presence at construction time
         ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
@@ -194,6 +195,7 @@ class AngelOneTickerAdapter:
     def _on_open(self, ws):
         self._connected = True
         self._running   = True   # connect() blocks forever so the line after it is dead code; set here instead
+        self._reconnect_count = 0  # Reset on every successful connect so _MAX_RECONNECT_ATTEMPTS resets per-session
         logger.info("[AO-DEBUG] _on_open fired — SmartStream connected ✅")
         if self._subscribed and self._sws:
             try:
@@ -262,6 +264,9 @@ class AngelOneTickerAdapter:
         logger.warning("[AO] ⚠️ SmartStream connection closed")
         self._running   = False
         self._connected = False
+        if self._force_stopped:
+            logger.info("[AO] _on_close: intentional stop — no auto-reconnect")
+            return
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._reconnect(), self._loop)
 
@@ -273,6 +278,26 @@ class AngelOneTickerAdapter:
         """
         self._on_reconnect_callbacks.append(cb)
         logger.info(f"[AO] Registered reconnect callback: {cb.__name__}")
+
+    async def restart(self) -> None:
+        """
+        Hard-restart SmartStream: close the current WebSocket and reconnect from scratch.
+        Called by BrokerReconnectManager when the feed is stale or _connected=False.
+        Sets _force_stopped so _on_close does NOT trigger another _reconnect() loop.
+        """
+        logger.info("[AO] 🔄 restart() — closing WebSocket for hard reconnect...")
+        self._force_stopped = True
+        self._running       = False
+        self._connected     = False
+        try:
+            if self._sws:
+                self._sws.close_connection()
+        except Exception as e:
+            logger.debug(f"[AO] close_connection in restart (expected): {e}")
+        await asyncio.sleep(1)  # Let the close propagate
+        self._force_stopped   = False
+        self._reconnect_count = 0  # Reset so _reconnect() doesn't think it already gave up
+        await self._reconnect()
 
     def update_feed_token(self, new_token: str):
         """

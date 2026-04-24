@@ -188,11 +188,12 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        # Broker reconnect check — every 3 seconds
+        # Broker reconnect check — every 10 seconds
+        # Checks: _connected=False (fast path), zombie (>60s stale), normal staleness (5s)
         self._scheduler.add_job(
             self._job_broker_reconnect,
             "interval",
-            seconds=3,
+            seconds=10,
             id="broker_reconnect",
             replace_existing=True,
         )
