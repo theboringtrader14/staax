@@ -4,7 +4,7 @@ import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/serv
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
-import { CaretLeft, CaretRight, XCircle } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
@@ -244,7 +244,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-            ⚠ SYNC
+            SYNC
           </div>
         )}
       </td>
@@ -844,7 +844,7 @@ export default function OrdersPage() {
       await ordersAPI.retryEntry(gridEntryId)
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
-      setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, msg, 'var(--red)', 0, true)
       setRetryingIds(prev => { const s = new Set(prev); s.delete(gridEntryId); return s })
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
       return
@@ -899,13 +899,13 @@ export default function OrdersPage() {
           // Terminal SUCCESS — at least one leg opened
           if (hasOpen || hasPending) {
             clearInterval(pollInterval)
-            await refetchAndClear('✅ Retry succeeded', 'var(--green)')
+            await refetchAndClear('Retry succeeded', 'var(--green)')
             return
           }
           // ERROR is only terminal after 6+ attempts (12s elapsed) to absorb APScheduler delay
           if ((hasError || allError) && attempts >= 6) {
             clearInterval(pollInterval)
-            await refetchAndClear('⚠️ Still errored', 'var(--red)')
+            await refetchAndClear('Still errored', 'var(--red)')
             return
           }
           // Otherwise: keep polling (error before 6 attempts, waiting, no orders yet, etc.)
@@ -931,13 +931,13 @@ export default function OrdersPage() {
     try {
       await ordersAPI.retryLegs(gridEntryId, selectedLegIds)
       await new Promise(r => setTimeout(r, 800))
-      setInlineStatus(setOrdersByDate, dateAtCall, idx, '✅ Done', 'var(--green)', 3000)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, 'Done', 'var(--green)', 3000)
       ordersAPI.list(dateAtCall, isPractixMode)
         .then(r => { if (selectedDateRef.current !== dateAtCall) return; const raw: any[] = r.data?.groups || []; setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) })) })
         .catch(() => {})
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Retry legs failed'
-      setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, msg, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`retry-${idx}`]: false }))
       setRetryModal(null)
@@ -970,17 +970,17 @@ export default function OrdersPage() {
       const nOk   = (data.squared_off || []).length
       const nFail = (data.failed || []).length
       if (nFail === 0) {
-        setInlineStatus(setOrdersByDate, dateAtCall, idx, `✅ ${nOk} leg${nOk !== 1 ? 's' : ''} squared off`, 'var(--green)')
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, `${nOk} leg${nOk !== 1 ? 's' : ''} squared off`, 'var(--green)')
         setSqChecked({})
         setModal(null)
       } else {
         // Keep modal open to show per-leg results
-        setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${nOk} squared off, ${nFail} failed`, 'var(--amber)')
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, `${nOk} squared off, ${nFail} failed`, 'var(--amber)')
       }
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'SQ failed'
       setSqError(msg)
-      setInlineStatus(setOrdersByDate, dateAtCall, idx, '⚠️ SQ failed', 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, 'SQ failed', 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`sq-${idx}`]: false }))
     }
@@ -1010,15 +1010,15 @@ export default function OrdersPage() {
 
       const nFailed = (data.failed || []).length
       if (nFailed > 0) {
-        setInlineStatus(setOrdersByDate, dateAtCall, idx, `⛔ Terminated — ${nFailed} order${nFailed !== 1 ? 's' : ''} may still be open at broker`, 'var(--amber)', 8000)
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, `Terminated — ${nFailed} order${nFailed !== 1 ? 's' : ''} may still be open at broker`, 'var(--amber)', 8000)
       } else {
-        setInlineStatus(setOrdersByDate, dateAtCall, idx, '⛔ Algo terminated', 'var(--red)', 5000)
+        setInlineStatus(setOrdersByDate, dateAtCall, idx, 'Algo terminated', 'var(--red)', 5000)
       }
       setModal(null)
     } catch (err: any) {
       // Backend error — do NOT mark algo as terminated locally
       const msg = err?.response?.data?.detail || err?.message || 'Terminate failed'
-      setInlineStatus(setOrdersByDate, dateAtCall, idx, `⚠️ ${msg}`, 'var(--red)', 0, true)
+      setInlineStatus(setOrdersByDate, dateAtCall, idx, msg, 'var(--red)', 0, true)
     } finally {
       setLoading(l => ({ ...l, [`t-${idx}`]: false }))
     }
@@ -1050,14 +1050,14 @@ export default function OrdersPage() {
             <>
               {sqResults.squared_off.map(r => (
                 <div key={r.order_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--bg-secondary)', borderRadius: '5px', fontSize: '12px' }}>
-                  <span style={{ color: 'var(--green)' }}>✅</span>
+                  <CheckCircle size={13} weight="fill" color="var(--green)" />
                   <span style={{ fontFamily: 'monospace', opacity: 0.7 }}>{r.order_id.slice(-8)}</span>
                   {r.exit_price != null && <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>exit: {r.exit_price}</span>}
                 </div>
               ))}
               {sqResults.failed.map(r => (
                 <div key={r.order_id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 12px', background: 'rgba(255,0,0,0.08)', borderRadius: '5px', fontSize: '12px' }}>
-                  <span style={{ color: 'var(--red)' }}>❌</span>
+                  <XCircle size={13} weight="fill" color="var(--red)" />
                   <div>
                     <div style={{ fontFamily: 'monospace', opacity: 0.7 }}>{r.order_id.slice(-8)}</div>
                     <div style={{ color: 'var(--red)', marginTop: '2px' }}>{r.error}</div>
@@ -1098,7 +1098,7 @@ export default function OrdersPage() {
     setSyncLoading(false)
     setShowSync(null)
     setSyncForm({ broker_order_id: '', account_id: '' })
-    const msg = failed === 0 ? `✅ ${succeeded} order${succeeded > 1 ? 's' : ''} synced` : `⚠️ ${succeeded} synced, ${failed} failed`
+    const msg = failed === 0 ? `${succeeded} order${succeeded > 1 ? 's' : ''} synced` : `${succeeded} synced, ${failed} failed`
     setInlineStatus(setOrdersByDate, selectedDateRef.current, algoIdx, msg, failed === 0 ? 'var(--green)' : 'var(--amber)', 5000)
   }
 
@@ -1547,7 +1547,7 @@ export default function OrdersPage() {
                             </span>
                           )}
                           {!isError && !isMissed && isFeedErr && (
-                            <span style={{ fontSize: '11px', color: '#D77B12' }}>⚡ Feed not ready</span>
+                            <span style={{ fontSize: '11px', color: '#D77B12', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Lightning size={11} weight="fill" />Feed not ready</span>
                           )}
                           {!isError && !isMissed && isOrbExpired && (
                             <span style={{ fontSize: '11px', color: '#D77B12' }}>⏱ ORB window closed</span>
@@ -1822,7 +1822,7 @@ export default function OrdersPage() {
                               const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
                               return (
                                 <span title={firstMsg || undefined} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#EF4444', whiteSpace: 'nowrap', cursor: firstMsg ? 'help' : 'default' }}>
-                                  ⚠ {errLegs.length} LEG{errLegs.length > 1 ? 'S' : ''} FAILED{shortMsg}
+                                  {errLegs.length} LEG{errLegs.length > 1 ? 'S' : ''} FAILED{shortMsg}
                                 </span>
                               )
                             })()}
@@ -1965,7 +1965,7 @@ export default function OrdersPage() {
       {showSync !== null && (
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '380px' }}>
-            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>🔗 Sync Order — {safeOrders[showSync]?.algoName}</div>
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}><Link size={15} weight="regular" />Sync Order — {safeOrders[showSync]?.algoName}</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
               Re-link an order that got delinked from STAAX.<br/>
               Find the <b>Order ID</b> in your broker platform (Zerodha: Order Book → Order ID · Angel One: Order Book → Broker Order No.)
@@ -2021,7 +2021,10 @@ export default function OrdersPage() {
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-ghost" onClick={() => setShowSync(null)}>Cancel</button>
               <button className="btn btn-primary" disabled={syncLoading} onClick={() => doSync(showSync)}>
-                {syncLoading ? '🔄 Fetching from broker...' : '🔗 Sync Order'}
+                {syncLoading
+                  ? <><ArrowsClockwise size={12} weight="regular" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Fetching from broker...</>
+                  : <><Link size={12} weight="regular" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Sync Order</>
+                }
               </button>
             </div>
           </div>
@@ -2044,7 +2047,7 @@ export default function OrdersPage() {
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-ghost" onClick={() => setEditExit(null)}>Cancel</button>
               <button className="btn btn-primary" disabled={exitSaving} onClick={doCorrectExit}>
-                {exitSaving ? 'Saving...' : '✅ Save'}
+                {exitSaving ? 'Saving...' : <><CheckCircle size={12} weight="fill" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Save</>}
               </button>
             </div>
           </div>

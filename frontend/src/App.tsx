@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import NotificationSystem from '@/components/notifications/NotificationSystem'
+import { CheckCircle, XCircle } from '@phosphor-icons/react'
+import { Toaster } from 'sonner'
 import Layout from '@/components/layout/Layout'
 import LandingPage from '@/pages/LandingPage'
 import GridPage from '@/pages/GridPage'
@@ -73,7 +74,7 @@ export default function App() {
         )}
         {zerodhaStatus === 'success' && (
           <>
-            <div style={{fontSize: 52}}>✅</div>
+            <CheckCircle size={52} weight="fill" color="#0ea66e" />
             <p style={{color: '#22DD88', fontFamily: 'Syne', fontWeight: 700, fontSize: 18}}>Zerodha Connected</p>
             <p style={{color: 'rgba(232,232,248,0.4)', fontFamily: 'Syne', fontSize: 13}}>Closing window...</p>
             <button
@@ -89,7 +90,7 @@ export default function App() {
         )}
         {zerodhaStatus === 'error' && (
           <>
-            <div style={{fontSize: 52}}>❌</div>
+            <XCircle size={52} weight="fill" color="#FF4444" />
             <p style={{color: '#FF4444', fontFamily: 'Syne', fontWeight: 700, fontSize: 18}}>Connection Failed</p>
             <button onClick={() => window.close()} style={{marginTop: 8, padding: '8px 20px', borderRadius: 8, border: '0.5px solid rgba(255,68,68,0.4)', background: 'transparent', color: '#FF4444', fontFamily: 'Syne', cursor: 'pointer'}}>Close</button>
           </>
@@ -101,7 +102,6 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <NotificationSystem />
       <DashboardPanel />
       <AccountsDrawer />
       <Routes>
@@ -123,6 +123,28 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: 'var(--bg-surface)',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--neu-raised)',
+            borderRadius: '12px',
+            fontFamily: 'Space Grotesk, sans-serif',
+            fontSize: '13px',
+          },
+          classNames: {
+            success: 'toast-success',
+            error: 'toast-error',
+            warning: 'toast-warning',
+          }
+        }}
+        expand={false}
+        richColors
+        closeButton
+      />
     </BrowserRouter>
   )
 }

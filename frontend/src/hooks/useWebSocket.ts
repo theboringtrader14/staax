@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef } from 'react'
 import { useStore } from '@/store'
-import { notify } from '@/components/notifications/NotificationSystem'
+import { showError, showWarning } from '@/utils/toast'
 
 const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
   .replace('http', 'ws')
@@ -130,10 +130,10 @@ export function useWebSocket() {
       }
 
       if (isError) {
-        notify('error', 'Engine Error', fullMessage)
+        showError(fullMessage)
         addNotification({ type: 'error', msg: fullMessage, time: new Date().toISOString() })
       } else if (isWarning) {
-        notify('warning', labelFor(msg.type), fullMessage)
+        showWarning(`${labelFor(msg.type)}: ${fullMessage}`)
         addNotification({ type: 'warn', msg: fullMessage, time: new Date().toISOString() })
       } else {
         // Silent — store only, no toast

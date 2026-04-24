@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { algosAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
-import { Sparkle } from '@phosphor-icons/react'
+import { Sparkle, LockSimple, CheckCircle, Warning } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 
 const INST_CODES: Record<string, string> = { NF: 'NIFTY', BN: 'BANKNIFTY', SX: 'SENSEX', MN: 'MIDCAPNIFTY', FN: 'FINNIFTY' }
@@ -976,43 +976,43 @@ export default function AlgoPage() {
   const validate = (): string => {
     const fail = (msg: string) => { console.error('[validate] FAIL:', msg, { algoName, account, stratMode, entryType, entryTime, exitTime, orbEnd, dte, legs }); return msg }
     // ── Algo-level fields ─────────────────────────────────────────────────────
-    if (!algoName.trim())            return fail('❌ Algo name is required')
-    if (!account)                    return fail('❌ Account is required — select a broker account')
-    if (!lotMult || parseInt(lotMult) < 1) return fail('❌ Lot multiplier must be at least 1')
-    if (!entryTime)                  return fail('❌ Entry time is required')
-    if (!exitTime)                   return fail('❌ Exit time is required')
-    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return fail(`❌ Entry time must be between 09:15 and 15:30 (got ${entryTime})`)
-    if (!['stbt','btst'].includes(stratMode) && (exitTime < TIME_MIN || exitTime > TIME_MAX)) return fail(`❌ Exit time must be between 09:15 and 15:30 (got ${exitTime})`)
-    if (stratMode === 'intraday' && exitTime <= entryTime) return fail('❌ Exit time must be after entry time for Intraday')
-    if (entryType === 'orb' && !orbEnd) return fail('❌ ORB End time is required when entry type is ORB')
-    if (entryType === 'orb' && orbEnd <= entryTime) return fail('❌ ORB end time must be after ORB start (entry) time')
-    if (stratMode === 'positional' && !dte) return fail('❌ DTE is required for Positional strategy')
-    if (legs.length === 0) return fail('❌ At least one leg is required')
+    if (!algoName.trim())            return fail('Algo name is required')
+    if (!account)                    return fail('Account is required — select a broker account')
+    if (!lotMult || parseInt(lotMult) < 1) return fail('Lot multiplier must be at least 1')
+    if (!entryTime)                  return fail('Entry time is required')
+    if (!exitTime)                   return fail('Exit time is required')
+    if (entryTime < TIME_MIN || entryTime > TIME_MAX) return fail(`Entry time must be between 09:15 and 15:30 (got ${entryTime})`)
+    if (!['stbt','btst'].includes(stratMode) && (exitTime < TIME_MIN || exitTime > TIME_MAX)) return fail(`Exit time must be between 09:15 and 15:30 (got ${exitTime})`)
+    if (stratMode === 'intraday' && exitTime <= entryTime) return fail('Exit time must be after entry time for Intraday')
+    if (entryType === 'orb' && !orbEnd) return fail('ORB End time is required when entry type is ORB')
+    if (entryType === 'orb' && orbEnd <= entryTime) return fail('ORB end time must be after ORB start (entry) time')
+    if (stratMode === 'positional' && !dte) return fail('DTE is required for Positional strategy')
+    if (legs.length === 0) return fail('At least one leg is required')
     // ── Leg-level fields ──────────────────────────────────────────────────────
     for (const leg of legs) {
       const L = `Leg ${leg.no}`
-      if (!leg.lots || parseInt(leg.lots) < 1) return fail(`❌ ${L}: Lots is required — enter number of lots`)
+      if (!leg.lots || parseInt(leg.lots) < 1) return fail(`${L}: Lots is required — enter number of lots`)
       if (leg.instType === 'OP') {
-        if (!leg.expiry)    return fail(`❌ ${L}: Expiry is required`)
-        if (!leg.strikeMode) return fail(`❌ ${L}: Strike mode is required`)
-        if (leg.strikeMode === 'premium' && !leg.premiumVal) return fail(`❌ ${L}: Premium value is required when mode is Premium`)
-        if (leg.strikeMode === 'straddle' && !leg.premiumVal) return fail(`❌ ${L}: Straddle % is required when mode is Straddle`)
+        if (!leg.expiry)    return fail(`${L}: Expiry is required`)
+        if (!leg.strikeMode) return fail(`${L}: Strike mode is required`)
+        if (leg.strikeMode === 'premium' && !leg.premiumVal) return fail(`${L}: Premium value is required when mode is Premium`)
+        if (leg.strikeMode === 'straddle' && !leg.premiumVal) return fail(`${L}: Straddle % is required when mode is Straddle`)
       }
       for (const feat of FEATURES) {
         if (leg.active[feat.key]) {
           const vals = leg.vals[feat.key] as any
           const hasValue = Object.values(vals).some((v: any) => v !== '' && v !== undefined)
-          if (!hasValue) return fail(`❌ ${L}: ${feat.label} is enabled but values are missing`)
+          if (!hasValue) return fail(`${L}: ${feat.label} is enabled but values are missing`)
         }
       }
       const slType = (leg.vals.sl as any).type || ''
       if (entryType !== 'orb') {
-        if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return fail(`❌ ${L}: SL value is required when SL is enabled`)
-        if (leg.active['tp'] && !(leg.vals.tp as any).value) return fail(`❌ ${L}: TP value is required when TP is enabled`)
+        if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return fail(`${L}: SL value is required when SL is enabled`)
+        if (leg.active['tp'] && !(leg.vals.tp as any).value) return fail(`${L}: TP value is required when TP is enabled`)
       }
-      if (leg.active['wt'] && !(leg.vals.wt as any).value) return fail(`❌ ${L}: W&T value is required when W&T is enabled`)
-      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return fail(`❌ ${L}: TSL requires SL to be enabled with a value`)
-      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return fail(`❌ ${L}: TTP requires TP to be enabled with a value`)
+      if (leg.active['wt'] && !(leg.vals.wt as any).value) return fail(`${L}: W&T value is required when W&T is enabled`)
+      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return fail(`${L}: TSL requires SL to be enabled with a value`)
+      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return fail(`${L}: TTP requires TP to be enabled with a value`)
     }
     return ''
   }
@@ -1179,7 +1179,7 @@ export default function AlgoPage() {
           </div>
         </div>
         <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '14px', padding: '20px 24px', textAlign: 'center', borderLeft: '3px solid #FF4444' }}>
-          <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔒</div>
+          <div style={{ marginBottom: '8px' }}><LockSimple size={24} weight="fill" color="var(--text-dim)" /></div>
           <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--red)', marginBottom: '6px' }}>Algo is live — editing locked</div>
           <div style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
             <strong>{algoName}</strong> has an active trade today.<br />
@@ -1222,8 +1222,8 @@ export default function AlgoPage() {
       <div className="page-header">
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>{algoName || (isEdit ? 'Edit Algo' : 'New Algo')}</h1>
         <div className="page-header-actions">
-          {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600 }}>● Unsaved changes</span>}
-          {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>✅ Saved!</span>}
+          {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-amber)', flexShrink: 0 }} />Unsaved changes</span>}
+          {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircle size={12} weight="fill" color="var(--green)" /> Saved!</span>}
           {saveError  && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveError}</span>}
           <button onClick={() => setShowAI(true)} style={{ height: '34px', padding: '0 14px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5 }}>
             <Sparkle size={13} weight="fill" color="var(--accent)" />
@@ -1235,14 +1235,14 @@ export default function AlgoPage() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '100px', padding: '10px 18px', fontSize: '12px', color: '#FF4444', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-          ⚠ {toast}
+        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '100px', padding: '10px 18px', fontSize: '12px', color: '#FF4444', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> {toast}
         </div>
       )}
       {/* F6 — tomorrow warning */}
       {showTomorrowWarn && (
         <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '14px', borderLeft: '3px solid #F59E0B', padding: '14px 16px', marginBottom: '12px' }}>
-          <div style={{ fontWeight: 700, color: 'var(--accent-amber)', marginBottom: '6px' }}>⚠️ Changes apply from tomorrow</div>
+          <div style={{ fontWeight: 700, color: 'var(--accent-amber)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: 6 }}><Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> Changes apply from tomorrow</div>
           <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px' }}>
             This algo may be deployed in today's grid. Changes you save will NOT affect today's trades — they will apply from the next trading day onward.
           </div>
@@ -1315,7 +1315,7 @@ export default function AlgoPage() {
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Exit Time{' '}
                   {(stratMode === 'stbt' || stratMode === 'btst') && (
-                    <span title="Next-day exit: entries on day 1, exits on day 2 at this time. SL check auto-handled." style={{ cursor: 'help', color: 'var(--accent-amber)', fontSize: '10px' }}>⚠</span>
+                    <span title="Next-day exit: entries on day 1, exits on day 2 at this time. SL check auto-handled." style={{ cursor: 'help', verticalAlign: 'middle', display: 'inline-flex' }}><Warning size={13} weight="fill" color="#F59E0B" style={{ verticalAlign: 'middle' }} /></span>
                   )}
                 </label>
                 <TimeInput value={['stbt','btst'].includes(stratMode) ? nextDayExitTime : exitTime} onChange={['stbt','btst'].includes(stratMode) ? setNextDayExitTime : setExitTime} />

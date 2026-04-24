@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { getCurrentFY } from '@/utils/fy'
+import { CheckCircle, Warning, ArrowsClockwise, ArrowLeft } from '@phosphor-icons/react'
+import { showSuccess } from '@/utils/toast'
 
 interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
@@ -57,7 +59,6 @@ export default function AccountsPage() {
   const [addForm,    setAddForm]    = useState<AddAccountForm>(EMPTY_FORM)
   const [addSaving,  setAddSaving]  = useState(false)
   const [addError,   setAddError]   = useState('')
-  const [addToast,   setAddToast]   = useState('')
 
   const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'reactivate'; accountId: string; nickname: string } | null>(null)
 
@@ -114,8 +115,7 @@ export default function AccountsPage() {
           scope: api.scope ?? 'fo', is_active: api.is_active ?? true,
         })))
       }).catch(() => {})
-      setAddToast('✅ Account added')
-      setTimeout(() => setAddToast(''), 3000)
+      showSuccess('Account added')
     } catch (e: any) {
       setAddError(e?.response?.data?.detail || 'Failed to add account')
     } finally {
@@ -247,9 +247,9 @@ export default function AccountsPage() {
     try {
       await accountsAPI.updateNickname(acc.id, newName)
       setAccounts(a => a.map(x => x.id === acc.id ? { ...x, name: newName } : x))
-      showSaved(acc.id, '✅ Nickname saved')
+      showSaved(acc.id, 'ok:Nickname saved')
     } catch {
-      showSaved(acc.id, '⚠️ Nickname save failed')
+      showSaved(acc.id, 'err:Nickname save failed')
     }
     setNickEditing(n => ({ ...n, [acc.id]: false }))
   }
@@ -288,9 +288,9 @@ export default function AccountsPage() {
         globalTP:    !isNaN(tp)   ? tp   : x.globalTP,
         fyBrokerage: isApril() && !isNaN(brok) ? brok : x.fyBrokerage,
       } : x))
-      showSaved(acc.id, '✅ Saved')
+      showSaved(acc.id, 'ok:Saved')
     } catch {
-      showSaved(acc.id, '⚠️ Save failed')
+      showSaved(acc.id, 'err:Save failed')
     } finally {
       setSaving(s => ({ ...s, [acc.id]: false }))
     }
@@ -306,7 +306,6 @@ export default function AccountsPage() {
           <p style={{ fontSize: '12px', color: 'var(--gs-muted)', marginTop: '3px' }}>Broker accounts & API tokens</p>
         </div>
         <div className="page-header-actions">
-          {addToast && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600 }}>{addToast}</span>}
           <button className="btn btn-ghost" style={{ fontSize: '12px' }} onClick={openAddModal}>
             + Add Account
           </button>
@@ -425,7 +424,7 @@ export default function AccountsPage() {
                       onClick={() => fetchFunds(acc.name, true)}
                       disabled={fundsLoading[acc.name]}
                       style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '10px', padding: 0 }}
-                    >{fundsLoading[acc.name] ? '…' : '↻'}</button>
+                    >{fundsLoading[acc.name] ? '…' : <ArrowsClockwise size={13} weight="regular" />}</button>
                   </div>
                   {!tokenConnected ? (
                     <div style={{ fontSize: '10px', color: 'rgba(232,232,248,0.25)', padding: '6px 0' }}>Login to see funds</div>
@@ -531,13 +530,17 @@ export default function AccountsPage() {
               {/* Save feedback */}
               {saved[acc.id] && (
                 <div style={{
-                  fontSize: '12px', color: saved[acc.id].startsWith('✅') ? '#22DD88' : 'var(--accent-amber)',
+                  fontSize: '12px', color: saved[acc.id].startsWith('ok:') ? '#22DD88' : 'var(--accent-amber)',
                   fontWeight: 600, padding: '6px 10px',
-                  background: saved[acc.id].startsWith('✅') ? 'rgba(34,221,136,0.1)' : 'rgba(245,158,11,0.1)',
+                  background: saved[acc.id].startsWith('ok:') ? 'rgba(34,221,136,0.1)' : 'rgba(245,158,11,0.1)',
                   borderRadius: '5px', textAlign: 'center', marginTop: '8px',
                   fontFamily: 'var(--font-mono)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
                 }}>
-                  {saved[acc.id]}
+                  {saved[acc.id].startsWith('ok:')
+                    ? <><CheckCircle size={13} weight="fill" color="#22DD88" />{saved[acc.id].slice(3)}</>
+                    : <><Warning size={13} weight="fill" color="var(--accent-amber)" />{saved[acc.id].startsWith('err:') ? saved[acc.id].slice(4) : saved[acc.id]}</>
+                  }
                 </div>
               )}
             </div>
@@ -595,7 +598,7 @@ export default function AccountsPage() {
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {/* A9 — Back button inside modal step 2 */}
-                  <button className="btn btn-ghost" style={{ fontSize: '11px' }} onClick={() => setAddStep(1)}>← Back</button>
+                  <button className="btn btn-ghost" style={{ fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} onClick={() => setAddStep(1)}><ArrowLeft size={12} weight="bold" /> Back</button>
                   <span style={{ fontWeight: 700, color: addForm.broker === 'zerodha' ? 'var(--ox-radiant)' : 'var(--accent-amber)' }}>
                     {addForm.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}
                   </span>

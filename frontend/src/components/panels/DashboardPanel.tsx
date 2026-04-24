@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Warning, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
+import { Warning, Prohibit, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 
@@ -352,7 +352,7 @@ export default function DashboardPanel() {
           {killActivated && killResult && (
             <div style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--border)' }}>
               <div style={{ background: 'rgba(255,68,68,0.08)', borderRadius: 12, padding: '10px 12px', boxShadow: 'var(--neu-inset)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#FF4444', marginBottom: 2 }}>⛔ Kill Switch Activated</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#FF4444', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}><Prohibit size={14} weight="fill" color="#FF4444" /> Kill Switch Activated</div>
                 <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
                   {killResult.positions_squared} pos squared · {killResult.orders_cancelled} orders cancelled
                 </div>

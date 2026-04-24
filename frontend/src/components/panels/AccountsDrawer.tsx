@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { PencilSimple, FloppyDisk, CheckCircle, Warning } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
+import { showSuccess } from '@/utils/toast'
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
@@ -78,7 +79,6 @@ export default function AccountsDrawer() {
   const [addForm,   setAddForm]   = useState<AddAccountForm>(EMPTY_FORM)
   const [addSaving, setAddSaving] = useState(false)
   const [addError,  setAddError]  = useState('')
-  const [addToast,  setAddToast]  = useState('')
 
   const mapAccounts = (data: any[]) => data.map((api: any) => ({
     id: api.id, name: api.nickname,
@@ -269,7 +269,7 @@ export default function AccountsDrawer() {
       await accountsAPI.create({ broker: addForm.broker, nickname: addForm.nickname.trim(), client_id: addForm.client_id.trim(), api_key: addForm.api_key.trim() || undefined, api_secret: addForm.api_secret.trim() || undefined, totp_secret: addForm.totp_secret.trim() || undefined, scope: addForm.scope || 'fo' })
       setAddModal(false); setAddError('')
       fetchAccounts()
-      setAddToast('ok:Account added'); setTimeout(() => setAddToast(''), 3000)
+      showSuccess('Account added')
     } catch (e: any) { setAddError(e?.response?.data?.detail || 'Failed to add account') }
     finally { setAddSaving(false) }
   }
@@ -414,16 +414,6 @@ export default function AccountsDrawer() {
                 style={{ width: '100%', height: 36, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, marginTop: 4 }}>
                 + Add Account
               </button>
-              {addToast && (() => {
-                const ok = addToast.startsWith('ok:')
-                const label = addToast.replace(/^(ok|err):/, '')
-                return (
-                  <div style={{ marginTop: 10, fontSize: 12, color: ok ? '#0ea66e' : '#F59E0B', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                    {ok ? <CheckCircle size={13} weight="fill" /> : <Warning size={13} weight="fill" />}
-                    {label}
-                  </div>
-                )
-              })()}
             </div>
           )}
 

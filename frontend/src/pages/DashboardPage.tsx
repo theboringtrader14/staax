@@ -1,5 +1,6 @@
 import { useStore } from '@/store'
 import { useState, useEffect } from 'react'
+import { Warning, Prohibit } from '@phosphor-icons/react'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI, holidaysAPI, gridAPI, reportsAPI, algosAPI, ordersAPI } from '@/services/api'
 import { getCurrentFY } from '@/utils/fy'
 
@@ -165,8 +166,8 @@ export default function DashboardPage() {
         const eDate = e.ts ? new Date(e.ts).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : null
         if (eDay !== todayStr && eDate && eDay !== lastSep) { lines.push('── ' + eDate + ' ──'); lastSep = eDay }
         const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
-        const icon = e.level === 'success' ? '✅' : e.level === 'error' ? '⛔' : e.level === 'warn' ? '⚠️' : '·'
-        lines.push('[' + ts + '] ' + icon + ' ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
+        const lvl = e.level === 'success' ? 'ok' : e.level === 'error' ? 'err' : e.level === 'warn' ? 'wrn' : 'inf'
+        lines.push('[' + ts + '] [' + lvl + '] ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
       }
       if (lines.length) setLog(p => [...lines, ...p])
     }).catch(() => {})
@@ -204,34 +205,34 @@ export default function DashboardPage() {
     setLog(l => ['[' + ts + '] ' + msg, ...l.slice(0, 49)])
   }
   const setSvc = (id: string, st: ServiceStatus) => setServices(s => s.map(x => x.id === id ? { ...x, status: st } : x))
-  const startSvc = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'...'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog('✅ '+id+' running') } catch { setSvc(id,'stopped'); addLog('⛔ '+id+' failed') } }
-  const stopSvc  = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'...'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog('⛔ '+id+' stopped') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
+  const startSvc = async (id: string) => { setSvc(id,'starting'); addLog('Starting '+id+'...'); try { await servicesAPI.start(id); setSvc(id,'running'); addLog('[ok] '+id+' running') } catch { setSvc(id,'stopped'); addLog('[err] '+id+' failed') } }
+  const stopSvc  = async (id: string) => { setSvc(id,'stopping'); addLog('Stopping '+id+'...'); try { await servicesAPI.stop(id); setSvc(id,'stopped'); addLog('[err] '+id+' stopped') } catch { setSvc(id,'running'); addLog('Error stopping '+id) } }
   const startAll = async () => { if (isPast9am()) { setLateWarn(true); return }; await doStartAll() }
   const doStartAll = async () => {
     setLateWarn(false); addLog('Starting all services...')
-    try { await servicesAPI.startAll(); addLog('✅ All services running.'); const res = await servicesAPI.status(); setServices(p => p.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s })) }
-    catch { addLog('⛔ Start all failed') }
+    try { await servicesAPI.startAll(); addLog('[ok] All services running.'); const res = await servicesAPI.status(); setServices(p => p.map(s => { const rem = (res.data.services as Service[]).find(r => r.id === s.id); return rem ? { ...s, status: rem.status } : s })) }
+    catch { addLog('[err] Start all failed') }
   }
   const stopAll = async () => { addLog('Stopping all services...'); try { await servicesAPI.stopAll(); addLog('All services stopped.') } catch { addLog('Error stopping services') } }
   const handleKill = async () => {
-    setKillLoading(true); addLog('⚠️ KILL SWITCH ACTIVATED')
+    setKillLoading(true); addLog('[wrn] KILL SWITCH ACTIVATED')
     try {
       const res = await systemAPI.activateKillSwitch(selKill); const d = res.data
       setKillActived(true); setKilledIds(p => Array.from(new Set([...p, ...(selKill.length > 0 ? selKill : (accounts as any[]).map(a => a.id))])))
       setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
       addLog('[CRITICAL] KILL — ' + (d.positions_squared ?? 0) + ' positions, ' + (d.orders_cancelled ?? 0) + ' orders')
-    } catch (err: any) { addLog('⛔ Kill switch failed — ' + (err?.response?.data?.detail || 'unknown')) }
+    } catch (err: any) { addLog('[err] Kill switch failed — ' + (err?.response?.data?.detail || 'unknown')) }
     finally { setKillLoading(false); setKillModal(false) }
   }
 
   const handleSyncHolidays = async () => {
     setSyncing(true)
     try {
-      const res = await holidaysAPI.sync(); addLog('✅ Holidays synced — ' + res.data.synced + ' new')
+      const res = await holidaysAPI.sync(); addLog('[ok] Holidays synced — ' + res.data.synced + ' new')
       const lr = await holidaysAPI.list(new Date().getFullYear())
       const today = new Date(); const in30 = new Date(today); in30.setDate(today.getDate() + 30)
       setHolidays((lr.data || []).filter((h: any) => { const d = new Date(h.date); return d >= today && d <= in30 && h.segment === 'fo' }).slice(0, 8))
-    } catch { addLog('⛔ Holiday sync failed') } finally { setSyncing(false) }
+    } catch { addLog('[err] Holiday sync failed') } finally { setSyncing(false) }
   }
 
   const allRunning = services.every(s => s.status === 'running')
@@ -355,15 +356,15 @@ export default function DashboardPage() {
 
       {/* LIVE blocked */}
       {!isPractixMode && typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
-        <div className="card card-amber" style={{ padding: '10px 16px', marginBottom: '12px', fontSize: '12px', color: 'var(--sem-warn)', fontWeight: 600 }}>
-          ⚠️ LIVE mode blocked on local — deploy to production.
+        <div className="card card-amber" style={{ padding: '10px 16px', marginBottom: '12px', fontSize: '12px', color: 'var(--sem-warn)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> LIVE mode blocked on local — deploy to production.
         </div>
       )}
 
       {/* Late warning */}
       {showLateWarning && (
         <div className="card card-violet" style={{ marginBottom: '12px' }}>
-          <div style={{ fontWeight: 700, color: 'var(--sem-short)', marginBottom: '6px', fontSize: '13px' }}>⚠️ Starting session after 9:00 AM</div>
+          <div style={{ fontWeight: 700, color: 'var(--sem-short)', marginBottom: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: 6 }}><Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> Starting session after 9:00 AM</div>
           <div style={{ fontSize: '12px', color: 'var(--gs-muted)', marginBottom: '10px' }}>These algos have already passed their entry time:</div>
           {lateAlgos.length === 0 ? <div style={{ fontSize: '12px', color: 'var(--gs-muted)' }}>No algos affected.</div> : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
@@ -386,7 +387,7 @@ export default function DashboardPage() {
           </div>
           <div style={{ fontSize: '11px', color: 'var(--gs-muted)', fontFamily: 'var(--font-mono)' }}>
             {killResult.positions_squared} positions squared · {killResult.orders_cancelled} orders cancelled
-            {killResult.errors.length > 0 && <span style={{ color: 'var(--sem-warn)', marginLeft: '8px' }}>⚠️ {killResult.errors.length} errors</span>}
+            {killResult.errors.length > 0 && <span style={{ color: 'var(--sem-warn)', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Warning size={11} weight="fill" color="#F59E0B" /> {killResult.errors.length} errors</span>}
           </div>
         </div>
       )}
@@ -718,9 +719,9 @@ export default function DashboardPage() {
                     {line}
                   </div>
                 )
-                const isOk  = line.includes('✅')
-                const isErr = line.includes('⛔')
-                const isWrn = line.includes('⚠')
+                const isOk  = line.includes('[ok]')
+                const isErr = line.includes('[err]')
+                const isWrn = line.includes('[wrn]')
                 return (
                   <div key={i} style={{ color: isOk ? '#22DD88' : isErr ? '#FF4444' : isWrn ? '#FFD700' : 'rgba(240,237,232,0.38)', lineHeight: 1.65, padding: '0.5px 0' }}>
                     {line}
@@ -746,7 +747,7 @@ export default function DashboardPage() {
                 const checked = selKill.includes(acc.id)
                 return (
                   <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: checked ? 'rgba(255,68,68,0.08)' : 'rgba(255,255,255,0.03)', border: '0.5px solid ' + (checked ? 'rgba(255,68,68,0.4)' : 'rgba(255,255,255,0.08)'), borderRadius: '8px', padding: '8px 12px', cursor: 'pointer' }}>
-                    {killedIds.includes(acc.id) ? <span style={{ fontSize: '12px', color: 'var(--sem-short)' }}>⛔</span>
+                    {killedIds.includes(acc.id) ? <Prohibit size={14} weight="fill" color="#FF4444" style={{ flexShrink: 0 }} />
                       : <input type="checkbox" checked={checked} onChange={() => setSelKill(p => p.includes(acc.id) ? p.filter(id => id !== acc.id) : [...p, acc.id])} style={{ width: '14px', height: '14px', accentColor: 'var(--sem-short)', cursor: 'pointer' }} />}
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ox-glow)' }}>{acc.nickname || acc.name}</div>
@@ -758,8 +759,8 @@ export default function DashboardPage() {
                 )
               })}
             </div>
-            <div style={{ background: 'rgba(255,68,68,0.07)', border: '0.5px solid rgba(255,68,68,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: 'var(--sem-short)', fontWeight: 600 }}>
-              ⚠️ This will square off all positions + cancel all orders. Cannot be undone.
+            <div style={{ background: 'rgba(255,68,68,0.07)', border: '0.5px solid rgba(255,68,68,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: 'var(--sem-short)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> This will square off all positions + cancel all orders. Cannot be undone.
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="btn btn-ghost" onClick={() => setKillModal(false)} disabled={killLoading}>Cancel</button>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../store'
 import { systemAPI } from '../../services/api'
+import { showSuccess, showWarning } from '@/utils/toast'
 
 export default function TopBar() {
   const isPractixMode   = useStore(s => s.isPractixMode)
@@ -9,7 +10,6 @@ export default function TopBar() {
   const setLivePnl      = useStore(s => s.setLivePnl)
   const logout          = useStore((s: any) => s.logout)
   const [time, setTime] = useState(new Date())
-  const [toast, setToast] = useState<{ msg: string; isLive: boolean } | null>(null)
 
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t) }, [])
 
@@ -62,8 +62,8 @@ export default function TopBar() {
         <button onClick={() => {
           const next = !isPractixMode
           setIsPractixMode(next)
-          setToast({ msg: next ? 'Switched to PRACTIX mode' : 'Switched to LIVE mode', isLive: !next })
-          setTimeout(() => setToast(null), 2500)
+          if (next) showWarning('Switched to PRACTIX mode')
+          else showSuccess('Switched to LIVE mode')
         }} style={{
           display:'flex', alignItems:'center', gap:'7px',
           height:'var(--btn-h)',
@@ -115,24 +115,6 @@ export default function TopBar() {
           </svg>
         </button>
       </div>
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999,
-          padding: '10px 20px', borderRadius: '8px',
-          fontFamily: 'var(--font-display)', fontSize: '13px', fontWeight: 700,
-          background: toast.isLive ? 'rgba(34,221,136,0.15)' : 'rgba(245,158,11,0.15)',
-          border: `1px solid ${toast.isLive ? 'rgba(34,221,136,0.4)' : 'rgba(245,158,11,0.4)'}`,
-          color: toast.isLive ? '#22DD88' : '#f59e0b',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-          backdropFilter: 'blur(10px)',
-          animation: 'fadeIn 0.2s ease',
-          pointerEvents: 'none',
-          whiteSpace: 'nowrap',
-        }}>
-          {toast.msg}
-        </div>
-      )}
     </header>
   )
 }

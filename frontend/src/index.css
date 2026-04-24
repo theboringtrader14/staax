@@ -981,3 +981,7 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   --glass-bg:    rgba(212,208,203,0.80);
   color-scheme: light;
 }
+
+.toast-success { border-left: 3px solid #0EA66E !important; }
+.toast-error   { border-left: 3px solid #FF4444 !important; }
+.toast-warning { border-left: 3px solid var(--accent) !important; }

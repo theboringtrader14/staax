@@ -5,6 +5,7 @@ import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning, Sparkle } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
+import { showSuccess, showError, showInfo } from '@/utils/toast'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
@@ -102,8 +103,6 @@ export default function GridPage() {
   const [loading,       setLoading]      = useState(true)
   const [showArch,      setShowArch]     = useState(() => localStorage.getItem('showArch') === 'true')
   const [archConfirm,   setArchConfirm]  = useState<string|null>(null)
-  const [opError,       setOpError]      = useState('')
-  const [autoFillToast, setAutoFillToast] = useState('')
   const [cardMults,       setCardMults]       = useState<Record<string,number>>({})
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [statFilter,      setStatFilter]      = useState<string|null>(null)
@@ -111,6 +110,7 @@ export default function GridPage() {
   const [showDeferModal, setShowDeferModal] = useState(false)
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
+  const [confirmCancel,  setConfirmCancel]  = useState<{algoId: string; day: string; entryId: string} | null>(null)
   const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
   const [stickyHeader,   setStickyHeader]   = useState<string|null>(null)
   const [showAI,         setShowAI]         = useState(false)
@@ -135,8 +135,6 @@ export default function GridPage() {
       return next
     })
   }, [grid, todayDay])
-
-  const flashError = (msg: string) => { setOpError(msg); setTimeout(() => setOpError(''), 3500) }
 
   // ── Load accounts for AI assistant ───────────────────────────────────────────
   useEffect(() => {
@@ -230,8 +228,7 @@ export default function GridPage() {
       }))
       if (filled > 0) {
         setGrid({ ...newGrid }); setAlgos(updAlgos)
-        setAutoFillToast(`Auto-filled ${filled} recurring day${filled > 1 ? 's' : ''}`)
-        setTimeout(() => setAutoFillToast(''), 3500)
+        showSuccess(`Auto-filled ${filled} recurring day${filled > 1 ? 's' : ''}`)
       }
     } catch { /* API unreachable */ } finally { setLoading(false) }
   }, [isPractixMode, activeAccount])
@@ -281,7 +278,7 @@ export default function GridPage() {
           setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: res.data.recurring_days } : x))
       } catch {
         setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: algo.recurringDays } : x))
-        flashError('Day update failed')
+        showError('Day update failed')
       }
       return
     }
@@ -300,7 +297,7 @@ export default function GridPage() {
       }
     } catch {
       setAlgos(a => a.map(x => x.id === algo.id ? { ...x, recurringDays: algo.recurringDays } : x))
-      flashError('Day update failed')
+      showError('Day update failed')
     }
   }
 
@@ -311,7 +308,7 @@ export default function GridPage() {
     setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:{ ...g[algoId][day], multiplier:v } } }))
     if (cell?.gridEntryId) {
       try { await gridAPI.update(cell.gridEntryId, { lot_multiplier:v }) }
-      catch { setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:{ ...g[algoId][day], multiplier:cell.multiplier } } })); flashError('Multiplier update failed') }
+      catch { setGrid(g => ({ ...g, [algoId]:{ ...g[algoId], [day]:{ ...g[algoId][day], multiplier:cell.multiplier } } })); showError('Multiplier update failed') }
     }
   }
 
@@ -337,19 +334,25 @@ export default function GridPage() {
   // ── Archive / Delete ──────────────────────────────────────────────────────────
   const archAlgo = async (algoId: string) => {
     const hasActive = Object.values(grid[algoId]||{}).some(c => c.status==='algo_active'||c.status==='waiting'||c.status==='open'||c.status==='order_pending')
-    if (hasActive) { flashError('Cannot archive — algo has active positions this week'); return }
+    if (hasActive) { showError('Cannot archive — algo has active positions this week'); return }
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x))
     setGrid(g => { const n={...g}; delete n[algoId]; return n })
-    try { await algosAPI.archive(algoId) } catch { loadData(); flashError('Archive failed') }
+    try { await algosAPI.archive(algoId) } catch { loadData(); showError('Archive failed') }
   }
   const unarch = async (algoId: string) => {
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:false } : x))
-    try { await algosAPI.unarchive(algoId) } catch { setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x)); flashError('Reactivate failed') }
+    try { await algosAPI.unarchive(algoId) } catch { setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x)); showError('Reactivate failed') }
   }
 
   // ── Cancel WAITING/ERROR entry ─────────────────────────────────────────────────
-  const cancelEntry = async (algoId: string, day: string, entryId: string) => {
-    if (!window.confirm(`Cancel this ${day} run? It will be marked NO_TRADE.`)) return
+  const cancelEntry = (algoId: string, day: string, entryId: string) => {
+    setConfirmCancel({ algoId, day, entryId })
+  }
+
+  const handleCancelConfirmed = async () => {
+    if (!confirmCancel) return
+    const { algoId, day, entryId } = confirmCancel
+    setConfirmCancel(null)
     try {
       await gridAPI.cancel(entryId)
       setGrid(g => ({
@@ -357,7 +360,7 @@ export default function GridPage() {
         [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], status: 'no_trade' as CS } }
       }))
     } catch (e: any) {
-      flashError(e?.response?.data?.detail || 'Cancel failed')
+      showError(e?.response?.data?.detail || 'Cancel failed')
     }
   }
 
@@ -365,7 +368,7 @@ export default function GridPage() {
     try {
       await algosAPI.duplicate(algoId)
       await loadData()
-    } catch { flashError('Duplicate failed') }
+    } catch { showError('Duplicate failed') }
   }
 
   const active   = algos.filter(a => !a.arch)
@@ -415,7 +418,6 @@ export default function GridPage() {
             </div>
           </div>
           <div className="page-header-actions">
-            {autoFillToast && <span style={{ fontSize:'11px', color:'var(--ox-radiant)', fontWeight:600 }}>↻ {autoFillToast}</span>}
 
             {/* Account filter */}
             <StaaxSelect value={filterAccount} onChange={setFilterAccount} options={accountOptions} width="130px"/>
@@ -1014,15 +1016,19 @@ export default function GridPage() {
         )
       })()}
 
-      {/* ── Bottom toast (errors + info) ──────────────────────────────────── */}
-      {opError && (
-        <div style={{
-          position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, background: '#1E2022', border: '1px solid var(--bg-border)',
-          borderRadius: '8px', padding: '10px 18px', display: 'flex', alignItems: 'center',
-          gap: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', pointerEvents: 'none',
-        }}>
-          <span style={{ color: 'var(--red)', fontSize: '13px', fontWeight: 600 }}>⚠ {opError}</span>
+      {/* ── Cancel run confirm modal ─────────────────────────────────────── */}
+      {confirmCancel && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth:'360px' }}>
+            <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Cancel run?</div>
+            <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>
+              This {confirmCancel.day} entry will be marked NO_TRADE.
+            </div>
+            <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmCancel(null)}>Keep</button>
+              <button className="btn btn-warn" style={{ color:'#FF4444' }} onClick={handleCancelConfirmed}>Cancel Run</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1044,10 +1050,9 @@ export default function GridPage() {
                   setShowDeferModal(false)
                   try {
                     await algosAPI.scheduleRemoval(deferAlgo.id, deferDay)
-                    setAutoFillToast(`🕛 ${deferAlgo.name} will be removed from ${deferDay}s after midnight`)
-                    setTimeout(() => setAutoFillToast(''), 5000)
+                    showInfo(`${deferAlgo.name} will be removed from ${deferDay}s after midnight`)
                   } catch {
-                    flashError('Schedule removal failed')
+                    showError('Schedule removal failed')
                   }
                   setDeferAlgo(null); setDeferDay('')
                 }}
