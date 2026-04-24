@@ -142,7 +142,7 @@ body {
 ::selection { background:rgba(255,107,0,0.28); color:#fff; }
 
 .page-content { padding:var(--page-v-pad) var(--page-h-pad); height:100%; overflow-y:auto; position:relative; z-index:1; }
-.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; min-height:40px; }
+.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; min-height:40px; }
 .page-header-actions { display:flex; align-items:center; gap:8px; }
 .font-display { font-family:var(--font-display); }
 .font-mono    { font-family:var(--font-mono); }
