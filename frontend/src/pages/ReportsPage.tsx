@@ -338,7 +338,7 @@ export default function ReportsPage() {
 
         {/* FY P&L */}
         <div style={{ ...cardSt, padding: '18px 22px', cursor: 'pointer' }} onClick={() => setChartModal(true)}>
-          <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontWeight: 600 }}>
+          <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontWeight: 600 }}>
             FY {fy} Total P&L
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
@@ -374,14 +374,14 @@ export default function ReportsPage() {
 
         {/* Total Trades */}
         <div style={{ ...cardSt, padding: '18px 22px' }}>
-          <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Total Trades</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Total Trades</div>
           <div style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{fyTrades}</div>
           <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '5px' }}>{fyMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
         <div style={{ ...cardSt, padding: '18px 22px' }}>
-          <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Win Rate</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Win Rate</div>
           <div style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, color: fyWins > 0 ? '#0ea66e' : 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
             {fyTrades > 0 ? fyWinRate.toFixed(1) + '%' : '—'}
           </div>
@@ -390,7 +390,7 @@ export default function ReportsPage() {
 
         {/* Day P&L bars */}
         <div style={{ ...cardSt, padding: '18px 22px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>P&L by Day</div>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>P&L by Day</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '56px', gap: '6px' }}>
             {DAY_NAMES.map(day => {
               const pnl = dowPnl[day] || 0
@@ -512,7 +512,7 @@ export default function ReportsPage() {
       {/* FY Calendar */}
       <div style={{ ...cardSt, padding: '16px 20px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>FY {fy} — Full Year Calendar</div>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>FY {fy} — Full Year Calendar</div>
           <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-dim)', alignItems: 'center' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#0ea66e', display: 'inline-block' }} />Profit
@@ -539,7 +539,7 @@ export default function ReportsPage() {
         {/* Header + filters */}
         <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Per-Algo Metrics</div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Per-Algo Metrics</div>
             <span style={{ fontSize: '11px', color: 'var(--accent)', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 10px', borderRadius: '100px', fontWeight: 600 }}>{activePeriodLabel}</span>
           </div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -571,7 +571,7 @@ export default function ReportsPage() {
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '130px', tableLayout: 'fixed' as const }}>
               <thead>
                 <tr>
-                  <th style={{ minWidth: '130px', padding: '8px 14px 14px', textAlign: 'center', background: 'transparent', borderRadius: '12px 0 0 0', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ minWidth: '130px', padding: '8px 14px 14px', textAlign: 'center', background: 'transparent', borderRadius: '12px 0 0 0', fontSize: '11px', fontWeight: 700, color: 'var(--text-mute)', borderBottom: '1px solid var(--border)' }}>
                     Key Metrics
                   </th>
                 </tr>
@@ -580,7 +580,7 @@ export default function ReportsPage() {
                 {METRIC_ROWS.map((row, idx) => (
                   <tr key={row.key} style={{ height: '30px' }}>
                     <td style={{
-                      fontWeight: 600, color: 'var(--text-dim)', fontSize: '11px',
+                      fontWeight: 600, color: 'var(--text-mute)', fontSize: '11px',
                       background: 'transparent',
                       borderBottom: idx < METRIC_ROWS.length - 1 ? '1px solid var(--border)' : 'none',
                       padding: '0 14px', textAlign: 'center', height: '30px', whiteSpace: 'nowrap',

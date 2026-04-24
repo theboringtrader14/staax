@@ -673,10 +673,10 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
-    if (ms < 150)  return 'var(--green)'
-    if (ms < 250)  return 'var(--green)'
-    if (ms < 400)  return 'var(--accent-amber)'
-    return 'var(--red)'
+    if (ms < 150)  return 'var(--green)'   // Excellent — dark green
+    if (ms < 250)  return '#22DD88'        // Good — bright green
+    if (ms < 400)  return 'var(--accent-amber)' // Acceptable — amber
+    return 'var(--red)'                    // Slow — red
   }
 
   function statusColor(s: string): string {
@@ -687,7 +687,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 
   const distBuckets = [
     { key: 'excellent',  label: 'Excellent  <150ms',    color: 'var(--green)',        count: data.distribution.excellent  },
-    { key: 'good',       label: 'Good       150–250ms',  color: 'var(--green)',        count: data.distribution.good       },
+    { key: 'good',       label: 'Good       150–250ms',  color: '#22DD88',             count: data.distribution.good       },
     { key: 'acceptable', label: 'Acceptable 250–400ms',  color: 'var(--accent-amber)', count: data.distribution.acceptable },
     { key: 'slow',       label: 'Slow       >400ms',     color: 'var(--red)',          count: data.distribution.slow       },
   ]
@@ -716,8 +716,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
             return (
               <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 160, fontSize: 11, color: 'var(--text-dim)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{b.label}</div>
-                <div style={{ flex: 1, height: 10, borderRadius: 5, background: 'rgba(0,0,0,0.08)', overflow: 'hidden', boxShadow: 'var(--neu-inset)' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: b.color, borderRadius: 5, transition: 'width 0.4s ease', opacity: 0.9 }} />
+                <div style={{ flex: 1, height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: b.color, borderRadius: 4, transition: 'width 0.4s ease', opacity: 0.9 }} />
                 </div>
                 <div style={{ width: 40, textAlign: 'right', fontSize: 12, fontWeight: 700, color: b.color, fontFamily: 'var(--font-mono)' }}>{b.count}</div>
                 <div style={{ width: 36, textAlign: 'right', fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{pct.toFixed(0)}%</div>
@@ -775,7 +775,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid var(--border)' }}>{a.avg_ms}</td>
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
-                    <div style={{ height: 8, borderRadius: 4, background: 'rgba(0,0,0,0.08)', overflow: 'hidden', boxShadow: 'var(--neu-inset)' }}>
+                    <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
                       <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
                     </div>
                   </td>

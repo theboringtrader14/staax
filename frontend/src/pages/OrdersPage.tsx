@@ -1293,7 +1293,7 @@ export default function OrdersPage() {
                       boxShadow: statusFilter === f ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                       transition: 'box-shadow 0.15s',
                     }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase' as const, color: 'var(--text-dim)', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase' as const, color: 'var(--text-mute)', marginBottom: 4 }}>{label}</div>
                     <div style={{ ...valStyle, color }}>{val}</div>
                   </div>
                 ))}
@@ -1633,7 +1633,7 @@ export default function OrdersPage() {
                         <thead>
                           <tr>
                             {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL','Target','Exit','Reason','P&L'].map(h => (
-                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-dim)', fontWeight: 600, padding: '8px 20px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
+                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-mute)', fontWeight: 600, padding: '8px 20px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1992,7 +1992,7 @@ export default function OrdersPage() {
 
             {/* ── Legs needing sync ── */}
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-mute)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>
                 Legs needing sync
               </div>
               {(safeOrders[showSync]?.legs ?? [])
@@ -2019,7 +2019,7 @@ export default function OrdersPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Broker Order ID(s) * <span style={{ fontWeight: 400, textTransform: 'none' }}>(comma-separated for multiple)</span></div>
+                <div style={{ fontSize: '10px', color: 'var(--text-mute)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Broker Order ID(s) * <span style={{ fontWeight: 400, textTransform: 'none' }}>(comma-separated for multiple)</span></div>
                 <textarea className="staax-input" style={{ width: '100%', fontSize: '13px', fontWeight: 600, resize: 'vertical', minHeight: '60px', fontFamily: 'monospace' }}
                   placeholder="e.g. 1100000000123456, 1100000000123457"
                   autoFocus
@@ -2028,7 +2028,7 @@ export default function OrdersPage() {
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>STAAX will fetch each order from broker and re-link automatically</div>
               </div>
               <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Account *</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-mute)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Account *</div>
                 <select className="staax-select" style={{ width: '100%', fontSize: '12px' }}
                   value={syncForm.account_id}
                   onChange={e => setSyncForm(s => ({ ...s, account_id: e.target.value }))}>
@@ -2057,7 +2057,7 @@ export default function OrdersPage() {
             <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>✏️ Correct Exit Price</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>Override the broker-reported exit price. Used when the broker reported a wrong fill.</div>
             <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Exit Price</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-mute)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Exit Price</div>
               <input className="staax-input" type="number" style={{ width: '100%', fontSize: '14px', fontWeight: 700 }}
                 value={editExit.value}
                 onChange={e => setEditExit(ex => ex ? { ...ex, value: e.target.value } : null)}
