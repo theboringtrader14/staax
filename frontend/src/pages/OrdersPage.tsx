@@ -1196,7 +1196,7 @@ export default function OrdersPage() {
         <div className="page-header">
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>Orders</h1>
-            <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
+            <p style={{ fontSize: '12px', color: 'var(--text-mute)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
           </div>
           <div className="page-header-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             {/* Week navigation */}

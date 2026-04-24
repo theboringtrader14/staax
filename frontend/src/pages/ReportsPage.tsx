@@ -318,7 +318,7 @@ export default function ReportsPage() {
       <div className="page-header">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>Reports</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>Performance analytics</p>
+          <p style={{ fontSize: '12px', color: 'var(--text-mute)', marginTop: '4px' }}>Performance analytics</p>
         </div>
         <div className="page-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <StaaxSelect value={fy} onChange={setFy} options={getFYOptions(3)} width="130px" />

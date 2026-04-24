@@ -412,7 +412,7 @@ export default function GridPage() {
           <div>
             <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--accent)' }}>Algos</h1>
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'3px' }}>
-              <span style={{ fontSize:'12px', color:'var(--gs-muted)' }}>
+              <span style={{ fontSize:'12px', color:'var(--text-mute)' }}>
                 Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })}
               </span>
             </div>
