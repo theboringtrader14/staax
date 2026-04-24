@@ -941,7 +941,9 @@ class BotRunner:
             return {"status": "error", "message": f"Bot {bot_id} not found in runner"}
 
         if str(bot.indicator) == IndicatorType.DTR:
-            return {"status": "skipped", "message": "DTR bots use load_daily_data(), not candle warmup"}
+            # DTR bots compute levels from daily OHLC, not intraday candles
+            await self.load_daily_data()
+            return {"status": "ok", "message": "DTR daily data loaded"}
 
         broker = next((b for b in self._angel_brokers if b.is_token_set()), None)
         if not broker:
