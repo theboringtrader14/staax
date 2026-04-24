@@ -920,7 +920,7 @@ export default function AnalyticsPage() {
 
       {/* Tab bar — neumorphic sliding pill */}
       <div style={{
-        flexShrink: 0, display: 'flex', position: 'relative', margin: '12px 28px 20px',
+        flexShrink: 0, display: 'flex', position: 'relative', margin: '13px 28px 20px',
         background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
         borderRadius: 100, padding: '4px',
       }}>
