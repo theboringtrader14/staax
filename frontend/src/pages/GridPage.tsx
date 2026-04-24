@@ -720,7 +720,7 @@ export default function GridPage() {
                               {/* ── Strategy + instrument chip ── */}
                               <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'100px', flexShrink:0 }}>
                                 <span style={{ fontSize:'10px', color:'var(--text-dim)', whiteSpace:'nowrap', letterSpacing:'0.3px' }}>
-                                  {toTitleCase(algo.entry_type ?? typeStr)} · {toTitleCase(algo.strategy_mode ?? 'Intraday')}
+                                  {toTitleCase(algo.entry_type ?? typeStr)} · {['btst','stbt'].includes((algo.strategy_mode||'').toLowerCase()) ? (algo.strategy_mode||'').toUpperCase() : toTitleCase(algo.strategy_mode ?? 'Intraday')}
                                 </span>
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                                   {instruments.map(ins => (
@@ -735,7 +735,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Entry / Exit time ── */}
-                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'90px', flexShrink:0 }}>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'3px', width:'90px', flexShrink:0, marginLeft:'10px' }}>
                                   <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                                     <Play size={10} weight="fill" style={{ color:'var(--ox-radiant)', flexShrink:0 }} />
                                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'12px', color:'var(--ox-radiant)', fontWeight:600 }}>{algo.et}</span>
@@ -750,7 +750,7 @@ export default function GridPage() {
                                 </div>
 
                               {/* ── Lot multiplier stepper ── */}
-                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'20px' }}
+                              <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'30px' }}
                                 onClick={e => e.stopPropagation()}>
                                   <button onClick={() => changeCardMult(algo.id, mult - 1)}
                                     style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
@@ -768,7 +768,7 @@ export default function GridPage() {
                               </div>
 
                               {/* ── Day pills M T W T F S S ── */}
-                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flexShrink:0, justifyContent:'center', marginLeft:'20px' }}>
+                              <div className="algo-card-days" style={{ display:'flex', gap:'4px', alignItems:'center', flexShrink:0, justifyContent:'center', marginLeft:'35px' }}>
                                 {ALL_DAYS.map((day, i) => {
                                   const isInRecurring = algo.recurringDays.includes(day)
                                   const cell = grid[algo.id]?.[day]
@@ -889,11 +889,12 @@ export default function GridPage() {
                                   width:40, height:40, borderRadius:12,
                                   background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
                                   cursor:'pointer', color:'var(--accent)', transition:'box-shadow 0.12s',
+                                  animation:'aiGlow 3s ease-in-out infinite',
                                 }}
                                 onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                 onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                 onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <Sparkle size={16} weight="fill" color="var(--accent)" style={{ animation:'chatCirclePulse 3s ease-in-out infinite' }} />
+                                <Sparkle size={16} weight="fill" color="var(--accent)" style={{ animation:'sparkleRotate 2.5s ease-in-out infinite' }} />
                               </button>
 
                               {/* GO LIVE / DEMOTE */}

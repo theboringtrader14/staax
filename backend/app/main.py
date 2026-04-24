@@ -282,6 +282,8 @@ async def lifespan(app: FastAPI):
 
     # ── 12. Run PositionRebuilder (once at startup) ───────────────────────────
     await position_rebuilder.run()
+    # ── 12b. Restore SL/TP monitoring for open positions (fills PositionRebuilder gap) ─
+    await algo_runner.restore_sl_monitoring()
     # ── Bot runner ──────────────────────────────────────────────────────────
     from app.core.database import AsyncSessionLocal as _ASL
     bot_runner.wire(

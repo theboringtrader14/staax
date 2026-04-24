@@ -1905,6 +1905,10 @@ class AlgoRunner:
                     if not order:
                         return
 
+                    # Resolve algo name — Order has no algo_name column, load from Algo
+                    _algo_name_res = await db.execute(select(Algo.name).where(Algo.id == order.algo_id))
+                    _algo_name = _algo_name_res.scalar_one_or_none() or ""
+
                     tsl_trailed = (
                         self._tsl_engine.has_trailed(order_id)
                         if self._tsl_engine else False
@@ -1921,8 +1925,8 @@ class AlgoRunner:
                     if self._journey_engine and order:
                         await self._journey_engine.on_exit(db, order, "sl", self)
                         await _ev.info(
-                            f"[JOURNEY] {order.algo_name or ''} — child leg fired after sl on {order.symbol}",
-                            algo_name=order.algo_name or "", source="engine",
+                            f"[JOURNEY] {_algo_name} — child leg fired after sl on {order.symbol}",
+                            algo_name=_algo_name, source="engine",
                         )
 
                     await db.commit()
@@ -1931,12 +1935,12 @@ class AlgoRunner:
                     _pnl = order.pnl or 0.0
                     _sign = "+" if _pnl >= 0 else ""
                     await _ev.error(
-                        f"{order.algo_name or ''} · SL {order.symbol} @ {ltp} · P&L {_sign}₹{_pnl:,.0f}",
-                        algo_name=order.algo_name or "", source="engine",
+                        f"{_algo_name} · SL {order.symbol} @ {ltp} · P&L {_sign}₹{_pnl:,.0f}",
+                        algo_name=_algo_name, source="engine",
                     )
                     asyncio.create_task(_push.send_push(
                         "🔴 SL Hit",
-                        f"{order.algo_name or 'Algo'} — SL triggered on {order.symbol}",
+                        f"{_algo_name or 'Algo'} — SL triggered on {order.symbol}",
                     ))
                     # Re-entry check
                     if self._reentry_engine:
@@ -1965,6 +1969,10 @@ class AlgoRunner:
                     if not order:
                         return
 
+                    # Resolve algo name — Order has no algo_name column, load from Algo
+                    _algo_name_res = await db.execute(select(Algo.name).where(Algo.id == order.algo_id))
+                    _algo_name = _algo_name_res.scalar_one_or_none() or ""
+
                     await self._close_order(db, order, ltp, "tp")
 
                     # Capture TSL trail state BEFORE deregister clears in-memory state
@@ -1982,20 +1990,20 @@ class AlgoRunner:
                     if self._journey_engine and order:
                         await self._journey_engine.on_exit(db, order, "tp", self)
                         await _ev.info(
-                            f"[JOURNEY] {order.algo_name or ''} — child leg fired after tp on {order.symbol}",
-                            algo_name=order.algo_name or "", source="engine",
+                            f"[JOURNEY] {_algo_name} — child leg fired after tp on {order.symbol}",
+                            algo_name=_algo_name, source="engine",
                         )
 
                     await db.commit()
 
                     _pnl_tp = order.pnl or 0.0
                     await _ev.success(
-                        f"{order.algo_name or ''} · TP {order.symbol} @ {ltp} · P&L +₹{_pnl_tp:,.0f}",
-                        algo_name=order.algo_name or "", source="engine",
+                        f"{_algo_name} · TP {order.symbol} @ {ltp} · P&L +₹{_pnl_tp:,.0f}",
+                        algo_name=_algo_name, source="engine",
                     )
                     asyncio.create_task(_push.send_push(
                         "✅ TP Hit",
-                        f"{order.algo_name or 'Algo'} — Target reached on {order.symbol}!",
+                        f"{_algo_name or 'Algo'} — Target reached on {order.symbol}!",
                     ))
 
                     if self._reentry_engine:
@@ -2010,6 +2018,87 @@ class AlgoRunner:
                     logger.error(f"on_tp_hit failed for {order_id}: {e}")
 
         return on_tp_hit
+
+    # ── SL monitoring restoration after restart ──────────────────────────────
+
+    async def restore_sl_monitoring(self) -> None:
+        """
+        Re-register all OPEN orders with SLTPMonitor after a restart.
+
+        PositionRebuilder re-subscribes LTP tokens but skips SL/TP callback
+        registration (Order model has sl_type + sl_original which is sufficient).
+        This method fills that gap: for every OPEN order with sl_type set, it
+        creates a PositionMonitor and overrides sl_actual with the DB-persisted
+        value (which may have been trail-adjusted by TSLEngine before the restart).
+        """
+        if not self._sl_tp_monitor:
+            logger.warning("[RESTORE-SL] SLTPMonitor not wired — skipping")
+            return
+
+        from app.models.algo import AlgoLeg as _AlgoLeg
+        recovered = 0
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(Order, _AlgoLeg)
+                    .join(_AlgoLeg, Order.leg_id == _AlgoLeg.id)
+                    .where(Order.status == OrderStatus.OPEN)
+                )
+                rows = result.all()
+
+                for order, leg in rows:
+                    if not order.sl_type or not order.instrument_token or not order.fill_price:
+                        continue
+                    # Skip if already registered (e.g. fresh position placed after startup)
+                    if str(order.id) in self._sl_tp_monitor._positions:
+                        continue
+
+                    pos_monitor = PositionMonitor(
+                        order_id=str(order.id),
+                        grid_entry_id=str(order.grid_entry_id),
+                        algo_id=str(order.algo_id),
+                        direction=order.direction,
+                        instrument_token=int(order.instrument_token),
+                        underlying_token=0,
+                        entry_price=float(order.fill_price),
+                        underlying_entry_price=0.0,
+                        quantity=order.quantity or 1,
+                        sl_type=order.sl_type,
+                        sl_value=float(order.sl_original) if order.sl_original else None,
+                        tp_type=leg.tp_type if leg else None,
+                        tp_value=float(leg.tp_value) if leg and leg.tp_value else None,
+                        symbol=order.symbol or "",
+                    )
+                    self._sl_tp_monitor.add_position(
+                        pos_monitor,
+                        on_sl=self._make_sl_callback(),
+                        on_tp=self._make_tp_callback(),
+                    )
+                    # Override sl_actual with DB-persisted value (TSL may have trailed)
+                    if order.sl_actual:
+                        pos_monitor.sl_actual = float(order.sl_actual)
+                    # Override tp_level with DB-persisted target
+                    if order.target:
+                        pos_monitor.tp_level = float(order.target)
+                    # Re-subscribe token to SmartStream
+                    if self._ltp_consumer:
+                        self._ltp_consumer.subscribe([int(order.instrument_token)])
+                    recovered += 1
+                    logger.info(
+                        f"[RESTORE-SL] {order.symbol} dir={order.direction} "
+                        f"fill={order.fill_price} sl_actual={pos_monitor.sl_actual}"
+                    )
+
+                logger.info(f"[RESTORE-SL] ✅ {recovered} positions re-registered in SLTPMonitor")
+
+                # Immediate SL check for all restored positions
+                if recovered > 0 and self._sl_tp_monitor and self._ltp_consumer:
+                    for order, _ in rows:
+                        if order.instrument_token and order.sl_type:
+                            await self._sl_tp_monitor.check_now(str(order.id), self._ltp_consumer)
+
+            except Exception as e:
+                logger.error(f"[RESTORE-SL] failed: {e}")
 
     # ── MTM callback ─────────────────────────────────────────────────────────
 

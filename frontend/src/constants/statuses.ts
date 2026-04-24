@@ -11,11 +11,11 @@ export function formatExitReason(reason: string | null | undefined): string {
   const map: Record<string, string> = {
     sl: 'SL Hit', tsl: 'TSL Hit', tp: 'TP Hit', ttp: 'TTP Hit',
     mtm_sl: 'MTM SL', mtm_tp: 'MTM TP', auto_sq: 'Exit Time',
-    sq: 'SQ', manual: 'Manual', terminate: 'Terminate',
+    sq: 'Manual SQ', manual: 'Manual SQ', terminate: 'Terminated',
     expiry: 'Expiry', reconcile: 'Reconcile',
     btst_exit: 'BTST Exit', stbt_exit: 'STBT Exit',
     global_sl: 'Global SL', expiry_force_close: 'Expiry', kill_switch: 'Kill Switch',
-    error: 'Error', terminated: 'Terminate',
+    error: 'Error', terminated: 'Terminated',
     entry_failure_auto_flatten: 'Auto-Flatten',
   }
   return map[reason] ?? reason
