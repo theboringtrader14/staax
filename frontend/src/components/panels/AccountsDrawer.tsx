@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { PencilSimple } from '@phosphor-icons/react'
+import { PencilSimple, FloppyDisk } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -506,12 +506,12 @@ export default function AccountsDrawer() {
                               value={fyEdit.brokerage !== undefined ? fyEdit.brokerage : (fyRow.fy_brokerage ?? '')}
                               onChange={e => setFYMarginEdits(ed => ({ ...ed, [f.account_id]: { ...fyEdit, brokerage: e.target.value } }))} />
                           </div>
-                          <button onClick={() => saveFYMarginForAccount(f.account_id)} disabled={savingFY[f.account_id]}
-                            style={{ height: 32, padding: '0 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-display)', transition: 'box-shadow 0.15s' }}
+                          <button onClick={() => saveFYMarginForAccount(f.account_id)} disabled={savingFY[f.account_id]} title="Save"
+                            style={{ width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 0.15s', opacity: savingFY[f.account_id] ? 0.5 : 1 }}
                             onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
                             onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
-                            {savingFY[f.account_id] ? '…' : 'Save'}
+                            <FloppyDisk size={15} weight="bold" />
                           </button>
                         </div>
                       </div>
@@ -563,12 +563,12 @@ export default function AccountsDrawer() {
                       <input style={inp} type="number" defaultValue={acc.globalTP ?? ''} placeholder="₹ TP"
                         onChange={e => setEditTP(s => ({ ...s, [acc.id]: e.target.value }))} />
                     </div>
-                    <button onClick={() => saveRisk(acc)} disabled={saving[acc.id + '_risk']}
-                      style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    <button onClick={() => saveRisk(acc)} disabled={saving[acc.id + '_risk']} title="Save"
+                      style={{ width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: saving[acc.id + '_risk'] ? 0.5 : 1 }}
                       onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
                       onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
                       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
-                      {saving[acc.id + '_risk'] ? '…' : 'Save'}
+                      <FloppyDisk size={15} weight="bold" />
                     </button>
                   </div>
                   {saved[acc.id + '_risk'] && <div style={{ marginTop: 8, fontSize: 11, color: '#0ea66e', fontWeight: 600 }}>{saved[acc.id + '_risk']}</div>}
@@ -688,7 +688,7 @@ export default function AccountsDrawer() {
                 if (editingCreds.totp_secret) creds.totp_secret = editingCreds.totp_secret
                 await accountsAPI.updateCredentials(editingCreds.id, creds)
                 setEditingCreds(null); setShowSecret(false); setShowTotp(false)
-              }} style={{ height: 36, padding: '0 20px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>Save</button>
+              }} style={{ width: 36, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Save"><FloppyDisk size={16} weight="bold" /></button>
             </div>
           </div>
         </div>

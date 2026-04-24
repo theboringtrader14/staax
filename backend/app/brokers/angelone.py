@@ -832,9 +832,13 @@ class AngelOneBroker(BaseBroker):
                 return _empty
 
             d = data.get("data", {})
-            logger.info(f"[FUNDS] AO raw RMS keys={list(d.keys())} net={d.get('net')} "
-                        f"availablecash={d.get('availablecash')} collateral={d.get('collateral')} "
-                        f"utilisedpayout={d.get('utilisedpayout')} utiliseddebits={d.get('utiliseddebits')}")
+            logger.info(
+                f"[FUNDS DEBUG] Raw AO RMS — client={self.client_code} | "
+                f"net={d.get('net')} availablecash={d.get('availablecash')} "
+                f"collateral={d.get('collateral')} utiliseddebits={d.get('utiliseddebits')} "
+                f"utilisedpayout={d.get('utilisedpayout')} m2munrealized={d.get('m2munrealized')} "
+                f"full_data={d}"
+            )
 
             def _f(key: str) -> float:
                 try:
