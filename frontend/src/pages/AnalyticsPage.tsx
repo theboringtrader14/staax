@@ -918,24 +918,36 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Tab bar — neumorphic pill trough */}
+      {/* Tab bar — neumorphic sliding pill */}
       <div style={{
-        flexShrink: 0, display: 'flex', margin: '0 28px 20px',
+        flexShrink: 0, display: 'flex', position: 'relative', margin: '0 28px 20px',
         background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
-        borderRadius: 100, padding: '4px', gap: 2,
+        borderRadius: 100, padding: '4px',
       }}>
+        {/* Sliding pill indicator */}
+        <div style={{
+          position: 'absolute',
+          top: 4, bottom: 4,
+          left: `calc(4px + ${TABS.indexOf(activeTab)} * (100% - 8px) / ${TABS.length})`,
+          width: `calc((100% - 8px) / ${TABS.length})`,
+          background: 'var(--bg)',
+          boxShadow: 'var(--neu-raised-sm)',
+          borderRadius: 100,
+          transition: 'left 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+          pointerEvents: 'none',
+        }} />
         {TABS.map(tab => (
           <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
             style={{
-              flex: 1, padding: '8px 0', textAlign: 'center', border: 'none', cursor: 'pointer',
+              flex: 1, padding: '8px 0', textAlign: 'center',
+              border: 'none', borderRadius: 100, cursor: 'pointer',
+              position: 'relative', zIndex: 1,
               fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)',
               letterSpacing: '1px', textTransform: 'uppercase',
-              borderRadius: 100,
-              background: activeTab === tab ? 'var(--bg)' : 'transparent',
-              boxShadow: activeTab === tab ? 'var(--neu-raised-sm)' : 'none',
+              background: 'transparent',
               color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
-              transition: 'all 0.2s ease',
+              transition: 'color 0.25s ease',
             }}>
             {tab}
           </button>
