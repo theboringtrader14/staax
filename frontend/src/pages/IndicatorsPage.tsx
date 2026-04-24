@@ -146,11 +146,6 @@ type BotOrder = {
   pnl?: number; status: string; signal_type?: string; expiry: string
   bot_id?: string
 }
-type BotSignal = {
-  id: string; bot_id: string; bot_name?: string; signal_type: string; direction: string | null
-  instrument: string; expiry: string; trigger_price: number | null; reason: string | null
-  status: string; bot_order_id: string | null; error_message: string | null; fired_at: string | null
-}
 
 // ── ConfirmModal ───────────────────────────────────────────────────────────────
 function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCancel }: {
@@ -429,9 +424,8 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 }
 
 // ── BotCard ────────────────────────────────────────────────────────────────────
-function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onDelete, onWarmup }: {
+function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, onWarmup }: {
   bot: Bot; accounts: any[]
-  signals: BotSignal[]
   onUpdate: (id: string, data: any) => void
   onArchive: (id: string) => void
   onUnarchive: (id: string) => void
@@ -469,7 +463,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
   // Orders (lazy, per-card)
   const [showOrders, setShowOrders] = useState(false)
   const [orders, setOrders]         = useState<BotOrder[]>([])
-  const [ordersLoaded, setOrdersLoaded] = useState(false)
+  const [, setOrdersLoaded] = useState(false)
   const [ordersLoading, setOrdersLoading] = useState(false)
 
   // LTP for expanded orders
@@ -490,14 +484,6 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
                        : bot.indicator === 'tt_bands' ? 'TT BANDS'
                        : 'DTR'
 
-  // Last 2 signals for this bot
-  const botSignals = [...signals]
-    .sort((a, b) => {
-      const ta = a.fired_at ? new Date(a.fired_at).getTime() : 0
-      const tb = b.fired_at ? new Date(b.fired_at).getTime() : 0
-      return tb - ta
-    })
-    .slice(0, 2)
   // Levels: prefer live-fetched cardLevels, fall back to chartData (if ever populated)
   const levels = cardLevels ?? chartData?.levels ?? null
 
@@ -522,7 +508,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
   }, [showOrders, orders])
 
   const handleToggleOrders = async () => {
-    if (!showOrders && !ordersLoaded) {
+    if (!showOrders) {
       setOrdersLoading(true)
       try {
         const r = await botsAPI.botOrders(bot.id)
@@ -622,8 +608,8 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
           </div>
         </div>
 
-        {/* ── ROW 2: Levels + Position + P&L ── */}
-        <div style={{ padding: '0 16px 6px 34px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
+        {/* ── ROW 2: Levels + LTP + Position chip + P&L ── */}
+        <div style={{ padding: '0 16px 8px 34px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
           {bot.indicator === 'dtr' && levels && <>
             <span><span style={{ color: 'var(--text-mute)' }}>UPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.upp1?.toLocaleString('en-IN') ?? '—'}</span></span>
             <span><span style={{ color: 'var(--text-mute)' }}>LPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.lpp1?.toLocaleString('en-IN') ?? '—'}</span></span>
@@ -648,47 +634,18 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
               </span>
             )
           })()}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            {openOrder ? (
-              <span style={neuChip(openOrder.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>
-                {openOrder.direction === 'BUY' ? 'LONG' : 'SHORT'} @{openOrder.entry_price?.toLocaleString('en-IN') ?? '—'}
-              </span>
-            ) : (
-              <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>FLAT</span>
-            )}
-            {livePnl != null && (
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: livePnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                {livePnl >= 0 ? '+' : ''}₹{Math.round(livePnl).toLocaleString('en-IN')}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* ── ROW 3: Last 2 signals — compact, no header label ── */}
-        <div style={{ padding: '0 16px 8px 34px' }}>
-          {botSignals.length === 0 ? (
-            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>No signals today</span>
+          <span style={{ color: 'var(--border)', fontSize: 14, userSelect: 'none' }}>·</span>
+          {openOrder ? (
+            <span style={neuChip(openOrder.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>
+              {openOrder.direction === 'BUY' ? 'LONG' : 'SHORT'} @{openOrder.entry_price?.toLocaleString('en-IN') ?? '—'}
+            </span>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {botSignals.map(sig => {
-                const isBuy = sig.direction === 'BUY' || sig.direction === 'buy'
-                const statusColor2 = sig.status === 'fired' ? 'var(--green)' : sig.status === 'error' ? '#FF4444' : '#F59E0B'
-                return (
-                  <div key={sig.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                    <span style={{ color: isBuy ? 'var(--green)' : '#FF4444', fontWeight: 700, fontSize: 12, width: 10, flexShrink: 0 }}>{isBuy ? '↑' : '↓'}</span>
-                    <span style={{ color: isBuy ? 'var(--green)' : '#FF4444', fontWeight: 700 }}>{isBuy ? 'BUY' : 'SELL'}</span>
-                    <span style={{ color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
-                      {sig.fired_at ? new Date(sig.fired_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}
-                    </span>
-                    {sig.trigger_price != null && (
-                      <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>₹{sig.trigger_price.toLocaleString('en-IN')}</span>
-                    )}
-                    <span style={{ ...neuChip(statusColor2), fontSize: 9, padding: '1px 7px' }}>{sig.status.toUpperCase()}</span>
-                    {sig.reason && <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>{sig.reason}</span>}
-                  </div>
-                )
-              })}
-            </div>
+            <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>FLAT</span>
+          )}
+          {livePnl != null && (
+            <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: livePnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {livePnl >= 0 ? '+' : ''}₹{Math.round(livePnl).toLocaleString('en-IN')}
+            </span>
           )}
         </div>
 
@@ -750,7 +707,7 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
                       return (
                         <tr key={o.id}>
                           <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{i + 1}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.instrument || '—'}</td>
+                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[o.instrument, o.expiry].filter(Boolean).join('') || '—'}</td>
                           <td style={{ padding: '5px 6px', borderBottom: '0.5px solid var(--border)' }}>
                             <span style={neuChip(o.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>{o.direction}</span>
                           </td>
@@ -833,9 +790,6 @@ export default function IndicatorsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading]     = useState(true)
-  const [signals, setSignals]     = useState<BotSignal[]>([])
-  const signalTimerRef            = useRef<ReturnType<typeof setInterval> | null>(null)
-
   // Load bots + accounts on mount
   useEffect(() => {
     Promise.all([
@@ -844,19 +798,7 @@ export default function IndicatorsPage() {
     ]).finally(() => setLoading(false))
   }, [isPractixMode])
 
-  // Load signals + start 30s refresh
-  const fetchSignals = () => {
-    botsAPI.signalsToday()
-      .then(r => setSignals(r.data?.signals || []))
-      .catch(() => {})
-  }
-  useEffect(() => {
-    fetchSignals()
-    signalTimerRef.current = setInterval(fetchSignals, 30000)
-    return () => { if (signalTimerRef.current) clearInterval(signalTimerRef.current) }
-  }, [isPractixMode])
-
-  // WebSocket — refresh signals on bot signal fire
+  // WebSocket — refresh bots list on notifications
   useEffect(() => {
     const wsUrl = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000')
       .replace('http://', 'ws://')
@@ -865,7 +807,9 @@ export default function IndicatorsPage() {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
-        if (msg.type === 'notification' && msg.data?.algo_name) fetchSignals()
+        if (msg.type === 'notification' && msg.data?.algo_name) {
+          // no-op — per-card chart-data fetch handles live updates
+        }
       } catch {}
     }
     ws.onerror = () => {}
@@ -909,7 +853,6 @@ export default function IndicatorsPage() {
   const botCardProps = (bot: Bot) => ({
     key: bot.id,
     bot, accounts,
-    signals: signals.filter(s => s.bot_id === bot.id),
     onUpdate: handleUpdate,
     onArchive: handleArchive,
     onUnarchive: handleUnarchive,
