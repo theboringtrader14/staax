@@ -1,5 +1,5 @@
 /* STAAX Brand Design System v2.0 — Orange / Void / Glass */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Syne:wght@700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ── Design Tokens ──────────────────────────────────────── */
 :root {
@@ -75,9 +75,9 @@
   --ease-out:   cubic-bezier(0,0,0.2,1);
   --dur-fast:120ms; --dur-mid:220ms; --dur-slow:400ms;
 
-  --font-display:'Syne', sans-serif;
-  --font-body:   'DM Sans','Calibri',sans-serif;
-  --font-mono:   'JetBrains Mono',monospace;
+  --font-display: 'Syne', sans-serif;
+  --font-body:    'Space Grotesk', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
 
   color-scheme:dark;
 }
@@ -133,7 +133,7 @@
 html { background:var(--bg,#1a1d25); }
 body {
   background:var(--bg,var(--bg-primary)); color:var(--text,#F0EDE8);
-  font-family:'Inter','DM Sans','Calibri',sans-serif; font-size:13px; line-height:1.6;
+  font-family: var(--font-body); font-size:13px; font-weight:400; line-height:1.6;
   -webkit-font-smoothing:antialiased;
 }
 

@@ -64,7 +64,7 @@ function NeuBtn({ children, onClick, disabled, accent, danger, style: extraStyle
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     height: 32, padding: '0 14px', borderRadius: 100,
     border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
-    fontSize: 11, fontWeight: 600, fontFamily: 'Inter, sans-serif',
+    fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-body)',
     transition: 'box-shadow 0.12s, opacity 0.12s',
     opacity: disabled ? 0.45 : 1,
     ...(accent
@@ -323,7 +323,7 @@ export default function DashboardPanel() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: overallColor, boxShadow: `0 0 8px ${overallColor}`, flexShrink: 0, animation: 'dotPulse 2.2s ease-in-out infinite' }} />
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>System Monitor</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>System Monitor</span>
             <span style={{ fontSize: 10, color: overallColor, fontWeight: 600 }}>· {statusLabel}</span>
           </div>
         </div>
@@ -488,7 +488,7 @@ export default function DashboardPanel() {
                     <div style={{ fontSize: 9, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{svc.detail}</div>
                   </div>
                   {/* Status chip — inset */}
-                  <span style={{ padding: '3px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, fontFamily: 'Inter, sans-serif', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: svc.status === 'running' ? '#0ea66e' : 'var(--text-mute)', flexShrink: 0 }}>
+                  <span style={{ padding: '3px 8px', borderRadius: 20, fontSize: 9, fontWeight: 600, fontFamily: 'var(--font-mono)', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: svc.status === 'running' ? '#0ea66e' : 'var(--text-mute)', flexShrink: 0 }}>
                     {svc.status}
                   </span>
                   {svc.status === 'stopped'  && (

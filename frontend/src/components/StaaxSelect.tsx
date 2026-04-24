@@ -44,7 +44,7 @@ export function StaaxSelect({ value, onChange, options, width, height, borderRad
         borderRadius: borderRadius || '100px',
         color: 'var(--text-dim)',
         fontSize: '12px',
-        fontFamily: 'Inter, sans-serif',
+        fontFamily: 'var(--font-body)',
         fontWeight: 500,
         cursor: 'pointer',
         textAlign: 'left',
@@ -86,7 +86,7 @@ export function StaaxSelect({ value, onChange, options, width, height, borderRad
             <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
               style={{
                 padding: '9px 12px', fontSize: '12px',
-                fontFamily: 'Inter, sans-serif', fontWeight: 500,
+                fontFamily: 'var(--font-body)', fontWeight: 500,
                 cursor: 'pointer', borderRadius: '10px',
                 color: o.value === value ? 'var(--accent)' : 'var(--text-dim)',
                 background: o.value === value ? 'var(--accent-dim)' : 'transparent',

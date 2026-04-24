@@ -114,7 +114,7 @@ export default function AIAgentPage() {
     padding: '28px 28px 0 28px',
     display: 'flex',
     flexDirection: 'column',
-    fontFamily: 'var(--font-body, Inter, sans-serif)',
+    fontFamily: 'var(--font-body)',
   }
 
   const glassCard: CSSProperties = {

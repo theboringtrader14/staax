@@ -200,7 +200,7 @@ export default function LandingPage() {
       minHeight: '100vh',
       background: '#050510',
       color: '#f0f0ff',
-      fontFamily: "'DM Sans', sans-serif",
+      fontFamily: "var(--font-body)",
       overflowX: 'hidden',
       position: 'relative',
     }}>

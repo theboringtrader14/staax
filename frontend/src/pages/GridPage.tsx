@@ -430,7 +430,7 @@ export default function GridPage() {
                 background:'var(--bg)', border:'none',
                 boxShadow: showArch ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                 color: showArch ? 'var(--accent)' : 'var(--text-dim)',
-                fontSize:12, fontWeight:500, fontFamily:'Inter, sans-serif',
+                fontSize:12, fontWeight:500, fontFamily:'var(--font-body)',
                 cursor:'pointer', flexShrink:0, transition:'box-shadow 0.15s, color 0.15s',
               }}
             >
@@ -440,7 +440,7 @@ export default function GridPage() {
                   position:'absolute', top:-5, right:-5,
                   minWidth:16, height:16, borderRadius:8,
                   background:'var(--accent)', color:'#fff',
-                  fontSize:9, fontWeight:700, fontFamily:'Inter, sans-serif',
+                  fontSize:9, fontWeight:700, fontFamily:'var(--font-body)',
                   display:'flex', alignItems:'center', justifyContent:'center',
                   padding:'0 4px', lineHeight:1,
                   boxShadow:'0 1px 4px rgba(0,0,0,0.2)',
@@ -458,7 +458,7 @@ export default function GridPage() {
                 height:32, padding:'0 14px', borderRadius:100,
                 background:'var(--bg)', border:'none',
                 color:'var(--text-dim)', fontSize:12, fontWeight:600,
-                fontFamily:'Inter, sans-serif', cursor:'pointer',
+                fontFamily:'var(--font-body)', cursor:'pointer',
                 boxShadow:'var(--neu-raised-sm)',
                 flexShrink:0, display:'flex', alignItems:'center', gap:5,
                 animation:'aiGlow 3s ease-in-out infinite',
@@ -480,7 +480,7 @@ export default function GridPage() {
                 height:32, padding:'0 16px', borderRadius:100,
                 background:'var(--bg)', border:'none',
                 color:'var(--accent)', fontSize:12, fontWeight:600,
-                fontFamily:'Inter, sans-serif', cursor:'pointer',
+                fontFamily:'var(--font-body)', cursor:'pointer',
                 boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
                 flexShrink:0,
               }}
@@ -498,7 +498,7 @@ export default function GridPage() {
       {showArch && (
         <div style={{ flexShrink:0, marginLeft:'28px', marginRight:'28px', marginBottom:'12px' }}>
           <div style={{ background:'var(--bg)', borderRadius:16, boxShadow:'var(--neu-inset)', padding:'14px 16px' }}>
-            <div style={{ fontSize:'10px', fontWeight:700, color:'var(--text-mute)', marginBottom:'12px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'Inter, sans-serif' }}>Archived</div>
+            <div style={{ fontSize:'10px', fontWeight:700, color:'var(--text-mute)', marginBottom:'12px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-body)' }}>Archived</div>
           {loading
             ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Loading…</span>
             : archived.length === 0
