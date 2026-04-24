@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { PencilSimple, FloppyDisk } from '@phosphor-icons/react'
+import { PencilSimple, FloppyDisk, CheckCircle, Warning } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -201,8 +201,8 @@ export default function AccountsDrawer() {
     try {
       await accountsAPI.updateNickname(acc.id, newName)
       setAccounts(a => a.map(x => x.id === acc.id ? { ...x, name: newName } : x))
-      showSaved(acc.id, '✅ Nickname saved')
-    } catch { showSaved(acc.id, '⚠️ Save failed') }
+      showSaved(acc.id, 'ok:Saved')
+    } catch { showSaved(acc.id, 'err:Failed') }
     setNickEditing(n => ({ ...n, [acc.id]: false }))
   }
 
@@ -241,8 +241,8 @@ export default function AccountsDrawer() {
       if (!isNaN(tp)) payload.global_tp = tp
       if (Object.keys(payload).length > 0) await accountsAPI.updateGlobalRisk(acc.id, payload)
       setAccounts(a => a.map(x => x.id === acc.id ? { ...x, globalSL: !isNaN(sl) ? sl : x.globalSL, globalTP: !isNaN(tp) ? tp : x.globalTP } : x))
-      showSaved(acc.id + '_risk', '✅ Saved')
-    } catch { showSaved(acc.id + '_risk', '⚠️ Failed') }
+      showSaved(acc.id + '_risk', 'ok:Saved')
+    } catch { showSaved(acc.id + '_risk', 'err:Failed') }
     finally { setSaving(s => ({ ...s, [acc.id + '_risk']: false })) }
   }
 
@@ -269,7 +269,7 @@ export default function AccountsDrawer() {
       await accountsAPI.create({ broker: addForm.broker, nickname: addForm.nickname.trim(), client_id: addForm.client_id.trim(), api_key: addForm.api_key.trim() || undefined, api_secret: addForm.api_secret.trim() || undefined, totp_secret: addForm.totp_secret.trim() || undefined, scope: addForm.scope || 'fo' })
       setAddModal(false); setAddError('')
       fetchAccounts()
-      setAddToast('✅ Account added'); setTimeout(() => setAddToast(''), 3000)
+      setAddToast('ok:Account added'); setTimeout(() => setAddToast(''), 3000)
     } catch (e: any) { setAddError(e?.response?.data?.detail || 'Failed to add account') }
     finally { setAddSaving(false) }
   }
@@ -338,9 +338,16 @@ export default function AccountsDrawer() {
           )}
         </div>
 
-        {saved[acc.id] && (
-          <div style={{ marginTop: 8, fontSize: 11, color: saved[acc.id].startsWith('✅') ? '#0ea66e' : '#F59E0B', fontWeight: 600 }}>{saved[acc.id]}</div>
-        )}
+        {saved[acc.id] && (() => {
+          const ok = saved[acc.id].startsWith('ok:')
+          const label = saved[acc.id].replace(/^(ok|err):/, '')
+          return (
+            <div style={{ marginTop: 8, fontSize: 11, color: ok ? '#0ea66e' : '#F59E0B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {ok ? <CheckCircle size={13} weight="fill" /> : <Warning size={13} weight="fill" />}
+              {label}
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -407,7 +414,16 @@ export default function AccountsDrawer() {
                 style={{ width: '100%', height: 36, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, marginTop: 4 }}>
                 + Add Account
               </button>
-              {addToast && <div style={{ marginTop: 10, fontSize: 12, color: '#0ea66e', fontWeight: 600, textAlign: 'center' }}>{addToast}</div>}
+              {addToast && (() => {
+                const ok = addToast.startsWith('ok:')
+                const label = addToast.replace(/^(ok|err):/, '')
+                return (
+                  <div style={{ marginTop: 10, fontSize: 12, color: ok ? '#0ea66e' : '#F59E0B', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    {ok ? <CheckCircle size={13} weight="fill" /> : <Warning size={13} weight="fill" />}
+                    {label}
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -571,7 +587,16 @@ export default function AccountsDrawer() {
                       <FloppyDisk size={15} weight="bold" />
                     </button>
                   </div>
-                  {saved[acc.id + '_risk'] && <div style={{ marginTop: 8, fontSize: 11, color: '#0ea66e', fontWeight: 600 }}>{saved[acc.id + '_risk']}</div>}
+                  {saved[acc.id + '_risk'] && (() => {
+                    const ok = saved[acc.id + '_risk'].startsWith('ok:')
+                    const label = saved[acc.id + '_risk'].replace(/^(ok|err):/, '')
+                    return (
+                      <div style={{ marginTop: 8, fontSize: 11, color: ok ? '#0ea66e' : '#F59E0B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {ok ? <CheckCircle size={13} weight="fill" /> : <Warning size={13} weight="fill" />}
+                        {label}
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
