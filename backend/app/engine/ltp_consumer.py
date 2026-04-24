@@ -67,6 +67,7 @@ class AngelOneTickerAdapter:
         self._running                       = False
         self._connected                     = False   # True while WebSocket is open
         self._last_tick_at: Optional[str]   = None    # ISO timestamp of last tick received
+        self._last_ao_tick: float           = 0.0     # monotonic — for per-adapter staleness in BrokerReconnectManager
         self._corr_id                       = "staax_ltp"
         self._mcx_tokens: Set[str]          = set()   # tokens that need exchangeType=5
         self._bfo_tokens: Set[str]          = set()   # tokens that need exchangeType=4 (BFO — BSE F&O)
@@ -74,6 +75,7 @@ class AngelOneTickerAdapter:
         self._last_reconnect_at: Optional[str] = None
         self._on_reconnect_callbacks: List[Callable] = []  # fired on every _on_open
         self._force_stopped: bool           = False   # True when restart() closes intentionally
+        self._reconnect_lock                = asyncio.Lock()  # prevents concurrent reconnects
 
         # Debug: log credential presence at construction time
         ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
@@ -235,8 +237,10 @@ class AngelOneTickerAdapter:
     def _on_data(self, ws, message):
         """Hot path — normalise Angel One tick and dispatch to async loop."""
         logger.debug(f"[AO-DEBUG] _on_data — raw message type={type(message).__name__}, len={len(message) if hasattr(message, '__len__') else 'N/A'}")
+        import time as _time
         from datetime import datetime, timezone
         self._last_tick_at = datetime.now(timezone.utc).isoformat()
+        self._last_ao_tick = _time.monotonic()   # per-adapter stamp for BrokerReconnectManager Fix 4
         if not self._loop or not self._on_tick_cb:
             return
         try:
@@ -261,14 +265,22 @@ class AngelOneTickerAdapter:
         logger.error(f"[AO] ❌ SmartStream error: {error}")
 
     def _on_close(self, ws):
-        logger.warning("[AO] ⚠️ SmartStream connection closed")
+        logger.warning("[AO] SmartStream connection closed")
         self._running   = False
         self._connected = False
         if self._force_stopped:
             logger.info("[AO] _on_close: intentional stop — no auto-reconnect")
             return
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._reconnect(), self._loop)
+            asyncio.run_coroutine_threadsafe(self._safe_reconnect(), self._loop)
+
+    async def _safe_reconnect(self) -> None:
+        """Reconnect with lock — prevents concurrent reconnect storms from multiple on_close events."""
+        if self._reconnect_lock.locked():
+            logger.info("[SMARTSTREAM] Reconnect already in progress — skipping duplicate")
+            return
+        async with self._reconnect_lock:
+            await self._reconnect()
 
     def register_on_reconnect_callback(self, cb: Callable):
         """
@@ -283,21 +295,22 @@ class AngelOneTickerAdapter:
         """
         Hard-restart SmartStream: close the current WebSocket and reconnect from scratch.
         Called by BrokerReconnectManager when the feed is stale or _connected=False.
-        Sets _force_stopped so _on_close does NOT trigger another _reconnect() loop.
+        Uses _reconnect_lock to prevent race with _safe_reconnect() from on_close.
         """
-        logger.info("[AO] 🔄 restart() — closing WebSocket for hard reconnect...")
-        self._force_stopped = True
-        self._running       = False
-        self._connected     = False
-        try:
-            if self._sws:
-                self._sws.close_connection()
-        except Exception as e:
-            logger.debug(f"[AO] close_connection in restart (expected): {e}")
-        await asyncio.sleep(1)  # Let the close propagate
-        self._force_stopped   = False
-        self._reconnect_count = 0  # Reset so _reconnect() doesn't think it already gave up
-        await self._reconnect()
+        async with self._reconnect_lock:
+            logger.info("[AO] restart() — closing WebSocket for hard reconnect...")
+            self._force_stopped = True
+            self._running       = False
+            self._connected     = False
+            try:
+                if self._sws:
+                    self._sws.close_connection()
+            except Exception as e:
+                logger.debug(f"[AO] close_connection in restart (expected): {e}")
+            await asyncio.sleep(1)  # Let the close propagate
+            self._force_stopped   = False
+            self._reconnect_count = 0  # Reset so _reconnect() doesn't think it already gave up
+            await self._reconnect()
 
     def update_feed_token(self, new_token: str):
         """
@@ -396,7 +409,9 @@ class LTPConsumer:
         self._ws_manager                      = None   # injected via set_ws_manager()
         self._running  = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self.last_tick_time: Optional[float]  = None   # monotonic time of last tick — for BrokerReconnectManager
+        self.last_tick_time: Optional[float]  = None   # monotonic — last tick from any source
+        self._last_ao_tick: float             = 0.0    # monotonic — Angel One ticks only (Fix 4)
+        self._last_zd_tick: float             = 0.0    # monotonic — Zerodha ticks only (Fix 4)
         self._started_at: Optional[float]     = None   # monotonic time feed was started
         self._ltp_map: Dict[int, float]       = {}     # in-memory cache for sync get_ltp()
         self._ltp_timestamps: Dict[int, float] = {}    # monotonic time of last tick per token
@@ -561,6 +576,8 @@ class LTPConsumer:
     def _on_ticks(self, ws, ticks):
         """Hot path — dispatch Zerodha ticks to async loop."""
         if ticks and self._loop:
+            import time as _time
+            self._last_zd_tick = _time.monotonic()   # per-adapter stamp (Fix 4)
             asyncio.run_coroutine_threadsafe(
                 self._process_ticks(ticks), self._loop
             )

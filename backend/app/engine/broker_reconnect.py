@@ -34,12 +34,14 @@ from zoneinfo import ZoneInfo
 logger = logging.getLogger(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
-STALE_THRESHOLD_SECONDS  = 5    # Seconds of tick silence before reconnect
+STALE_THRESHOLD_SECONDS  = 30   # Fix 2: raised from 5→30 — 5s was too aggressive, caused false reconnects
 ZOMBIE_THRESHOLD_SECONDS = 60   # Connected but no tick for this long → force reconnect
 _reconnecting: bool = False      # Guard against concurrent reconnect attempts
 
 
 class BrokerReconnectManager:
+
+    MIN_RESTART_INTERVAL = 60.0   # Fix 3: never restart more than once per minute
 
     def __init__(self):
         self._ltp_consumer = None
@@ -48,6 +50,7 @@ class BrokerReconnectManager:
         self._consecutive_failures: int = 0
         self._max_consecutive_failures: int = 10   # After this → CRITICAL alert
         self._status_log_ticks: int = 0            # For 5-minute periodic log (30 × 10s = 300s)
+        self._last_restart_at: float = 0.0         # Fix 3: monotonic timestamp of last restart
 
     def wire(self, ltp_consumer) -> None:
         """Wire the LTPConsumer instance. Called during engine startup."""
@@ -97,58 +100,67 @@ class BrokerReconnectManager:
             self._status_log_ticks = 0
             self._log_status()
 
+        # ── Per-adapter staleness (Fix 4) ─────────────────────────────────────
+        angel    = getattr(self._ltp_consumer, '_angel_adapter', None)
+        now_mono = _time.monotonic()
+
+        # Angel One last tick: read from adapter._last_ao_tick (stamped in _on_data)
+        last_ao_tick = getattr(angel, '_last_ao_tick', 0.0) if angel else 0.0
+        ao_age       = (now_mono - last_ao_tick) if last_ao_tick > 0 else None
+
         # ── Fast path: _connected=False → immediate reconnect ─────────────────
-        angel = getattr(self._ltp_consumer, '_angel_adapter', None)
         is_ws_connected = getattr(angel, '_connected', True) if angel else True
 
         if not is_ws_connected:
             _reconnecting = True
             try:
-                logger.warning("[RECONNECT MGR] ⚠️ SmartStream _connected=False — triggering reconnect")
+                logger.warning("[RECONNECT MGR] SmartStream _connected=False — triggering reconnect")
                 await self._do_reconnect()
             finally:
                 _reconnecting = False
             return
 
-        # ── Zombie detection: connected but tick stale > 60s ─────────────────
-        last_tick = getattr(self._ltp_consumer, 'last_tick_time', None)
-        now_mono  = _time.monotonic()
+        # ── Zombie detection: connected but AO tick stale > 60s ───────────────
+        if ao_age is not None and ao_age > ZOMBIE_THRESHOLD_SECONDS:
+            _reconnecting = True
+            try:
+                logger.warning(
+                    f"[RECONNECT MGR] Zombie WebSocket — AO connected but no tick for "
+                    f"{ao_age:.0f}s (>{ZOMBIE_THRESHOLD_SECONDS}s) — forcing reconnect"
+                )
+                await self._do_reconnect()
+            finally:
+                _reconnecting = False
+            return
 
-        if last_tick is not None:
-            elapsed = now_mono - last_tick
-            if elapsed > ZOMBIE_THRESHOLD_SECONDS:
-                _reconnecting = True
-                try:
-                    logger.warning(
-                        f"[RECONNECT MGR] 🧟 Zombie WebSocket — connected but no tick for "
-                        f"{elapsed:.0f}s (>{ZOMBIE_THRESHOLD_SECONDS}s) — forcing reconnect"
-                    )
-                    await self._do_reconnect()
-                finally:
-                    _reconnecting = False
-                return
-
-        # ── Normal staleness check ────────────────────────────────────────────
-        # NOTE: last_tick_time and _started_at are time.monotonic() floats.
-        if last_tick is None:
+        # ── Fix 4: Angel One-specific staleness check ─────────────────────────
+        # Use AO tick age independently — Zerodha ticks won't mask a dead AO feed.
+        if ao_age is None:
+            # AO never ticked — fall back to legacy last_tick_time for startup grace period
             started_at = getattr(self._ltp_consumer, '_started_at', None)
-            if started_at is None:
-                return
-            if (now_mono - started_at) < STALE_THRESHOLD_SECONDS:
-                return   # Give it time on first start
-            # Fall through to reconnect
+            if started_at is None or (now_mono - started_at) < STALE_THRESHOLD_SECONDS:
+                return   # Not started yet or within startup grace
+            # Started but no AO tick yet — will fall through to reconnect
         else:
-            elapsed = now_mono - last_tick
-            if elapsed < STALE_THRESHOLD_SECONDS:
+            if ao_age < STALE_THRESHOLD_SECONDS:
                 self._consecutive_failures = 0
-                return
+                return   # AO is healthy
 
-        # ── Feed is stale — attempt reconnect ────────────────────────────────
+        # ── AO feed stale — apply cooldown guard (Fix 3) then reconnect ───────
+        cooldown_remaining = self.MIN_RESTART_INTERVAL - (now_mono - self._last_restart_at)
+        if cooldown_remaining > 0:
+            logger.info(
+                f"[RECONNECT MGR] Cooldown active — {cooldown_remaining:.0f}s remaining "
+                f"(AO stale {ao_age:.0f}s)" if ao_age else
+                f"[RECONNECT MGR] Cooldown active — {cooldown_remaining:.0f}s remaining"
+            )
+            return
+
         _reconnecting = True
         try:
+            ao_age_str = f"{ao_age:.0f}s" if ao_age else "never"
             logger.warning(
-                f"[RECONNECT MGR] ⚠️ Market feed inactive for "
-                f"{STALE_THRESHOLD_SECONDS}s — reconnecting "
+                f"[RECONNECT MGR] AO stale ({ao_age_str}) — restarting "
                 f"(attempt #{self._reconnect_count + 1})"
             )
             await self._do_reconnect()
@@ -192,6 +204,7 @@ class BrokerReconnectManager:
             self._reconnect_count     += 1
             self._consecutive_failures = 0
             self._last_reconnect_at    = datetime.now(timezone.utc)
+            self._last_restart_at      = _time.monotonic()   # Fix 3: stamp for cooldown
 
             logger.info(
                 f"[RECONNECT MGR] ✅ Reconnect initiated "
@@ -214,15 +227,18 @@ class BrokerReconnectManager:
 
     def _log_status(self) -> None:
         """5-minute periodic SmartStream health log."""
-        angel        = getattr(self._ltp_consumer, '_angel_adapter', None)
-        is_connected = getattr(angel, '_connected', None)
+        angel         = getattr(self._ltp_consumer, '_angel_adapter', None)
+        is_connected  = getattr(angel, '_connected', None)
         ao_reconnects = getattr(angel, '_reconnect_count', 0)
-        last_tick    = getattr(self._ltp_consumer, 'last_tick_time', None)
-        now_mono     = _time.monotonic()
-        tick_age     = round(now_mono - last_tick, 1) if last_tick else None
+        now_mono      = _time.monotonic()
+        last_ao_tick  = getattr(angel, '_last_ao_tick', 0.0) if angel else 0.0
+        last_zd_tick  = getattr(self._ltp_consumer, '_last_zd_tick', 0.0)
+        ao_age        = round(now_mono - last_ao_tick, 1) if last_ao_tick > 0 else None
+        zd_age        = round(now_mono - last_zd_tick, 1) if last_zd_tick > 0 else None
         logger.info(
-            f"[RECONNECT MGR] 📊 5-min status — connected={is_connected} "
-            f"tick_age={tick_age}s mgr_reconnects={self._reconnect_count} "
+            f"[RECONNECT MGR] 5-min status — ao_connected={is_connected} "
+            f"ao_tick_age={ao_age}s zd_tick_age={zd_age}s "
+            f"mgr_reconnects={self._reconnect_count} "
             f"adapter_reconnects={ao_reconnects} consecutive_failures={self._consecutive_failures}"
         )
 
