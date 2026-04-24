@@ -1322,12 +1322,13 @@ export default function OrdersPage() {
                     onClick={() => date && setSelectedDate(date)}
                     style={{
                       flex: 1, padding: '12px 0', textAlign: 'center' as const,
-                      background: isActive ? 'linear-gradient(to top, rgba(255,107,0,0.09), transparent)' : 'transparent',
+                      background: 'none',
                       border: 'none',
                       borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
                       color: isActive ? 'var(--accent)' : 'var(--text-dim)',
-                      fontFamily: 'var(--font-display)', fontSize: '12px', fontWeight: 600,
-                      cursor: 'pointer', transition: 'all 0.15s ease',
+                      fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
+                      letterSpacing: '1px', textTransform: 'uppercase' as const,
+                      cursor: 'pointer', transition: 'all 0.2s ease',
                       display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px',
                     }}
                   >
@@ -1337,7 +1338,7 @@ export default function OrdersPage() {
                     {isHoliday ? (
                       <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
                     ) : pnl != null ? (
-                      <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                         {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
                       </span>
                     ) : (

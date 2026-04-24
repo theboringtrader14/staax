@@ -195,10 +195,14 @@ class AngelOneTickerAdapter:
         return token_list
 
     def _on_open(self, ws):
+        _is_reconnect = self._reconnect_count > 0
+        import time as _time
+        _open_at = _time.monotonic()
         self._connected = True
         self._running   = True   # connect() blocks forever so the line after it is dead code; set here instead
         self._reconnect_count = 0  # Reset on every successful connect so _MAX_RECONNECT_ATTEMPTS resets per-session
         logger.info("[AO-DEBUG] _on_open fired — SmartStream connected ✅")
+        _n_subscribed = len(self._subscribed)
         if self._subscribed and self._sws:
             try:
                 token_list = self._build_token_list(self._subscribed)
@@ -225,6 +229,26 @@ class AngelOneTickerAdapter:
                 logger.info(f"[AO] ✅ Subscribed {len(self._subscribed)} tokens on connect")
             except Exception as e:
                 logger.error(f"[AO] Subscription error on connect: {e}")
+
+        # ── Event log: connect / reconnect ───────────────────────────────────
+        if self._loop and self._loop.is_running():
+            try:
+                from app.engine import event_logger as _ev
+                if _is_reconnect:
+                    _elapsed = _time.monotonic() - getattr(self, '_reconnect_started_at', _open_at)
+                    asyncio.run_coroutine_threadsafe(
+                        _ev.log("success", f"SmartStream reconnected after {_elapsed:.0f}s — resubscribed {_n_subscribed} tokens",
+                                algo_name=None, source="smartstream"),
+                        self._loop,
+                    )
+                else:
+                    asyncio.run_coroutine_threadsafe(
+                        _ev.log("success", f"SmartStream connected — subscribed {_n_subscribed} tokens",
+                                algo_name=None, source="smartstream"),
+                        self._loop,
+                    )
+            except Exception as _ev_err:
+                logger.warning(f"[AO] event_logger call failed in _on_open: {_ev_err}")
 
         # Fire reconnect callbacks (e.g. AlgoRunner.rearm_wt_monitors)
         if self._on_reconnect_callbacks and self._loop and self._loop.is_running():
@@ -271,6 +295,17 @@ class AngelOneTickerAdapter:
         if self._force_stopped:
             logger.info("[AO] _on_close: intentional stop — no auto-reconnect")
             return
+        # ── Event log: disconnect (non-intentional) ───────────────────────────
+        if self._loop and self._loop.is_running():
+            try:
+                from app.engine import event_logger as _ev
+                asyncio.run_coroutine_threadsafe(
+                    _ev.log("warning", "SmartStream disconnected — scheduling reconnect",
+                            algo_name=None, source="smartstream"),
+                    self._loop,
+                )
+            except Exception as _ev_err:
+                logger.warning(f"[AO] event_logger call failed in _on_close: {_ev_err}")
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._safe_reconnect(), self._loop)
 
@@ -337,7 +372,31 @@ class AngelOneTickerAdapter:
                 f"[AO] ❌ SmartStream gave up after {self._MAX_RECONNECT_ATTEMPTS} reconnect attempts. "
                 "Manual intervention required — call POST /api/v1/system/smartstream/start"
             )
+            # ── Event log: reconnect failed / max attempts ────────────────────
+            try:
+                from app.engine import event_logger as _ev
+                await _ev.log(
+                    "error",
+                    f"SmartStream reconnect failed after {self._MAX_RECONNECT_ATTEMPTS} attempts — manual intervention needed",
+                    algo_name=None, source="smartstream",
+                )
+            except Exception as _ev_err:
+                logger.warning(f"[AO] event_logger call failed (max attempts): {_ev_err}")
             return
+
+        # ── Event log: reconnect attempt ─────────────────────────────────────
+        try:
+            from app.engine import event_logger as _ev
+            await _ev.log(
+                "info",
+                f"SmartStream reconnecting... attempt {self._reconnect_count + 1}",
+                algo_name=None, source="smartstream",
+            )
+        except Exception as _ev_err:
+            logger.warning(f"[AO] event_logger call failed (reconnect attempt): {_ev_err}")
+
+        import time as _time
+        self._reconnect_started_at = _time.monotonic()
 
         backoff = self._RECONNECT_BACKOFF[
             min(self._reconnect_count, len(self._RECONNECT_BACKOFF) - 1)

@@ -919,19 +919,18 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Tab bar */}
-      <div style={{ flexShrink: 0, display: 'flex', borderBottom: '0.5px solid var(--border)', margin: '0 28px' }}>
+      <div style={{ flexShrink: 0, display: 'flex', borderBottom: '1px solid var(--border)', margin: '0 28px' }}>
         {TABS.map(tab => (
           <button key={tab}
             onClick={() => { setActiveTab(tab); localStorage.setItem('analytics_tab', tab) }}
             style={{
               flex: 1, padding: '10px 0', textAlign: 'center', border: 'none', cursor: 'pointer',
-              fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-display)',
-              background: activeTab === tab
-                ? 'linear-gradient(to top, rgba(255,107,0,0.09), transparent)'
-                : 'transparent',
+              fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)',
+              letterSpacing: '1px', textTransform: 'uppercase',
+              background: 'none',
               borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
               color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
-              transition: 'all 0.15s ease',
+              transition: 'all 0.2s ease',
               marginBottom: -1,
             }}>
             {tab}

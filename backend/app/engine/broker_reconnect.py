@@ -51,6 +51,7 @@ class BrokerReconnectManager:
         self._max_consecutive_failures: int = 10   # After this → CRITICAL alert
         self._status_log_ticks: int = 0            # For 5-minute periodic log (30 × 10s = 300s)
         self._last_restart_at: float = 0.0         # Fix 3: monotonic timestamp of last restart
+        self._last_cooldown_log_at: float = 0.0    # Track last cooldown event log — only log once per cooldown period
 
     def wire(self, ltp_consumer) -> None:
         """Wire the LTPConsumer instance. Called during engine startup."""
@@ -154,6 +155,19 @@ class BrokerReconnectManager:
                 f"(AO stale {ao_age:.0f}s)" if ao_age else
                 f"[RECONNECT MGR] Cooldown active — {cooldown_remaining:.0f}s remaining"
             )
+            # Only emit one event_log entry per cooldown period (not every 10s poll)
+            if self._last_cooldown_log_at == 0.0 or (now_mono - self._last_cooldown_log_at) >= self.MIN_RESTART_INTERVAL:
+                self._last_cooldown_log_at = now_mono
+                try:
+                    from app.engine import event_logger as _ev
+                    import asyncio as _asyncio
+                    _asyncio.ensure_future(
+                        _ev.log("info",
+                                f"SmartStream reconnect cooldown — {cooldown_remaining:.0f}s remaining",
+                                algo_name=None, source="smartstream")
+                    )
+                except Exception as _ev_err:
+                    logger.warning(f"[RECONNECT MGR] event_logger call failed (cooldown): {_ev_err}")
             return
 
         _reconnecting = True
@@ -241,6 +255,18 @@ class BrokerReconnectManager:
             f"mgr_reconnects={self._reconnect_count} "
             f"adapter_reconnects={ao_reconnects} consecutive_failures={self._consecutive_failures}"
         )
+        # ── Event log: 5-minute health snapshot ──────────────────────────────
+        try:
+            from app.engine import event_logger as _ev
+            import asyncio as _asyncio
+            _ao_age_str = f"{ao_age}s" if ao_age is not None else "never"
+            _asyncio.ensure_future(
+                _ev.log("info",
+                        f"SmartStream health — connected={is_connected}, ao_tick_age={_ao_age_str}",
+                        algo_name=None, source="smartstream")
+            )
+        except Exception as _ev_err:
+            logger.warning(f"[RECONNECT MGR] event_logger call failed (_log_status): {_ev_err}")
 
     def get_status(self) -> dict:
         """Return current reconnect manager status — for health checks."""
