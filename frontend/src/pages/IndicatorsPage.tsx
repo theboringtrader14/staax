@@ -447,6 +447,25 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
   const [showChart] = useState(false)
   const [chartData] = useState<{ candles: any[]; levels: any; signals: any[]; ltp: number | null } | null>(null)
 
+  // Live levels + LTP (fetched from chart-data endpoint every 30s)
+  const [cardLevels, setCardLevels] = useState<Record<string, number> | null>(null)
+  const [cardLtp, setCardLtp]       = useState<number | null>(null)
+  const [cardLtpAt, setCardLtpAt]   = useState<number | null>(null)  // Date.now() of last fetch
+  useEffect(() => {
+    const fetchLevels = () => {
+      apiGet(`/bots/${bot.id}/chart-data`)
+        .then(r => {
+          const d = r.data
+          if (d?.levels && Object.keys(d.levels).length > 0) setCardLevels(d.levels)
+          if (d?.ltp != null && d.ltp > 0) { setCardLtp(d.ltp); setCardLtpAt(Date.now()) }
+        })
+        .catch(() => {})
+    }
+    fetchLevels()
+    const t = setInterval(fetchLevels, 30000)
+    return () => clearInterval(t)
+  }, [bot.id])
+
   // Orders (lazy, per-card)
   const [showOrders, setShowOrders] = useState(false)
   const [orders, setOrders]         = useState<BotOrder[]>([])
@@ -479,8 +498,8 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
       return tb - ta
     })
     .slice(0, 2)
-  // Levels from chart data
-  const levels = chartData?.levels ?? null
+  // Levels: prefer live-fetched cardLevels, fall back to chartData (if ever populated)
+  const levels = cardLevels ?? chartData?.levels ?? null
 
   // LTP polling for expanded orders
   useEffect(() => {
@@ -618,9 +637,17 @@ function BotCard({ bot, accounts, signals, onUpdate, onArchive, onUnarchive, onD
             <span><span style={{ color: 'var(--text-mute)' }}>Low </span><span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{levels.tt_low?.toLocaleString('en-IN') ?? '—'}</span></span>
           </>}
           {!levels && <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>warmup to see levels</span>}
-          {chartData?.ltp != null && (
-            <span><span style={{ color: 'var(--text-mute)' }}>LTP </span><span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{chartData.ltp.toLocaleString('en-IN')}</span></span>
-          )}
+          {(cardLtp ?? chartData?.ltp) != null && (() => {
+            const ltp = (cardLtp ?? chartData?.ltp)!
+            const fresh = cardLtpAt != null && (Date.now() - cardLtpAt) < 35000
+            return (
+              <span>
+                <span style={{ color: 'var(--text-mute)' }}>LTP </span>
+                <span style={{ color: fresh ? 'var(--green)' : 'var(--text-mute)', fontSize: 8, marginRight: 2 }}>{fresh ? '●' : '○'}</span>
+                <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{ltp.toLocaleString('en-IN')}</span>
+              </span>
+            )
+          })()}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
             {openOrder ? (
               <span style={neuChip(openOrder.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>
