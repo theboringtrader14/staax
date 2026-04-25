@@ -1736,7 +1736,7 @@ export default function OrdersPage() {
                     const chip     = ALGO_STATUS_CHIP[algoSt]
                     const isClosed = group.legs.length > 0 && group.legs.every(l => l.status === 'closed' || l.status === 'error')
                     const closedL  = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
-                    const totalPnl = closedL.reduce((s, l) => s + (l.pnl ?? 0), 0)
+                    const totalPnl = group.legs.reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
                     const showSpark = closedL.length > 0 && !group.legs.some(l => l.status === 'open' || l.status === 'pending')
 
                     // Action button helper booleans
@@ -1865,15 +1865,11 @@ export default function OrdersPage() {
                                 <SmoothedSparkline algoId={group.algoId} legs={group.legs} totalPnl={totalPnl} />
                               )}
                               {(() => {
-                                const openLegIds = group.legs.filter(l => l.status === 'open').map(l => l.id)
-                                const livePnlEntries = openLegIds.map(id => ltpData[id]).filter(Boolean)
-                                const liveMtm = livePnlEntries.length > 0
-                                  ? livePnlEntries.reduce((s, e) => s + (e?.pnl ?? 0), 0)
-                                  : null
-                                const displayMtm = liveMtm !== null ? liveMtm : group.mtm
+                                // Sum every order: live WS pnl if available, else server pnl, else 0
+                                const displayMtm = group.legs.reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
                                 return (
                                   <span style={{
-                                    minWidth: '90px', textAlign: 'right',
+                                    minWidth: '90px', textAlign: 'center',
                                     fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
                                     color: displayMtm !== 0 ? (displayMtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent',
                                     opacity: group.terminated ? 0.6 : 1,
