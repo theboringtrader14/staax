@@ -65,9 +65,10 @@ async def algo_metrics(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
 ):
-    # When start_date/end_date are provided, use them instead of the FY range
+    fy_start, fy_end = _fy_range(fy)
+
+    # Build date range (start_date/end_date override fy range)
     if start_date or end_date:
-        fy_start, fy_end = _fy_range(fy)
         try:
             range_start = datetime.strptime(start_date, "%Y-%m-%d").replace(hour=0, minute=0, second=0, tzinfo=IST) if start_date else fy_start
         except ValueError:
@@ -76,22 +77,24 @@ async def algo_metrics(
             range_end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=IST) if end_date else fy_end
         except ValueError:
             range_end = fy_end
-        conditions = [
-            Order.status == OrderStatus.CLOSED,
-            Order.pnl.isnot(None),
-            Order.fill_time >= range_start,
-            Order.fill_time <= range_end,
-        ]
-        if account_id:
-            import uuid as _uuid
-            try:
-                conditions.append(Order.account_id == _uuid.UUID(account_id))
-            except ValueError:
-                pass
-        if is_practix is not None:
-            conditions.append(Order.is_practix == is_practix)
     else:
-        conditions = _base_query(fy, account_id, is_practix)
+        range_start, range_end = fy_start, fy_end
+
+    # Include ALL orders with pnl (open + closed) — same as Orders page
+    conditions = [
+        Order.pnl.isnot(None),
+        Order.fill_time >= range_start,
+        Order.fill_time <= range_end,
+    ]
+    if account_id:
+        import uuid as _uuid
+        try:
+            conditions.append(Order.account_id == _uuid.UUID(account_id))
+        except ValueError:
+            pass
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
+
     result = await db.execute(
         select(Order, Algo)
         .join(Algo, Order.algo_id == Algo.id, isouter=True)
@@ -112,16 +115,25 @@ async def algo_metrics(
     for aid, data in by_algo.items():
         pnls = data["pnls"]
         algo_orders = data["orders"]
-        wins   = [p for p in pnls if p > 0]
-        losses = [p for p in pnls if p <= 0]
-        total  = round(sum(pnls), 2)
+        total = round(sum(pnls), 2)
 
-        # avg_day_pnl
-        trading_days = set()
+        # Group by trading day — wins/losses = per execution, not per leg
+        daily_pnl: dict = {}
         for o in algo_orders:
             if o.fill_time:
-                trading_days.add(o.fill_time.astimezone(IST).date())
-        avg_day_pnl = round(total / len(trading_days), 2) if trading_days else 0.0
+                d = o.fill_time.astimezone(IST).date()
+                daily_pnl[d] = daily_pnl.get(d, 0.0) + (o.pnl or 0.0)
+
+        num_days = len(daily_pnl)
+        wins     = sum(1 for v in daily_pnl.values() if v > 0)
+        losses   = sum(1 for v in daily_pnl.values() if v <= 0)
+
+        # avg_day_pnl
+        avg_day_pnl = round(total / num_days, 2) if num_days else 0.0
+
+        # win/loss pct based on trading days
+        win_pct  = round(wins / num_days * 100, 1) if num_days else 0.0
+        loss_pct = round(losses / num_days * 100, 1) if num_days else 0.0
 
         # max_drawdown
         cumulative = 0.0
@@ -145,10 +157,10 @@ async def algo_metrics(
             "name":         data["name"],
             "trades":       len(pnls),
             "total_pnl":    total,
-            "wins":         len(wins),
-            "losses":       len(losses),
-            "win_pct":      round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
-            "loss_pct":     round(len(losses) / len(pnls) * 100, 1) if pnls else 0,
+            "wins":         wins,
+            "losses":       losses,
+            "win_pct":      win_pct,
+            "loss_pct":     loss_pct,
             "max_profit":   round(max(pnls), 2) if pnls else 0,
             "max_loss":     round(min(pnls), 2) if pnls else 0,
             "avg_day_pnl":  avg_day_pnl,

@@ -565,7 +565,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Table */}
-        <div style={{ display: 'flex', overflow: 'hidden', padding: '0 20px 0' }}>
+        <div style={{ display: 'flex', overflow: 'visible', padding: '0 20px 0' }}>
           {/* Left: Key Metrics labels */}
           <div style={{ flexShrink: 0, minWidth: '130px', overflow: 'hidden', borderRadius: '12px 0 0 12px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '130px', tableLayout: 'fixed' as const }}>
@@ -622,7 +622,7 @@ export default function ReportsPage() {
                     <tr key={row.key} style={{ height: '30px' }}>
                       {algoMetrics.map((a: any) => {
                         const val = (a as any)[row.key]
-                        const isNeg = (val || 0) < 0
+                        const isNeg = (val || 0) < 0 || row.isLoss
                         return (
                           <td key={a.algo_id} style={{
                             color: isNeg ? '#FF4444' : '#0ea66e',
@@ -667,7 +667,7 @@ export default function ReportsPage() {
                     : isCurrency
                       ? ((cumVal < 0 ? '-' : '') + '₹' + Math.abs(cumVal).toLocaleString('en-IN', { maximumFractionDigits: 2 }))
                       : String(Math.round(Math.abs(cumVal)))
-                  const isNeg = cumVal < 0
+                  const isNeg = cumVal < 0 || row.isLoss
                   return (
                     <tr key={row.key} style={{ height: '30px' }}>
                       <td style={{
