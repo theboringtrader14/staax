@@ -767,12 +767,18 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
       {data.by_algo.length > 0 && (
         <div style={{ ...neuCard, marginBottom: 12 }}>
           <div style={secLabel}>By Algo</div>
-          <table className="staax-table" style={{ width: '100%' }}>
+          <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 160 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 80 }} />
+              <col />
+            </colgroup>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
-                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Avg (ms)</th>
-                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Orders</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Avg (ms)</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Orders</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Bar</th>
               </tr>
             </thead>
@@ -780,11 +786,11 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
               {data.by_algo.map(a => (
                 <tr key={a.algo_name}>
                   <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{a.algo_name}</td>
-                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid var(--border)' }}>{a.avg_ms}</td>
-                  <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{a.count}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.avg_ms}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      <div style={{ width: `${Math.min(Math.round(a.avg_ms / maxAlgoMs * 225), 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
+                      <div style={{ width: `${Math.min(Math.round(a.avg_ms / maxAlgoMs * 300), 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
                     </div>
                   </td>
                 </tr>
