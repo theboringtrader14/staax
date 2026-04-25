@@ -512,7 +512,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
         {perAlgo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No errors on record</div>
         ) : (
-          <div style={neuInset}>
+          <div className="no-scrollbar" style={{ maxHeight: 200, overflowY: 'auto' }}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
@@ -540,7 +540,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
         {recent.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No recent errors</div>
         ) : (
-          <div style={{ ...neuInset, overflowX: 'auto' }}>
+          <div className="no-scrollbar" style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto' }}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
