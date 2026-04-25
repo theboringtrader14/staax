@@ -512,7 +512,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
         {perAlgo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No errors on record</div>
         ) : (
-          <div className="no-scrollbar" style={{ maxHeight: 200, overflowY: 'auto' }}>
+          <div className="no-scrollbar" style={{ maxHeight: 320, overflowY: 'auto' }}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
