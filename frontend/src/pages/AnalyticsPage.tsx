@@ -549,7 +549,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
               <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
                 <colgroup>
                   <col style={{ width: 110 }} />
-                  <col style={{ width: 72 }} />
+                  <col style={{ width: 100 }} />
                   <col />
                   <col style={{ width: 130 }} />
                 </colgroup>
@@ -557,7 +557,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
                   <tr>
                     <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
                     <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Errors</th>
-                    <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Last Error Msg</th>
+                    <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)', paddingLeft: 32 }}>Last Error Msg</th>
                     <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Date / Time</th>
                   </tr>
                 </thead>
@@ -566,7 +566,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
                     <tr key={row.algo}>
                       <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{row.algo}</td>
                       <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
-                      <td style={{ color: row.errorMsg === '—' ? 'var(--text-mute)' : 'var(--red)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={row.errorMsg}>{row.errorMsg}</td>
+                      <td style={{ color: row.errorMsg === '—' ? 'var(--text-mute)' : 'var(--red)', paddingLeft: 32, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={row.errorMsg}>{row.errorMsg}</td>
                       <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 12, borderBottom: '0.5px solid var(--border)' }}>
                         {row.hasRecentTs ? fmtDateTime(row.dateTime ?? undefined) : fmtDate(row.dateTime ?? undefined)}
                       </td>
