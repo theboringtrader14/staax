@@ -164,6 +164,9 @@ class AlgoRunner:
         # succession between the is_active=False flag and the broker call.
         self._exiting_orders: set = set()
 
+        # P1: State reconciler — tracks last run timestamp
+        self._reconciler_last_run: Optional[datetime] = None
+
     def wire_engines(
         self,
         strike_selector:   StrikeSelector,
@@ -590,6 +593,20 @@ class AlgoRunner:
             f"{'↻ Re-entry' if reentry else '▶ Entry'}: {algo.name} "
             f"[{grid_entry_id}] practix={grid_entry.is_practix}"
         )
+
+        # ── 2b. P2: Circuit Breaker — block live entries when feed is offline >5min ──
+        if not grid_entry.is_practix:
+            from app.engine.broker_reconnect import circuit_breaker as _cb
+            if not _cb.entries_allowed:
+                logger.warning(
+                    f"[CIRCUIT BREAKER] Entry BLOCKED for {algo.name}: {_cb._disabled_reason}"
+                )
+                await _ev.warn(
+                    f"Entry blocked by circuit breaker — {_cb._disabled_reason}",
+                    algo_name=algo.name,
+                    source="circuit_breaker",
+                )
+                return   # Leave algo in WAITING so it can retry when feed restores
 
         # ── 3. Load legs ───────────────────────────────────────────────────────
         legs_result = await db.execute(
@@ -2684,6 +2701,95 @@ class AlgoRunner:
             f"(underlying={underlying})"
         )
         return fallback
+
+    # ── P1: Runtime State Reconciler ─────────────────────────────────────────
+
+    async def _reconcile_state(self) -> None:
+        """
+        P1: Every 60s during market hours — reconcile DB open orders vs runtime monitor.
+
+        For every Order with status=OPEN in DB:
+          - If not in SLTPMonitor._positions → re-register via restore_sl_monitoring()
+          - Log: [RECONCILER] Re-registered {symbol} for monitor — was missing
+
+        For every position in SLTPMonitor._positions:
+          - If DB order is CLOSED/ERROR → deregister from monitor
+          - Log: [RECONCILER] Deregistered {symbol} — DB status is {status}
+
+        Only runs during market hours (09:00–15:35 IST). Guard already enforced by scheduler.
+        """
+        now_ist = datetime.now(IST)
+        _hour_float = now_ist.hour + now_ist.minute / 60.0
+        if not (9.0 <= _hour_float < 15.6):
+            return
+
+        n_open = 0
+        n_registered = 0
+        n_fixed = 0
+
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Order).where(Order.status == OrderStatus.OPEN)
+                )
+                open_orders = result.scalars().all()
+                n_open = len(open_orders)
+
+                # ── Check: DB OPEN orders missing from monitor ────────────────
+                if self._sl_tp_monitor:
+                    monitored_ids = set(self._sl_tp_monitor._positions.keys())
+                    n_registered = len(monitored_ids)
+
+                    for order in open_orders:
+                        oid = str(order.id)
+                        if oid not in monitored_ids:
+                            logger.warning(
+                                f"[RECONCILER] {order.symbol} (order {oid}) is OPEN in DB "
+                                f"but NOT in SLTPMonitor — triggering restore"
+                            )
+                            await _ev.warn(
+                                f"[RECONCILER] Re-registering {order.symbol} — was missing from monitor",
+                                source="reconciler",
+                            )
+                            n_fixed += 1
+
+                    # ── Check: monitor has positions not OPEN in DB ───────────
+                    db_open_ids = {str(o.id) for o in open_orders}
+                    stale_ids = monitored_ids - db_open_ids
+                    for stale_id in stale_ids:
+                        pm = self._sl_tp_monitor._positions.get(stale_id)
+                        sym = pm.symbol if pm else stale_id
+                        logger.warning(
+                            f"[RECONCILER] {sym} (order {stale_id}) is in SLTPMonitor "
+                            f"but NOT OPEN in DB — deregistering"
+                        )
+                        await _ev.warn(
+                            f"[RECONCILER] Deregistered {sym} — no longer OPEN in DB",
+                            source="reconciler",
+                        )
+                        self._sl_tp_monitor.remove_position(stale_id)
+                        n_fixed += 1
+
+            self._reconciler_last_run = datetime.now(IST)
+            logger.info(
+                f"[RECONCILER] State check: {n_open} DB open, {n_registered} monitored, "
+                f"{n_fixed} resynced"
+            )
+            # Trigger full SL monitoring restore if any were missing
+            if n_fixed > 0:
+                await self.restore_sl_monitoring()
+
+        except Exception as e:
+            logger.error(f"[RECONCILER] State reconciliation failed: {e}", exc_info=True)
+
+    # ── P3: Callback latency property ────────────────────────────────────────
+
+    @property
+    def _callback_latency(self) -> dict:
+        """P3: Returns avg callback latencies from LTPConsumer (for /system/health)."""
+        if self._ltp_consumer and hasattr(self._ltp_consumer, "get_callback_latencies"):
+            return self._ltp_consumer.get_callback_latencies()
+        return {}
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
