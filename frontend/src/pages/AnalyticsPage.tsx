@@ -375,8 +375,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                               </td>
                               <td style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 8px' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ ...neuInset, height: 6, borderRadius: 3 }}>
-                                    <div style={{ width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 3, background: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
+                                  <div style={{ ...neuInset, height: 10, borderRadius: 6, padding: '2px 3px' }}>
+                                    <div style={{ width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 4, background: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
                                   </div>
                                   <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', minWidth: 36, textAlign: 'right' }}>{s.score}</span>
                                 </div>
