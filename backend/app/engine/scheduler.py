@@ -209,7 +209,24 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, broker_reconnect")
+        # 09:16 IST — missed entry recovery sweep (Mon–Fri)
+        self._scheduler.add_job(
+            self._job_missed_entry_recovery,
+            CronTrigger(hour=9, minute=16, day_of_week="mon-fri", timezone=IST),
+            id="missed_entry_recovery_0916",
+            replace_existing=True,
+        )
+
+        # 60s interval — P1 runtime state reconciler (DB vs SLTPMonitor)
+        self._scheduler.add_job(
+            self._job_state_reconciler,
+            "interval",
+            seconds=60,
+            id="state_reconciler",
+            replace_existing=True,
+        )
+
+        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, broker_reconnect, missed_entry_recovery, state_reconciler")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -466,6 +483,79 @@ class AlgoScheduler:
             await broker_reconnect_manager.check()
         except Exception as e:
             logger.error(f"[SCHEDULER] broker_reconnect job error: {e}")
+
+    async def _job_state_reconciler(self):
+        """P1: Every 60s — reconcile DB open orders vs SLTPMonitor registry."""
+        if not self._algo_runner:
+            return
+        now_ist = datetime.now(IST)
+        _hf = now_ist.hour + now_ist.minute / 60.0
+        if not (9.0 <= _hf < 15.6):
+            return   # only during market hours
+        try:
+            await self._algo_runner._reconcile_state()
+        except Exception as e:
+            logger.error(f"[SCHEDULER] state_reconciler job error: {e}")
+
+    async def _job_missed_entry_recovery(self):
+        """
+        P4: 09:16 IST — recovery sweep for algos that should have entered at 09:15 but didn't.
+        Finds GridEntries with entry_time=09:15 still in WAITING state at 09:16.
+        """
+        if not self._algo_runner:
+            return
+        now_ist = datetime.now(IST)
+        today   = now_ist.date()
+        logger.info("[RECOVERY] 09:16 missed entry sweep starting...")
+
+        try:
+            async with AsyncSessionLocal() as db:
+                from app.models.algo import Algo as _Algo
+                result = await db.execute(
+                    select(GridEntry, _Algo)
+                    .join(_Algo, GridEntry.algo_id == _Algo.id)
+                    .where(
+                        GridEntry.trading_date == today,
+                        GridEntry.status == GridStatus.ALGO_ACTIVE,
+                        _Algo.is_active == True,
+                    )
+                )
+                rows = result.all()
+
+            # Check AlgoState for each: find those still WAITING at 09:16
+            missed = []
+            async with AsyncSessionLocal() as db:
+                from app.models.algo_state import AlgoState as _AS, AlgoRunStatus as _ARS
+                for ge, algo in rows:
+                    if algo.entry_time and algo.entry_time.startswith("09:15"):
+                        state_result = await db.execute(
+                            select(_AS).where(_AS.grid_entry_id == ge.id)
+                        )
+                        state = state_result.scalar_one_or_none()
+                        if state and state.status == _ARS.WAITING:
+                            missed.append((ge, algo))
+
+            if not missed:
+                logger.info("[RECOVERY] 09:16 sweep: all 09:15 entries accounted for")
+                return
+
+            for ge, algo in missed:
+                logger.warning(
+                    f"[RECOVERY] 09:16 sweep: {algo.name} still WAITING after 09:15 entry — "
+                    f"attempting recovery entry"
+                )
+                await _ev.warn(
+                    f"09:16 recovery sweep — re-attempting missed 09:15 entry for {algo.name}",
+                    algo_name=algo.name,
+                    source="scheduler",
+                )
+                try:
+                    await self._algo_runner._enter_with_db_wrap(str(ge.id))
+                except Exception as e:
+                    logger.error(f"[RECOVERY] Recovery entry failed for {algo.name}: {e}")
+
+        except Exception as e:
+            logger.error(f"[SCHEDULER] missed_entry_recovery job error: {e}", exc_info=True)
 
     async def _job_token_refresh(self):
         """08:30 — refresh all broker tokens."""
