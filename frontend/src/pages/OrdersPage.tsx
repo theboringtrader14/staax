@@ -1160,12 +1160,12 @@ export default function OrdersPage() {
       if (groups && groups.some(g => g.legs.length > 0)) {
         const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
         result[day] = filtered.reduce((daySum, group) =>
-          daySum + group.legs.reduce((s, l) => s + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
+          daySum + group.legs.reduce((s, l) => s + (l.pnl ?? 0), 0)
         , 0)
       }
     }
     return result
-  }, [weekPnl, ordersByDate, accountFilter, weekDates, todayDate, ltpData])
+  }, [weekPnl, ordersByDate, accountFilter, weekDates, todayDate])
 
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
