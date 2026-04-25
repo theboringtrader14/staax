@@ -6,6 +6,7 @@ import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
 import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
+import { SortableHeader } from '@/components/SortableHeader'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -95,7 +96,7 @@ const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
 }
 
 const COLS = ['36px','66px','158px','50px','120px','66px','72px','54px','84px','74px','120px']
-const HDRS = ['#','Status','Symbol','Lots','Fill / Ref','LTP','SL','Target','Exit','Reason','P&L']
+
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function todayDay(): string {
@@ -667,6 +668,24 @@ export default function OrdersPage() {
     try { return sessionStorage.getItem('staax_status_filter') ?? null } catch { return null }
   })
   const [isMarketHours, setIsMarketHours] = useState(false)
+  const [legSortKey, setLegSortKey] = useState<string>('pnl')
+  const [legSortDir, setLegSortDir] = useState<'asc' | 'desc' | null>('desc')
+
+  const handleLegSort = (key: string) => {
+    if (legSortKey === key) setLegSortDir(d => d === 'desc' ? 'asc' : d === 'asc' ? null : 'desc')
+    else { setLegSortKey(key); setLegSortDir('desc') }
+  }
+
+  const sortLegs = (legs: Leg[]): Leg[] => {
+    if (!legSortKey || !legSortDir) return legs
+    return [...legs].sort((a, b) => {
+      const av = (a as any)[legSortKey] ?? null
+      const bv = (b as any)[legSortKey] ?? null
+      if (av == null) return 1; if (bv == null) return -1
+      if (typeof av === 'number') return legSortDir === 'asc' ? av - bv : bv - av
+      return legSortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
+    })
+  }
 
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
@@ -1957,13 +1976,21 @@ export default function OrdersPage() {
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                               <thead>
                                 <tr>
-                                  {HDRS.map((h, hi) => (
-                                    <th key={h} style={{ textAlign: (h === 'Symbol' || h === '#') ? 'left' : 'center', background: 'var(--bg)', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', paddingLeft: hi === 0 ? 20 : undefined, paddingRight: hi === HDRS.length - 1 ? 20 : undefined }}>{h}</th>
-                                  ))}
+                                  <th style={{ textAlign: 'left', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', paddingLeft: 20, fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>#</th>
+                                  <SortableHeader label="Status" sortKey="status" currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
+                                  <SortableHeader label="Symbol" sortKey="symbol" currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} align="left" style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Lots</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Fill / Ref</th>
+                                  <SortableHeader label="LTP"    sortKey="ltp"    currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>SL</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Target</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Exit</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Reason</th>
+                                  <SortableHeader label="P&L"    sortKey="pnl"    currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)', paddingRight: 20 }} />
                                 </tr>
                               </thead>
                               <tbody>
-                                {buildRows(group.legs).map(({ leg, isChild }) => {
+                                {buildRows(sortLegs(group.legs)).map(({ leg, isChild }) => {
                                   const pollEntry = ltpData[leg.id]
                                   // Coerce instrumentToken to number — JSON may deserialise it as string
                                   const tokenKey = leg.instrumentToken != null ? Number(leg.instrumentToken) : undefined

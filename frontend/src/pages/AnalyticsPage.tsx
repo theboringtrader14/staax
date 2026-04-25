@@ -7,6 +7,8 @@ import type { Order, Algo } from '@/types'
 import { getCurrentFY, getFYOptions } from '@/utils/fy'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
+import { SortableHeader } from '@/components/SortableHeader'
+import { useSort } from '@/hooks/useSort'
 
 // ── Local Types ────────────────────────────────────────────────────────────────
 interface MetricRow {
@@ -243,6 +245,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
   const [showWeekends, setShowWeekends] = useState(false)
   const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
+  const { sorted: sortedScores, sortKey: scoresSortKey, sortDir: scoresSortDir, handleSort: handleScoresSort } = useSort<HealthScore>(scores, 'total_pnl')
 
   const bestAlgo       = metrics.length > 0 ? [...metrics].sort((a, b) => b.pnl - a.pnl)[0] : null
   const worstAlgo      = metrics.length > 0 ? [...metrics].sort((a, b) => a.pnl - b.pnl)[0] : null
@@ -369,16 +372,16 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                 <table className="staax-table" style={{ width: '100%' }}>
                       <thead>
                         <tr>
-                          <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
-                          <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Grade</th>
-                          <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Score</th>
-                          <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Trades</th>
-                          <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Win %</th>
-                          <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>P&amp;L</th>
+                          <SortableHeader label="Algo"   sortKey="algo_name"  currentKey={scoresSortKey as string | null} currentDir={scoresSortDir} onSort={k => handleScoresSort(k as keyof HealthScore)} align="left"   style={{ borderBottom: '0.5px solid var(--border)' }} />
+                          <SortableHeader label="Grade"  sortKey="grade"      currentKey={scoresSortKey as string | null} currentDir={scoresSortDir} onSort={k => handleScoresSort(k as keyof HealthScore)}              style={{ borderBottom: '0.5px solid var(--border)' }} />
+                          <SortableHeader label="Score"  sortKey="score"      currentKey={scoresSortKey as string | null} currentDir={scoresSortDir} onSort={k => handleScoresSort(k as keyof HealthScore)}              style={{ borderBottom: '0.5px solid var(--border)' }} />
+                          <SortableHeader label="Trades" sortKey="trades"     currentKey={scoresSortKey as string | null} currentDir={scoresSortDir} onSort={k => handleScoresSort(k as keyof HealthScore)}              style={{ borderBottom: '0.5px solid var(--border)' }} />
+                          <SortableHeader label="Win %"  sortKey="win_pct"    currentKey={scoresSortKey as string | null} currentDir={scoresSortDir} onSort={k => handleScoresSort(k as keyof HealthScore)}              style={{ borderBottom: '0.5px solid var(--border)' }} />
+                          <SortableHeader label="P&L"    sortKey="total_pnl"  currentKey={scoresSortKey as string | null} currentDir={scoresSortDir} onSort={k => handleScoresSort(k as keyof HealthScore)}              style={{ borderBottom: '0.5px solid var(--border)' }} />
                         </tr>
                       </thead>
                       <tbody>
-                        {scores.map(s => {
+                        {sortedScores.map(s => {
                           const g = GRADE_COLORS[s.grade] || GRADE_COLORS['D']
                           return (
                             <tr key={s.algo_name}>
@@ -406,6 +409,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                     </table>
               </div>
         )}
+
       </div>
 
       {/* Best Time to Trade */}
