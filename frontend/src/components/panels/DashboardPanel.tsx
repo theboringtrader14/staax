@@ -184,7 +184,9 @@ export default function DashboardPanel() {
         for (const e of entries) {
           const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
           const lvl: LogLevel = e.level === 'success' ? 'ok' : e.level === 'error' ? 'err' : e.level === 'warn' ? 'wrn' : 'inf'
-          lines.push('[' + ts + '] [' + lvl + '] ' + (e.source ? '[' + e.source + '] ' : '') + e.msg)
+          // Normalize multiline msg (exception tracebacks) to single line so the regex always matches
+          const msg = (e.msg ?? '').replace(/\r?\n/g, ' ').trim()
+          lines.push('[' + ts + '] [' + lvl + '] ' + (e.source ? '[' + e.source + '] ' : '') + msg)
         }
         if (lines.length === 0) lines.push('No events for this date.')
         setLog([...lines])
