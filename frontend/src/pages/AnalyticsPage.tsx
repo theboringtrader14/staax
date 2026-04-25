@@ -517,16 +517,16 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Errors</th>
                   <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Last Error</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Errors</th>
                 </tr>
               </thead>
               <tbody>
                 {perAlgo.map(row => (
                   <tr key={row.algo}>
                     <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{row.algo}</td>
-                    <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
                     <td style={{ textAlign: 'center', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{fmtDate(row.last_error ?? undefined)}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
                   </tr>
                 ))}
               </tbody>
@@ -541,27 +541,30 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No recent errors</div>
         ) : (
           <div className="no-scrollbar" style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto' }}>
-            <table className="staax-table" style={{ width: '100%' }}>
+            <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: 90 }} />
+                <col style={{ width: 110 }} />
+                <col />
+                <col style={{ width: 80 }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Time</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Algo</th>
+                  <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
                   <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Symbol</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Error Message</th>
+                  <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Error Message</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Time</th>
                 </tr>
               </thead>
               <tbody>
                 {recent.map(o => {
                   const msg = o.error_message || '—'
-                  const short = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
                   return (
                     <tr key={o.id}>
-                      <td style={{ color: 'var(--text-mute)', whiteSpace: 'nowrap', textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{fmtDate(o.created_at ?? undefined)}</td>
-                      <td style={{ fontWeight: 600, textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>{o.algo}</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>{o.symbol}</td>
-                      <td style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>
-                        <span title={msg} style={{ cursor: msg.length > 60 ? 'help' : 'default', color: 'var(--red)', fontSize: 11 }}>{short}</span>
-                      </td>
+                      <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{o.algo}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{o.symbol}</td>
+                      <td style={{ color: 'var(--red)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={msg}>{msg}</td>
+                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', borderBottom: '0.5px solid var(--border)' }}>{fmtDate(o.created_at ?? undefined)}</td>
                     </tr>
                   )
                 })}
@@ -609,7 +612,7 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
         {data.per_algo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No slippage data on record</div>
         ) : (
-          <div style={{ ...neuInset, overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table className="staax-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
@@ -765,7 +768,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                 <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Avg (ms)</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Orders</th>
-                <th style={{ width: 160, textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Bar</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Bar</th>
               </tr>
             </thead>
             <tbody>

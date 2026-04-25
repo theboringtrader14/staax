@@ -4,6 +4,22 @@ reports.py — Reports API
 import csv
 import io
 import logging
+import re as _re
+
+
+def _clean_algo_tag(name: str) -> str:
+    """Strip STAAX_Mom_ prefix and _<instance>_<timestamp> suffix from bot names.
+
+    STAAX_Mom_NF-BTST_1_1776851648704  →  NF-BTST
+    STAAX_Mom_SX-STBT_2_1776833400798  →  SX-STBT
+    """
+    if not name or name == "unknown":
+        return name
+    m = _re.match(r"^STAAX_Mom_(.+?)_\d{1,3}_\d{7,}$", name)
+    if m:
+        return m.group(1)
+    # Fallback: strip prefix only
+    return _re.sub(r"^STAAX_Mom_", "", name, flags=_re.IGNORECASE)
 from datetime import date, datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -384,13 +400,13 @@ async def error_analytics(
         msg      = o.error_message or f"{o.symbol} {o.direction} order failed (status=error)"
         rows.append({
             "date":       date_str,
-            "algo_name":  o.algo_tag or "unknown",
+            "algo_name":  _clean_algo_tag(o.algo_tag or "unknown"),
             "error_type": prefix,
             "message":    msg,
         })
         recent.append({
             "id":            str(o.id),
-            "algo":          o.algo_tag or "unknown",
+            "algo":          _clean_algo_tag(o.algo_tag or "unknown"),
             "symbol":        o.symbol or "—",
             "error_message": msg,
             "created_at":    o.created_at.isoformat() if o.created_at else None,
