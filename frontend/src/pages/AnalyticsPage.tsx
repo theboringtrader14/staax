@@ -42,6 +42,21 @@ function fmtDate(s?: string): string {
   return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
+function fmtDateTime(s?: string): string {
+  if (!s) return '—'
+  const d = new Date(s)
+  const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
+  return `${date} ${time}`
+}
+
+function cleanAlgo(name: string): string {
+  if (!name) return name
+  const m = name.match(/^STAAX_Mom_(.+?)_\d{1,3}_\d{7,}$/)
+  if (m) return m[1]
+  return name.replace(/^STAAX_Mom_/i, '')
+}
+
 function getOrderDate(o: any): string {
   return (o.fill_time || o.created_at || o.trading_date || '').slice(0, 10)
 }
@@ -524,7 +539,7 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
               <tbody>
                 {perAlgo.map(row => (
                   <tr key={row.algo}>
-                    <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{row.algo}</td>
+                    <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{cleanAlgo(row.algo)}</td>
                     <td style={{ textAlign: 'center', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{fmtDate(row.last_error ?? undefined)}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
                   </tr>
@@ -543,17 +558,17 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
           <div className="no-scrollbar" style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto' }}>
             <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: 90 }} />
-                <col style={{ width: 110 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 170 }} />
                 <col />
-                <col style={{ width: 80 }} />
+                <col style={{ width: 110 }} />
               </colgroup>
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
                   <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Symbol</th>
                   <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Error Message</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Time</th>
+                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Date / Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -561,10 +576,10 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
                   const msg = o.error_message || '—'
                   return (
                     <tr key={o.id}>
-                      <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{o.algo}</td>
+                      <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{cleanAlgo(o.algo)}</td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{o.symbol}</td>
                       <td style={{ color: 'var(--red)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={msg}>{msg}</td>
-                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', borderBottom: '0.5px solid var(--border)' }}>{fmtDate(o.created_at ?? undefined)}</td>
+                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11, borderBottom: '0.5px solid var(--border)' }}>{fmtDateTime(o.created_at ?? undefined)}</td>
                     </tr>
                   )
                 })}
@@ -766,8 +781,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
             <thead>
               <tr>
                 <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
-                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Avg (ms)</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Orders</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Avg (ms)</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Bar</th>
               </tr>
             </thead>
@@ -775,11 +790,11 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
               {data.by_algo.map(a => (
                 <tr key={a.algo_name}>
                   <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{a.algo_name}</td>
-                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid var(--border)' }}>{a.avg_ms}</td>
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{a.count}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid var(--border)' }}>{a.avg_ms}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
+                      <div style={{ width: `${Math.min(Math.round(a.avg_ms / maxAlgoMs * 150), 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
                     </div>
                   </td>
                 </tr>
