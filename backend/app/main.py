@@ -139,6 +139,7 @@ async def lifespan(app: FastAPI):
     ws_manager = ConnectionManager()
     app.state.ws_manager = ws_manager
     event_logger.wire(ws_manager)
+    await event_logger.start()   # P6: start buffered flush loop
     logger.info("✅ WebSocket manager ready")
 
     # ── 4. Broker clients (no token needed at init) ───────────────────────────
@@ -248,11 +249,11 @@ async def lifespan(app: FastAPI):
 
     # ── 9. Register LTP callbacks ─────────────────────────────────────────────
     # Order is intentional — exits before entries, trailing updates before entry signals.
-    ltp_consumer.register_callback(sl_tp_monitor.on_tick)    # exits first — money protection
-    ltp_consumer.register_callback(tsl_engine_ins.on_tick)   # updates sl_actual
-    ltp_consumer.register_callback(ttp_engine_ins.on_tick)   # updates tp_actual
-    ltp_consumer.register_callback(wt_evaluator.on_tick)     # new entries
-    ltp_consumer.register_callback(orb_tracker.on_tick)      # new entries
+    ltp_consumer.register_callback(sl_tp_monitor.on_tick,  "SLTP")   # exits first — money protection
+    ltp_consumer.register_callback(tsl_engine_ins.on_tick, "TSL")    # updates sl_actual
+    ltp_consumer.register_callback(ttp_engine_ins.on_tick, "TTP")    # updates tp_actual
+    ltp_consumer.register_callback(wt_evaluator.on_tick,   "WT")     # new entries
+    ltp_consumer.register_callback(orb_tracker.on_tick,    "ORB")    # new entries
     logger.info("✅ LTP callbacks registered")
 
     # ── 10. Start scheduler ───────────────────────────────────────────────────
@@ -296,7 +297,7 @@ async def lifespan(app: FastAPI):
     async def _bot_runner_tick(token: int, ltp: float, tick: dict):
         ts = datetime.now(ZoneInfo("Asia/Kolkata"))
         await bot_runner.on_tick(token, ltp, ts)
-    ltp_consumer.register_callback(_bot_runner_tick)
+    ltp_consumer.register_callback(_bot_runner_tick, "BOT")
 
     logger.info("✅ BotRunner started + LTP callback registered")
 
@@ -356,6 +357,7 @@ async def lifespan(app: FastAPI):
     scheduler.stop()
     if ltp_consumer:
         ltp_consumer.stop()
+    await event_logger.stop()   # P6: flush remaining buffered events
     await redis_client.aclose()
     logger.info("✅ Clean shutdown complete")
 

@@ -461,7 +461,8 @@ class LTPConsumer:
     def __init__(self, ticker, redis_client: aioredis.Redis):
         self.ticker    = ticker          # KiteTicker instance or None
         self.redis     = redis_client
-        self._callbacks: List[Callable]       = []
+        self._callbacks: list[tuple[str, Callable]] = []   # (name, callback) pairs
+        self._cb_latencies: dict[str, list[float]] = {}    # name → rolling 100 samples (ms)
         self._subscribed_tokens: List[int]    = []
         self._bfo_token_set: Set[int]         = set()
         self._angel_adapter: Optional[AngelOneTickerAdapter] = None
@@ -509,13 +510,24 @@ class LTPConsumer:
 
     # ── Callback registry ─────────────────────────────────────────────────────
 
-    def register_callback(self, callback: Callable):
+    def register_callback(self, callback: Callable, name: str = None):
         """
         Register a callback fired on every tick.
         Signature: async def callback(instrument_token: int, ltp: float, tick: dict)
+        name: optional label for latency tracking (defaults to callback.__name__)
         """
-        self._callbacks.append(callback)
-        logger.info(f"LTP callback registered: {callback.__name__}")
+        label = name or getattr(callback, "__name__", f"CB-{len(self._callbacks)}")
+        self._callbacks.append((label, callback))
+        if label not in self._cb_latencies:
+            self._cb_latencies[label] = []
+        logger.info(f"LTP callback registered: {label}")
+
+    def get_callback_latencies(self) -> dict[str, float | None]:
+        """Returns average latency (ms) per named callback over last 100 ticks."""
+        result = {}
+        for label, samples in self._cb_latencies.items():
+            result[label] = round(sum(samples) / len(samples), 1) if samples else None
+        return result
 
     # ── Subscription ──────────────────────────────────────────────────────────
 
@@ -696,11 +708,20 @@ class LTPConsumer:
         for tick in ticks:
             token = tick["instrument_token"]
             ltp   = tick.get("last_price", 0)
-            for cb in self._callbacks:
+            for label, cb in self._callbacks:
+                t0 = _time.monotonic()
                 try:
                     await cb(token, ltp, tick)
                 except Exception as e:
-                    logger.error(f"Callback error in {cb.__name__}: {e}")
+                    logger.error(f"Callback error in {label}: {e}")
+                elapsed_ms = (_time.monotonic() - t0) * 1000
+                samples = self._cb_latencies.get(label)
+                if samples is not None:
+                    samples.append(elapsed_ms)
+                    if len(samples) > 100:
+                        samples.pop(0)
+                if elapsed_ms > 50:
+                    logger.warning(f"[TICK] {label} callback SLOW: {elapsed_ms:.1f}ms")
 
     def _on_close(self, ws, code, reason):
         logger.warning(f"⚠️ Zerodha WebSocket closed: {code} — {reason}")
