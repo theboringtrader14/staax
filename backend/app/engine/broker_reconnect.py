@@ -39,6 +39,80 @@ ZOMBIE_THRESHOLD_SECONDS = 60   # Connected but no tick for this long → force 
 _reconnecting: bool = False      # Guard against concurrent reconnect attempts
 
 
+class CircuitBreaker:
+    """
+    Tracks SmartStream uptime and disables live entries when feed is stale.
+    Threshold: 5 minutes offline → entries disabled.
+    Re-enabled automatically on first healthy tick confirmation.
+    """
+    DISABLE_THRESHOLD_SECONDS = 300  # 5 minutes offline → disable entries
+
+    def __init__(self):
+        self._offline_since: float | None = None   # monotonic timestamp when stale began
+        self._entries_disabled: bool = False
+        self._disabled_reason: str = ""
+
+    def on_tick_received(self) -> None:
+        """Call when AO feed is confirmed healthy. Clears disabled state."""
+        if self._entries_disabled:
+            self._entries_disabled = False
+            self._disabled_reason = ""
+            self._offline_since = None
+            logger.info("[CIRCUIT BREAKER] Feed restored — live entries re-enabled")
+            try:
+                from app.engine import event_logger as _ev
+                import asyncio as _asyncio
+                _asyncio.ensure_future(
+                    _ev.log("info", "Circuit breaker cleared — SmartStream feed restored",
+                            source="circuit_breaker")
+                )
+            except Exception:
+                pass
+        else:
+            self._offline_since = None
+
+    def on_feed_stale(self, age_seconds: float) -> None:
+        """Call when AO feed is stale. Disables entries after DISABLE_THRESHOLD_SECONDS."""
+        if self._offline_since is None:
+            self._offline_since = _time.monotonic()
+
+        offline_duration = _time.monotonic() - self._offline_since
+
+        if offline_duration >= self.DISABLE_THRESHOLD_SECONDS and not self._entries_disabled:
+            self._entries_disabled = True
+            self._disabled_reason = f"SmartStream offline {offline_duration:.0f}s"
+            logger.warning(
+                f"[CIRCUIT BREAKER] ⚠ Live entries DISABLED — feed offline {offline_duration:.0f}s "
+                f"(>{self.DISABLE_THRESHOLD_SECONDS}s threshold)"
+            )
+            try:
+                from app.engine import event_logger as _ev
+                import asyncio as _asyncio
+                _asyncio.ensure_future(
+                    _ev.log("warn",
+                            f"CIRCUIT BREAKER: Live entries disabled — SmartStream offline {offline_duration:.0f}s",
+                            source="circuit_breaker")
+                )
+            except Exception:
+                pass
+
+    @property
+    def entries_allowed(self) -> bool:
+        """True when entries are permitted (feed healthy or within threshold)."""
+        return not self._entries_disabled
+
+    def get_status(self) -> dict:
+        """Status dict for /system/health endpoint."""
+        return {
+            "entries_allowed": self.entries_allowed,
+            "disabled_reason": self._disabled_reason or None,
+            "offline_since_seconds": (
+                round(_time.monotonic() - self._offline_since, 1)
+                if self._offline_since is not None else None
+            ),
+        }
+
+
 class BrokerReconnectManager:
 
     MIN_RESTART_INTERVAL = 60.0   # Fix 3: never restart more than once per minute
@@ -129,6 +203,7 @@ class BrokerReconnectManager:
                     f"[RECONNECT MGR] Zombie WebSocket — AO connected but no tick for "
                     f"{ao_age:.0f}s (>{ZOMBIE_THRESHOLD_SECONDS}s) — forcing reconnect"
                 )
+                circuit_breaker.on_feed_stale(ao_age)   # zombie = definitely stale
                 await self._do_reconnect()
             finally:
                 _reconnecting = False
@@ -145,6 +220,7 @@ class BrokerReconnectManager:
         else:
             if ao_age < STALE_THRESHOLD_SECONDS:
                 self._consecutive_failures = 0
+                circuit_breaker.on_tick_received()   # feed healthy — clear any circuit breaker state
                 return   # AO is healthy
 
         # ── AO feed stale — apply cooldown guard (Fix 3) then reconnect ───────
@@ -177,6 +253,8 @@ class BrokerReconnectManager:
                 f"[RECONNECT MGR] AO stale ({ao_age_str}) — restarting "
                 f"(attempt #{self._reconnect_count + 1})"
             )
+            if ao_age is not None:
+                circuit_breaker.on_feed_stale(ao_age)   # may disable entries if stale >5min
             await self._do_reconnect()
         finally:
             _reconnecting = False
@@ -286,8 +364,10 @@ class BrokerReconnectManager:
                 and feed_age < STALE_THRESHOLD_SECONDS
             ),
             "ws_connected":           is_connected,
+            "circuit_breaker":        circuit_breaker.get_status(),
         }
 
 
-# ── Singleton ─────────────────────────────────────────────────────────────────
+# ── Singletons ────────────────────────────────────────────────────────────────
 broker_reconnect_manager = BrokerReconnectManager()
+circuit_breaker          = CircuitBreaker()
