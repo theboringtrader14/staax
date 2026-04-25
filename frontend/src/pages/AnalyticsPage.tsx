@@ -548,10 +548,10 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
             <div className="no-scrollbar" style={{ maxHeight: 480, overflowY: 'auto' }}>
               <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: 120 }} />
-                  <col style={{ width: 64 }} />
-                  <col />
                   <col style={{ width: 110 }} />
+                  <col style={{ width: 72 }} />
+                  <col />
+                  <col style={{ width: 130 }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -566,8 +566,8 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
                     <tr key={row.algo}>
                       <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{row.algo}</td>
                       <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
-                      <td style={{ color: row.errorMsg === '—' ? 'var(--text-mute)' : 'var(--red)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={row.errorMsg}>{row.errorMsg}</td>
-                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11, borderBottom: '0.5px solid var(--border)' }}>
+                      <td style={{ color: row.errorMsg === '—' ? 'var(--text-mute)' : 'var(--red)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={row.errorMsg}>{row.errorMsg}</td>
+                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 12, borderBottom: '0.5px solid var(--border)' }}>
                         {row.hasRecentTs ? fmtDateTime(row.dateTime ?? undefined) : fmtDate(row.dateTime ?? undefined)}
                       </td>
                     </tr>
