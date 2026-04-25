@@ -4,7 +4,7 @@ import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/serv
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
-import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
@@ -1368,7 +1368,7 @@ export default function OrdersPage() {
                       }}
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {day}{isHoliday && <span style={{ fontSize: '9px' }}>🏛</span>}
+                        {day}{isHoliday && <CalendarX size={10} style={{ marginLeft: 2, verticalAlign: 'middle', flexShrink: 0 }} />}
                       </span>
                       {isHoliday ? (
                         <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
@@ -1416,7 +1416,7 @@ export default function OrdersPage() {
         {/* Holiday banner */}
         {isHolidayToday && (
           <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(215,123,18,0.08)', border: '1px solid rgba(215,123,18,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px' }}>🏛</span>
+            <CalendarX size={16} color="var(--accent-amber)" />
             <span style={{ fontSize: '12px', color: 'var(--accent-amber)', fontWeight: 600 }}>Market Holiday</span>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>— No trading scheduled for {selectedDate}</span>
           </div>
