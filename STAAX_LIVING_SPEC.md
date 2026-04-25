@@ -895,3 +895,124 @@ AnalyticsPage:
 5. Failures tab — fix frontend field names
 6. Analytics page styling review (Slippage/Latency tabs)
 7. EC2 deploy after first clean day
+
+---
+
+## Session — 25 April 2026 (v8.16)
+
+### STAAX — Reliability Hardening (P1–P6 from ChatGPT architecture assessment)
+
+P1 — Runtime State Reconciler
+  _reconcile_state() every 60s, market hours only.
+  Skips orders with no SL (sl_type=None) — fixes NF-BTST CE leg spam.
+  Date guard skips stale orders from previous days.
+  Single summary log per cycle instead of per-order spam.
+
+P2 — Circuit Breaker
+  CircuitBreaker class in broker_reconnect.py.
+  on_feed_stale() disables live entries after 300s SmartStream offline.
+  on_tick_received() clears state on reconnect.
+  PRACTIX entries bypass circuit breaker.
+  entries_allowed exposed in /system/health.
+
+P3 — Callback Latency Logging
+  register_callback() accepts name label.
+  _process_ticks() times each callback (SLTP/TSL/TTP/WT/ORB/BOT).
+  Rolling 100-sample average per callback.
+  WARNING logged if any callback >50ms.
+  get_callback_latencies() exposed on engine.
+
+P4 — 09:16 Missed Entry Recovery Sweep
+  _job_missed_entry_recovery() fires at 09:16 IST Mon–Fri.
+  Finds algos with entry_time=09:15 still WAITING → retries entry.
+
+P5 — Engine Health Metrics in Dashboard
+  /system/health returns engine_metrics block:
+    tick_lag_ao_seconds, tick_lag_zd_seconds, reconnect_count,
+    callback_latency_ms per callback, circuit_breaker, reconciler_last_run.
+  DashboardPanel System Health card shows inline Engine Metrics row.
+
+P6 — Buffered Event Log Writes
+  INFO/WARN buffered in memory, flushed every 5s.
+  ERROR writes immediately (never buffered).
+  start()/stop() wired in main.py lifespan.
+
+### STAAX — Orders Page Fixes
+
+P&L calculation fixed — critical:
+  Algo card header: sum of ALL order pnls (open + closed legs).
+  Open legs use live WS pnl, closed legs use server pnl.
+  NF-STBT2 was showing +₹2,765.75 (open CE only) — correct is -₹1,095.25.
+  NF-STBT1 was showing +₹3,831.75 — correct is +₹403.
+  Day tab P&L uses computedDayPnl (useMemo) — historical days use order.pnl directly.
+
+Week navigation fixed:
+  useEffect now depends on [weekDates, isPractixMode] — re-fetches on week change.
+  setWeekPnl({}) on navigation so stale data never shows.
+
+Weekends toggle persisted in localStorage — survives refresh.
+
+### STAAX — Reports Page
+
+Per-Algo Metrics center table scroll fixed (overflow:hidden → overflow:visible).
+Losses/Loss%/Max Loss/Max Drawdown rows now render in #FF4444.
+Per-algo P&L includes open orders (not just closed).
+Wins/losses counted per execution day (combined legs = 1 trade).
+
+### STAAX — Engine Log Cleanup
+
+[RECONCILER]/[engine]/[scheduler] bracket prefixes removed from messages.
+Source field already identifies sender — no duplication.
+Frontend formatMsg() strips any remaining brackets as safety net.
+
+### STAAX — Accounts Drawer API Keys Modal (commercial-grade)
+
+has_api_key/has_totp boolean fields in account response (never raw values).
+API KEY field shows masked dots if configured, empty if not.
+Broker-specific fields: Zerodha shows no TOTP field.
+Status indicators: Configured ✓ / Not set ○ per field.
+Save Changes button with text label.
+Inline validation before save.
+Helper text with link to portal per broker.
+
+### STAAX — Typography
+
+3 fonts locked: Syne / Space Grotesk / JetBrains Mono.
+Inter, DM Sans, Arial eliminated.
+TYPOGRAPHY_SPEC.md at repo root.
+useSort stale closure → useReducer fix applied to STAAX.
+
+### ChatGPT Architecture Assessment — Status
+
+| Priority | Item | Status |
+|----------|------|--------|
+| 1 | Runtime state reconciler | ✅ Done |
+| 2 | Circuit breaker | ✅ Done |
+| 3 | Callback latency logging | ✅ Done |
+| 4 | 09:16 missed entry recovery | ✅ Done |
+| 5 | Engine health metrics dashboard | ✅ Done |
+| 6 | Buffered event log writes | ✅ Done |
+| — | Single process risk | Accepted — monitor on EC2 |
+| — | Sequential callback chain | Monitored via P3 latency |
+
+### Known Issues / Pending Monday 28 April 2026
+
+MONDAY 28 Apr — CHECKLIST:
+  1. start.sh — watch SmartStream stays connected
+  2. All algos fire at 09:15/09:29/09:35 etc
+  3. Check Engine Log — no reconciler spam
+  4. Check circuit breaker in /system/health
+  5. Zerodha token refresh → INVEX MF + equity sync
+  6. Mom Angel One sync → verify 31 holdings still live
+  7. INVEX portfolio refresh → MF tab shows 9 funds
+  8. Check snapshot writer — total_value must be non-zero
+  9. Karthik AO: refresh token via Accounts drawer
+
+PENDING FEATURES:
+  - AI Algo Builder → Claude Haiku (Gemma 4 chain-of-thought leaks)
+  - Holdings statements for XIRR (offer still open)
+  - MF Phase 2 (expense ratios, overlap detector)
+  - EC2 deploy
+  - TRAVEX module
+
+Version: v8.16
