@@ -522,71 +522,61 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
         <SummaryCard label="Algos w/ Errors"  value={perAlgo.length.toString()} />
       </div>
 
-      <div style={{ ...neuCard, marginBottom: 12 }}>
+      <div style={neuCard}>
         <div style={secLabel}>Errors per Algo</div>
         {perAlgo.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No errors on record</div>
-        ) : (
-          <div className="no-scrollbar" style={{ maxHeight: 320, overflowY: 'auto' }}>
-            <table className="staax-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Last Error</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Errors</th>
-                </tr>
-              </thead>
-              <tbody>
-                {perAlgo.map(row => (
-                  <tr key={row.algo}>
-                    <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{cleanAlgo(row.algo)}</td>
-                    <td style={{ textAlign: 'center', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{fmtDate(row.last_error ?? undefined)}</td>
-                    <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
+        ) : (() => {
+          const errorRows = perAlgo.map(row => {
+            const algoClean = cleanAlgo(row.algo)
+            const recentEntry = recent
+              .filter(o => cleanAlgo(o.algo) === algoClean)
+              .sort((a, b) => {
+                if (!a.created_at) return 1
+                if (!b.created_at) return -1
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              })[0]
+            return {
+              algo: algoClean,
+              errors: row.errors,
+              errorMsg: recentEntry?.error_message ?? '—',
+              dateTime: recentEntry?.created_at ?? row.last_error,
+              hasRecentTs: !!recentEntry?.created_at,
+            }
+          })
+          return (
+            <div className="no-scrollbar" style={{ maxHeight: 480, overflowY: 'auto' }}>
+              <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 120 }} />
+                  <col style={{ width: 64 }} />
+                  <col />
+                  <col style={{ width: 110 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
+                    <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Errors</th>
+                    <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Last Error Msg</th>
+                    <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Date / Time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div style={neuCard}>
-        <div style={secLabel}>Recent Error Orders (last 20)</div>
-        {recent.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-mute)', fontSize: 12 }}>No recent errors</div>
-        ) : (
-          <div className="no-scrollbar" style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto' }}>
-            <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: 120 }} />
-                <col style={{ width: 170 }} />
-                <col />
-                <col style={{ width: 110 }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Symbol</th>
-                  <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Error Message</th>
-                  <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Date / Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map(o => {
-                  const msg = o.error_message || '—'
-                  return (
-                    <tr key={o.id}>
-                      <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{cleanAlgo(o.algo)}</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{o.symbol}</td>
-                      <td style={{ color: 'var(--red)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={msg}>{msg}</td>
-                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11, borderBottom: '0.5px solid var(--border)' }}>{fmtDateTime(o.created_at ?? undefined)}</td>
+                </thead>
+                <tbody>
+                  {errorRows.map(row => (
+                    <tr key={row.algo}>
+                      <td style={{ fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }}>{row.algo}</td>
+                      <td style={{ textAlign: 'center', ...numStyle, color: 'var(--red)', fontWeight: 700, borderBottom: '0.5px solid var(--border)' }}>{row.errors}</td>
+                      <td style={{ color: row.errorMsg === '—' ? 'var(--text-mute)' : 'var(--red)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', borderBottom: '0.5px solid var(--border)' }} title={row.errorMsg}>{row.errorMsg}</td>
+                      <td style={{ color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11, borderBottom: '0.5px solid var(--border)' }}>
+                        {row.hasRecentTs ? fmtDateTime(row.dateTime ?? undefined) : fmtDate(row.dateTime ?? undefined)}
+                      </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
