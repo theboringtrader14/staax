@@ -757,12 +757,42 @@ async def system_health(request: Request):
 
     status = "ok" if ready else "degraded"
 
+    # ── P5: Engine Metrics ────────────────────────────────────────────────────
+    engine_metrics: dict = {}
+    try:
+        from app.engine.broker_reconnect import broker_reconnect_manager as _brm, circuit_breaker as _cb
+        from app.engine.algo_runner import algo_runner as _engine
+        import time as _t
+
+        angel_adapter = getattr(getattr(state, "ltp_consumer", None), "_angel_adapter", None)
+        now_mono = _t.monotonic()
+
+        last_ao = getattr(angel_adapter, "_last_ao_tick", 0.0) if angel_adapter else 0.0
+        last_zd = getattr(getattr(state, "ltp_consumer", None), "_last_zd_tick", 0.0) or 0.0
+        ao_age = round(now_mono - last_ao, 1) if last_ao > 0 else None
+        zd_age = round(now_mono - last_zd, 1) if last_zd > 0 else None
+
+        engine_metrics = {
+            "tick_lag_ao_seconds":   ao_age,
+            "tick_lag_zd_seconds":   zd_age,
+            "reconnect_count":       _brm._reconnect_count,
+            "callback_latency_ms":   _engine._callback_latency,
+            "circuit_breaker":       _cb.get_status(),
+            "reconciler_last_run":   (
+                _engine._reconciler_last_run.isoformat()
+                if _engine._reconciler_last_run else None
+            ),
+        }
+    except Exception as _em_err:
+        engine_metrics = {"error": str(_em_err)}
+
     return {
         "ready":           ready,
         "ready_reason":    ready_reason,
         "is_market_hours": is_market_hours,
         "status":          status,
         "checks":          checks,
+        "engine_metrics":  engine_metrics,
         "timestamp":       now_ist.isoformat(),
     }
 

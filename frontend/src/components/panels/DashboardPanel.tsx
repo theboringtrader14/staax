@@ -403,6 +403,39 @@ export default function DashboardPanel() {
               })}
             </div>
 
+            {/* Engine Metrics — P5 */}
+            {health?.engine_metrics && !health.engine_metrics.error && (() => {
+              const em = health.engine_metrics
+              const cb = em.circuit_breaker
+              const aoAge: number | null = em.tick_lag_ao_seconds
+              const latency = em.callback_latency_ms || {}
+              const sltpMs: number | null = latency['SLTP'] ?? null
+
+              const aoColor = aoAge == null ? 'var(--text-mute)' : aoAge < 5 ? '#0ea66e' : aoAge < 30 ? '#b45309' : '#FF4444'
+              const cbColor = cb?.entries_allowed ? '#0ea66e' : '#FF4444'
+              const latColor = sltpMs == null ? 'var(--text-mute)' : sltpMs < 10 ? '#0ea66e' : sltpMs < 50 ? '#b45309' : '#FF4444'
+
+              return (
+                <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 12, background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text-mute)', textTransform: 'uppercase', marginBottom: 8 }}>Engine Metrics</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      AO lag: <span style={{ color: aoColor, fontWeight: 600 }}>{aoAge != null ? `${aoAge}s` : '—'}</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      Reconnects: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{em.reconnect_count ?? '—'}</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      SLTP: <span style={{ color: latColor, fontWeight: 600 }}>{sltpMs != null ? `${sltpMs}ms` : '—'}</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      CB: <span style={{ color: cbColor, fontWeight: 600 }}>{cb?.entries_allowed ? 'CLOSED' : 'OPEN'}</span>
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Accounts needing login */}
             {(() => {
               const needsLogin = (accounts as any[]).filter((a: any) => {
