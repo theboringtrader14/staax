@@ -717,10 +717,11 @@ export default function OrdersPage() {
     }).catch(() => {})
   }, [isPractixMode])
 
-  // Fetch week P&L summary — single call for all 5 days
+  // Fetch week P&L summary — re-runs whenever the displayed week changes
   useEffect(() => {
     const monDate = weekDates['MON']
     if (!monDate) return
+    setWeekPnl({})  // clear stale values immediately so tabs don't show last week's data
     ordersAPI.weekSummary(monDate, isPractixMode)
       .then((res: any) => {
         const mtmByDate: Record<string, any> = res.data?.mtm_by_date || {}
@@ -741,7 +742,7 @@ export default function OrdersPage() {
         setWeekPnl(map)
       })
       .catch(() => {})
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [weekDates, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load orders + waiting algos for selectedDate — skip if already cached
   useEffect(() => {
