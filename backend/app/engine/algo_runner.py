@@ -783,7 +783,7 @@ class AlgoRunner:
                             f"exiting all positions (exit_on_margin_error=True)"
                         )
                         await _ev.error(
-                            f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, exiting all positions",
+                            f"{_algo_name_str} — margin error on leg {leg_number}, exiting all positions",
                             algo_name=_algo_name_str, algo_id=_algo_id_str, source="engine",
                         )
                         for placed in placed_orders:
@@ -832,7 +832,7 @@ class AlgoRunner:
                             f"continuing other legs (exit_on_margin_error=False)"
                         )
                         await _ev.info(
-                            f"[MARGIN_ERROR] {_algo_name_str} — margin error on leg {leg_number}, continuing",
+                            f"{_algo_name_str} — margin error on leg {leg_number}, continuing",
                             algo_name=_algo_name_str, algo_id=_algo_id_str, source="engine",
                         )
                         continue
@@ -1106,7 +1106,7 @@ class AlgoRunner:
                             if _attempt < 2:
                                 await asyncio.sleep(1.5)
                     if _strike_err is not None:
-                        _msg = f"[TOKEN_ERROR] Strike selection failed after 3 attempts: {_strike_err}"
+                        _msg = f"Strike selection failed after 3 attempts: {_strike_err}"
                         logger.error(_msg)
                         await _ev.error(
                             _msg,
@@ -1944,7 +1944,7 @@ class AlgoRunner:
                         _child_fired = await self._journey_engine.on_exit(db, order, "sl", self)
                         if _child_fired:
                             await _ev.info(
-                                f"[JOURNEY] {_algo_name} — child leg fired after sl on {order.symbol}",
+                                f"{_algo_name} — child leg fired after sl on {order.symbol}",
                                 algo_name=_algo_name, source="engine",
                             )
 
@@ -2010,7 +2010,7 @@ class AlgoRunner:
                         _child_fired = await self._journey_engine.on_exit(db, order, "tp", self)
                         if _child_fired:
                             await _ev.info(
-                                f"[JOURNEY] {_algo_name} — child leg fired after tp on {order.symbol}",
+                                f"{_algo_name} — child leg fired after tp on {order.symbol}",
                                 algo_name=_algo_name, source="engine",
                             )
 
@@ -2606,9 +2606,9 @@ class AlgoRunner:
             f"⚠️ [W&T/ORB] {getattr(algo_state, 'algo_id', '')} set to WAITING: {msg}"
         )
         is_feed_error = (msg == ExecutionErrorCode.FEED_INACTIVE or str(msg) == "FEED_INACTIVE")
-        prefix = "[FEED_ERROR] " if is_feed_error else ""
+        _wait_suffix = " (feed inactive)" if is_feed_error else ""
         await _ev.warn(
-            f"{prefix}{getattr(algo_state, 'algo_id', '')} · WAITING: {msg}",
+            f"{getattr(algo_state, 'algo_id', '')} · WAITING: {msg}{_wait_suffix}",
             algo_name=str(getattr(algo_state, "algo_id", "")),
             source="engine",
         )
@@ -2733,9 +2733,17 @@ class AlgoRunner:
                     select(Order).where(Order.status == OrderStatus.OPEN)
                 )
                 open_orders = result.scalars().all()
+
+                # Only process orders from today — ignore overnight/stale rows
+                today = date.today()
+                open_orders = [
+                    o for o in open_orders
+                    if o.fill_time is not None and o.fill_time.date() >= today
+                ]
                 n_open = len(open_orders)
 
                 # ── Check: DB OPEN orders missing from monitor ────────────────
+                re_registered: list = []
                 if self._sl_tp_monitor:
                     monitored_ids = set(self._sl_tp_monitor._positions.keys())
                     n_registered = len(monitored_ids)
@@ -2743,14 +2751,12 @@ class AlgoRunner:
                     for order in open_orders:
                         oid = str(order.id)
                         if oid not in monitored_ids:
-                            logger.warning(
-                                f"[RECONCILER] {order.symbol} (order {oid}) is OPEN in DB "
-                                f"but NOT in SLTPMonitor — triggering restore"
-                            )
-                            await _ev.warn(
-                                f"[RECONCILER] Re-registering {order.symbol} — was missing from monitor",
-                                source="reconciler",
-                            )
+                            # Skip if no SL configured — BUY/non-SL orders don't need SLTPMonitor
+                            has_sl = order.sl_type or order.sl_original
+                            if not has_sl:
+                                continue
+                            # Real problem — has SL but missing from monitor
+                            re_registered.append(order.symbol)
                             n_fixed += 1
 
                     # ── Check: monitor has positions not OPEN in DB ───────────
@@ -2763,12 +2769,15 @@ class AlgoRunner:
                             f"[RECONCILER] {sym} (order {stale_id}) is in SLTPMonitor "
                             f"but NOT OPEN in DB — deregistering"
                         )
-                        await _ev.warn(
-                            f"[RECONCILER] Deregistered {sym} — no longer OPEN in DB",
-                            source="reconciler",
-                        )
                         self._sl_tp_monitor.remove_position(stale_id)
                         n_fixed += 1
+
+                    if re_registered:
+                        await _ev.log(
+                            "warn",
+                            f"Re-registered {len(re_registered)} orders: {', '.join(re_registered)}",
+                            source="reconciler",
+                        )
 
             self._reconciler_last_run = datetime.now(IST)
             logger.info(

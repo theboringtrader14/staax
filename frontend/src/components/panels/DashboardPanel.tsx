@@ -587,6 +587,7 @@ export default function DashboardPanel() {
                   if (isSep) return (
                     <div key={i} style={{ color: 'rgba(255,107,0,0.3)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
                   )
+                  const formatMsg = (s: string) => s.replace(/^\[[A-Z_a-z]+\]\s*/i, '')
                   // Parse structured format: [HH:MM:SS] [lvl] rest
                   const m = line.match(/^(\[\d{2}:\d{2}:\d{2}\])\s+\[(ok|err|wrn|inf)\]\s+(.*)$/)
                   if (m) {
@@ -602,13 +603,13 @@ export default function DashboardPanel() {
                         <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0, width: 12 }}>
                           {ico ?? <span style={{ color: 'var(--text-mute)' }}>·</span>}
                         </span>
-                        <span style={{ color: col }}>{rest}</span>
+                        <span style={{ color: col }}>{formatMsg(rest)}</span>
                       </div>
                     )
                   }
                   // Fallback (e.g. 'STAAX ready.' init line)
                   return (
-                    <div key={i} style={{ color: 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>{line}</div>
+                    <div key={i} style={{ color: 'var(--text-mute)', lineHeight: 1.6, padding: '0.5px 0' }}>{formatMsg(line)}</div>
                   )
                 })}
               </div>

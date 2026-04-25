@@ -996,7 +996,7 @@ class AlgoScheduler:
                     await db.commit()
                     logger.info(f"Entry expired → NO_TRADE: {grid_entry_id}")
                     await _ev.warn(
-                        f"[ENTRY_EXPIRED] {algo.name} — entry window closed, no order placed",
+                        f"{algo.name} — entry window closed, no order placed",
                         algo_name=algo.name,
                         algo_id=str(grid_entry.algo_id),
                         source="scheduler",
@@ -1031,7 +1031,7 @@ class AlgoScheduler:
                     await db.commit()
                     logger.info(f"ORB no trade: {grid_entry_id}")
                     await _ev.warn(
-                        f"[ORB_EXPIRED] {algo.name} — ORB window closed, no breakout detected",
+                        f"{algo.name} — ORB window closed, no breakout detected",
                         algo_name=algo.name,
                         algo_id=str(grid_entry.algo_id),
                         source="scheduler",
@@ -1199,7 +1199,7 @@ class AlgoScheduler:
                         from app.engine import event_logger as _ev_s
                         import asyncio
                         asyncio.ensure_future(_ev_s.info(
-                            f"[SCHEDULE] {algo.name} — auto-removed {pending} from recurring_days after midnight",
+                            f"{algo.name} — auto-removed {pending} from recurring_days after midnight",
                             algo_name=algo.name,
                             algo_id=str(algo.id),
                             source="scheduler",
@@ -1288,7 +1288,7 @@ class AlgoScheduler:
                                 f"(entry was {algo.entry_time}, was {algo_state.status.value})"
                             )
                             await _ev.warn(
-                                f"[ENTRY_MISSED] {algo.name} — server restarted after entry time ({algo.entry_time}) → NO_TRADE",
+                                f"{algo.name} — server restarted after entry time ({algo.entry_time}) → NO_TRADE",
                                 algo_name=algo.name,
                                 algo_id=str(algo_state.algo_id),
                                 source="scheduler",
@@ -1309,7 +1309,7 @@ class AlgoScheduler:
                                     f"(entry @ {algo.entry_time})"
                                 )
                                 await _ev.info(
-                                    f"[RECOVERY] {algo.name} — reset ERROR → WAITING, entry job re-registered @ {algo.entry_time}",
+                                    f"{algo.name} — reset ERROR → WAITING, entry job re-registered @ {algo.entry_time}",
                                     algo_name=algo.name,
                                     algo_id=str(algo_state.algo_id),
                                     source="scheduler",
@@ -1528,7 +1528,7 @@ class AlgoScheduler:
                             f"(orb_end was {orb_end_str})"
                         )
                         await _ev.warn(
-                            f"[ORB_MISSED] {algo.name} — ORB window expired during restart recovery (orb_end {orb_end_str}) → NO_TRADE",
+                            f"{algo.name} — ORB window expired during restart recovery (orb_end {orb_end_str}) → NO_TRADE",
                             algo_name=algo.name,
                             algo_id=str(algo_state.algo_id),
                             source="scheduler",
