@@ -8,11 +8,14 @@ interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
   margin: number; pnl: number; token: string; color: string
   globalSL: number | null; globalTP: number | null; fyBrokerage: number | null
-  client_id?: string; api_key?: string
+  client_id?: string
+  has_api_key?: boolean; has_api_secret?: boolean; has_totp?: boolean
   scope?: string; is_active?: boolean
 }
 interface EditCredsState {
-  id: string; nickname: string; client_id: string; api_key: string; api_secret: string; totp_secret: string
+  id: string; nickname: string; broker: string; client_id: string
+  api_key: string; api_secret: string; totp_secret: string
+  has_api_key: boolean; has_api_secret: boolean; has_totp: boolean
 }
 interface AddAccountForm {
   broker: 'zerodha' | 'angelone' | ''
@@ -60,8 +63,10 @@ export default function AccountsDrawer() {
   const [editNick,     setEditNick]     = useState<Record<string, string>>({})
   const [nickEditing,  setNickEditing]  = useState<Record<string, boolean>>({})
   const [editingCreds, setEditingCreds] = useState<EditCredsState | null>(null)
+  const [showApiKey,   setShowApiKey]   = useState(false)
   const [showSecret,   setShowSecret]   = useState(false)
   const [showTotp,     setShowTotp]     = useState(false)
+  const [credErrors,   setCredErrors]   = useState<Record<string, string>>({})
   // All-accounts funds panel state
   const [allFunds,        setAllFunds]        = useState<AccountFunds[]>([])
   const [allFundsLoading, setAllFundsLoading] = useState(false)
@@ -88,7 +93,10 @@ export default function AccountsDrawer() {
     fyBrokerage: api.fy_brokerage ?? null,
     margin: api.fy_margin ?? 0, pnl: 0, token: '', color: '',
     type: api.broker === 'angelone' && api.nickname === 'Wife' ? 'MCX' : 'F&O',
-    client_id: api.client_id ?? '', api_key: api.api_key ?? '',
+    client_id: api.client_id ?? '',
+    has_api_key: api.has_api_key ?? false,
+    has_api_secret: api.has_api_secret ?? false,
+    has_totp: api.has_totp ?? false,
     scope: api.scope ?? 'fo', is_active: api.is_active ?? true,
   }))
 
@@ -321,7 +329,7 @@ export default function AccountsDrawer() {
               {loginLoading[acc.id] ? '…' : connected ? 'Refresh Token' : 'Login'}
             </button>
           )}
-          <button onClick={() => setEditingCreds({ id: acc.id, nickname: acc.name, client_id: acc.client_id || '', api_key: acc.api_key || '', api_secret: '', totp_secret: '' })}
+          <button onClick={() => { setCredErrors({}); setEditingCreds({ id: acc.id, nickname: acc.name, broker: acc.broker, client_id: acc.client_id || '', api_key: '', api_secret: '', totp_secret: '', has_api_key: acc.has_api_key ?? false, has_api_secret: acc.has_api_secret ?? false, has_totp: acc.has_totp ?? false }) }}
             style={{ height: 28, padding: '0 12px', borderRadius: 100, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>
             API Keys
           </button>
@@ -632,11 +640,11 @@ export default function AccountsDrawer() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
                   {[
-                    { key: 'nickname', label: 'Nickname', type: 'text', ph: 'e.g. Karthik' },
-                    { key: 'client_id', label: 'Client ID', type: 'text', ph: addForm.broker === 'zerodha' ? 'AB1234' : 'A123456' },
-                    { key: 'api_key', label: 'API Key', type: 'text', ph: 'API key from console' },
-                    { key: 'api_secret', label: addForm.broker === 'zerodha' ? 'API Secret' : 'PIN / Password', type: 'password', ph: '••••••••' },
-                    { key: 'totp_secret', label: 'TOTP Secret', type: 'password', ph: 'Base32 TOTP secret' },
+                    { key: 'nickname',    label: 'Nickname',   type: 'text',     ph: 'e.g. Karthik' },
+                    { key: 'client_id',   label: 'Client ID',  type: 'text',     ph: addForm.broker === 'zerodha' ? 'AB1234' : 'A123456' },
+                    { key: 'api_key',     label: 'API Key',    type: 'text',     ph: addForm.broker === 'zerodha' ? 'From Kite Connect' : 'From SmartAPI portal' },
+                    { key: 'api_secret',  label: 'API Secret', type: 'password', ph: '••••••••' },
+                    ...(addForm.broker === 'angelone' ? [{ key: 'totp_secret', label: 'TOTP Secret', type: 'password', ph: 'Base32 TOTP secret' }] : []),
                   ].map(({ key, label, type, ph }) => (
                     <div key={key}>
                       <label style={lbl}>{label}</label>
@@ -665,49 +673,145 @@ export default function AccountsDrawer() {
       )}
 
       {/* ── Edit API Keys Modal ──────────────────────────────────────────── */}
-      {editingCreds && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
-          onClick={() => { setEditingCreds(null); setShowSecret(false); setShowTotp(false) }}>
-          <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 28, width: 420, maxWidth: '90%' }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>{editingCreds.nickname}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-mute)', marginBottom: 20 }}>Client ID: {editingCreds.client_id}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-              <div>
-                <label style={lbl}>API Key</label>
-                <input style={inp} value={editingCreds.api_key} onChange={e => setEditingCreds({ ...editingCreds, api_key: e.target.value })} />
-              </div>
-              <div>
-                <label style={lbl}>API Secret</label>
-                <div style={{ position: 'relative' }}>
-                  <input style={{ ...inp, paddingRight: 56 }} type={showSecret ? 'text' : 'password'} value={editingCreds.api_secret} placeholder="Leave blank to keep existing"
-                    onChange={e => setEditingCreds({ ...editingCreds, api_secret: e.target.value })} />
-                  <button onClick={() => setShowSecret(!showSecret)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 10 }}>{showSecret ? 'Hide' : 'Show'}</button>
-                </div>
-              </div>
-              <div>
-                <label style={lbl}>TOTP Secret</label>
-                <div style={{ position: 'relative' }}>
-                  <input style={{ ...inp, paddingRight: 56 }} type={showTotp ? 'text' : 'password'} value={editingCreds.totp_secret} placeholder="Leave blank to keep existing"
-                    onChange={e => setEditingCreds({ ...editingCreds, totp_secret: e.target.value })} />
-                  <button onClick={() => setShowTotp(!showTotp)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 10 }}>{showTotp ? 'Hide' : 'Show'}</button>
-                </div>
-              </div>
+      {editingCreds && (() => {
+        const isZerodha = editingCreds.broker === 'Zerodha'
+        const connected = tokenStatus[editingCreds.nickname] ?? false
+
+        const closeModal = () => {
+          setEditingCreds(null)
+          setShowApiKey(false); setShowSecret(false); setShowTotp(false)
+          setCredErrors({})
+        }
+
+        const validateAndSave = async () => {
+          const errs: Record<string, string> = {}
+          if (!editingCreds.api_key && !editingCreds.has_api_key)
+            errs.api_key = 'API Key is required'
+          if (isZerodha && !editingCreds.api_secret && !editingCreds.has_api_secret)
+            errs.api_secret = 'API Secret is required for Zerodha'
+          if (Object.keys(errs).length > 0) { setCredErrors(errs); return }
+          const creds: { api_key?: string; api_secret?: string; totp_secret?: string } = {}
+          if (editingCreds.api_key)     creds.api_key     = editingCreds.api_key
+          if (editingCreds.api_secret)  creds.api_secret  = editingCreds.api_secret
+          if (editingCreds.totp_secret) creds.totp_secret = editingCreds.totp_secret
+          await accountsAPI.updateCredentials(editingCreds.id, creds)
+          closeModal()
+        }
+
+        const StatusDot = ({ configured }: { configured: boolean }) => (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: configured ? '#0ea66e' : 'var(--text-mute)' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: configured ? '#0ea66e' : 'var(--border)', display: 'inline-block', flexShrink: 0 }} />
+            {configured ? 'Configured' : 'Not set'}
+          </span>
+        )
+
+        const MaskedField = ({ fieldKey, label, value, has, show, onToggleShow, onChange, error, helperText }: {
+          fieldKey: string; label: string; value: string; has: boolean; show: boolean
+          onToggleShow: () => void; onChange: (v: string) => void; error?: string; helperText?: string
+        }) => (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label style={lbl}>{label}</label>
+              <StatusDot configured={has || value.length > 0} />
             </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => { setEditingCreds(null); setShowSecret(false); setShowTotp(false) }}
-                style={{ height: 36, padding: '0 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', fontSize: 12 }}>Cancel</button>
-              <button onClick={async () => {
-                const creds: { api_key?: string; api_secret?: string; totp_secret?: string } = { api_key: editingCreds.api_key }
-                if (editingCreds.api_secret) creds.api_secret = editingCreds.api_secret
-                if (editingCreds.totp_secret) creds.totp_secret = editingCreds.totp_secret
-                await accountsAPI.updateCredentials(editingCreds.id, creds)
-                setEditingCreds(null); setShowSecret(false); setShowTotp(false)
-              }} style={{ width: 36, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Save"><FloppyDisk size={16} weight="bold" /></button>
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inp, paddingRight: 52, borderRadius: 8, boxShadow: error ? 'inset 0 0 0 1.5px #FF4444, var(--neu-inset)' : 'var(--neu-inset)' }}
+                type={show ? 'text' : 'password'}
+                value={value}
+                placeholder={has ? '••••••••••••' : `Enter ${label.toLowerCase()}`}
+                onChange={e => { onChange(e.target.value); setCredErrors(prev => { const n = { ...prev }; delete n[fieldKey]; return n }) }}
+              />
+              {(value.length > 0) && (
+                <button onClick={onToggleShow} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>
+                  {show ? 'Hide' : 'Show'}
+                </button>
+              )}
+            </div>
+            {error && <div style={{ fontSize: 10, color: '#FF4444', marginTop: 4 }}>{error}</div>}
+            {helperText && !error && <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4 }}>{helperText}</div>}
+          </div>
+        )
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+            onClick={closeModal}>
+            <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 28, width: 420, maxWidth: '90%' }}
+              onClick={e => e.stopPropagation()}>
+
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
+                    {editingCreds.nickname}
+                    <span style={{ fontWeight: 400, color: 'var(--text-mute)', fontSize: 13 }}> — {editingCreds.broker}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-mute)' }}>
+                      Client: {editingCreds.client_id}
+                    </span>
+                    <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: connected ? '#0ea66e' : '#FF4444' }}>
+                      {connected ? 'Live' : 'Offline'}
+                    </span>
+                  </div>
+                </div>
+                <button onClick={closeModal} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+              </div>
+
+              {/* Fields */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
+                <MaskedField
+                  fieldKey="api_key"
+                  label="API Key"
+                  value={editingCreds.api_key}
+                  has={editingCreds.has_api_key}
+                  show={showApiKey}
+                  onToggleShow={() => setShowApiKey(v => !v)}
+                  onChange={v => setEditingCreds({ ...editingCreds, api_key: v })}
+                  error={credErrors.api_key}
+                  helperText={isZerodha ? 'From Kite Connect → Your App → API Key' : 'From SmartAPI portal → Apps → Your App → API Key'}
+                />
+                <MaskedField
+                  fieldKey="api_secret"
+                  label={isZerodha ? 'API Secret' : 'API Secret'}
+                  value={editingCreds.api_secret}
+                  has={editingCreds.has_api_secret}
+                  show={showSecret}
+                  onToggleShow={() => setShowSecret(v => !v)}
+                  onChange={v => setEditingCreds({ ...editingCreds, api_secret: v })}
+                  error={credErrors.api_secret}
+                  helperText={isZerodha ? 'From Kite Connect → Your App → API Secret' : undefined}
+                />
+                {!isZerodha && (
+                  <MaskedField
+                    fieldKey="totp_secret"
+                    label="TOTP Secret"
+                    value={editingCreds.totp_secret}
+                    has={editingCreds.has_totp}
+                    show={showTotp}
+                    onToggleShow={() => setShowTotp(v => !v)}
+                    onChange={v => setEditingCreds({ ...editingCreds, totp_secret: v })}
+                    error={credErrors.totp_secret}
+                    helperText="Base32 secret from your TOTP app — required for auto-login"
+                  />
+                )}
+              </div>
+
+              {/* Footer buttons */}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button onClick={closeModal}
+                  style={{ height: 38, padding: '0 18px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', fontSize: 12 }}>
+                  Cancel
+                </button>
+                <button onClick={validateAndSave}
+                  style={{ height: 38, padding: '0 20px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <FloppyDisk size={14} weight="bold" /> Save Changes
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Confirm Deactivate/Reactivate Modal ─────────────────────────── */}
       {confirmAction && (

@@ -70,6 +70,10 @@ def _account_to_dict(acc: Account) -> dict:
             acc.token_generated_at.date() == __import__('datetime').date.today() and
             acc.status == AccountStatus.ACTIVE
         ),
+        # Presence flags — never return the actual secret values
+        "has_api_key":    bool(acc.api_key),
+        "has_api_secret": bool(acc.api_secret),
+        "has_totp":       bool(acc.totp_secret),
     }
 
 
