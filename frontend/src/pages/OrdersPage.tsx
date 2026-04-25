@@ -1150,6 +1150,23 @@ export default function OrdersPage() {
     return realized + openMtm
   }, [ordersByDate, todayDate, ltpData, accountFilter])
 
+  // Day tab P&L — computed from local order data (same logic as cards) for every past day.
+  // Falls back to server weekPnl only when a day's orders haven't been loaded yet.
+  const computedDayPnl = useMemo(() => {
+    const result: Record<string, number | null> = { ...weekPnl }
+    for (const [day, date] of Object.entries(weekDates)) {
+      if (!date || date === todayDate) continue  // today handled by liveTodayPnl
+      const groups = ordersByDate[date]
+      if (groups && groups.some(g => g.legs.length > 0)) {
+        const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
+        result[day] = filtered.reduce((daySum, group) =>
+          daySum + group.legs.reduce((s, l) => s + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
+        , 0)
+      }
+    }
+    return result
+  }, [weekPnl, ordersByDate, accountFilter, weekDates, todayDate, ltpData])
+
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
   const localFilteredOrders  = isPastDay
@@ -1333,7 +1350,7 @@ export default function OrdersPage() {
                   const isActive  = selectedDate === date
                   const isHoliday = date ? holidayDates.has(date) : false
                   const isDayToday = date === todayDate
-                  const pnl       = isDayToday ? liveTodayPnl : (weekPnl[day] ?? null)
+                  const pnl       = isDayToday ? liveTodayPnl : (computedDayPnl[day] ?? null)
                   const rupee     = '\u20B9'
                   return (
                     <button
