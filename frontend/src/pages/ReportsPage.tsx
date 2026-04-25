@@ -594,7 +594,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Middle: algo columns, scrollable */}
-          <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+          <div style={{ flex: 1, minWidth: 0, overflowX: 'scroll', paddingBottom: 8 }}>
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', tableLayout: 'fixed' as const }}>
               <thead>
                 <tr>
