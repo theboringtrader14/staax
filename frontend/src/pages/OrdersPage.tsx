@@ -652,7 +652,9 @@ export default function OrdersPage() {
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
-  const [showWeekends, setShowWeekends] = useState(false)
+  const [showWeekends, setShowWeekends] = useState(() => {
+    return localStorage.getItem('orders_show_weekends') === 'true'
+  })
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
   const [replayAlgo, setReplayAlgo]   = useState<{ id: string; name: string; date: string } | null>(null)
@@ -1366,7 +1368,11 @@ export default function OrdersPage() {
               </div>
               {/* Weekends pill — unchanged */}
               <div
-                onClick={() => setShowWeekends(!showWeekends)}
+                onClick={() => setShowWeekends(prev => {
+                  const next = !prev
+                  localStorage.setItem('orders_show_weekends', String(next))
+                  return next
+                })}
                 style={{
                   padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
                   fontSize: 11, fontFamily: 'var(--font-display)',
