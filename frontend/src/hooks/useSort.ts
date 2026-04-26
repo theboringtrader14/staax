@@ -11,7 +11,6 @@ function sortReducer<T>(
   const { key } = action
   if (state.key !== key) return { key, dir: 'desc' }
   if (state.dir === 'desc') return { key, dir: 'asc' }
-  if (state.dir === 'asc')  return { key: null, dir: null }
   return { key, dir: 'desc' }
 }
 
