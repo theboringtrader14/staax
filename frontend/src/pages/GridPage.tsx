@@ -116,7 +116,10 @@ export default function GridPage() {
   const [showAI,         setShowAI]         = useState(false)
   const [aiEditAlgo,     setAiEditAlgo]     = useState<Algo|null>(null)
   const [aiAccounts,     setAiAccounts]     = useState<{id:string,nickname:string,broker:string}[]>([])
-
+  const [modeModalAlgo,  setModeModalAlgo]  = useState<{
+    id: string; name: string; account: string
+    currentMode: 'live' | 'practix'; targetMode: 'live' | 'practix'
+  } | null>(null)
   const listScrollRef    = useRef<HTMLDivElement>(null)
   const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
 
@@ -717,6 +720,34 @@ export default function GridPage() {
                                 <span style={{ fontSize:'10px', color:'var(--text-mute)', fontFamily:'var(--font-body)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                                   {algo.account || '—'}
                                 </span>
+                                <button
+                                  onClick={e => { e.stopPropagation(); setModeModalAlgo({
+                                    id: algo.id,
+                                    name: algo.name,
+                                    account: algo.account,
+                                    currentMode: algo.is_live ? 'live' : 'practix',
+                                    targetMode: algo.is_live ? 'practix' : 'live',
+                                  }) }}
+                                  style={{
+                                    fontSize: 10, fontFamily: 'monospace', letterSpacing: 1,
+                                    padding: '2px 10px', borderRadius: 20, cursor: 'pointer',
+                                    border: `1px solid ${algo.is_live ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.4)'}`,
+                                    background: algo.is_live ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                                    color: algo.is_live ? '#10B981' : '#F59E0B',
+                                    display: 'flex', alignItems: 'center', gap: 5,
+                                    alignSelf: 'flex-start',
+                                  }}
+                                >
+                                  {algo.is_live && (
+                                    <span style={{
+                                      width: 6, height: 6, borderRadius: '50%',
+                                      background: '#10B981',
+                                      animation: 'pillDotPulse 1.5s ease-in-out infinite',
+                                      display: 'inline-block', flexShrink: 0,
+                                    }} />
+                                  )}
+                                  {algo.is_live ? 'LIVE' : 'PRACTIX'}
+                                </button>
                               </div>
 
                               {/* ── Strategy + instrument chip ── */}
@@ -1063,6 +1094,96 @@ export default function GridPage() {
                 onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
                 style={{ flex:1, padding:'10px 0', borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'transparent', color:'rgba(200,200,220,0.6)', fontSize:13, cursor:'pointer' }}>
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── LIVE / PRACTIX mode toggle modal ─────────────────────────────── */}
+      {modeModalAlgo && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setModeModalAlgo(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#0d1117',
+              border: `1px solid ${modeModalAlgo.targetMode === 'live' ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.3)'}`,
+              borderRadius: 12, padding: 28, width: 400,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: '0 0 8px' }}>
+              {modeModalAlgo.targetMode === 'live'
+                ? `Go LIVE — ${modeModalAlgo.name}`
+                : `Switch to PRACTIX — ${modeModalAlgo.name}`}
+            </h3>
+            <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, margin: '0 0 20px' }}>
+              {modeModalAlgo.targetMode === 'live'
+                ? 'This will switch to live trading. Real orders will be placed with real money from your broker account.'
+                : 'This switches to paper trading mode. Open live positions will NOT be closed automatically — close them manually first.'}
+            </p>
+            <div style={{ background: '#111827', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
+              {([
+                ['Account', modeModalAlgo.account || '—'],
+                ['Strategy', modeModalAlgo.name],
+                ['From', modeModalAlgo.currentMode === 'practix' ? 'PRACTIX (paper)' : 'LIVE (real money)'],
+                ['To', modeModalAlgo.targetMode === 'live' ? 'LIVE (real money)' : 'PRACTIX (paper)'],
+              ] as [string,string][]).map(([label, value]) => (
+                <div key={label} style={{ display:'flex', justifyContent:'space-between', marginBottom:8, fontSize:12 }}>
+                  <span style={{ color:'#6b7280', fontFamily:'monospace' }}>{label}</span>
+                  <span style={{ color:'#e2e8f0', fontWeight:600 }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            {modeModalAlgo.targetMode === 'live' && (
+              <div style={{
+                background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)',
+                borderRadius:8, padding:'10px 14px', marginBottom:20,
+                fontSize:12, color:'#f87171',
+              }}>
+                This action enables live trading. Ensure sufficient margin is available.
+              </div>
+            )}
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button
+                onClick={() => setModeModalAlgo(null)}
+                style={{
+                  padding:'8px 20px', borderRadius:8,
+                  border:'1px solid rgba(255,255,255,0.1)',
+                  background:'transparent', color:'#9ca3af', cursor:'pointer', fontSize:13,
+                }}
+              >Cancel</button>
+              <button
+                onClick={async () => {
+                  const { id, name, targetMode } = modeModalAlgo
+                  setModeModalAlgo(null)
+                  try {
+                    if (targetMode === 'live') {
+                      await algosAPI.promote(id)
+                    } else {
+                      await algosAPI.demote(id)
+                    }
+                    setAlgos(a => a.map(x => x.id === id ? { ...x, is_live: targetMode === 'live' } : x))
+                    showSuccess(targetMode === 'live' ? `${name} is now LIVE` : `${name} switched to PRACTIX`)
+                    loadData()
+                  } catch {
+                    showError('Failed to switch mode')
+                  }
+                }}
+                style={{
+                  padding:'8px 20px', borderRadius:8, border:'none',
+                  background: modeModalAlgo.targetMode === 'live' ? '#dc2626' : '#d97706',
+                  color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600,
+                }}
+              >
+                {modeModalAlgo.targetMode === 'live' ? 'Confirm — Go LIVE' : 'Switch to PRACTIX'}
               </button>
             </div>
           </div>
