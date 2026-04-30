@@ -212,7 +212,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
   return (
     <>
     <tr style={{ background: isChild ? 'rgba(255,107,0,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #FF4444' : undefined }}>
-      <td style={{ paddingLeft: isChild ? '16px' : '10px', width: COLS[0] }}>
+      <td style={{ textAlign: 'center', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
         {(leg.reentryCount ?? 0) > 0 && (
           <span style={{
@@ -233,7 +233,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
           </span>
         )}
       </td>
-      <td style={{ width: COLS[1], ...C }}>
+      <td style={{ width: COLS[1], ...C, padding: '11px 4px' }}>
         <span style={{ background: st.bg, boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
@@ -392,7 +392,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
             </span>
           : <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>}
       </td>
-      <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'right', color: (livePnl ?? leg.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+      <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'center', color: (livePnl ?? leg.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
         {(() => { const p = livePnl ?? leg.pnl; return p != null && p !== 0 ? `${p >= 0 ? '+' : ''}₹${Math.abs(p).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—' })()}
       </td>
     </tr>
@@ -1688,8 +1688,8 @@ export default function OrdersPage() {
                         <tbody>
                           {(w.legs || []).map(leg => (
                             <tr key={leg.leg_number}>
-                              <td style={{ textAlign: 'left', paddingLeft: '10px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
-                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                              <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
+                              <td style={{ textAlign: 'center', padding: '11px 4px', verticalAlign: 'middle' }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, boxShadow: 'var(--neu-inset)', color: legStatusChip.color, background: legStatusChip.bg, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                   {legStatusChip.label}
                                 </span>
@@ -1720,7 +1720,7 @@ export default function OrdersPage() {
                               {['LTP','SL','Target','Exit','Reason'].map(col => (
                                 <td key={col} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
                               ))}
-                              <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, verticalAlign: 'middle' }}>—</td>
+                              <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, verticalAlign: 'middle' }}>—</td>
                             </tr>
                           ))}
                         </tbody>
