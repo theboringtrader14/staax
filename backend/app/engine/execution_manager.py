@@ -366,12 +366,30 @@ class ExecutionManager:
         symbol_token:    str  = "",
         broker_order_id: Optional[str] = None,
         order_type:      str  = "MARKET",
+        reason:          str  = "manual",
+        sl_price:        Optional[float] = None,
     ) -> Optional[str]:
         """
         Place a square-off (opposite direction) order.
         Bypasses kill switch and market hours — SQ is always permitted.
         Cancel rate guard applied.
+
+        reason="sl_hit" + sl_price → places SL-LIMIT order (Zerodha "SL", Angel One "STOPLOSS_LIMIT")
+        All other reasons → MARKET order (default behaviour).
         """
+        # Bug A: derive order_type and prices from reason + sl_price
+        _limit_price:   Optional[float] = None
+        _trigger_price: Optional[float] = None
+        if reason == "sl_hit" and sl_price is not None:
+            order_type = "SL"
+            _trigger_price = sl_price
+            if direction.lower() in ("buy", "b"):
+                # Closing a LONG — SELL stop; price slightly below trigger
+                _limit_price = sl_price - 0.05
+            else:
+                # Closing a SHORT — BUY stop; price slightly above trigger
+                _limit_price = sl_price + 0.05
+
         # P2.1 — per-idempotency_key lock: deduplicate concurrent square-off calls
         lock = self._locks.setdefault(idempotency_key, asyncio.Lock())
         if lock.locked():
@@ -386,6 +404,8 @@ class ExecutionManager:
                 is_practix=is_practix, broker_type=broker_type, symbol_token=symbol_token,
                 broker_order_id=broker_order_id,
                 order_type=order_type,
+                limit_price=_limit_price,
+                trigger_price=_trigger_price,
             )
 
     async def _square_off_inner(
@@ -404,6 +424,8 @@ class ExecutionManager:
         symbol_token:    str  = "",
         broker_order_id: Optional[str] = None,
         order_type:      str  = "MARKET",
+        limit_price:     Optional[float] = None,
+        trigger_price:   Optional[float] = None,
     ) -> Optional[str]:
         _sq_details = {"symbol": symbol, "direction": direction, "qty": quantity,
                        "broker_type": broker_type, "is_practix": is_practix,
@@ -447,6 +469,8 @@ class ExecutionManager:
             ltp             = 0.0,
             is_practix      = is_practix,
             is_overnight    = False,
+            limit_price     = limit_price,
+            trigger_price   = trigger_price,
             broker_type     = broker_type,
             symbol_token    = symbol_token,
             algo_tag        = algo_tag,

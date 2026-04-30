@@ -156,6 +156,24 @@ class ConnectionManager:
             }
         })
 
+    async def broadcast_sl_hit(
+        self, symbol: str, sl_price: float, ltp: float, order_id: str
+    ):
+        """
+        Send a structured sl_hit event on the status channel.
+        Frontend useWebSocket.ts handles this to show a toast + play sound.
+        """
+        await self._send(self.status_connections, {
+            "type": "sl_hit",
+            "data": {
+                "symbol":   symbol,
+                "sl_price": sl_price,
+                "ltp":      ltp,
+                "order_id": order_id,
+                "ts":       _now_ist(),
+            }
+        })
+
     async def broadcast_order_update(self, order_id: str, update: dict):
         """
         Called when an order's fill price, exit, or SL level changes.

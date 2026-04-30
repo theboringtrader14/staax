@@ -1932,11 +1932,12 @@ class AlgoRunner:
                         if self._tsl_engine else False
                     )
 
-                    # Place broker square-off for live orders (not practix/paper)
+                    # Bug B+A: Place broker square-off with SL-LIMIT order type
+                    _broker_sq_id: Optional[str] = None
                     if not order.is_practix and self._execution_manager:
                         _exit_broker_type = getattr(order, "broker_type", None) or "zerodha"
                         try:
-                            await self._execution_manager.square_off(
+                            _broker_sq_id = await self._execution_manager.square_off(
                                 db              = db,
                                 idempotency_key = f"exit:{order.id}:sl",
                                 algo_id         = str(order.algo_id),
@@ -1949,12 +1950,50 @@ class AlgoRunner:
                                 is_practix      = order.is_practix,
                                 broker_type     = _exit_broker_type,
                                 symbol_token    = str(getattr(order, "instrument_token", None) or ""),
-                                order_type      = "SLM",
+                                reason          = "sl_hit",
+                                sl_price        = order.sl_actual,
                             )
                         except Exception as _sq_err:
                             logger.error(f"[SL] square_off failed for {order_id} (continuing DB close): {_sq_err}")
 
-                    await self._close_order(db, order, ltp, "sl")
+                    # Bug C: fetch actual fill price from broker order book
+                    exit_price = ltp
+                    if not order.is_practix and _broker_sq_id:
+                        _exit_broker_type = getattr(order, "broker_type", None) or "zerodha"
+                        if _exit_broker_type == "angelone":
+                            # Load account to find the AO broker instance
+                            try:
+                                _acc_res = await db.execute(
+                                    select(Account).where(Account.id == order.account_id)
+                                )
+                                _acc = _acc_res.scalar_one_or_none()
+                                _ao = self._angel_broker_map.get(_acc.client_id) if _acc else None
+                                if _ao:
+                                    _actual_fill: Optional[float] = None
+                                    for _wait in (2, 3):
+                                        await asyncio.sleep(_wait)
+                                        try:
+                                            _ob = await _ao.get_order_book()
+                                            for _ob_row in (_ob or []):
+                                                if str(_ob_row.get("orderid", "")) == str(_broker_sq_id):
+                                                    _avg = float(_ob_row.get("averageprice", 0) or 0)
+                                                    if _avg > 0:
+                                                        _actual_fill = _avg
+                                                        break
+                                        except Exception as _ob_err:
+                                            logger.warning(f"[SL FILL] Orderbook fetch failed: {_ob_err}")
+                                        if _actual_fill:
+                                            break
+                                    if _actual_fill:
+                                        logger.info(
+                                            f"[SL FILL] Corrected exit_price from broker fill: "
+                                            f"{order.symbol} {ltp:.2f} → {_actual_fill:.2f}"
+                                        )
+                                        exit_price = _actual_fill
+                            except Exception as _fill_err:
+                                logger.warning(f"[SL FILL] Fill fetch error for {order.symbol}: {_fill_err}")
+
+                    await self._close_order(db, order, exit_price, "sl")
 
                     # Deregister
                     if self._tsl_engine:
@@ -1973,17 +2012,28 @@ class AlgoRunner:
 
                     await db.commit()
 
-                    # Notify WebSocket
+                    # Notify WebSocket — event_logger broadcast (notifications panel)
                     _pnl = order.pnl or 0.0
                     _sign = "+" if _pnl >= 0 else ""
                     await _ev.error(
-                        f"{_algo_name} · SL {order.symbol} @ {ltp} · P&L {_sign}₹{_pnl:,.0f}",
+                        f"{_algo_name} · SL {order.symbol} @ {exit_price} · P&L {_sign}₹{_pnl:,.0f}",
                         algo_name=_algo_name, source="engine",
                     )
                     asyncio.create_task(_push.send_push(
                         "🔴 SL Hit",
                         f"{_algo_name or 'Algo'} — SL triggered on {order.symbol}",
                     ))
+                    # Bug B: broadcast sl_hit event for frontend toast + sound
+                    if self._ws_manager:
+                        try:
+                            await self._ws_manager.broadcast_sl_hit(
+                                symbol   = order.symbol,
+                                sl_price = order.sl_actual or exit_price,
+                                ltp      = exit_price,
+                                order_id = str(order.id),
+                            )
+                        except Exception as _ws_err:
+                            logger.warning(f"[SL] ws broadcast_sl_hit failed: {_ws_err}")
                     # Re-entry check
                     if self._reentry_engine:
                         await self._reentry_engine.on_exit(
