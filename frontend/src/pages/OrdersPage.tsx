@@ -1668,31 +1668,39 @@ export default function OrdersPage() {
                   {/* ── Leg table ── */}
                   {(w.legs || []).length > 0 && (
                     <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <table className="staax-table">
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
                           <tr>
-                            {['#','Status','Symbol','Lots','Fill / Ref','LTP','SL','Target','Exit','Reason','P&L'].map(h => (
-                              <th key={h} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-mute)', fontWeight: 600, padding: '8px 20px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
-                            ))}
+                            <th style={{ textAlign: 'left',   background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>#</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Status</th>
+                            <th style={{ textAlign: 'left',   background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Symbol</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Lots</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Fill / Ref</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>LTP</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>SL</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Target</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Exit</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Reason</th>
+                            <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>P&L</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(w.legs || []).map(leg => (
                             <tr key={leg.leg_number}>
-                              <td style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>{leg.leg_number}</td>
-                              <td style={{ textAlign: 'center', padding: '8px 6px', verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
+                              <td style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, boxShadow: 'var(--neu-inset)', color: legStatusChip.color, background: legStatusChip.bg, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                   {legStatusChip.label}
                                 </span>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '8px 6px', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
+                              <td style={{ textAlign: 'left', fontSize: 11, verticalAlign: 'middle' }}>
                                 <div style={{ color: 'var(--text)' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
                                 <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>{leg.lots}</td>
+                              <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.lots}</td>
                               {/* Fill/Ref: show W&T ref+trigger only for actively MONITORING legs */}
-                              <td style={{ textAlign: 'center', padding: '8px 6px', fontSize: 10, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
+                              <td style={{ textAlign: 'center', fontSize: 11, verticalAlign: 'middle' }}>
                                 {(() => {
                                   const showRefTrigger = w.display_status === 'MONITORING' && leg.wt_enabled && leg.wt_ref_price !== null && leg.wt_ref_price !== undefined
                                   if (showRefTrigger) {
@@ -1704,13 +1712,13 @@ export default function OrdersPage() {
                                     )
                                   }
                                   if (w.display_status === 'MONITORING' && leg.wt_enabled) {
-                                    return <span style={{ color: '#F59E0B', fontSize: 9 }}>W&amp;T waiting ref…</span>
+                                    return <span style={{ color: '#F59E0B', fontSize: 10 }}>W&amp;T waiting ref…</span>
                                   }
                                   return <span style={{ color: 'var(--text-dim)' }}>—</span>
                                 })()}
                               </td>
                               {['LTP','SL','Target','Exit','Reason','P&L'].map(col => (
-                                <td key={col} style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>—</td>
+                                <td key={col} style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
                               ))}
                             </tr>
                           ))}
