@@ -6,7 +6,6 @@ import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
 import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
-import { SortableHeader } from '@/components/SortableHeader'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -18,8 +17,8 @@ const fmtIST = (iso: string | null | undefined): string => {
   })
 }
 
-type LegStatus  = 'open' | 'closed' | 'error' | 'pending' | 'waiting'
-type AlgoStatus = 'open' | 'closed' | 'error' | 'pending' | 'waiting' | 'no_trade'
+type LegStatus  = 'open' | 'closed' | 'error' | 'pending' | 'waiting' | 'skipped'
+type AlgoStatus = 'open' | 'closed' | 'error' | 'pending' | 'waiting' | 'no_trade' | 'skipped'
 
 interface Leg {
   id: string; parentId?: string; journeyLevel: string; status: LegStatus
@@ -73,6 +72,7 @@ const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
   error:   { color: '#FF4444',              bg: 'rgba(255,68,68,0.12)'   },
   pending: { color: '#FF8C00',              bg: 'rgba(255,140,0,0.12)'   },
   waiting: { color: '#F59E0B',              bg: 'rgba(245,158,11,0.12)'  },
+  skipped: { color: '#9CA3AF',              bg: 'rgba(156,163,175,0.15)' },
 }
 
 // ── Algo-level status chip ──────────────────────────────────────────────────
@@ -83,6 +83,7 @@ const ALGO_STATUS_CHIP: Record<AlgoStatus, { color: string; bg: string; label: s
   pending:  { color: '#FF8C00', bg: 'rgba(255,140,0,0.12)',   label: 'PENDING'  },
   waiting:  { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: 'WAITING'  },
   no_trade: { color: 'var(--text-dim)', bg: 'transparent',    label: 'NO TRADE' },
+  skipped:  { color: '#9CA3AF', bg: 'rgba(156,163,175,0.15)', label: 'SKIPPED'  },
 }
 
 // ── Algo card left status strip ─────────────────────────────────────────────
@@ -93,6 +94,7 @@ const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
   pending:  { color: '#FF8C00',               glow: 'rgba(255,140,0,0.65)'   },
   waiting:  { color: '#D97706',               glow: 'rgba(217,119,6,0.65)'   },
   no_trade: { color: 'var(--border)',          glow: 'transparent'            },
+  skipped:  { color: 'rgba(156,163,175,0.5)', glow: 'transparent'            },
 }
 
 const COLS = ['36px','66px','158px','50px','120px','66px','72px','54px','84px','74px','120px']
@@ -126,6 +128,7 @@ function getAlgoStatus(group: AlgoGroup): AlgoStatus {
   if (legs.some(l => l.status === ORDER_STATUS.OPEN))   return ORDER_STATUS.OPEN as AlgoStatus
   if (legs.some(l => l.status === 'pending')) return 'pending'
   if (legs.every(l => l.status === ORDER_STATUS.CLOSED)) return ORDER_STATUS.CLOSED as AlgoStatus
+  if (legs.every(l => l.status === 'skipped')) return 'skipped'
   return 'no_trade'
 }
 
@@ -242,7 +245,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         )}
       </td>
       <td style={{ width: COLS[1], ...C }}>
-        <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
+        <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
             SYNC
@@ -679,25 +682,6 @@ export default function OrdersPage() {
     try { return sessionStorage.getItem('staax_status_filter') ?? null } catch { return null }
   })
   const [isMarketHours, setIsMarketHours] = useState(false)
-  const [legSortKey, setLegSortKey] = useState<string>('pnl')
-  const [legSortDir, setLegSortDir] = useState<'asc' | 'desc' | null>('desc')
-
-  const handleLegSort = (key: string) => {
-    if (legSortKey === key) setLegSortDir(d => d === 'desc' ? 'asc' : d === 'asc' ? null : 'desc')
-    else { setLegSortKey(key); setLegSortDir('desc') }
-  }
-
-  const sortLegs = (legs: Leg[]): Leg[] => {
-    if (!legSortKey || !legSortDir) return legs
-    return [...legs].sort((a, b) => {
-      const av = (a as any)[legSortKey] ?? null
-      const bv = (b as any)[legSortKey] ?? null
-      if (av == null) return 1; if (bv == null) return -1
-      if (typeof av === 'number') return legSortDir === 'asc' ? av - bv : bv - av
-      return legSortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
-    })
-  }
-
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
     if (!monDate) return ''
@@ -1497,13 +1481,16 @@ export default function OrdersPage() {
                 return ist.getHours() * 60 + ist.getMinutes() >= hh * 60 + mm
               })()
 
-              // Card accent colours — red for ERROR, amber for WAITING/MISSED
-              const legStatusChip = isMissed
+              // Card accent colours — red for ERROR, amber for WAITING/MISSED, grey for SKIPPED
+              const legStatusChip =
+                isMissed
                 ? { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' }
                 : w.display_status === 'MONITORING'
                 ? { label: 'W&T',     color: '#2dd4bf',               bg: 'rgba(45,212,191,0.10)'  }
                 : w.display_status === 'SCHEDULED'
                 ? { label: 'SCHED',   color: '#4488FF',               bg: 'rgba(68,136,255,0.10)'  }
+                : w.display_status === 'SKIPPED'
+                ? { label: 'SKIPPED', color: '#9CA3AF',               bg: 'rgba(156,163,175,0.10)' }
                 : { label: isError ? 'ERROR' : 'WAITING', color: isError ? '#FF4444' : '#FFD700', bg: isError ? 'rgba(255,68,68,0.10)' : 'rgba(255,215,0,0.10)' }
               const displayStatus = w.display_status  // 'MONITORING' | 'SCHEDULED' | 'WAITING' | 'MISSED' | 'ERROR'
               const stripBg =
@@ -1511,6 +1498,7 @@ export default function OrdersPage() {
                 displayStatus === 'SCHEDULED'  ? '#4488FF' :
                 displayStatus === 'ERROR'      ? '#FF4444' :
                 displayStatus === 'MISSED'     ? '#F59E0B' :
+                displayStatus === 'SKIPPED'    ? 'rgba(156,163,175,0.5)' :
                 isError ? '#FF4444' :
                 isMissed ? 'rgba(255,215,0,0.35)' :
                 '#FFE600'  // WAITING default
@@ -1519,6 +1507,7 @@ export default function OrdersPage() {
                 displayStatus === 'SCHEDULED'  ? 'rgba(68,136,255,0.5)' :
                 displayStatus === 'ERROR'      ? 'rgba(255,34,68,0.5)'  :
                 displayStatus === 'MISSED'     ? 'rgba(245,158,11,0.5)' :
+                displayStatus === 'SKIPPED'    ? 'transparent'          :
                 isError ? 'rgba(255,68,68,0.5)' :
                 'rgba(255,230,0,0.5)'  // WAITING default
 
@@ -1610,9 +1599,10 @@ export default function OrdersPage() {
                             WAITING:    { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: '⏳ WAITING'    },
                             MISSED:     { color: '#C2610C', bg: 'rgba(194,97,12,0.12)',   label: 'MISSED'        },
                             ERROR:      { color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   label: 'ERROR'         },
+                            SKIPPED:    { color: '#9CA3AF', bg: 'rgba(156,163,175,0.15)', label: 'SKIPPED'       },
                           }
                           const c = chipStyles[ds] || chipStyles['WAITING']
-                          return <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
+                          return <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
                         })()}
 
                         {/* Retrying badge — shown while polling for result */}
@@ -1886,17 +1876,17 @@ export default function OrdersPage() {
 
                             {/* Status chip — show "Pending..." during retry to suppress stale ERROR */}
                             {isRetrying ? (
-                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
+                              <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
                                 ↻ Pending...
                               </span>
                             ) : (
-                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
+                              <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
                                 {chip.label}
                               </span>
                             )}
                             {/* ORB capture indicator */}
                             {isOrbAlgo && !isOrbMissed && algoSt === 'waiting' && (
-                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
+                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                 📡 Capturing ORB
                               </span>
                             )}
@@ -1916,7 +1906,7 @@ export default function OrdersPage() {
                               const firstMsg = errLegs[0]?.errorMessage
                               const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
                               return (
-                                <span title={firstMsg || undefined} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#EF4444', whiteSpace: 'nowrap', cursor: firstMsg ? 'help' : 'default' }}>
+                                <span title={firstMsg || undefined} style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#EF4444', whiteSpace: 'nowrap', cursor: firstMsg ? 'help' : 'default' }}>
                                   {errLegs.length} LEG{errLegs.length > 1 ? 'S' : ''} FAILED{shortMsg}
                                 </span>
                               )
@@ -1929,7 +1919,7 @@ export default function OrdersPage() {
                                 <span style={{
                                   fontSize: '10px', fontWeight: 700, color: group.inlineColor,
                                   padding: '2px 10px', borderRadius: '100px',
-                                  background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+                                  background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)',
                                   fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
                                   whiteSpace: 'nowrap' as const,
                                   animation: 'fadeIn 0.15s ease',
@@ -2010,20 +2000,20 @@ export default function OrdersPage() {
                               <thead>
                                 <tr>
                                   <th style={{ textAlign: 'left', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', paddingLeft: 20, fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>#</th>
-                                  <SortableHeader label="Status" sortKey="status" currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
-                                  <SortableHeader label="Symbol" sortKey="symbol" currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} align="left" style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Lots</th>
-                                  <SortableHeader label="Fill / Ref" sortKey="fillPrice" currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
-                                  <SortableHeader label="LTP"        sortKey="ltp"       currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
-                                  <SortableHeader label="SL"         sortKey="slOrig"    currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }} />
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Target</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Exit</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Reason</th>
-                                  <SortableHeader label="P&L"    sortKey="pnl"    currentKey={legSortKey} currentDir={legSortDir} onSort={handleLegSort} style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)', paddingRight: 20 }} />
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Status</th>
+                                  <th style={{ textAlign: 'left',   background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Symbol</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Lots</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Fill / Ref</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>LTP</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>SL</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Target</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Exit</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px' }}>Reason</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'rgba(148,163,184,0.7)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', padding: '8px 12px', paddingRight: 20 }}>P&L</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {buildRows(sortLegs(group.legs)).map(({ leg, isChild }) => {
+                                {buildRows(group.legs).map(({ leg, isChild }) => {
                                   const pollEntry = ltpData[leg.id]
                                   // Coerce instrumentToken to number — JSON may deserialise it as string
                                   const tokenKey = leg.instrumentToken != null ? Number(leg.instrumentToken) : undefined
