@@ -245,7 +245,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         )}
       </td>
       <td style={{ width: COLS[1], ...C }}>
-        <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
+        <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
             SYNC
@@ -1602,7 +1602,7 @@ export default function OrdersPage() {
                             SKIPPED:    { color: '#9CA3AF', bg: 'rgba(156,163,175,0.15)', label: 'SKIPPED'       },
                           }
                           const c = chipStyles[ds] || chipStyles['WAITING']
-                          return <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
+                          return <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
                         })()}
 
                         {/* Retrying badge — shown while polling for result */}
@@ -1876,17 +1876,17 @@ export default function OrdersPage() {
 
                             {/* Status chip — show "Pending..." during retry to suppress stale ERROR */}
                             {isRetrying ? (
-                              <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
+                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
                                 ↻ Pending...
                               </span>
                             ) : (
-                              <span style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
+                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
                                 {chip.label}
                               </span>
                             )}
                             {/* ORB capture indicator */}
                             {isOrbAlgo && !isOrbMissed && algoSt === 'waiting' && (
-                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
+                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                 📡 Capturing ORB
                               </span>
                             )}
@@ -1906,7 +1906,7 @@ export default function OrdersPage() {
                               const firstMsg = errLegs[0]?.errorMessage
                               const shortMsg = firstMsg ? ` — ${firstMsg.length > 40 ? firstMsg.slice(0, 40) + '…' : firstMsg}` : ''
                               return (
-                                <span title={firstMsg || undefined} style={{ background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#EF4444', whiteSpace: 'nowrap', cursor: firstMsg ? 'help' : 'default' }}>
+                                <span title={firstMsg || undefined} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#EF4444', whiteSpace: 'nowrap', cursor: firstMsg ? 'help' : 'default' }}>
                                   {errLegs.length} LEG{errLegs.length > 1 ? 'S' : ''} FAILED{shortMsg}
                                 </span>
                               )
@@ -1919,7 +1919,7 @@ export default function OrdersPage() {
                                 <span style={{
                                   fontSize: '10px', fontWeight: 700, color: group.inlineColor,
                                   padding: '2px 10px', borderRadius: '100px',
-                                  background: 'var(--bg)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12)',
+                                  background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
                                   fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
                                   whiteSpace: 'nowrap' as const,
                                   animation: 'fadeIn 0.15s ease',
