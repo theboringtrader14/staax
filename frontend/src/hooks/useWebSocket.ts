@@ -14,6 +14,7 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { showError, showWarning } from '@/utils/toast'
+import { sounds } from '@/utils/sounds'
 
 const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
   .replace('http', 'ws')
@@ -86,6 +87,11 @@ export function useWebSocket() {
     const statusWs = makeWs('/ws/status', (msg) => {
       if (msg.type === 'order_update' && msg.data?.order_id) {
         updateOrder(msg.data.order_id, msg.data)
+      }
+      if (msg.type === 'sl_hit' && msg.data) {
+        const d = msg.data
+        showError(`SL Hit: ${d.symbol} at ₹${d.sl_price}`, 6000)
+        sounds.slHit()
       }
     }, statusRetry)
 
