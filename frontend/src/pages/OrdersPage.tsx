@@ -1580,6 +1580,14 @@ export default function OrdersPage() {
                           </span>
                         )}
 
+                        {/* Expiry skip reason — inline beside account chip */}
+                        {isSkipped && w.error_message && (
+                          <span style={{ fontSize: '11px', color: 'var(--text-mute)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <CalendarX size={11} />
+                            {w.error_message.replace('expiry_skip: ', '')}
+                          </span>
+                        )}
+
                         {/* Retrying badge — shown while polling for result */}
                         {isRetrying && (
                           <span style={{ fontSize: '11px', color: '#06B6D4' }}>
@@ -1598,7 +1606,7 @@ export default function OrdersPage() {
                       </div>
 
                       {/* Row 2: full error / missed / status detail (hidden when nothing to show) */}
-                      {(isError || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error) || isSkipped) && (
+                      {(isError || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error)) && (
                         <div style={{ padding: '0 14px 10px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {isError && (w.error_message || w.latest_error?.reason) && (
                             <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
@@ -1621,12 +1629,6 @@ export default function OrdersPage() {
                           {isOrbWindowPast && (
                             <span style={{ fontSize: '11px', color: 'var(--text-mute)', fontStyle: 'italic' }}>
                               ORB window passed ({w.orb_end_time}) — RETRY disabled
-                            </span>
-                          )}
-                          {isSkipped && w.error_message && (
-                            <span style={{ fontSize: '11px', color: 'var(--text-mute)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CalendarX size={11} />
-                              {w.error_message.replace('expiry_skip: ', '')}
                             </span>
                           )}
                         </div>
