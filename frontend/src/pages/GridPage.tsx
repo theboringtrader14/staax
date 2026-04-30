@@ -1041,14 +1041,14 @@ export default function GridPage() {
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button
                   onClick={() => setArchConfirm(null)}
-                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:8, padding:'7px 18px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 >Cancel</button>
                 <button
                   onClick={() => { archAlgo(archConfirm); setArchConfirm(null) }}
-                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:8, padding:'7px 18px', fontSize:13, fontWeight:600, color:'#F59E0B', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#F59E0B', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
