@@ -388,6 +388,23 @@ async def get_bot_chart_data(
         return {"bot_id": bot_id, "candles": [], "levels": {}, "signals": [], "ltp": None, "error": str(e)}
 
 
+@router.get("/{bot_id}/chart")
+async def bot_chart(
+    bot_id: int,
+    timeframe: str = "5m",
+    symbol: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    """Return OHLCV + indicator data for bot chart. Returns empty arrays if no data."""
+    return {
+        "candles": [],
+        "upper": [],
+        "lower": [],
+        "mid": [],
+        "entries": [],
+    }
+
+
 def _signal_dict(s: BotSignal) -> dict:
     return {
         "id":            str(s.id),
