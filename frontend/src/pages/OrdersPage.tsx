@@ -4,7 +4,7 @@ import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/serv
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { TradeReplay } from '@/components/TradeReplay'
-import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX, Broadcast } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
@@ -245,7 +245,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         )}
       </td>
       <td style={{ width: COLS[1], ...C }}>
-        <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
+        <span style={{ background: st.bg, boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
             SYNC
@@ -1880,14 +1880,14 @@ export default function OrdersPage() {
                                 ↻ Pending...
                               </span>
                             ) : (
-                              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
+                              <span style={{ background: chip.bg, boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
                                 {chip.label}
                               </span>
                             )}
                             {/* ORB capture indicator */}
                             {isOrbAlgo && !isOrbMissed && algoSt === 'waiting' && (
-                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
-                                📡 Capturing ORB
+                              <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.10)', boxShadow: 'var(--neu-inset)', padding: '2px 10px', borderRadius: '100px', whiteSpace: 'nowrap' as const, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <Broadcast size={10} weight="fill" />Capturing ORB
                               </span>
                             )}
 
