@@ -1545,6 +1545,7 @@ export default function OrdersPage() {
                 { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true,  action: undefined },
                 { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true,  action: undefined },
                 { label: retryLabel, col: retryCol, bg: retryBg, hBg: retryHBg, border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
+                { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: true, title: 'Available after algo closes', action: undefined },
               ]
 
               return (
@@ -1578,21 +1579,6 @@ export default function OrdersPage() {
                             {w.account_name}
                           </span>
                         )}
-
-                        {/* Status chip — driven by display_status from backend */}
-                        {(() => {
-                          const ds = w.display_status || (isError ? 'ERROR' : isMissed ? 'MISSED' : 'WAITING')
-                          const chipStyles: Record<string, { color: string; bg: string; label: string }> = {
-                            MONITORING: { color: '#0EA5A0', bg: 'rgba(14,165,160,0.12)', label: 'MONITORING' },
-                            SCHEDULED:  { color: '#3B82F6', bg: 'rgba(59,130,246,0.12)', label: '⏰ SCHEDULED'  },
-                            WAITING:    { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: '⏳ WAITING'    },
-                            MISSED:     { color: '#C2610C', bg: 'rgba(194,97,12,0.12)',   label: 'MISSED'        },
-                            ERROR:      { color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   label: 'ERROR'         },
-                            SKIPPED:    { color: '#9CA3AF', bg: 'rgba(156,163,175,0.15)', label: 'SKIPPED'       },
-                          }
-                          const c = chipStyles[ds] || chipStyles['WAITING']
-                          return <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: c.color, whiteSpace: 'nowrap' as const }}>{c.label}</span>
-                        })()}
 
                         {/* Retrying badge — shown while polling for result */}
                         {isRetrying && (
@@ -1788,7 +1774,10 @@ export default function OrdersPage() {
                     const gi       = safeOrders.findIndex(g => g.algoId === group.algoId)
                     const algoSt   = getAlgoStatus(group)
                     const bar      = ALGO_STATUS_BAR[algoSt]
-                    const isClosed = group.legs.length > 0 && group.legs.every(l => l.status === 'closed' || l.status === 'error')
+                    const isFullyClosed = group.legs.length > 0 && group.legs.every(
+                      l => l.status === 'closed' || l.status === 'error' || l.status === 'skipped'
+                    )
+                    const isClosed = isFullyClosed
                     const closedL  = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
                     const totalPnl = group.legs.reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
                     const showSpark = closedL.length > 0 && !group.legs.some(l => l.status === 'open' || l.status === 'pending')
@@ -1831,7 +1820,7 @@ export default function OrdersPage() {
                       { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed || !isMarketHours,   title: !isTerminated && !isClosed && !isMarketHours ? 'Market is closed' : undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
                       { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
-                      { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isClosed, title: !isClosed ? 'Available after algo closes' : undefined, action: isClosed ? () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) : undefined },
+                      { label: 'REPLAY', col: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', hBg: 'rgba(139,92,246,0.25)', border: '1px solid rgba(139,92,246,0.4)', disabled: !isFullyClosed, title: !isFullyClosed ? 'Available after algo closes' : undefined, action: isFullyClosed ? () => setReplayAlgo({ id: group.algoId, name: group.algoName, date: selectedDate }) : undefined },
                     ]
 
                     return (
