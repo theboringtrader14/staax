@@ -75,17 +75,6 @@ const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
   skipped: { color: '#9CA3AF',              bg: 'rgba(156,163,175,0.15)' },
 }
 
-// ── Algo-level status chip ──────────────────────────────────────────────────
-const ALGO_STATUS_CHIP: Record<AlgoStatus, { color: string; bg: string; label: string }> = {
-  open:     { color: '#0ea66e', bg: 'rgba(34,221,136,0.12)',  label: 'OPEN'     },
-  closed:   { color: '#0ea66e', bg: 'rgba(34,221,136,0.10)',  label: 'CLOSED'   },
-  error:    { color: '#FF4444', bg: 'rgba(255,68,68,0.12)',   label: 'ERROR'    },
-  pending:  { color: '#FF8C00', bg: 'rgba(255,140,0,0.12)',   label: 'PENDING'  },
-  waiting:  { color: '#D97706', bg: 'rgba(217,119,6,0.12)',   label: 'WAITING'  },
-  no_trade: { color: 'var(--text-dim)', bg: 'transparent',    label: 'NO TRADE' },
-  skipped:  { color: '#9CA3AF', bg: 'rgba(156,163,175,0.15)', label: 'SKIPPED'  },
-}
-
 // ── Algo card left status strip ─────────────────────────────────────────────
 const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
   open:     { color: '#0ea66e',               glow: 'rgba(14,166,110,0.70)'  },
@@ -1799,7 +1788,6 @@ export default function OrdersPage() {
                     const gi       = safeOrders.findIndex(g => g.algoId === group.algoId)
                     const algoSt   = getAlgoStatus(group)
                     const bar      = ALGO_STATUS_BAR[algoSt]
-                    const chip     = ALGO_STATUS_CHIP[algoSt]
                     const isClosed = group.legs.length > 0 && group.legs.every(l => l.status === 'closed' || l.status === 'error')
                     const closedL  = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
                     const totalPnl = group.legs.reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
