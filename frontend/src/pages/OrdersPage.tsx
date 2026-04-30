@@ -1874,14 +1874,10 @@ export default function OrdersPage() {
                               {group.account || '—'}
                             </span>
 
-                            {/* Status chip — show "Pending..." during retry to suppress stale ERROR */}
-                            {isRetrying ? (
+                            {/* Retry indicator — only shown during active retry, status visible in row */}
+                            {isRetrying && (
                               <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
                                 ↻ Pending...
-                              </span>
-                            ) : (
-                              <span style={{ background: chip.bg, boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: chip.color, whiteSpace: 'nowrap' }}>
-                                {chip.label}
                               </span>
                             )}
                             {/* ORB capture indicator */}
