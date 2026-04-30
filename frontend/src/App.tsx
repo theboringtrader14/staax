@@ -7,7 +7,6 @@ import GridPage from '@/pages/GridPage'
 import OrdersPage from '@/pages/OrdersPage'
 import AlgoPage from '@/pages/AlgoPage'
 import ReportsPage from '@/pages/ReportsPage'
-import AccountsPage from '@/pages/AccountsPage'
 import IndicatorsPage from '@/pages/IndicatorsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import { useStore } from '@/store'
@@ -139,7 +138,7 @@ export default function App() {
             <Route path="/algo/new"   element={<AlgoPage />} />
             <Route path="/algo/:id"   element={<AlgoPage />} />
             <Route path="/reports"    element={<ReportsPage />} />
-            <Route path="/accounts"   element={<AccountsPage />} />
+            <Route path="/accounts"   element={<Navigate to="/grid" replace />} />
             <Route path="/indicators" element={<IndicatorsPage />} />
             <Route path="/analytics"  element={<AnalyticsPage />} />
           </Route>
