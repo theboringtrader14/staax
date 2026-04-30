@@ -6,6 +6,7 @@ import { StaaxSelect } from '@/components/StaaxSelect'
 import { Sparkle, LockSimple, CheckCircle, Warning } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 import { sounds, initSounds } from '../utils/sounds'
+import { toast } from 'sonner'
 
 const INST_CODES: Record<string, string> = { NF: 'NIFTY', BN: 'BANKNIFTY', SX: 'SENSEX', MN: 'MIDCAPNIFTY', FN: 'FINNIFTY' }
 const EXPIRY_OPTIONS = [
@@ -734,9 +735,7 @@ export default function AlgoPage() {
   const [isDirty, setIsDirty]       = useState(false)
   const formLoadedRef               = useRef(false)   // true after initial data is populated
   const [saving, setSaving]         = useState(false)
-  const [toast, setToast]           = useState('')
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500) }
-  const [saveError, setSaveError]   = useState('')
+const [saveError, setSaveError]   = useState('')
   const [saved, setSaved]           = useState(false)
   const [showTomorrowWarn, setShowTomorrowWarn] = useState(false)  // F6
   const [isLocked, setIsLocked]     = useState(false)              // F5 — edit lock
@@ -1236,12 +1235,7 @@ export default function AlgoPage() {
         </div>
       </div>
 
-      {toast && (
-        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: '100px', padding: '10px 18px', fontSize: '12px', color: '#FF4444', fontWeight: 600, zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> {toast}
-        </div>
-      )}
-      {/* F6 — tomorrow warning */}
+{/* F6 — tomorrow warning */}
       {showTomorrowWarn && (
         <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: '14px', borderLeft: '3px solid #F59E0B', padding: '14px 16px', marginBottom: '12px' }}>
           <div style={{ fontWeight: 700, color: 'var(--accent-amber)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: 6 }}><Warning size={13} weight="fill" color="#F59E0B" style={{ flexShrink: 0 }} /> Changes apply from tomorrow</div>
@@ -1372,7 +1366,7 @@ export default function AlgoPage() {
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
           style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent)' : 'none', borderRadius: '16px' }}>
-          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={showToast} entryType={entryType} />
+          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={(msg: string) => { sounds.error(); toast.warning(msg) }} entryType={entryType} />
         </div>
       ))}
 
