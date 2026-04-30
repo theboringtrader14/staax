@@ -1667,8 +1667,7 @@ export default function OrdersPage() {
 
                   {/* ── Leg table ── */}
                   {(w.legs || []).length > 0 && (
-                    <div style={{ overflow: 'hidden' }}>
-                    <div style={{ overflow: 'hidden' }}>
+                    <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
@@ -1683,7 +1682,7 @@ export default function OrdersPage() {
                             <tr key={leg.leg_number}>
                               <td style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>{leg.leg_number}</td>
                               <td style={{ textAlign: 'center', padding: '8px 6px', verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3, color: legStatusChip.color, background: legStatusChip.bg, letterSpacing: 0.5 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, boxShadow: 'var(--neu-inset)', color: legStatusChip.color, background: legStatusChip.bg, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                   {legStatusChip.label}
                                 </span>
                               </td>
@@ -1717,7 +1716,6 @@ export default function OrdersPage() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
                     </div>
                   )}
                 </div>
@@ -1972,17 +1970,17 @@ export default function OrdersPage() {
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                               <thead>
                                 <tr>
-                                  <th style={{ textAlign: 'left', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>#</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Status</th>
-                                  <th style={{ textAlign: 'left',   background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Symbol</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Lots</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Fill / Ref</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>LTP</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>SL</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Target</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Exit</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>Reason</th>
-                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px' }}>P&L</th>
+                                  <th style={{ textAlign: 'left', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>#</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Status</th>
+                                  <th style={{ textAlign: 'left',   background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Symbol</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Lots</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Fill / Ref</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>LTP</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>SL</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Target</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Exit</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Reason</th>
+                                  <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>P&L</th>
                                 </tr>
                               </thead>
                               <tbody>
