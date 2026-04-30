@@ -109,20 +109,7 @@ export default function App() {
 
   return (
     <>
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          style: {
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: '12px',
-            background: '#1a2520',
-            border: '1px solid rgba(45,212,191,0.25)',
-            color: '#e2e8f0',
-            borderRadius: '8px',
-          },
-          duration: 4000,
-        }}
-      />
+      <Toaster position="bottom-right" />
       <BrowserRouter>
         <DashboardPanel />
         <AccountsDrawer />
