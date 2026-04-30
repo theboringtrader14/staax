@@ -917,7 +917,7 @@ export default function AnalyticsPage() {
       if (latRes.status === 'fulfilled') setLatencyData(latRes.value.data || null)
     }).finally(() => setLoading(false))
 
-    api.get('/analytics/advanced-metrics')
+    api.get('/analytics/advanced-metrics', { params: { is_practix: isPractixMode } })
       .then(r => setAdvMetrics(r.data))
       .catch(console.error)
   }, [isPractixMode, fy])

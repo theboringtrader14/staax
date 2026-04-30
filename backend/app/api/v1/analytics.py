@@ -102,8 +102,8 @@ def _win_loss_streaks(daily_pnls: List[float]):
 @router.get("/advanced-metrics")
 async def get_advanced_metrics(
     algo_id: Optional[str] = Query(None, description="Filter by algo UUID (optional)"),
+    is_practix: Optional[bool] = Query(None, description="Filter by practix mode"),
     db: AsyncSession = Depends(get_db),
-    
 ):
     """
     Returns advanced portfolio metrics:
@@ -115,14 +115,20 @@ async def get_advanced_metrics(
     - Total Trading Days
     """
     # Query completed (closed) orders — "complete" is not a valid status; "closed" is.
-    query = select(Order).where(Order.status == "closed")
+    conditions = [Order.status == "closed"]
+    if is_practix is not None:
+        conditions.append(Order.is_practix == is_practix)
+    query = select(Order).where(*conditions)
     if algo_id:
         # Filter by algo via join with GridEntry → Algo
         from app.models.grid import GridEntry
+        algo_conditions = [GridEntry.algo_id == algo_id, Order.status == "closed"]
+        if is_practix is not None:
+            algo_conditions.append(Order.is_practix == is_practix)
         query = (
             select(Order)
             .join(GridEntry, Order.grid_entry_id == GridEntry.id)
-            .where(GridEntry.algo_id == algo_id, Order.status == "closed")
+            .where(*algo_conditions)
         )
 
     result = await db.execute(query)
