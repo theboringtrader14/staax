@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { accountsAPI } from '@/services/api'
 import DashboardPanel from '@/components/panels/DashboardPanel'
 import AccountsDrawer from '@/components/panels/AccountsDrawer'
+import { initSounds } from './utils/sounds'
 
 export default function App() {
   const setAccounts = useStore(s => s.setAccounts)
@@ -56,6 +57,13 @@ export default function App() {
   useEffect(() => {
     accountsAPI.list().then(r => setAccounts(r.data?.accounts || r.data || [])).catch(() => {})
   }, [setAccounts])
+
+  // Resume AudioContext on first user interaction (browsers block autoplay)
+  useEffect(() => {
+    const init = () => { initSounds(); document.removeEventListener('click', init) }
+    document.addEventListener('click', init)
+    return () => document.removeEventListener('click', init)
+  }, [])
 
   // Render overlay in popup mode — prevents LandingPage from flashing
   if (zerodhaStatus) {
@@ -101,42 +109,44 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
-      <DashboardPanel />
-      <AccountsDrawer />
-      <Routes>
-        {/* Landing page */}
-        <Route path="/" element={<LandingPage />} />
-
-        {/* App routes — Layout is a pathless wrapper */}
-        <Route element={<Layout />}>
-          <Route path="/dashboard"  element={<Navigate to="/grid" replace />} />
-          <Route path="/grid"       element={<GridPage />} />
-          <Route path="/orders"     element={<OrdersPage />} />
-          <Route path="/algo/new"   element={<AlgoPage />} />
-          <Route path="/algo/:id"   element={<AlgoPage />} />
-          <Route path="/reports"    element={<ReportsPage />} />
-          <Route path="/accounts"   element={<AccountsPage />} />
-          <Route path="/indicators" element={<IndicatorsPage />} />
-          <Route path="/analytics"  element={<AnalyticsPage />} />
-        </Route>
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+    <>
       <Toaster
         position="bottom-right"
         toastOptions={{
           style: {
             fontFamily: 'JetBrains Mono, monospace',
             fontSize: '12px',
-            background: '#1a2a2a',
-            border: '1px solid rgba(45,212,191,0.2)',
+            background: '#1a2520',
+            border: '1px solid rgba(45,212,191,0.25)',
             color: '#e2e8f0',
             borderRadius: '8px',
           },
-          duration: 3000,
+          duration: 4000,
         }}
       />
-    </BrowserRouter>
+      <BrowserRouter>
+        <DashboardPanel />
+        <AccountsDrawer />
+        <Routes>
+          {/* Landing page */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* App routes — Layout is a pathless wrapper */}
+          <Route element={<Layout />}>
+            <Route path="/dashboard"  element={<Navigate to="/grid" replace />} />
+            <Route path="/grid"       element={<GridPage />} />
+            <Route path="/orders"     element={<OrdersPage />} />
+            <Route path="/algo/new"   element={<AlgoPage />} />
+            <Route path="/algo/:id"   element={<AlgoPage />} />
+            <Route path="/reports"    element={<ReportsPage />} />
+            <Route path="/accounts"   element={<AccountsPage />} />
+            <Route path="/indicators" element={<IndicatorsPage />} />
+            <Route path="/analytics"  element={<AnalyticsPage />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </>
   )
 }
