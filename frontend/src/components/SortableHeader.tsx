@@ -23,7 +23,7 @@ export function SortableHeader({ label, sortKey, currentKey, currentDir, onSort,
         fontWeight: 400,
         letterSpacing: '1px',
         textTransform: 'uppercase',
-        color: isActive ? 'var(--accent)' : 'var(--text-mute)',
+        color: 'rgba(148,163,184,0.7)',
         whiteSpace: 'nowrap',
         padding: '8px 12px',
         textAlign: align,
@@ -36,12 +36,12 @@ export function SortableHeader({ label, sortKey, currentKey, currentDir, onSort,
           <CaretUp
             size={8}
             weight="bold"
-            color={isActive && currentDir === 'asc' ? 'var(--accent)' : 'var(--border)'}
+            color={isActive && currentDir === 'asc' ? 'rgba(148,163,184,0.7)' : 'var(--border)'}
           />
           <CaretDown
             size={8}
             weight="bold"
-            color={isActive && currentDir === 'desc' ? 'var(--accent)' : 'var(--border)'}
+            color={isActive && currentDir === 'desc' ? 'rgba(148,163,184,0.7)' : 'var(--border)'}
           />
         </span>
       </span>

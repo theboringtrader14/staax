@@ -1719,12 +1719,12 @@ export default function OrdersPage() {
                               {/* Fill/Ref: show W&T ref+trigger only for actively MONITORING legs */}
                               <td style={{ textAlign: 'center', padding: '8px 6px', fontSize: 10, verticalAlign: 'middle', borderTop: '1px solid var(--border)' }}>
                                 {(() => {
-                                  const showRefTrigger = w.display_status === 'MONITORING' && leg.wt_enabled && leg.wt_ref_price != null
+                                  const showRefTrigger = w.display_status === 'MONITORING' && leg.wt_enabled && leg.wt_ref_price !== null && leg.wt_ref_price !== undefined
                                   if (showRefTrigger) {
                                     return (
                                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>Ref: {leg.wt_ref_price!.toLocaleString('en-IN')}</span>
-                                        <span style={{ color: '#06B6D4', fontWeight: 600 }}>→ {leg.wt_threshold?.toLocaleString('en-IN')}</span>
+                                        <span style={{ color: 'var(--text-muted)' }}>Ref: {(leg.wt_ref_price as number).toLocaleString('en-IN')}</span>
+                                        <span style={{ color: '#06B6D4', fontWeight: 600 }}>→ {leg.wt_threshold !== null && leg.wt_threshold !== undefined ? leg.wt_threshold.toLocaleString('en-IN') : '—'}</span>
                                       </div>
                                     )
                                   }
