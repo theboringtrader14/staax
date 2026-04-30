@@ -275,6 +275,17 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
               <div>
                 <div style={{ fontWeight: 600, borderBottom: '1px dashed var(--text-dim)', display: 'inline-block' }}>₹{leg.fillPrice}</div>
                 {leg.fillTime && <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>{leg.fillTime}</div>}
+                {leg.entryReference != null && leg.entryCondition === 'wt' && (
+                  <div style={{
+                    fontSize: 10,
+                    color: '#F59E0B',
+                    marginTop: 2,
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: 0.5,
+                  }}>
+                    REF ₹{Number(leg.entryReference).toFixed(2)}
+                  </div>
+                )}
               </div>
             ) : <div style={{ color: 'var(--text-dim)' }}>—</div>}
             {isOrbAlgo && orbHigh && orbLow && leg.status === 'open' && (
