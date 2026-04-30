@@ -1206,9 +1206,9 @@ export default function OrdersPage() {
                       : statusFilter === 'closed'   ? localFilteredOrders.filter(g => getAlgoStatus(g) === 'closed')
                       : statusFilter === 'missed' || statusFilter === 'error' || statusFilter === 'waiting' ? []
                       : localFilteredOrders
-  const displayWaiting = statusFilter === 'missed'  ? localFilteredWaiting.filter(w => w.is_missed)
-                       : statusFilter === 'error'   ? localFilteredWaiting.filter(w => !w.is_missed && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message)))
-                       : statusFilter === 'waiting' ? localFilteredWaiting.filter(w => !w.is_missed && w.algo_state_status !== 'error' && !(w.algo_state_status === 'no_trade' && !!w.error_message))
+  const displayWaiting = statusFilter === 'missed'  ? localFilteredWaiting.filter(w => w.is_missed || w.display_status === 'SKIPPED')
+                       : statusFilter === 'error'   ? localFilteredWaiting.filter(w => !w.is_missed && w.display_status !== 'SKIPPED' && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message)))
+                       : statusFilter === 'waiting' ? localFilteredWaiting.filter(w => !w.is_missed && w.display_status !== 'SKIPPED' && w.algo_state_status !== 'error' && !(w.algo_state_status === 'no_trade' && !!w.error_message))
                        : statusFilter === 'open' || statusFilter === 'closed' ? []
                        : localFilteredWaiting
 
@@ -1297,10 +1297,11 @@ export default function OrdersPage() {
           const closedAlgosCount = localFilteredOrders.filter(g => getAlgoStatus(g) === 'closed').length
           const openLegsCount    = localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'open').length, 0)
           const closedLegsCount  = localFilteredOrders.reduce((s, g) => s + g.legs.filter(l => l.status === 'closed').length, 0)
-          const missedCount      = safeWaiting.filter(w => w.is_missed).length
-          const isWaitingError   = (w: WaitingAlgo) => !w.is_missed && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message))
+          const isExpiry         = (w: WaitingAlgo) => w.display_status === 'SKIPPED'
+          const missedCount      = safeWaiting.filter(w => w.is_missed || isExpiry(w)).length
+          const isWaitingError   = (w: WaitingAlgo) => !w.is_missed && !isExpiry(w) && (w.algo_state_status === 'error' || (w.algo_state_status === 'no_trade' && !!w.error_message))
           const errorCount       = safeWaiting.filter(isWaitingError).length
-          const waitingCount     = safeWaiting.filter(w => !w.is_missed && !isWaitingError(w)).length
+          const waitingCount     = safeWaiting.filter(w => !w.is_missed && !isWaitingError(w) && !isExpiry(w)).length
 
           const valStyle: React.CSSProperties = { fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-mono)', lineHeight: 1 }
 
@@ -1453,8 +1454,10 @@ export default function OrdersPage() {
           <div style={{ marginBottom: '16px' }}>
             {displayWaiting.map(w => {
               // isError: algo_state ERROR, or NO_TRADE caused by engine failure (has error_message)
-              const isError   = w.algo_state_status === 'error' ||
-                                (w.algo_state_status === 'no_trade' && !!w.error_message)
+              // but NOT expiry_skip — that is an intentional SKIPPED, not an error
+              const isSkipped = w.display_status === 'SKIPPED'
+              const isError   = !isSkipped && (w.algo_state_status === 'error' ||
+                                (w.algo_state_status === 'no_trade' && !!w.error_message))
               // isMissed: backend-authoritative flag (NO_TRADE + activated_at + no error)
               const isMissed  = !!w.is_missed
               const errType = w.latest_error?.event_type || ''
@@ -1598,7 +1601,7 @@ export default function OrdersPage() {
                       </div>
 
                       {/* Row 2: full error / missed / status detail (hidden when nothing to show) */}
-                      {(isError || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error)) && (
+                      {(isError || isFeedErr || isOrbExpired || isOrbWindowPast || (!isError && !isMissed && w.latest_error) || isSkipped) && (
                         <div style={{ padding: '0 14px 10px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {isError && (w.error_message || w.latest_error?.reason) && (
                             <span style={{ fontSize: '11px', color: '#FF6666', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' as const, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
@@ -1623,15 +1626,12 @@ export default function OrdersPage() {
                               ORB window passed ({w.orb_end_time}) — RETRY disabled
                             </span>
                           )}
-                        </div>
-                      )}
-
-                      {/* Expiry skip subtitle — shown only on MISSED cards with expiry reason */}
-                      {isMissed && w.error_message?.includes('expiry_skip') && (
-                        <div style={{ padding: '0 14px 10px 14px' }}>
-                          <span style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
-                            {w.error_message.replace('expiry_skip: ', '')}
-                          </span>
+                          {isSkipped && w.error_message && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-mute)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CalendarX size={11} />
+                              {w.error_message.replace('expiry_skip: ', '')}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
