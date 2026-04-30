@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
 import { Pulse, Sun, Moon, User, Warning } from '@phosphor-icons/react'
+import { showSuccess, showWarning } from '@/utils/toast'
 
 const NAV_TABS = [
   { path: '/grid',       label: 'Algos'     },
@@ -36,6 +37,8 @@ export default function TopNav() {
   const isDashboardOpen    = useStore(s => s.isDashboardOpen)
   const setIsDashboardOpen = useStore(s => s.setIsDashboardOpen)
   const livePnl           = useStore(s => s.livePnl)
+  const isPractixMode     = useStore(s => s.isPractixMode)
+  const setIsPractixMode  = useStore(s => s.setIsPractixMode)
 
   const [pendingPath, setPendingPath] = useState<string | null>(null)
 
@@ -124,6 +127,39 @@ export default function TopNav() {
 
           {/* RIGHT — Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+
+            {/* PRACTIX / LIVE mode toggle */}
+            <button
+              onClick={() => {
+                const next = !isPractixMode
+                setIsPractixMode(next)
+                if (next) showWarning('Switched to PRACTIX mode')
+                else showSuccess('Switched to LIVE mode')
+              }}
+              title={isPractixMode ? 'Switch to LIVE' : 'Switch to PRACTIX'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                height: 32, padding: '0 14px', borderRadius: 100,
+                border: 'none', cursor: 'pointer',
+                background: 'var(--bg)',
+                boxShadow: 'var(--neu-raised-sm)',
+                fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+                fontFamily: 'var(--font-display)',
+                color: isPractixMode ? '#F59E0B' : '#0EA66E',
+                transition: 'box-shadow 0.15s',
+              }}
+              onMouseDown={e => (e.currentTarget.style.boxShadow = 'var(--neu-inset)')}
+              onMouseUp={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}
+              onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}
+            >
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                background: isPractixMode ? '#F59E0B' : '#0EA66E',
+                boxShadow: isPractixMode ? '0 0 6px #F59E0B' : '0 0 6px #0EA66E',
+                animation: !isPractixMode ? 'glowPulse 1.5s infinite' : 'none',
+              }} />
+              {isPractixMode ? 'PRACTIX' : 'LIVE'}
+            </button>
 
             {/* Activity */}
             <button onClick={() => { setIsProfileOpen(false); setIsDashboardOpen(!isDashboardOpen) }} title="System Monitor"
