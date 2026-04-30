@@ -1321,7 +1321,7 @@ class AlgoRunner:
             quantity=quantity,
             is_practix=grid_entry.is_practix,
             is_overnight=is_overnight,
-            entry_type=algo.entry_type,
+            entry_type="wt" if leg.wt_enabled else algo.entry_type,
             entry_reference=_wt_entry_ref,
             status=OrderStatus.PENDING,
             journey_level=journey_level,
