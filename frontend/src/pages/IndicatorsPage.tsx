@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts'
 import { ArrowsClockwise, Play, Stop, Gear, Trash, CaretDown, CaretUp } from '@phosphor-icons/react'
 import { accountsAPI, botsAPI } from '@/services/api'
+import BotChart from '../components/BotChart'
 import axios from 'axios'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
@@ -437,8 +438,8 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
   const [showArch, setShowArch]   = useState(false)
   const [warmingUp, setWarmingUp] = useState(false)
 
-  // Chart (state kept for potential future use — chart toggle removed from UI)
-  const [showChart] = useState(false)
+  // Chart toggle
+  const [showChart, setShowChart] = useState(false)
   const [chartData] = useState<{ candles: any[]; levels: any; signals: any[]; ltp: number | null } | null>(null)
 
   // Live levels + LTP (fetched from chart-data endpoint every 30s)
@@ -572,6 +573,16 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+            <button
+              onClick={() => setShowChart(v => !v)}
+              style={{
+                fontSize: 10, color: '#2dd4bf', fontFamily: 'monospace', cursor: 'pointer',
+                background: 'none', border: '1px solid rgba(45,212,191,0.2)',
+                borderRadius: 4, padding: '2px 8px',
+              }}
+            >
+              {showChart ? '▲ Chart' : '▼ Chart'}
+            </button>
             <button title="Warmup — reload historical candles" onClick={handleWarmup} disabled={warmingUp}
               style={{ ...iconBtn(warmingUp), color: warmingUp ? 'var(--accent)' : 'var(--text-dim)' }}>
               <ArrowsClockwise size={14} style={{ animation: warmingUp ? 'spin 0.8s linear infinite' : 'none' }} />
@@ -758,6 +769,10 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+        )}
+
+        {showChart && (
+          <BotChart botId={bot.id} symbol={bot.instrument} timeframe="5m" />
         )}
       </div>
 
