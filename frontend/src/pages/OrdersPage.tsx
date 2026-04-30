@@ -1688,7 +1688,7 @@ export default function OrdersPage() {
                         <tbody>
                           {(w.legs || []).map(leg => (
                             <tr key={leg.leg_number}>
-                              <td style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
+                              <td style={{ textAlign: 'left', paddingLeft: '10px', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
                               <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, boxShadow: 'var(--neu-inset)', color: legStatusChip.color, background: legStatusChip.bg, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
                                   {legStatusChip.label}
@@ -1717,9 +1717,10 @@ export default function OrdersPage() {
                                   return <span style={{ color: 'var(--text-dim)' }}>—</span>
                                 })()}
                               </td>
-                              {['LTP','SL','Target','Exit','Reason','P&L'].map(col => (
-                                <td key={col} style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
+                              {['LTP','SL','Target','Exit','Reason'].map(col => (
+                                <td key={col} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>—</td>
                               ))}
+                              <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, verticalAlign: 'middle' }}>—</td>
                             </tr>
                           ))}
                         </tbody>
