@@ -1177,7 +1177,7 @@ export default function AlgoPage() {
         <div className="page-header">
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>{algoName || 'Edit Algo'}</h1>
           <div className="page-header-actions">
-            <button onClick={() => navigate('/grid')} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>← Back to Algos</button>
+            <button onClick={() => { sounds.click(); navigate('/grid') }} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>← Back to Algos</button>
           </div>
         </div>
         <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: '14px', padding: '20px 24px', textAlign: 'center', borderLeft: '3px solid #FF4444' }}>
@@ -1249,8 +1249,8 @@ export default function AlgoPage() {
             This algo may be deployed in today's grid. Changes you save will NOT affect today's trades — they will apply from the next trading day onward.
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn btn-ghost" onClick={() => setShowTomorrowWarn(false)}>Cancel</button>
-            <button className="btn btn-warn" onClick={handleSave}>Save Anyway</button>
+            <button className="btn btn-ghost" onClick={() => { sounds.click(); setShowTomorrowWarn(false) }}>Cancel</button>
+            <button className="btn btn-warn" onClick={() => { sounds.strategyStart(); handleSave() }}>Save Anyway</button>
           </div>
         </div>
       )}
@@ -1286,8 +1286,8 @@ export default function AlgoPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Type</label>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={() => setEntryType('direct')} style={{ height: '28px', padding: '0 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'direct' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'direct' ? 'var(--accent)' : 'var(--text-dim)' }}>Direct</button>
-                  <button onClick={() => setEntryType('orb')}    style={{ height: '28px', padding: '0 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'orb' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'orb' ? 'var(--accent)' : 'var(--text-dim)' }}>ORB</button>
+                  <button onClick={() => { sounds.toggleOn(); setEntryType('direct') }} style={{ height: '28px', padding: '0 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'direct' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'direct' ? 'var(--accent)' : 'var(--text-dim)' }}>Direct</button>
+                  <button onClick={() => { sounds.toggleOn(); setEntryType('orb') }}    style={{ height: '28px', padding: '0 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: entryType === 'orb' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: entryType === 'orb' ? 'var(--accent)' : 'var(--text-dim)' }}>ORB</button>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1366,7 +1366,7 @@ export default function AlgoPage() {
           <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Legs</span>
           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{legs.length} leg{legs.length > 1 ? 's' : ''}</span>
         </div>
-        <button onClick={addLeg} title="Add Leg" style={{ height: '28px', width: '28px', borderRadius: '6px', fontSize: '16px', fontWeight: 400, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>+</button>
+        <button onClick={() => { sounds.click(); addLeg() }} title="Add Leg" style={{ height: '28px', width: '28px', borderRadius: '6px', fontSize: '16px', fontWeight: 400, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>+</button>
       </div>
       {legs.map((leg, i) => (
         <div key={leg.id}
@@ -1400,13 +1400,13 @@ export default function AlgoPage() {
         <div style={{ margin: '12px 0 10px', borderTop: '1px solid var(--border)' }} />
         <SubSection title="Error Settings — Algo Level" />
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }} onClick={() => setErrorMargin(v => !v)}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }} onClick={() => { setErrorMargin(v => { sounds[v ? 'toggleOff' : 'toggleOn'](); return !v }) }}>
             <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: errorMargin ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {errorMargin && <div style={{ width: 8, height: 8, borderRadius: 1, background: 'var(--red)' }} />}
             </div>
             On margin error, exit all open positions
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }} onClick={() => setErrorEntry(v => !v)}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '11px', color: 'var(--red)' }} onClick={() => { setErrorEntry(v => { sounds[v ? 'toggleOff' : 'toggleOn'](); return !v }) }}>
             <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: errorEntry ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {errorEntry && <div style={{ width: 8, height: 8, borderRadius: 1, background: 'var(--red)' }} />}
             </div>
