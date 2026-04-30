@@ -938,7 +938,7 @@ class AlgoScheduler:
         if loop and loop.is_running():
             _asyncio.run_coroutine_threadsafe(self._job_entry_expiry_coro(grid_entry_id), loop)
         else:
-            logger.error(f"[SCHEDULER] Event loop not running — expiry skipped for {grid_entry_id}")
+            logger.info(f"[SKIP] expiry: Event loop not running — expiry skipped for {grid_entry_id}")
 
     async def _job_entry_expiry_coro(self, grid_entry_id: str):
         """
