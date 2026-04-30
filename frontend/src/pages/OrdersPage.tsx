@@ -1695,7 +1695,7 @@ export default function OrdersPage() {
                                 </span>
                               </td>
                               <td style={{ textAlign: 'left', fontSize: 11, verticalAlign: 'middle' }}>
-                                <div style={{ color: 'var(--text)' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
+                                <div style={{ fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
                                 <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
                               </td>
                               <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.lots}</td>
