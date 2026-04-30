@@ -365,6 +365,7 @@ class ExecutionManager:
         broker_type:     str  = "zerodha",
         symbol_token:    str  = "",
         broker_order_id: Optional[str] = None,
+        order_type:      str  = "MARKET",
     ) -> Optional[str]:
         """
         Place a square-off (opposite direction) order.
@@ -384,6 +385,7 @@ class ExecutionManager:
                 quantity=quantity, algo_tag=algo_tag,
                 is_practix=is_practix, broker_type=broker_type, symbol_token=symbol_token,
                 broker_order_id=broker_order_id,
+                order_type=order_type,
             )
 
     async def _square_off_inner(
@@ -401,6 +403,7 @@ class ExecutionManager:
         broker_type:     str  = "zerodha",
         symbol_token:    str  = "",
         broker_order_id: Optional[str] = None,
+        order_type:      str  = "MARKET",
     ) -> Optional[str]:
         _sq_details = {"symbol": symbol, "direction": direction, "qty": quantity,
                        "broker_type": broker_type, "is_practix": is_practix,
@@ -440,7 +443,7 @@ class ExecutionManager:
             exchange        = exchange,
             direction       = sq_direction,
             quantity        = quantity,
-            order_type      = "MARKET",
+            order_type      = order_type,
             ltp             = 0.0,
             is_practix      = is_practix,
             is_overnight    = False,

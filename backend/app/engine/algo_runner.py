@@ -1931,6 +1931,29 @@ class AlgoRunner:
                         self._tsl_engine.has_trailed(order_id)
                         if self._tsl_engine else False
                     )
+
+                    # Place broker square-off for live orders (not practix/paper)
+                    if not order.is_practix and self._execution_manager:
+                        _exit_broker_type = getattr(order, "broker_type", None) or "zerodha"
+                        try:
+                            await self._execution_manager.square_off(
+                                db              = db,
+                                idempotency_key = f"exit:{order.id}:sl",
+                                algo_id         = str(order.algo_id),
+                                account_id      = str(order.account_id),
+                                symbol          = order.symbol,
+                                exchange        = order.exchange or "NFO",
+                                direction       = order.direction,
+                                quantity        = order.quantity,
+                                algo_tag        = order.algo_tag or "",
+                                is_practix      = order.is_practix,
+                                broker_type     = _exit_broker_type,
+                                symbol_token    = str(getattr(order, "instrument_token", None) or ""),
+                                order_type      = "SLM",
+                            )
+                        except Exception as _sq_err:
+                            logger.error(f"[SL] square_off failed for {order_id} (continuing DB close): {_sq_err}")
+
                     await self._close_order(db, order, ltp, "sl")
 
                     # Deregister
