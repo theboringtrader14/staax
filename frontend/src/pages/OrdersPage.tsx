@@ -830,6 +830,28 @@ export default function OrdersPage() {
       .catch(() => {})
   }, [])
 
+  // Live poll /orders/waiting every 3s when today has MONITORING W&T legs.
+  // Without this, wt_ref_price stays null forever: the initial fetch fires before
+  // the W&T evaluator captures its reference price, and the cached result is never
+  // refreshed — so display_status becomes MONITORING but wt_ref_price is still
+  // undefined, blocking the "Ref: …" display.
+  useEffect(() => {
+    const todayWaiting = waitingByDate[todayDate] ?? []
+    const hasMonitoring = todayWaiting.some(
+      w => w.display_status === 'MONITORING' && (w.legs ?? []).some((l: any) => l.wt_enabled)
+    )
+    if (!hasMonitoring) return
+    const poll = () => {
+      ordersAPI.waiting(todayDate, isPractixMode)
+        .then(res => {
+          setWaitingByDate(prev => ({ ...prev, [todayDate]: res.data?.waiting || [] }))
+        })
+        .catch(() => {})
+    }
+    const interval = setInterval(poll, 3000)
+    return () => clearInterval(interval)
+  }, [waitingByDate, todayDate, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Persist selected day tab across page refreshes
   useEffect(() => {
     try { localStorage.setItem(LS_DAY_KEY, selectedDate) } catch {}

@@ -127,23 +127,15 @@ export default function App() {
         position="bottom-right"
         toastOptions={{
           style: {
-            background: 'var(--bg-surface)',
-            color: 'var(--text)',
-            border: '1px solid var(--border)',
-            boxShadow: 'var(--neu-raised)',
-            borderRadius: '12px',
-            fontFamily: 'Space Grotesk, sans-serif',
-            fontSize: '13px',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '12px',
+            background: '#1a2a2a',
+            border: '1px solid rgba(45,212,191,0.2)',
+            color: '#e2e8f0',
+            borderRadius: '8px',
           },
-          classNames: {
-            success: 'toast-success',
-            error: 'toast-error',
-            warning: 'toast-warning',
-          }
+          duration: 3000,
         }}
-        expand={false}
-        richColors
-        closeButton
       />
     </BrowserRouter>
   )

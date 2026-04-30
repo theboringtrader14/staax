@@ -5,6 +5,7 @@ import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { Sparkle, LockSimple, CheckCircle, Warning } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
+import { sounds, initSounds } from '../utils/sounds'
 
 const INST_CODES: Record<string, string> = { NF: 'NIFTY', BN: 'BANKNIFTY', SX: 'SENSEX', MN: 'MIDCAPNIFTY', FN: 'FINNIFTY' }
 const EXPIRY_OPTIONS = [
@@ -743,6 +744,7 @@ export default function AlgoPage() {
   // Sync isDirty to window flag — Sidebar reads this to block nav clicks
   // Also warn on browser close/refresh when unsaved
   useEffect(() => {
+    initSounds()
     ;(window as any).__staaxDirty = isDirty
     const handler = (e: BeforeUnloadEvent) => {
       if (isDirty) { e.preventDefault(); e.returnValue = '' }
@@ -1225,12 +1227,12 @@ export default function AlgoPage() {
           {isDirty    && <span style={{ fontSize: '11px', color: 'var(--accent-amber)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-amber)', flexShrink: 0 }} />Unsaved changes</span>}
           {saved      && <span style={{ fontSize: '12px', color: 'var(--green)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircle size={12} weight="fill" color="var(--green)" /> Saved!</span>}
           {saveError  && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveError}</span>}
-          <button onClick={() => setShowAI(true)} style={{ height: '34px', padding: '0 14px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <button onClick={() => { sounds.click(); setShowAI(true) }} style={{ height: '34px', padding: '0 14px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5 }}>
             <Sparkle size={13} weight="fill" color="var(--accent)" />
             Describe
           </button>
-          <button onClick={() => navigate('/grid')} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', border: 'none', background: 'var(--bg)', boxShadow: saving ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: '#0ea66e', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : (isEdit ? 'Update Algo' : 'Save Algo')}</button>
+          <button onClick={() => { sounds.click(); navigate('/grid') }} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>Cancel</button>
+          <button onClick={() => { sounds.click(); handleSave() }} disabled={saving} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', border: 'none', background: 'var(--bg)', boxShadow: saving ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: '#0ea66e', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : (isEdit ? 'Update Algo' : 'Save Algo')}</button>
         </div>
       </div>
 
