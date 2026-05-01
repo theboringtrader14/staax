@@ -1045,13 +1045,17 @@ export default function GridPage() {
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button
-                className="btn btn-ghost"
-                style={{ boxShadow: 'var(--neu-raised-sm)', border: 'none' }}
+                style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
+                onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
               >Cancel</button>
               <button
-                className="btn btn-primary"
-                style={{ boxShadow: 'var(--neu-raised-sm), 0 0 14px rgba(255,107,0,0.30)' }}
+                style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--accent)', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
+                onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 onClick={async () => {
                   setShowDeferModal(false)
                   try {
