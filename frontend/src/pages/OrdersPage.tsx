@@ -723,6 +723,40 @@ export default function OrdersPage() {
     }
   }, [weekOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pre-fetch orders for all weekdays in the current week so day-tab P&L shows on load.
+  // Runs whenever the visible week changes (weekDates is a new object each time weekOffset changes).
+  // Skips dates already cached in ordersByDate to avoid duplicate requests.
+  useEffect(() => {
+    const weekdayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI']
+    const todayStr = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 10)
+    const datesToFetch = weekdayNames
+      .map(name => weekDates[name])
+      .filter((date): date is string => !!date && date <= todayStr)
+
+    if (datesToFetch.length === 0) return
+
+    // Snapshot current cache to avoid stale closure reads inside the async callbacks
+    setOrdersByDate(prev => {
+      const missing = datesToFetch.filter(date => prev[date] === undefined)
+      if (missing.length === 0) return prev  // nothing to do
+
+      // Fire all missing fetches in parallel — each resolves independently
+      missing.forEach(date => {
+        ordersAPI.list(date, isPractixMode)
+          .then(res => {
+            const data = res.data
+            const raw: RawGroup[] = Array.isArray(data) ? [] : (data?.groups || [])
+            setOrdersByDate(cache => ({ ...cache, [date]: raw.map(mapGroup) }))
+          })
+          .catch(() => {
+            setOrdersByDate(cache => ({ ...cache, [date]: [] }))  // mark loaded (empty)
+          })
+      })
+
+      return prev  // don't mutate yet — individual .then() calls will merge results
+    })
+  }, [weekDates, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch accounts list on mount
   useEffect(() => {
     accountsAPI.list()
