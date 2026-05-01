@@ -861,6 +861,8 @@ interface LatencyData {
 }
 
 function LatencyTab({ data }: { data: LatencyData | null }) {
+  const [showAllRecent, setShowAllRecent] = useState(false)
+
   if (!data || data.total_orders === 0) {
     return (
       <div style={{ ...neuCard, textAlign: 'center', color: 'var(--text-mute)', padding: 48, fontSize: 12 }}>
@@ -874,9 +876,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 
   function latencyColor(ms: number): string {
     if (ms < 150)  return 'var(--green)'
-    if (ms < 250)  return 'var(--green)'
-    if (ms < 400)  return 'var(--accent-amber)' // Acceptable — amber
-    return 'var(--red)'                    // Slow — red
+    if (ms < 250)  return 'var(--accent-amber)'
+    return 'var(--red)'
   }
 
   function statusColor(s: string): string {
@@ -971,7 +972,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                 <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Avg (ms)</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Orders</th>
-                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Bar</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Relative</th>
               </tr>
             </thead>
             <tbody>
@@ -982,7 +983,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      <div style={{ width: `${Math.min(Math.round(a.avg_ms / maxAlgoMs * 300), 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
+                      <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
                     </div>
                   </td>
                 </tr>
@@ -1005,7 +1006,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
               </tr>
             </thead>
             <tbody>
-              {data.recent_orders.map((o, i) => (
+              {data.recent_orders.slice(0, showAllRecent ? data.recent_orders.length : 10).map((o, i) => (
                 <tr key={i}>
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{o.time}</td>
                   <td style={{ textAlign: 'left', fontWeight: 600, borderBottom: '0.5px solid var(--border)' }}>{o.symbol}</td>
@@ -1018,6 +1019,15 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
               ))}
             </tbody>
           </table>
+          {data.recent_orders.length > 10 && (
+            <button onClick={() => setShowAllRecent(s => !s)} style={{
+              fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)',
+              background: 'none', border: 'none', cursor: 'pointer', marginTop: 8,
+              letterSpacing: 1, display: 'block',
+            }}>
+              {showAllRecent ? '↑ Show less' : `↓ Show ${data.recent_orders.length - 10} more`}
+            </button>
+          )}
         </div>
       )}
     </div>
