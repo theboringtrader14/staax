@@ -1038,13 +1038,14 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      <div style={{
-                        width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`,
-                        height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
-                        background: 'linear-gradient(to right, #10B981 0%, #3B82F6 30%, #F59E0B 50%, #EF4444 80%)',
-                        backgroundSize: `${(500 / a.avg_ms * 100).toFixed(1)}% 100%`,
-                        backgroundRepeat: 'no-repeat',
-                      }} />
+                      {/* Clip div: bar width with overflow:hidden for clean edge */}
+                      <div style={{ width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`, height: '100%', borderRadius: 4, overflow: 'hidden', transition: 'width 0.3s' }}>
+                        {/* Gradient div: always spans full 500ms container width */}
+                        <div style={{
+                          width: `${Math.round(500 / a.avg_ms * 100)}%`, height: '100%',
+                          background: 'linear-gradient(to right, #10B981 0%, #10B981 30%, #3B82F6 50%, #F59E0B 80%, #EF4444 100%)',
+                        }} />
+                      </div>
                     </div>
                   </td>
                 </tr>
