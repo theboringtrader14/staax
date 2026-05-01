@@ -59,6 +59,25 @@ class RetryLegsRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _live_pnl(order: Order) -> Optional[float]:
+    """
+    Return the best available P&L for an order:
+    - CLOSED: use stored order.pnl (broker-confirmed exit price)
+    - OPEN:   compute from order.ltp (last tick written by engine)
+              formula mirrors _compute_pnl in algo_runner: (exit - fill) * qty
+              Returns None if fill_price or ltp is missing.
+    """
+    if order.status != OrderStatus.OPEN:
+        return order.pnl
+    if not order.fill_price or not order.ltp:
+        return None
+    qty = order.quantity or 0
+    if order.direction == "buy":
+        return round((order.ltp - order.fill_price) * qty, 2)
+    else:
+        return round((order.fill_price - order.ltp) * qty, 2)
+
+
 def _order_to_dict(order: Order) -> dict:
     return {
         "id":                str(order.id),
@@ -93,7 +112,7 @@ def _order_to_dict(order: Order) -> dict:
         "exit_price_manual": order.exit_price_manual,
         "exit_time":         order.exit_time.isoformat() if order.exit_time and order.status == OrderStatus.CLOSED else None,
         "exit_reason":       order.exit_reason.value if order.exit_reason else None,
-        "pnl":               order.pnl,
+        "pnl":               _live_pnl(order),
         "reconcile_status":  order.reconcile_status,
         "status":            order.status.value if order.status else "pending",
         "journey_level":     order.journey_level,
@@ -247,6 +266,7 @@ async def list_orders(
                 "algo_name":      meta.get("algo_name", ""),
                 "account":        meta.get("account", ""),
                 "mtm":            mtm,
+                "total_pnl":      mtm,   # alias — open legs use ltp-based pnl, closed use exit pnl
                 "mtm_sl":         meta.get("mtm_sl", 0),
                 "mtm_tp":         meta.get("mtm_tp", 0),
                 "latest_error":   latest_error,
