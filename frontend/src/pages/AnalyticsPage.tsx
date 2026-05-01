@@ -913,13 +913,9 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
     return 'var(--red)'
   }
 
-  // Bar gradient shows only the colours the algo has "earned" by being fast enough
-  function algoBarGradient(ms: number): string {
-    if (ms < 150)  return 'linear-gradient(to right, #EF4444, #F59E0B 35%, #3B82F6 65%, #10B981)' // all 4
-    if (ms < 250)  return 'linear-gradient(to right, #EF4444, #F59E0B 40%, #3B82F6)'              // red→amber→blue
-    if (ms < 400)  return 'linear-gradient(to right, #EF4444, #F59E0B)'                           // red→amber
-    return '#EF4444'                                                                               // red only
-  }
+  // Universal gradient with stops at category boundaries (as % of 500ms scale)
+  // 150ms=30%, 250ms=50%, 400ms=80% — bar clips naturally at avg_ms/500
+  const algoBarGradient = 'linear-gradient(to right, #10B981 0%, #3B82F6 30%, #F59E0B 50%, #EF4444 80%)'
 
   function statusColor(s: string): string {
     if (s === 'filled') return 'var(--green)'
@@ -1014,23 +1010,22 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Avg (ms)</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Orders</th>
                 <th style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 12px' }}>
-                  {/* 0–500ms ruler: Excellent 30% | Good 20% | Acceptable 30% | Slow 20% */}
-                  <div style={{ display: 'flex', height: 14, borderRadius: 4, overflow: 'hidden', boxShadow: 'var(--neu-inset)' }}>
+                  {/* 0–500ms inset ruler with groove separators */}
+                  <div style={{ ...neuInset, height: 16, borderRadius: 6, padding: '2px 3px', display: 'flex', gap: 2 }}>
                     {([
                       { label: 'EXCELLENT', flex: 30, color: '#10B981' },
                       { label: 'GOOD',      flex: 20, color: '#3B82F6' },
                       { label: 'ACCEPTABLE',flex: 30, color: '#F59E0B' },
                       { label: 'SLOW',      flex: 20, color: '#EF4444' },
-                    ] as const).map((z, i, arr) => (
+                    ] as const).map(z => (
                       <div key={z.label} style={{
                         flex: z.flex, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 7, fontWeight: 700, letterSpacing: '0.08em', color: '#000',
-                        background: z.color, opacity: 0.85,
-                        borderRight: i < arr.length - 1 ? '1px solid rgba(0,0,0,0.25)' : 'none',
+                        fontSize: 7, fontWeight: 700, letterSpacing: '0.06em', color: 'rgba(0,0,0,0.75)',
+                        background: z.color, borderRadius: 3, opacity: 0.88,
                       }}>{z.label}</div>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, padding: '0 1px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, padding: '0 3px' }}>
                     {['0', '150', '250', '400', '500ms'].map(t => (
                       <span key={t} style={{ fontSize: 7, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{t}</span>
                     ))}
@@ -1049,7 +1044,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                       <div style={{
                         width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`,
                         height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
-                        background: algoBarGradient(a.avg_ms),
+                        background: algoBarGradient,
                       }} />
                     </div>
                   </td>
