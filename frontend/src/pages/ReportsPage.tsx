@@ -432,7 +432,7 @@ export default function ReportsPage() {
 
       {/* Chart modal */}
       {chartModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setChartModal(false)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setChartModal(false)}>
           <div style={{ ...neuModal, maxWidth: '780px', width: '90%', animation: 'slideUp 0.18s ease' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: 'var(--text)' }}>FY {fy} — Cumulative P&L</span>
@@ -467,7 +467,7 @@ export default function ReportsPage() {
 
       {/* Download modal */}
       {downloadModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setDownloadModal(null)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setDownloadModal(null)}>
           <div style={{ ...neuModal, width: '320px', maxWidth: '90vw', animation: 'slideUp 0.18s ease' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -704,7 +704,7 @@ export default function ReportsPage() {
 
       {/* Month detail modal */}
       {monthModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setMonthModal(null)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setMonthModal(null)}>
           <div style={{ ...neuModal, maxWidth: '480px', width: '90%', animation: 'slideUp 0.18s ease' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: '16px', fontWeight: 700, color: 'var(--text)' }}>

@@ -368,7 +368,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
       {/* Backdrop */}
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)', zIndex: 900 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', zIndex: 900 }}
       />
 
       {/* Modal */}

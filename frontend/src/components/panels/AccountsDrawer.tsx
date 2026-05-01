@@ -393,7 +393,7 @@ export default function AccountsDrawer() {
   return (
     <>
       {/* Blur backdrop — sits behind the panel, blurs the rest of the page */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 299, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.15)' }} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 299, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.06)' }} />
 
       {/* Floating accounts + profile panel */}
       <div ref={panelRef} style={{
@@ -631,7 +631,7 @@ export default function AccountsDrawer() {
 
       {/* ── Add Account Modal ─────────────────────────────────────────────── */}
       {addModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
           onClick={() => { setAddModal(false); setAddError('') }}>
           <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 28, width: 440, maxWidth: '90%' }}
             onClick={e => e.stopPropagation()}>
@@ -761,7 +761,7 @@ export default function AccountsDrawer() {
         )
 
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
             onClick={closeModal}>
             <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 28, width: 420, maxWidth: '90%' }}
               onClick={e => e.stopPropagation()}>
@@ -842,7 +842,7 @@ export default function AccountsDrawer() {
 
       {/* ── Confirm Deactivate/Reactivate Modal ─────────────────────────── */}
       {confirmAction && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
           onClick={() => setConfirmAction(null)}>
           <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 20, padding: 24, width: 360, maxWidth: '90%' }}
             onClick={e => e.stopPropagation()}>
