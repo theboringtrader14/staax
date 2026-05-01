@@ -308,6 +308,15 @@ class AlgoRunner:
                     )
                     self._wt_evaluator.register(window, on_entry=self._make_wt_callback(ge_id))
                     if self._ltp_consumer:
+                        # For BFO options (SENSEX/BANKEX), register_bfo_tokens MUST be
+                        # called before subscribe() so exchangeType=4 is used, not NFO.
+                        _cached_exch = _cached.get("exchange", "NFO")
+                        if _cached_exch == "BFO":
+                            self._ltp_consumer.register_bfo_tokens([_cached["instrument_token"]])
+                            logger.info(
+                                f"[REARM] BFO token {_cached['instrument_token']} "
+                                f"registered for {_cached['symbol']}"
+                            )
                         self._ltp_consumer.subscribe([_cached["instrument_token"]])
                     logger.info(
                         f"[REARM] ✅ Re-armed W&T for {algo_name} "
@@ -1199,12 +1208,18 @@ class AlgoRunner:
                 )
                 self._wt_evaluator.register(window, on_entry=self._make_wt_callback(_ge_id_str))
                 if self._ltp_consumer:
+                    # For BFO options (SENSEX/BANKEX), register before subscribe so
+                    # SmartStream uses exchangeType=4, preventing index LTP contamination.
+                    if _instrument_exchange == "BFO":
+                        self._ltp_consumer.register_bfo_tokens([int(instrument_token)])
+                        logger.info(f"[W&T/BFO] Registered BFO token {instrument_token} for {symbol}")
                     self._ltp_consumer.subscribe([int(instrument_token)])
 
                 # Cache arming details so rearm_wt_monitors() can restore the window after reconnect
                 self._wt_arming_cache[_ge_id_str] = {
                     "instrument_token": int(instrument_token),
                     "symbol":           symbol,
+                    "exchange":         _instrument_exchange,   # needed for BFO re-arm token registration
                     "reference_price":  _wt_option_ltp,
                     "threshold":        _wt_threshold,
                     "direction":        _wt_dir,
@@ -2173,8 +2188,19 @@ class AlgoRunner:
                     # Override tp_level with DB-persisted target
                     if order.target:
                         pos_monitor.tp_level = float(order.target)
-                    # Re-subscribe token to SmartStream
+                    # Re-subscribe token to SmartStream.
+                    # For BFO (SENSEX/BANKEX options), register_bfo_tokens MUST be called
+                    # before subscribe() so SmartStream uses exchangeType=4 (BFO) instead
+                    # of exchangeType=2 (NFO).  Without this, Angel One sends back the
+                    # SENSEX index LTP (~76000) for the option token, contaminating _ltp_map
+                    # and triggering phantom TP/SL exits with a ~₹15L P&L error.
                     if self._ltp_consumer:
+                        if getattr(order, "exchange", None) == "BFO":
+                            self._ltp_consumer.register_bfo_tokens([int(order.instrument_token)])
+                            logger.info(
+                                f"[RESTORE-SL] BFO token {order.instrument_token} "
+                                f"registered for {order.symbol}"
+                            )
                         self._ltp_consumer.subscribe([int(order.instrument_token)])
                     recovered += 1
                     logger.info(
@@ -2612,6 +2638,21 @@ class AlgoRunner:
         self, db: AsyncSession, order: Order, exit_price: float, reason: str
     ):
         """Update Order to CLOSED in DB and compute P&L."""
+        # ── Sanity guard: detect index LTP contamination ──────────────────────
+        # For option orders (BFO/NFO), the exit_price must be an option premium
+        # (small), not an underlying index value (large).  If exit_price is more
+        # than 50× the entry fill_price the value is almost certainly the index
+        # spot price leaking into the option's LTP slot — abort rather than
+        # corrupt the DB with a phantom -₹15L P&L.
+        _fill = float(order.fill_price or 0)
+        if _fill > 0 and exit_price > _fill * 50:
+            logger.error(
+                f"[ENGINE] ABORTED _close_order — suspicious exit_price {exit_price} "
+                f"for {order.symbol} (fill={_fill}, ratio={exit_price/_fill:.1f}x). "
+                f"Likely index LTP contamination (BFO option subscribed with wrong "
+                f"exchangeType). Reason={reason}. Order NOT closed."
+            )
+            return
         order.status      = OrderStatus.CLOSED
         order.ltp         = exit_price   # snapshot LTP at close
         order.exit_price  = exit_price

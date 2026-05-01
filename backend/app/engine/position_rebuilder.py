@@ -203,8 +203,19 @@ class PositionRebuilder:
 
         # Re-subscribe LTP token so ticks flow immediately after restart.
         # subscribe() expects List[int] — pass as single-element list.
+        # For BFO (SENSEX/BANKEX options), register_bfo_tokens() MUST be called
+        # before subscribe() so SmartStream uses exchangeType=4 (BFO) instead of
+        # exchangeType=2 (NFO).  Without this, Angel One sends the SENSEX index LTP
+        # (~76000) as the option tick, corrupting _ltp_map and causing phantom
+        # TP/SL exits with a phantom ~₹15L P&L (BFO exit_price contamination bug).
         token = getattr(order, "instrument_token", None)
         if self._ltp_consumer and token:
+            if getattr(order, "exchange", None) == "BFO":
+                self._ltp_consumer.register_bfo_tokens([int(token)])
+                logger.info(
+                    "[STARTUP] BFO token %s registered for order %s (%s)",
+                    token, order.id, symbol,
+                )
             self._ltp_consumer.subscribe([int(token)])
             logger.info("[STARTUP] LTP token %s re-subscribed for order %s", token, order.id)
 
