@@ -908,10 +908,10 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
-    if (ms < 150)  return 'var(--green)'
-    if (ms < 250)  return '#22DD88'
-    if (ms < 400)  return 'var(--accent-amber)'
-    return 'var(--red)'
+    if (ms < 150)  return '#10B981'           // Excellent — emerald
+    if (ms < 250)  return '#3B82F6'           // Good — blue
+    if (ms < 400)  return 'var(--accent-amber)' // Acceptable — amber
+    return 'var(--red)'                        // Slow — red
   }
 
   function statusColor(s: string): string {
@@ -921,8 +921,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   }
 
   const distBuckets = [
-    { key: 'excellent',  label: 'Excellent  <150ms',    color: 'var(--green)',        count: data.distribution.excellent  },
-    { key: 'good',       label: 'Good       150–250ms',  color: '#22DD88',             count: data.distribution.good       },
+    { key: 'excellent',  label: 'Excellent  <150ms',    color: '#10B981',             count: data.distribution.excellent  },
+    { key: 'good',       label: 'Good       150–250ms',  color: '#3B82F6',             count: data.distribution.good       },
     { key: 'acceptable', label: 'Acceptable 250–400ms',  color: 'var(--accent-amber)', count: data.distribution.acceptable },
     { key: 'slow',       label: 'Slow       >400ms',     color: 'var(--red)',          count: data.distribution.slow       },
   ]
@@ -1017,7 +1017,9 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
+                      <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 100)}%`, height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
+                        background: 'linear-gradient(to right, #10B981, #3B82F6 35%, #F59E0B 70%, #EF4444)',
+                      }} />
                     </div>
                   </td>
                 </tr>
