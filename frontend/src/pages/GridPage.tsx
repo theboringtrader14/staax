@@ -1039,35 +1039,14 @@ export default function GridPage() {
       {showDeferModal && deferAlgo && (
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 400 }}>
-
-            {/* Title */}
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
-              Remove from recurring schedule?
+            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>Remove from recurring schedule?</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '20px' }}>
+              {deferAlgo.name} is active today ({deferDay}). This will keep today's session running and remove it from future {deferDay}s after midnight.
             </div>
-
-            {/* Body — inset info block */}
-            <div style={{
-              background: 'var(--bg)',
-              boxShadow: 'var(--neu-inset)',
-              borderRadius: 12,
-              padding: '12px 16px',
-              marginBottom: 20,
-              borderLeft: '3px solid var(--accent)',
-            }}>
-              <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: 'var(--accent)' }}>{deferAlgo.name}</span>
-                {' '}is active today ({deferDay}). Removing now could disrupt today's session.
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-                Remove from future <span style={{ fontWeight: 700, color: 'var(--text)' }}>{deferDay}</span>s after tonight?
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}>Cancel</button>
               <button
                 className="btn btn-primary"
-                style={{ flex: 1 }}
                 onClick={async () => {
                   setShowDeferModal(false)
                   try {
@@ -1081,15 +1060,7 @@ export default function GridPage() {
               >
                 Yes, future only
               </button>
-              <button
-                className="btn btn-ghost"
-                style={{ flex: 1 }}
-                onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
-              >
-                Cancel
-              </button>
             </div>
-
           </div>
         </div>
       )}
