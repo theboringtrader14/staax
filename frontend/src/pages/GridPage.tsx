@@ -1044,9 +1044,14 @@ export default function GridPage() {
               {deferAlgo.name} is active today ({deferDay}). This will keep today's session running and remove it from future {deferDay}s after midnight.
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}>Cancel</button>
+              <button
+                className="btn btn-ghost"
+                style={{ boxShadow: 'var(--neu-raised-sm)', border: 'none' }}
+                onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
+              >Cancel</button>
               <button
                 className="btn btn-primary"
+                style={{ boxShadow: 'var(--neu-raised-sm), 0 0 14px rgba(255,107,0,0.30)' }}
                 onClick={async () => {
                   setShowDeferModal(false)
                   try {
