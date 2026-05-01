@@ -54,6 +54,7 @@ from app.engine.strike_selector    import StrikeSelector
 from app.engine.execution_manager  import execution_manager
 from app.engine.position_rebuilder import position_rebuilder
 from app.engine.order_reconciler   import order_reconciler
+from app.engine.reconciler         import position_reconciler
 from app.engine.bot_runner         import bot_runner
 from app.engine import event_logger
 
@@ -302,6 +303,14 @@ async def lifespan(app: FastAPI):
 
     logger.info("✅ BotRunner started + LTP callback registered")
 
+    # ── 12c. Wire + start PositionReconciler (30 s, market hours only) ───────
+    position_reconciler.wire(
+        zerodha       = zerodha,
+        angel_brokers = [angelone_mom, angelone_wife, angelone_karthik],
+    )
+    _pos_recon_task = asyncio.create_task(position_reconciler.start_loop())
+    logger.info("✅ PositionReconciler background task started (30 s, market hours only)")
+
     # ── 13. Load all broker tokens from DB (independent of market feed) ─────
     await _load_all_broker_tokens(app)
 
@@ -357,6 +366,11 @@ async def lifespan(app: FastAPI):
     _ao_bg_task.cancel()
     try:
         await _ao_bg_task
+    except asyncio.CancelledError:
+        pass
+    _pos_recon_task.cancel()
+    try:
+        await _pos_recon_task
     except asyncio.CancelledError:
         pass
     scheduler.stop()
