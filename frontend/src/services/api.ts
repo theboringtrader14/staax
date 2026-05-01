@@ -53,6 +53,10 @@ export const accountsAPI = {
     api.post('/accounts/fy-margin', data),
   stampFYMargin: () => api.post('/accounts/fy-margin/stamp-all'),
 
+  // Initial capital baseline
+  setInitialCapital: (id: string, amount: number) =>
+    api.post(`/accounts/${id}/set-initial-capital`, { amount }),
+
   // Zerodha token flow
   zerodhaLoginUrl:    () => api.get('/accounts/zerodha/login-url'),
   zerodhaSetToken:    (requestToken: string) =>
@@ -211,12 +215,6 @@ export const holidaysAPI = {
 export const eventsAPI = {
   list:   (limit = 100, date?: string) => api.get('/events/', { params: date ? { limit, date } : { limit } }),
   export: () => api.get('/events/export', { responseType: 'blob' }),
-}
-
-// ── Risk ──────────────────────────────────────────────────────────────────────
-export const riskAPI = {
-  live: (isPractix?: boolean) =>
-    api.get('/risk/live', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Warning, Prohibit, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { useStore } from '@/store'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI, riskAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 import { getISTNow } from '@/utils/format'
 
 // ── Types ──────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export default function DashboardPanel() {
   const [services, setServices]             = useState<Service[]>(INIT_SERVICES)
   const [health, setHealth]                 = useState<HealthData | null>(null)
   const [engineHealth, setEngineHealth]     = useState<any>(null)
-  const [riskData, setRiskData]             = useState<any>(null)
+  const [fundsData, setFundsData]           = useState<any[]>([])
   const [log, setLog]                       = useState<string[]>(['STAAX ready.'])
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
   const [logDate, setLogDate]               = useState<string>(todayIST())
@@ -285,12 +285,12 @@ export default function DashboardPanel() {
     return () => clearInterval(t)
   }, [])
 
-  // ── Live risk poll — 10s ───────────────────────────────────────
+  // ── Funds poll — 30s (margin utilisation bars) ───────────────
   useEffect(() => {
-    const fetchRisk = () =>
-      riskAPI.live(true).then(r => setRiskData(r.data)).catch(() => {})
-    fetchRisk()
-    const t = setInterval(fetchRisk, 10_000)
+    const fetchFunds = () =>
+      accountsAPI.funds().then(r => { if (Array.isArray(r.data)) setFundsData(r.data) }).catch(() => {})
+    fetchFunds()
+    const t = setInterval(fetchFunds, 30_000)
     return () => clearInterval(t)
   }, [])
 
@@ -320,15 +320,10 @@ export default function DashboardPanel() {
 
   const healthChips = [
     { label: 'Database',    ok: health?.checks?.database?.ok  ?? false, state: (health?.checks?.database?.ok  ?? false) ? 'green' : health ? 'red' : 'amber' },
-    { label: 'Redis',       ok: health?.checks?.redis?.ok     ?? false, state: (health?.checks?.redis?.ok     ?? false) ? 'green' : health ? 'red' : 'amber' },
     { label: 'Scheduler',   ok: health?.checks?.scheduler?.ok ?? false, state: (health?.checks?.scheduler?.ok ?? false) ? 'green' : health ? 'red' : 'amber' },
+    { label: 'Redis',       ok: health?.checks?.redis?.ok     ?? false, state: (health?.checks?.redis?.ok     ?? false) ? 'green' : health ? 'red' : 'amber' },
     { label: 'SmartStream', ok: ssConnected,                            state: ssConnected ? 'green' : isMarketHours ? 'red' : 'amber' },
   ] as const
-
-  const riskColor = !riskData ? 'var(--text-mute)'
-    : riskData.risk_pct > 20 ? 'var(--red, #FF4444)'
-    : riskData.risk_pct >= 10 ? '#b45309'
-    : '#0ea66e'
 
   const sectionLabel = (text: string) => (
     <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const, marginBottom: 8 }}>
@@ -445,33 +440,64 @@ export default function DashboardPanel() {
               </div>
             </div>
 
-            {/* ── Live Risk strip — only when positions are open ── */}
-            {riskData && riskData.open_positions > 0 && (
-              <div style={{
-                marginBottom: 10, padding: '10px 12px', borderRadius: 12,
-                background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
-                display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
-              }}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text-mute)', textTransform: 'uppercase' }}>
-                  Live Risk
+            {/* ── Margin Utilisation — only when funds data available ── */}
+            {fundsData.length > 0 && fundsData.some(f => (f.utilised ?? 0) > 0) && (() => {
+              const fmtCpt = (v: number) =>
+                v >= 100000 ? `${(v / 100000).toFixed(2)}L`
+                : v >= 1000 ? `${(v / 1000).toFixed(1)}k`
+                : `${Math.round(v)}`
+              const maxSlLoss: number | null = engineHealth?.engine?.max_sl_loss ?? null
+              const totalMargin = fundsData.reduce((s, f) => {
+                const u = f.utilised ?? 0
+                const n = Math.max(0, f.net ?? 0)
+                return s + u + n
+              }, 0)
+              return (
+                <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 12, background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text-mute)', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Margin Utilisation
+                  </div>
+                  {fundsData.filter(f => (f.utilised ?? 0) > 0).map(f => {
+                    const used = f.utilised ?? 0
+                    const avail = Math.max(0, f.net ?? 0)
+                    const pct = (used + avail) > 0 ? Math.round(used / (used + avail) * 100) : 0
+                    const barColor = pct > 80 ? '#EF4444' : pct > 50 ? '#F59E0B' : '#10B981'
+                    const broker = f.broker === 'zerodha' ? 'Zerodha' : 'AO'
+                    return (
+                      <div key={f.account_id} style={{ marginBottom: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                            {f.nickname} · {broker}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}>
+                              ₹{fmtCpt(used)} of ₹{fmtCpt(used + avail)}
+                            </span>
+                            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: barColor }}>{pct}%</span>
+                          </div>
+                        </div>
+                        <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 3 }}>
+                          <div style={{ height: '100%', borderRadius: 3, width: `${pct}%`, background: barColor, transition: 'width 0.3s ease' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {maxSlLoss != null && maxSlLoss > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 6, borderTop: '0.5px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Max loss if all SLs hit</span>
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: maxSlLoss > 50000 ? '#EF4444' : '#F59E0B' }}>
+                        ₹{fmtCpt(maxSlLoss)}
+                        {totalMargin > 0 && (
+                          <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-mute)', marginLeft: 4 }}>
+                            ({(maxSlLoss / totalMargin * 100).toFixed(1)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                  Deployed: <span style={{ fontWeight: 700, color: 'var(--text)' }}>
-                    ₹{(riskData.deployed_capital / 1000).toFixed(1)}k
-                  </span>
-                </span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                  At Risk: <span style={{ fontWeight: 700, color: riskColor }}>
-                    ₹{(riskData.max_loss_if_sl_hit / 1000).toFixed(1)}k ({riskData.risk_pct}%)
-                  </span>
-                </span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                  P&amp;L: <span style={{ fontWeight: 700, color: riskData.current_unrealized_pnl >= 0 ? 'var(--green, #0ea66e)' : 'var(--red, #FF4444)' }}>
-                    {riskData.current_unrealized_pnl >= 0 ? '+' : ''}₹{(Math.abs(riskData.current_unrealized_pnl) / 1000).toFixed(1)}k
-                  </span>
-                </span>
-              </div>
-            )}
+              )
+            })()}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map((chip) => {
@@ -499,8 +525,10 @@ export default function DashboardPanel() {
                     <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotColor, boxShadow: `0 0 6px ${dotColor}55` }} />
                     <div>
                       <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-mute)', lineHeight: 1.3 }}>{chip.label}</div>
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, color: dotColor }}>{statusText}</div>
-                      {detail && <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', marginTop: 1 }}>{detail}</div>}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, color: dotColor }}>{statusText}</span>
+                        {detail && <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}>{detail}</span>}
+                      </div>
                     </div>
                   </div>
                 )

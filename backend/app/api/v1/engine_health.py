@@ -140,7 +140,7 @@ async def engine_health(request: Request):
     try:
         from app.core.database import AsyncSessionLocal
         from app.models.order import Order, OrderStatus
-        from sqlalchemy import select, func
+        from sqlalchemy import select, func, text as _text
         from datetime import date
         from zoneinfo import ZoneInfo
 
@@ -165,6 +165,28 @@ async def engine_health(request: Request):
                 )
             )
             engine["open_positions"] = open_result.scalar() or 0
+
+            # Max SL loss — sum of worst-case loss if every open SL hits right now
+            try:
+                sl_result = await db.execute(_text("""
+                    SELECT
+                        CASE WHEN transaction_type = 'BUY' OR side = 'BUY'
+                             THEN (fill_price - COALESCE(sl_actual, fill_price))
+                                  * lots * COALESCE(lot_size, 1)
+                             ELSE (COALESCE(sl_actual, fill_price) - fill_price)
+                                  * lots * COALESCE(lot_size, 1)
+                        END AS sl_loss
+                    FROM orders
+                    WHERE status = 'open'
+                      AND fill_price IS NOT NULL
+                      AND sl_actual  IS NOT NULL
+                """))
+                sl_rows = sl_result.fetchall()
+                total_sl_loss = sum(max(0.0, float(r.sl_loss)) for r in sl_rows)
+                engine["max_sl_loss"] = round(total_sl_loss, 2) if total_sl_loss > 0 else None
+            except Exception as _sl_e:
+                logger.warning(f"[ENGINE HEALTH] max_sl_loss compute failed: {_sl_e}")
+                engine["max_sl_loss"] = None
 
     except Exception as e:
         logger.warning(f"[ENGINE HEALTH] orders/positions DB query failed: {e}")
