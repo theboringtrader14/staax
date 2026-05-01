@@ -131,7 +131,6 @@ export default function GridPage() {
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
   const [confirmCancel,  setConfirmCancel]  = useState<{algoId: string; day: string; entryId: string} | null>(null)
-  const [hoveredPill,    setHoveredPill]    = useState<string|null>(null)  // "algoId-day"
   const [stickyHeader,   setStickyHeader]   = useState<string|null>(null)
   const [showAI,         setShowAI]         = useState(false)
   const [aiEditAlgo,     setAiEditAlgo]     = useState<Algo|null>(null)
@@ -361,11 +360,6 @@ export default function GridPage() {
   const unarch = async (algoId: string) => {
     setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:false } : x))
     try { await algosAPI.unarchive(algoId) } catch { setAlgos(a => a.map(x => x.id===algoId ? { ...x, arch:true } : x)); showError('Reactivate failed') }
-  }
-
-  // ── Cancel WAITING/ERROR entry ─────────────────────────────────────────────────
-  const cancelEntry = (algoId: string, day: string, entryId: string) => {
-    setConfirmCancel({ algoId, day, entryId })
   }
 
   const handleCancelConfirmed = async () => {
@@ -805,22 +799,14 @@ export default function GridPage() {
                                   const dotColor   = 'transparent'
                                   const dotAnim    = false
 
-                                  const s = cell?.status
                                   const isMonitoring = cell?.is_monitoring === true
-
-                                  const pillKey = `${algo.id}-${day}`
-                                  // Monitoring pills are display-only — no cancel hover
-                                  const canCancel = !isMonitoring && (s === 'waiting' || s === 'algo_active' || s === 'error') && !!cell?.gridEntryId
-                                  const isPillHovered = hoveredPill === pillKey
 
                                   return (
                                     <button key={day}
                                       onClick={e => { e.stopPropagation(); void toggleDay(algo, day) }}
-                                      onMouseEnter={() => canCancel && setHoveredPill(pillKey)}
-                                      onMouseLeave={() => setHoveredPill(null)}
-                                      title={isMonitoring ? `${day} · W&T monitoring` : (canCancel ? `${day} · hover for cancel` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`)}
+                                      title={isMonitoring ? `${day} · W&T monitoring` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
                                       style={{
-                                        width:'32px', height:'32px', borderRadius:'50%', cursor: isMonitoring ? 'default' : 'pointer',
+                                        width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
                                         fontFamily:'JetBrains Mono, monospace', fontSize:'10px',
                                         display:'flex', alignItems:'center', justifyContent:'center',
                                         position:'relative',
@@ -844,7 +830,7 @@ export default function GridPage() {
                                           animation: 'pillDotPulse 1.4s ease-in-out infinite',
                                         }}/>
                                       )}
-                                      {showDot && !isPillHovered && !isMonitoring && (
+                                      {showDot && !isMonitoring && (
                                         <span style={{
                                           position:'absolute',
                                           top:'4px',
@@ -855,17 +841,6 @@ export default function GridPage() {
                                           background: dotColor,
                                           animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
                                         }}/>
-                                      )}
-                                      {canCancel && isPillHovered && (
-                                        <span
-                                          onClick={e => { e.stopPropagation(); void cancelEntry(algo.id, day, cell!.gridEntryId!) }}
-                                          title="Cancel this run"
-                                          style={{
-                                            position:'absolute', inset:0, borderRadius:'50%',
-                                            display:'flex', alignItems:'center', justifyContent:'center',
-                                            background: 'rgba(0,0,0,0.65)', fontSize:'13px', color:'#FF4444',
-                                            fontWeight:700, lineHeight:1,
-                                          }}>×</span>
                                       )}
                                     </button>
                                   )

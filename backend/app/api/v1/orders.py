@@ -138,6 +138,7 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
 
 @router.get("/")
 async def list_orders(
+    request:      Request,
     trading_date: Optional[str] = Query(None, description="YYYY-MM-DD, defaults to today"),
     algo_id:      Optional[str] = Query(None),
     account_id:   Optional[str] = Query(None),
@@ -195,6 +196,31 @@ async def list_orders(
     orders = result.scalars().all()
 
     orders_list = [_order_to_dict(o) for o in orders]
+
+    # ── Enrich open orders with live LTP from cache ───────────────────────────
+    # order.ltp in DB may be stale or None for open legs; ltp_cache (Redis) has
+    # the most recent tick written by LTPConsumer on every market tick.
+    ltp_cache = getattr(request.app.state, "ltp_cache", None)
+    if ltp_cache:
+        # Build token→order-dict map for open orders that have an instrument_token
+        token_to_open: dict = {}
+        for od, o in zip(orders_list, orders):
+            if od.get("status") == "open" and o.instrument_token:
+                token_to_open[int(o.instrument_token)] = (od, o)
+        if token_to_open:
+            try:
+                live_ltps = await ltp_cache.get_many(list(token_to_open.keys()))
+                for token, live_ltp in live_ltps.items():
+                    od, o = token_to_open[token]
+                    od["ltp"] = live_ltp
+                    if o.fill_price and o.quantity:
+                        if o.direction == "sell":
+                            od["pnl"] = round((o.fill_price - live_ltp) * o.quantity, 2)
+                        else:
+                            od["pnl"] = round((live_ltp - o.fill_price) * o.quantity, 2)
+            except Exception as _ltp_err:
+                logger.warning(f"[orders] live LTP enrichment failed: {_ltp_err}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     # Group by algo_id
     by_algo: dict = {}
