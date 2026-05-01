@@ -75,6 +75,7 @@ const neuCardSm: CSSProperties = {
   boxShadow: 'var(--neu-raised-sm)',
   borderRadius: 12,
   padding: '12px 14px',
+  minHeight: 90,
 }
 
 const neuInset: CSSProperties = {
