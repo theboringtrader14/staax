@@ -311,7 +311,12 @@ async def lifespan(app: FastAPI):
     await _register_global_mtm(mtm_monitor)
 
     # ── 13c. Auto-login AO accounts whose token is stale/missing ─────────────
-    await _ao_startup_auto_login(app)
+    # Run as a background task — AO TOTP re-login retries can take 20-30s on
+    # holidays/Mondays (expired sessions). Running in background means the app
+    # starts serving requests immediately; SmartStream comes up progressively.
+    # _auto_start_market_feed and _print_account_status_summary both depend on
+    # AO tokens so they travel with the background task.
+    _ao_bg_task = asyncio.create_task(_ao_broker_startup_sequence(app))
 
     # ── 13c2. Auto-create grid entries for today's recurring algos ────────────
     await _ensure_today_grid_entries()
@@ -335,12 +340,6 @@ async def lifespan(app: FastAPI):
     except Exception as _mcx_e:
         logger.warning(f"[STARTUP] MCX expiry check failed (non-fatal): {_mcx_e}")
 
-    # ── 14. Auto-start Market Feed if broker token exists in DB ──────────────
-    await _auto_start_market_feed(app)
-
-    # ── 15. Print account status summary ─────────────────────────────────────
-    await _print_account_status_summary(app)
-
     # ── 16. DB schema migrations (ADD COLUMN IF NOT EXISTS — idempotent) ──────
     await _run_startup_migrations()
 
@@ -348,12 +347,17 @@ async def lifespan(app: FastAPI):
     import asyncio as _aio
     _aio.create_task(_fix_today_order_quantities())
 
-    logger.info("✅ STAAX engine operational — awaiting broker login to start LTP feed")
+    logger.info("✅ STAAX engine operational — AO broker login running in background")
 
     yield  # ── Application running ─────────────────────────────────────────
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("🛑 STAAX shutting down...")
+    _ao_bg_task.cancel()
+    try:
+        await _ao_bg_task
+    except asyncio.CancelledError:
+        pass
     scheduler.stop()
     if ltp_consumer:
         ltp_consumer.stop()
@@ -674,6 +678,26 @@ async def _ensure_today_grid_entries() -> None:
                 logger.info(f"[AUTO-GRID] No new entries needed for {today} ({today_day})")
     except Exception as e:
         logger.warning(f"[AUTO-GRID] Failed to ensure today grid entries (non-fatal): {e}")
+
+
+async def _ao_broker_startup_sequence(app: "FastAPI") -> None:
+    """
+    Background task: AO re-login → market feed start → account status print.
+    Runs after yield so the app starts serving requests immediately.
+    On holidays/Mondays, AO TOTP retries can take 20-30s — this keeps
+    startup fast regardless.
+    """
+    try:
+        logger.info("[BG] Starting AO broker startup sequence...")
+        await _ao_startup_auto_login(app)
+        await _auto_start_market_feed(app)
+        await _print_account_status_summary(app)
+        logger.info("[BG] AO broker startup sequence complete")
+    except asyncio.CancelledError:
+        logger.info("[BG] AO broker startup sequence cancelled (shutdown)")
+        raise
+    except Exception as _e:
+        logger.warning(f"[BG] AO broker startup sequence failed (non-fatal): {_e}")
 
 
 async def _ao_startup_auto_login(app: "FastAPI") -> None:
