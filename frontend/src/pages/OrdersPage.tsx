@@ -1383,7 +1383,7 @@ export default function OrdersPage() {
           const days = showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']
           const activeDayIdx = Math.max(0, days.findIndex(d => weekDates[d] === selectedDate))
           return (
-            <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0 0', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0 16px', gap: 10 }}>
               {/* Day tabs pill trough */}
               <div style={{
                 display: 'flex', flex: 1, position: 'relative',

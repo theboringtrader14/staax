@@ -683,8 +683,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
-    if (ms < 150)  return 'var(--green)'   // Excellent — dark green
-    if (ms < 250)  return '#22DD88'        // Good — bright green
+    if (ms < 150)  return 'var(--green)'
+    if (ms < 250)  return 'var(--green)'
     if (ms < 400)  return 'var(--accent-amber)' // Acceptable — amber
     return 'var(--red)'                    // Slow — red
   }
