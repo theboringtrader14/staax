@@ -321,24 +321,28 @@ async def error_analytics(
     fy_start, fy_end = _fy_range(fy)
 
     # ── Source 1: event_log with error prefixes or "failed" keyword ──
-    conditions = [
-        EventLog.ts >= fy_start,
-        EventLog.ts <= fy_end,
-        or_(
-            *[EventLog.msg.like(f"{prefix}%") for prefix in ERROR_PREFIXES],
-            EventLog.msg.like("% failed%"),
-            EventLog.msg.like("%[ORB_EXPIRED]%"),
-        ),
-    ]
-    if account_id:
-        conditions.append(EventLog.account_id == account_id)
+    # EventLog has no is_practix column — skip it entirely when mode is specified
+    # to avoid leaking PRACTIX errors into LIVE mode (or vice versa).
+    raw = []
+    if is_practix is None:
+        conditions = [
+            EventLog.ts >= fy_start,
+            EventLog.ts <= fy_end,
+            or_(
+                *[EventLog.msg.like(f"{prefix}%") for prefix in ERROR_PREFIXES],
+                EventLog.msg.like("% failed%"),
+                EventLog.msg.like("%[ORB_EXPIRED]%"),
+            ),
+        ]
+        if account_id:
+            conditions.append(EventLog.account_id == account_id)
 
-    res = await db.execute(
-        select(EventLog)
-        .where(*conditions)
-        .order_by(EventLog.ts.desc())
-    )
-    raw = res.scalars().all()
+        res = await db.execute(
+            select(EventLog)
+            .where(*conditions)
+            .order_by(EventLog.ts.desc())
+        )
+        raw = res.scalars().all()
 
     def _extract_prefix(msg: str) -> str:
         for p in ERROR_PREFIXES:
