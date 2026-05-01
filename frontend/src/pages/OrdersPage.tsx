@@ -95,8 +95,8 @@ function StatusChip({ status }: { status: string }) {
       padding: '3px 10px',
       borderRadius: 20,
       color: s.color,
-      background: s.bg,
-      boxShadow: 'inset 1px 1px 3px rgba(0,0,0,0.4), inset -1px -1px 2px rgba(255,255,255,0.04)',
+      background: 'var(--bg)',
+      boxShadow: 'var(--neu-inset)',
       whiteSpace: 'nowrap',
     }}>
       {s.label}
