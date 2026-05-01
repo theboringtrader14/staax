@@ -913,9 +913,6 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
     return 'var(--red)'
   }
 
-  // Universal gradient with stops at category boundaries (as % of 500ms scale)
-  // 150ms=30%, 250ms=50%, 400ms=80% — bar clips naturally at avg_ms/500
-  const algoBarGradient = 'linear-gradient(to right, #10B981 0%, #3B82F6 30%, #F59E0B 50%, #EF4444 80%)'
 
   function statusColor(s: string): string {
     if (s === 'filled') return 'var(--green)'
@@ -1044,7 +1041,9 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                       <div style={{
                         width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`,
                         height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
-                        background: algoBarGradient,
+                        background: 'linear-gradient(to right, #10B981 0%, #3B82F6 30%, #F59E0B 50%, #EF4444 80%)',
+                        backgroundSize: `${(500 / a.avg_ms * 100).toFixed(1)}% 100%`,
+                        backgroundRepeat: 'no-repeat',
                       }} />
                     </div>
                   </td>
