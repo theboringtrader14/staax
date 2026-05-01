@@ -914,6 +914,17 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   }
 
 
+  // Gradient stops computed relative to bar width — colours are always proportionally visible
+  function algoBarGradient(ms: number): string {
+    if (ms <= 150) return '#10B981'
+    const g = Math.round(150 / ms * 100)
+    if (ms < 250) return `linear-gradient(to right, #10B981 ${g}%, #3B82F6 100%)`
+    const b = Math.round(250 / ms * 100)
+    if (ms < 400) return `linear-gradient(to right, #10B981 ${g}%, #3B82F6 ${b}%, #F59E0B 100%)`
+    const a = Math.round(400 / ms * 100)
+    return `linear-gradient(to right, #10B981 ${g}%, #3B82F6 ${b}%, #F59E0B ${a}%, #EF4444 100%)`
+  }
+
   function statusColor(s: string): string {
     if (s === 'filled') return 'var(--green)'
     if (s === 'error')  return 'var(--red)'
@@ -1038,14 +1049,11 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      {/* Clip div: bar width with overflow:hidden for clean edge */}
-                      <div style={{ width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`, height: '100%', borderRadius: 4, overflow: 'hidden', transition: 'width 0.3s' }}>
-                        {/* Gradient div: always spans full 500ms container width */}
-                        <div style={{
-                          width: `${Math.round(500 / a.avg_ms * 100)}%`, height: '100%',
-                          background: 'linear-gradient(to right, #10B981 0%, #10B981 30%, #3B82F6 50%, #F59E0B 80%, #EF4444 100%)',
-                        }} />
-                      </div>
+                      <div style={{
+                        width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`,
+                        height: '100%', borderRadius: 4, transition: 'width 0.3s',
+                        background: algoBarGradient(a.avg_ms),
+                      }} />
                     </div>
                   </td>
                 </tr>
