@@ -1585,7 +1585,7 @@ export default function OrdersPage() {
                   }}>
 
                   {/* ── Card header ── */}
-                  <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--row-sep)' }}>
 
                     {/* Left status strip */}
                     <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: stripBg, boxShadow: `0 0 8px ${stripGlow}, 0 0 20px ${stripGlow}` }}/>
@@ -1860,7 +1860,7 @@ export default function OrdersPage() {
                         style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '20px', overflow: 'hidden', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', marginBottom: 14 }}>
 
                         {/* ── Algo card header ── */}
-                        <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--row-sep)' }}>
 
                           {/* Status strip */}
                           <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: bar.color, boxShadow: `0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>

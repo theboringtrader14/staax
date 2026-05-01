@@ -101,6 +101,7 @@
   --text-mute:     rgba(229,231,235,0.3);
   --border:        rgba(255,255,255,0.06);
   --border-accent: rgba(255,107,0,0.3);
+  --row-sep:       rgba(255,255,255,0.04);
 }
 
 [data-theme="light"] {
@@ -121,6 +122,7 @@
   --text-mute:     rgba(26,20,16,0.4);
   --border:        rgba(0,0,0,0.08);
   --border-accent: rgba(229,90,0,0.3);
+  --row-sep:       rgba(0,0,0,0.05);
   --bg-primary:    #e4e7ef;
   --bg-void:       #e4e7ef;
   --bg-secondary:  #ddd9d4;
@@ -296,10 +298,8 @@ body {
 
 /* ── TABLES ── */
 .staax-table { width:100%; border-collapse:collapse; table-layout:fixed; }
-.staax-table th { background:var(--bg); font-family:var(--font-display); font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); padding:10px 20px; text-align:left; border-bottom:1px solid rgba(0,0,0,0.05); white-space:nowrap; overflow:hidden; }
-[data-theme="dark"] .staax-table th { border-bottom:1px solid rgba(255,255,255,0.04); }
-.staax-table td { padding:11px 20px; border-bottom:1px solid rgba(0,0,0,0.05); font-size:13px; font-weight:400; color:var(--gs-muted); overflow:hidden; transition:background var(--dur-fast); }
-[data-theme="dark"] .staax-table td { border-bottom:1px solid rgba(255,255,255,0.04); }
+.staax-table th { background:var(--bg); font-family:var(--font-display); font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); padding:10px 20px; text-align:left; border-bottom:1px solid var(--row-sep); white-space:nowrap; overflow:hidden; }
+.staax-table td { padding:11px 20px; border-bottom:1px solid var(--row-sep); font-size:13px; font-weight:400; color:var(--gs-muted); overflow:hidden; transition:background var(--dur-fast); }
 .staax-table tr:hover td { background:rgba(128,128,128,0.04); }
 .staax-table tr:last-child td { border-bottom: none; }
 .reports-table th {
