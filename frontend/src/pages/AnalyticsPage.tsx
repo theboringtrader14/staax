@@ -904,7 +904,6 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
     )
   }
 
-  const maxAlgoMs = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
