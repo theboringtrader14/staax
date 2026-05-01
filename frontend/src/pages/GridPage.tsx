@@ -1037,18 +1037,37 @@ export default function GridPage() {
 
       {/* ── Defer removal modal ── */}
       {showDeferModal && deferAlgo && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ background:'#1A1208', border:'1px solid rgba(255,107,0,0.35)', borderRadius:12, padding:'28px 32px', maxWidth:420, width:'90%' }}>
-            <div style={{ fontFamily:'var(--font-display)', fontSize:15, fontWeight:700, color:'rgba(232,232,248,0.9)', marginBottom:10 }}>
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 400 }}>
+
+            {/* Title */}
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
               Remove from recurring schedule?
             </div>
-            <div style={{ fontSize:13, color:'rgba(200,200,220,0.75)', marginBottom:24, lineHeight:1.5 }}>
-              <strong>{deferAlgo.name}</strong> is active today ({deferDay}). Removing now could disrupt today's session.
-              <br/><br/>
-              Remove from future <strong>{deferDay}</strong>s after tonight?
+
+            {/* Body — inset info block */}
+            <div style={{
+              background: 'var(--bg)',
+              boxShadow: 'var(--neu-inset)',
+              borderRadius: 12,
+              padding: '12px 16px',
+              marginBottom: 20,
+              borderLeft: '3px solid var(--accent)',
+            }}>
+              <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: 'var(--accent)' }}>{deferAlgo.name}</span>
+                {' '}is active today ({deferDay}). Removing now could disrupt today's session.
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                Remove from future <span style={{ fontWeight: 700, color: 'var(--text)' }}>{deferDay}</span>s after tonight?
+              </div>
             </div>
-            <div style={{ display:'flex', gap:10 }}>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
                 onClick={async () => {
                   setShowDeferModal(false)
                   try {
@@ -1059,15 +1078,18 @@ export default function GridPage() {
                   }
                   setDeferAlgo(null); setDeferDay('')
                 }}
-                style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none', background:'rgba(255,107,0,0.15)', color:'var(--ox-glow)', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              >
                 Yes, future only
               </button>
               <button
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
                 onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
-                style={{ flex:1, padding:'10px 0', borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'transparent', color:'rgba(200,200,220,0.6)', fontSize:13, cursor:'pointer' }}>
+              >
                 Cancel
               </button>
             </div>
+
           </div>
         </div>
       )}
