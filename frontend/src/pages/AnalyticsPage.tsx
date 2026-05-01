@@ -259,7 +259,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
   advMetrics: AdvMetrics | null
   stratRows: StratRow[]
 }) {
-  const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
+  const [activeView, setActiveView] = useState<'heatmap' | 'health'>(() =>
+    localStorage.getItem('analytics_perf_view') === 'health' ? 'health' : 'heatmap'
+  )
   const [showWeekends, setShowWeekends] = useState(false)
   const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
   const { sorted: sortedScores, sortKey: scoresSortKey, sortDir: scoresSortDir, handleSort: handleScoresSort } = useSort<HealthScore>(scores, 'total_pnl')
@@ -286,9 +288,17 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
 
   return (
     <div>
-      {/* Row 1 — Advanced Metrics (5 cards) */}
+      {/* Row 1 — Advanced Metrics (4 cards + Best Time spans 2 = 6-col grid) */}
       {advMetrics && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 10 }}>
+          {/* Trading Days */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Trading Days</div>
+            <div style={advCardVal('var(--text-dim)')}>
+              {advMetrics.total_trading_days}
+            </div>
+          </div>
+
           {/* Sharpe Ratio */}
           <div style={{ ...neuCardSm }}>
             <div style={advCardLabel}>Sharpe Ratio</div>
@@ -324,34 +334,36 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
             </div>
           </div>
 
-          {/* Trading Days */}
-          <div style={{ ...neuCardSm }}>
-            <div style={advCardLabel}>Trading Days</div>
-            <div style={advCardVal('var(--text-dim)')}>
-              {advMetrics.total_trading_days}
-            </div>
-          </div>
-
-          {/* Best Time to Trade */}
-          <div style={{ ...neuCardSm }}>
+          {/* Best Time to Trade — spans cols 5+6 */}
+          <div style={{ ...neuCardSm, gridColumn: 'span 2' }}>
             <div style={advCardLabel}>Best Time</div>
             {timeSlots.length === 0 ? (
               <div style={{ color: 'var(--text-mute)', fontSize: 12 }}>—</div>
-            ) : (
-              [...timeSlots]
-                .sort((a, b) => b.total_pnl - a.total_pnl)
-                .slice(0, 5)
-                .map(slot => (
-                  <div key={slot.hour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)' }}>
-                      {slot.hour}AM
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {slot.total_pnl >= 0 ? '+' : '−'}₹{(Math.abs(slot.total_pnl) / 1000).toFixed(1)}k
-                    </span>
-                  </div>
-                ))
-            )}
+            ) : (() => {
+              const maxAbs = Math.max(...timeSlots.map(s => Math.abs(s.total_pnl)), 1)
+              const BAR_MAX = 30
+              return (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: BAR_MAX + 18, paddingTop: 4 }}>
+                  {timeSlots.map(slot => {
+                    const h = Math.max(3, Math.round((Math.abs(slot.total_pnl) / maxAbs) * BAR_MAX))
+                    const tip = `${slot.label}: ${slot.total_pnl >= 0 ? '+' : ''}₹${slot.total_pnl.toLocaleString('en-IN')} · ${slot.trades} trades`
+                    return (
+                      <div key={slot.hour} title={tip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'help' }}>
+                        <div style={{
+                          width: '75%', height: h,
+                          background: slot.total_pnl >= 0
+                            ? 'linear-gradient(to top, rgba(14,166,110,0.5), rgba(14,166,110,0.9))'
+                            : 'linear-gradient(to top, rgba(255,68,68,0.5), rgba(255,68,68,0.9))',
+                          borderRadius: '3px 3px 0 0',
+                          transition: 'height 0.4s cubic-bezier(0.4,0,0.2,1)',
+                        }} />
+                        <div style={{ fontSize: 8, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>{slot.hour}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -388,8 +400,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
       <div style={{ ...neuCard, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <NeuChip label="P&L Heatmap"   active={activeView === 'heatmap'} onClick={() => setActiveView('heatmap')} />
-            <NeuChip label="Health Scores" active={activeView === 'health'}  onClick={() => setActiveView('health')} />
+            <NeuChip label="P&L Heatmap"   active={activeView === 'heatmap'} onClick={() => { setActiveView('heatmap'); localStorage.setItem('analytics_perf_view', 'heatmap') }} />
+            <NeuChip label="Health Scores" active={activeView === 'health'}  onClick={() => { setActiveView('health');  localStorage.setItem('analytics_perf_view', 'health')  }} />
           </div>
           {activeView === 'heatmap' && (
             <NeuChip label="Weekends" active={showWeekends} onClick={() => setShowWeekends(!showWeekends)} />
@@ -475,7 +487,14 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
                               <td style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 8px' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
                                   <div style={{ ...neuInset, height: 10, borderRadius: 6, padding: '2px 3px' }}>
-                                    <div style={{ width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 4, background: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
+                                    {s.score > 0 && (
+                      <div style={{
+                        width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 4,
+                        background: 'linear-gradient(to right, #EF4444, #F59E0B 50%, #0EA66E)',
+                        backgroundSize: `${(100 / Math.min(s.score, 100) * 100).toFixed(1)}% 100%`,
+                        transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)',
+                      }} />
+                    )}
                                   </div>
                                   <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', minWidth: 36, textAlign: 'right' }}>{s.score}</span>
                                 </div>
@@ -513,11 +532,25 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
               <tbody>
                 {stratRows.map(r => (
                   <tr key={r.strategy_type}>
-                    <td style={{ fontWeight: 600, textTransform: 'capitalize', textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{r.strategy_type}</td>
+                    <td style={{ fontWeight: 600, textTransform: 'uppercase', textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{r.strategy_type}</td>
                     <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid var(--border)' }}>{r.trades}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.total_pnl >= 0 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{fmtPnl(r.total_pnl)}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.avg_pnl >= 0 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{fmtPnl(r.avg_pnl)}</td>
-                    <td style={{ textAlign: 'center', ...numStyle, color: r.win_rate >= 50 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{r.win_rate.toFixed(1)}%</td>
+                    <td style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
+                        <div style={{ ...neuInset, height: 10, borderRadius: 6, padding: '2px 3px' }}>
+                          {r.win_rate > 0 && (
+                            <div style={{
+                              width: `${Math.min(r.win_rate, 100)}%`, height: '100%', borderRadius: 4,
+                              background: 'linear-gradient(to right, #EF4444, #F59E0B 50%, #0EA66E)',
+                              backgroundSize: `${(100 / Math.min(r.win_rate, 100) * 100).toFixed(1)}% 100%`,
+                              transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)',
+                            }} />
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, color: r.win_rate >= 50 ? 'var(--green)' : 'var(--red)', minWidth: 36, textAlign: 'right' }}>{r.win_rate.toFixed(1)}%</span>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
