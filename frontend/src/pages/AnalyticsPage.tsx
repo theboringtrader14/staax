@@ -998,8 +998,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
           <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 160 }} />
-              <col style={{ width: 90 }} />
-              <col style={{ width: 80 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 110 }} />
               <col />
             </colgroup>
             <thead>
