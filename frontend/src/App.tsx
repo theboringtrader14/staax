@@ -54,7 +54,7 @@ export default function App() {
 
   // Load accounts on mount
   useEffect(() => {
-    accountsAPI.list().then(r => setAccounts(r.data?.accounts || r.data || [])).catch(() => {})
+    accountsAPI.list().then(r => setAccounts(r.data?.accounts || r.data || [])).catch((e) => { console.warn('[App] accounts load failed', e) })
   }, [setAccounts])
 
   // Resume AudioContext on first user interaction (browsers block autoplay)

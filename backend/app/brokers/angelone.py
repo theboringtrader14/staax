@@ -356,7 +356,6 @@ class AngelOneBroker(BaseBroker):
 
                 # ltpData needs exchange, tradingsymbol, symboltoken
                 # For batch use, caller should pass symboltoken separately
-                # Here we do a best-effort REST call
                 data = await loop.run_in_executor(
                     None,
                     lambda ex=exchange, sym=trading_symbol: client.ltpData(ex, sym, "")

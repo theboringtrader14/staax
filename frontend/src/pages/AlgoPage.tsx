@@ -84,9 +84,9 @@ const mkJourneyChild = (): JourneyChild => ({
 
 // Reverse of buildJourneyConfig — restores JourneyChild from stored JSON on edit load
 const _REV_CODES: Record<string, string> = Object.fromEntries(Object.entries(INST_CODES).map(([k, v]) => [v, k]))
-const fromJourneyConfig = (jc: any): JourneyChild => {
+const fromJourneyConfig = (jc: Record<string, unknown> | null): JourneyChild => {
   if (!jc || !jc.child) return mkJourneyChild()
-  const c = jc.child
+  const c = jc.child as Record<string, any>
   return {
     enabled:       true,
     instType:      c.instrument === 'fu' ? 'FU' : 'OP',
@@ -150,12 +150,12 @@ const mkLeg = (n: number): Leg => ({
 const cpLeg = (l: Leg, n: number): Leg => ({ ...l, id: `leg-${Date.now()}-c${n}`, no: n, vals: { ...l.vals, wt: { ...l.vals.wt }, sl: { ...l.vals.sl }, reentry: { ...l.vals.reentry }, tp: { ...l.vals.tp }, tsl: { ...l.vals.tsl }, ttp: { ...l.vals.ttp }, orb: { ...l.vals.orb } }, active: { ...l.active }, journey: l.journey ? { ...l.journey } : mkJourneyChild() })
 
 function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void; entryType: string }) {
-  const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as any), [sub]: val } } })
+  const u = (k: FeatureKey, sub: string, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, [k]: { ...(leg.vals[k] as Record<string, string>), [sub]: val } } })
   const inpSt = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
   const noZero = (e: React.FocusEvent<HTMLInputElement>, fn: (v: string) => void) => { if (e.target.value === '' || Number(e.target.value) < 1) fn('1') }
-  const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input type="number" min="1" value={(leg.vals[k] as any)[sub] || ''} onChange={e => u(k, sub, e.target.value)} onBlur={e => noZero(e, v => u(k, sub, v))} placeholder={ph} style={{ ...inpSt, width: w }} />
+  const inp = (k: FeatureKey, sub: string, ph: string, w = '54px') => <input type="number" min="1" value={(leg.vals[k] as Record<string, string>)[sub] || ''} onChange={e => u(k, sub, e.target.value)} onBlur={e => noZero(e, v => u(k, sub, v))} placeholder={ph} style={{ ...inpSt, width: w }} />
   const sel = (k: FeatureKey, sub: string, opts: [string, string][], w = '80px') =>
-    <StaaxSelect value={(leg.vals[k] as any)[sub] || ''} onChange={v => u(k, sub, v)}
+    <StaaxSelect value={(leg.vals[k] as Record<string, string>)[sub] || ''} onChange={v => u(k, sub, v)}
       options={opts.map(([value, label]) => ({ value, label }))} width={w} height="28px" borderRadius="6px" />
   const sep = <span style={{ width: '1px', height: '14px', background: 'var(--border)', flexShrink: 0, margin: '0 8px' }} />
 
@@ -177,7 +177,7 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
             ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
           ]
           const ov = leg.vals.orb
-          const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
+          const uOrb = (sub: keyof typeof ov, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
           const needsBuf = ov.slType === 'orb_range_plus_pts' || ov.slType === 'orb_range_minus_pts'
           return <>
             <StaaxSelect value={ov.slType} onChange={v => uOrb('slType', v)} options={orbSlOpts.map(([value, label]) => ({ value, label }))} width="100px" height="28px" borderRadius="6px" />
@@ -199,7 +199,7 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
             ['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']
           ]
           const ov = leg.vals.orb
-          const uOrb = (sub: keyof typeof ov, val: any) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
+          const uOrb = (sub: keyof typeof ov, val: string) => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...ov, [sub]: val } } })
           const needsBuf = ov.tpType === 'orb_range_plus_pts' || ov.tpType === 'orb_range_minus_pts'
           return <>
             <StaaxSelect value={ov.tpType} onChange={v => uOrb('tpType', v)} options={orbTpOpts.map(([value, label]) => ({ value, label }))} width="100px" height="28px" borderRadius="6px" />
@@ -236,7 +236,7 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
 
 function ReentryConfig({ rv, uRe, inpSt }: {
   rv: ReentryVals
-  uRe: (sub: keyof ReentryVals, val: any) => void
+  uRe: (sub: keyof ReentryVals, val: string | boolean) => void
   inpSt: React.CSSProperties
 }) {
   const bSt = (on: boolean): React.CSSProperties => ({ height: '28px', padding: '0 9px', fontSize: 10, borderRadius: 6, cursor: 'pointer', background: 'var(--bg)', boxShadow: on ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: on ? 'var(--accent)' : 'var(--text-dim)', border: 'none' })
@@ -285,7 +285,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
 }) {
   const cs = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit', color: 'var(--text)', outline: 'none' as const, padding: '0 8px' }
   const csSt = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
-  const u = (k: keyof JourneyChild, v: any) => onChange({ ...child, [k]: v })
+  const u = <K extends keyof JourneyChild>(k: K, v: JourneyChild[K]) => onChange({ ...child, [k]: v })
 
   // Auto-reset this child's trigger when its own SL/TP availability changes
   useEffect(() => {
@@ -557,11 +557,11 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   onUpdate: (id: string, u: Partial<Leg>) => void
   onRemove: (id: string) => void
   onCopy:   (id: string) => void
-  dragHandleProps: any
+  dragHandleProps: Record<string, unknown>
   onBlockedClick: (msg: string) => void
   entryType: string
 }) {
-  const u = (k: keyof Leg, v: any) => onUpdate(leg.id, { [k]: v })
+  const u = <K extends keyof Leg>(k: K, v: Leg[K]) => onUpdate(leg.id, { [k]: v })
   const sInp = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
   const expiryOpts = MONTHLY_ONLY_CODES.has(leg.instCode) ? MONTHLY_ONLY_EXPIRY : EXPIRY_OPTIONS
 
@@ -588,8 +588,8 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: 'var(--text)' }} />
         <span style={{ color: 'var(--border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.filter(f => ['sl','tsl','tp','ttp'].includes(f.key)).map(f => {
-          const slHasValue = !!(leg.vals.sl as any)?.value
-          const tpHasValue = !!(leg.vals.tp as any)?.value
+          const slHasValue = !!leg.vals.sl?.value
+          const tpHasValue = !!leg.vals.tp?.value
           const blocked = (f.key === 'tsl' && (!leg.active['sl'] || !slHasValue)) || (f.key === 'ttp' && (!leg.active['tp'] || !tpHasValue))
           return (
             <button key={f.key} onClick={() => {
@@ -744,14 +744,14 @@ const [saveError, setSaveError]   = useState('')
   // Also warn on browser close/refresh when unsaved
   useEffect(() => {
     initSounds()
-    ;(window as any).__staaxDirty = isDirty
+    ;window.__staaxDirty = isDirty
     const handler = (e: BeforeUnloadEvent) => {
       if (isDirty) { e.preventDefault(); e.returnValue = '' }
     }
     window.addEventListener('beforeunload', handler)
     return () => {
       window.removeEventListener('beforeunload', handler)
-      ;(window as any).__staaxDirty = false  // clear when leaving AlgoPage
+      ;window.__staaxDirty = false  // clear when leaving AlgoPage
     }
   }, [isDirty])
 
@@ -775,7 +775,7 @@ const [saveError, setSaveError]   = useState('')
   useEffect(() => {
     accountsAPI.list()
       .then(res => {
-        const opts = res.data.map((a: any) => ({
+        const opts = (res.data as { id: string; nickname: string; broker: string }[]).map((a) => ({
           id: a.id,
           label: `${a.nickname} (${a.broker === 'zerodha' ? 'Zerodha' : 'Angel One'})`,
         }))
@@ -820,7 +820,7 @@ const [saveError, setSaveError]   = useState('')
         const revCode: Record<string, string> = Object.fromEntries(
           Object.entries(INST_CODES).map(([k, v]) => [v, k])
         )
-        const mappedLegs: Leg[] = (a.legs || []).map((l: any, i: number) => {
+        const mappedLegs: Leg[] = (a.legs as any[]).map((l, i) => {
           const isFu      = l.instrument === 'fu'
           const strikeMode = l.strike_type === 'premium' ? 'premium'
             : l.strike_type === 'straddle_premium' ? 'straddle' : 'leg'
@@ -897,11 +897,11 @@ const [saveError, setSaveError]   = useState('')
   }, [id, isEdit])
 
   // ── AI config application ────────────────────────────────────────────────────
-  function applyAIConfig(config: any, accountId?: string | null, days?: string[]) {
+  function applyAIConfig(config: import('@/components/ai/AlgoAIAssistant').AIAlgoConfig, accountId?: string | null, days?: string[]) {
     const code = UNDERLYING_TO_CODE[config.underlying?.toUpperCase() || ''] || 'NF'
     if (config.algo_name)     setAlgoName(config.algo_name)
     if (config.strategy_mode) setStratMode(config.strategy_mode)
-    if (config.entry_type)    setEntryType(config.entry_type)
+    if (config.entry_type)    setEntryType(config.entry_type as string)
     if (config.entry_time) {
       const t = config.entry_time
       setEntryTime(t.length === 5 ? `${t}:00` : t)
@@ -914,10 +914,10 @@ const [saveError, setSaveError]   = useState('')
     if (days?.length) setRecurringDays(days.map((d: string) => d.toUpperCase()))
     if (config.mtm_sl != null) setMtmSL(String(config.mtm_sl))
     if (config.mtm_tp != null) setMtmTP(String(config.mtm_tp))
-    if (config.mtm_unit)       setMtmUnit(config.mtm_unit)
+    if (config.mtm_unit)       setMtmUnit(config.mtm_unit as string)
 
     if (Array.isArray(config.legs) && config.legs.length > 0) {
-      const mapped: Leg[] = config.legs.map((l: any, i: number) => {
+      const mapped: Leg[] = (config.legs as any[]).map((l, i) => {
         const isOpt   = l.instrument !== 'fut'
         let strikeMode = 'leg'
         let strikeType = (l.strike_type || 'atm').toLowerCase()
@@ -1001,19 +1001,19 @@ const [saveError, setSaveError]   = useState('')
       }
       for (const feat of FEATURES) {
         if (leg.active[feat.key]) {
-          const vals = leg.vals[feat.key] as any
-          const hasValue = Object.values(vals).some((v: any) => v !== '' && v !== undefined)
+          const vals = leg.vals[feat.key as keyof LegVals]
+          const hasValue = Object.values(vals).some((v) => v !== '' && v !== undefined)
           if (!hasValue) return fail(`${L}: ${feat.label} is enabled but values are missing`)
         }
       }
-      const slType = (leg.vals.sl as any).type || ''
+      const slType = leg.vals.sl.type || ''
       if (entryType !== 'orb') {
-        if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !(leg.vals.sl as any).value) return fail(`${L}: SL value is required when SL is enabled`)
-        if (leg.active['tp'] && !(leg.vals.tp as any).value) return fail(`${L}: TP value is required when TP is enabled`)
+        if (leg.active['sl'] && !['orb_high','orb_low'].includes(slType) && !leg.vals.sl.value) return fail(`${L}: SL value is required when SL is enabled`)
+        if (leg.active['tp'] && !leg.vals.tp.value) return fail(`${L}: TP value is required when TP is enabled`)
       }
-      if (leg.active['wt'] && !(leg.vals.wt as any).value) return fail(`${L}: W&T value is required when W&T is enabled`)
-      if (leg.active['tsl'] && (!leg.active['sl'] || !(leg.vals.sl as any).value)) return fail(`${L}: TSL requires SL to be enabled with a value`)
-      if (leg.active['ttp'] && (!leg.active['tp'] || !(leg.vals.tp as any).value)) return fail(`${L}: TTP requires TP to be enabled with a value`)
+      if (leg.active['wt'] && !leg.vals.wt.value) return fail(`${L}: W&T value is required when W&T is enabled`)
+      if (leg.active['tsl'] && (!leg.active['sl'] || !leg.vals.sl.value)) return fail(`${L}: TSL requires SL to be enabled with a value`)
+      if (leg.active['ttp'] && (!leg.active['tp'] || !leg.vals.tp.value)) return fail(`${L}: TTP requires TP to be enabled with a value`)
     }
     return ''
   }
@@ -1087,7 +1087,7 @@ const [saveError, setSaveError]   = useState('')
     return payload
   }
 
-  const buildJourneyConfig = (j?: JourneyChild, depth = 1): any => {
+  const buildJourneyConfig = (j?: JourneyChild, depth = 1): Record<string, unknown> | null => {
     if (!j || !j.enabled || depth > 3) return null
     return {
       level: depth, trigger: 'any',
@@ -1145,23 +1145,25 @@ const [saveError, setSaveError]   = useState('')
       setSaved(true)
       setIsDirty(false)
       setTimeout(() => { setSaved(false); navigate('/grid') }, 1200)
-    } catch (e: any) {
-      const status  = e?.response?.status
-      const data    = e?.response?.data
-      const detail  = data?.detail
-      console.error('[AlgoPage] save error', status, detail ?? data ?? e?.message)
+    } catch (e) {
+      type ApiError = { response?: { status?: number; data?: { detail?: unknown } | string }; message?: string }
+      const err = e as ApiError
+      const status  = err?.response?.status
+      const data    = err?.response?.data
+      const detail  = typeof data === 'object' && data ? (data as { detail?: unknown }).detail : undefined
+      console.error('[AlgoPage] save error', status, detail ?? data ?? err?.message)
       let msg = `Save failed (${status ?? 'network error'}). Check console for details.`
       if (Array.isArray(detail)) {
-        msg = detail.map((d: any) => {
-          const loc = Array.isArray(d.loc) ? d.loc.filter((s: any) => s !== 'body').join(' → ') : ''
-          return loc ? `${loc}: ${d.msg}` : d.msg
+        msg = (detail as { loc?: unknown[]; msg?: string }[]).map((d) => {
+          const loc = Array.isArray(d.loc) ? d.loc.filter((s) => s !== 'body').join(' → ') : ''
+          return loc ? `${loc}: ${d.msg}` : (d.msg ?? '')
         }).join(' | ')
       } else if (typeof detail === 'string') {
         msg = detail
       } else if (typeof data === 'string' && data.length < 200) {
         msg = data
-      } else if (e?.message) {
-        msg = e.message
+      } else if (err?.message) {
+        msg = err.message
       }
       setSaveError(msg)
     } finally {

@@ -29,6 +29,26 @@ interface Cell {
   tradingDate?:  string
   is_monitoring?: boolean
 }
+interface RawAccount { id: string; nickname: string; broker: string }
+interface RawAlgoLeg {
+  underlying?: string; direction?: string; lots?: number; strike_type?: string
+  wt_enabled?: boolean; wt_value?: number; wt_unit?: string; journey_config?: { child?: unknown }
+  tsl_x?: number; tsl_y?: number; ttp_x?: number; ttp_y?: number
+  reentry_on_sl?: boolean; reentry_on_tp?: boolean
+}
+interface RawAlgo {
+  id: string | number; name: string; account_nickname?: string; legs?: RawAlgoLeg[]
+  entry_time?: string; exit_time?: string; next_day_exit_time?: string; strategy_mode?: string
+  is_archived?: boolean; recurring_days?: string[]; is_live?: boolean
+  mtm_sl?: number; mtm_tp?: number; mtm_unit?: string; entry_type?: string; order_type?: string
+}
+interface RawGridEntry {
+  algo_id: string | number; trading_date: string; status?: string; mode?: string
+  multiplier?: number; lot_multiplier?: number; entry_time?: string; exit_time?: string; pnl?: number
+  grid_entry_id?: string; id?: string; is_monitoring?: boolean; is_practix?: boolean
+  [key: string]: unknown
+}
+
 interface Algo {
   id:            string
   name:          string
@@ -138,7 +158,7 @@ export default function GridPage() {
   // ── Load accounts for AI assistant ───────────────────────────────────────────
   useEffect(() => {
     accountsAPI.list()
-      .then(res => setAiAccounts((res.data || []).map((a: any) => ({ id: a.id, nickname: a.nickname, broker: a.broker }))))
+      .then(res => setAiAccounts((res.data || []).map((a: RawAccount) => ({ id: a.id, nickname: a.nickname, broker: a.broker }))))
       .catch(() => {})
   }, [])
 
@@ -147,12 +167,12 @@ export default function GridPage() {
     setLoading(true)
     try {
       const algoRes = await algosAPI.list({ include_archived: true })
-      const apiAlgos: Algo[] = (algoRes.data || []).map((a: any) => ({
+      const apiAlgos: Algo[] = (algoRes.data as RawAlgo[] || []).map((a) => ({
         id:           String(a.id),
         name:         a.name,
         account:      a.account_nickname || '',
-        legs:         (a.legs || []).map((l: any) => ({
-          i: (({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'} as Record<string,string>)[l.underlying] || (l.underlying||'NF').slice(0,2).toUpperCase()),
+        legs:         (a.legs || []).map((l) => ({
+          i: (({'NIFTY':'NF','BANKNIFTY':'BN','SENSEX':'SX','MIDCAPNIFTY':'MN','FINNIFTY':'FN'} as Record<string,string>)[l.underlying || ''] || (l.underlying||'NF').slice(0,2).toUpperCase()),
           d:            l.direction === 'buy' ? 'B' : 'S',
           lots:         l.lots ?? undefined,
           strikeType:   l.strike_type ?? undefined,
@@ -168,7 +188,7 @@ export default function GridPage() {
           reTpEnabled:  !!l.reentry_on_tp,
         })),
         et:           a.entry_time  || '09:16',
-        xt:           (['stbt','btst'].includes(a.strategy_mode) ? a.next_day_exit_time : a.exit_time) || '15:10',
+        xt:           (['stbt','btst'].includes(a.strategy_mode || '') ? a.next_day_exit_time : a.exit_time) || '15:10',
         arch:         a.is_archived || false,
         recurringDays:Array.isArray(a.recurring_days) ? a.recurring_days : [],
         is_live:      a.is_live || false,
@@ -186,7 +206,7 @@ export default function GridPage() {
         is_practix: isPractixMode,
         ...(activeAccount ? { account_id: activeAccount } : {}),
       })
-      const entries: any[] = gridRes.data?.entries || gridRes.data || []
+      const entries: RawGridEntry[] = gridRes.data?.entries || gridRes.data || []
       const newGrid: Record<string,Record<string,Cell>> = {}
 
       for (const e of entries) {
@@ -358,8 +378,9 @@ export default function GridPage() {
         ...g,
         [algoId]: { ...g[algoId], [day]: { ...g[algoId][day], status: 'no_trade' as CS } }
       }))
-    } catch (e: any) {
-      showError(e?.response?.data?.detail || 'Cancel failed')
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      showError(err?.response?.data?.detail || 'Cancel failed')
     }
   }
 

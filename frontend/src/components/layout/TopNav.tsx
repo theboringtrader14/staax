@@ -4,6 +4,8 @@ import { useStore } from '@/store'
 import { Pulse, Sun, Moon, User, Warning } from '@phosphor-icons/react'
 import { showSuccess, showWarning } from '@/utils/toast'
 
+declare global { interface Window { __staaxDirty?: boolean } }
+
 const NAV_TABS = [
   { path: '/grid',       label: 'Algos'     },
   { path: '/indicators', label: 'Bots'      },
@@ -49,7 +51,7 @@ export default function TopNav() {
 
   const handleNavClick = (e: React.MouseEvent, to: string) => {
     setIsDashboardOpen(false)
-    if ((window as any).__staaxDirty) {
+    if (window.__staaxDirty) {
       e.preventDefault()
       setPendingPath(to)
     }
@@ -239,7 +241,7 @@ export default function TopNav() {
                 Stay
               </button>
               <button onClick={() => {
-                (window as any).__staaxDirty = false
+                window.__staaxDirty = false
                 const dest = pendingPath
                 setPendingPath(null)
                 navigate(dest)

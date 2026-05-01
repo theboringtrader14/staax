@@ -487,9 +487,8 @@ class LTPConsumer:
     def set_angel_adapter(self, adapter: AngelOneTickerAdapter):
         """Attach Angel One SmartStream adapter. Called from services.py after AO login."""
         self._angel_adapter = adapter
-        # Push all tokens already tracked by this consumer to the new adapter.
-        # This handles the case where subscriptions were attempted before the adapter
-        # existed (e.g. tokens added during a period when adapter was None after restart).
+        # Replay tokens subscribed before this adapter existed — e.g. tokens added
+        # during a restart window when the adapter was None.
         if self._subscribed_tokens:
             adapter.subscribe([str(t) for t in self._subscribed_tokens])
             logger.info(f"[LTP] Replayed {len(self._subscribed_tokens)} existing tokens to new adapter")

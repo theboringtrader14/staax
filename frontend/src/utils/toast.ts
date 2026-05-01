@@ -24,7 +24,8 @@ const label: React.CSSProperties = {
   lineHeight: 1.3,
 }
 
-const make = (accent: string, Icon: React.ComponentType<any>, msg: string) =>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const make = (accent: string, Icon: any, msg: string) =>
   h('div', { style: shell(accent) },
     h(Icon, { size: 16, weight: 'fill' as const, color: accent }),
     h('span', { style: label }, msg),

@@ -111,8 +111,8 @@ async def kill_switch_status(db: AsyncSession = Depends(get_db)):
                 "error":              row.kill_switch_error,
                 "killed_account_ids": row.killed_account_ids.split(',') if row.killed_account_ids else [],
             }
-    except Exception:
-        pass
+    except Exception as _ks_err:
+        logger.warning(f"[KILL SWITCH] DB state read failed, falling back to in-memory: {_ks_err}")
     return global_kill_switch.get_state()
 
 

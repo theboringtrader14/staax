@@ -5,6 +5,7 @@ import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX, Broadcast } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
+import { fmtPnl, getISTNow } from '@/utils/format'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -38,7 +39,6 @@ interface Leg {
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
-  closedPnl: number; openPnl: number
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
   isLive?: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
@@ -65,14 +65,44 @@ interface WaitingAlgo {
   orb_end_time?: string | null  // "HH:MM" — null for non-ORB algos
   display_status?: string       // "MONITORING" | "SCHEDULED" | "WAITING" | "MISSED" | "ERROR"
 }
-// ── Leg status chip colours ─────────────────────────────────────────────────
-const STATUS_STYLE: Record<LegStatus, { color: string; bg: string }> = {
-  open:    { color: '#0ea66e',  bg: 'rgba(34,221,136,0.12)'  },
-  closed:  { color: '#0ea66e', bg: 'rgba(34,221,136,0.10)' },
-  error:   { color: '#FF4444',              bg: 'rgba(255,68,68,0.12)'   },
-  pending: { color: '#FF8C00',              bg: 'rgba(255,140,0,0.12)'   },
-  waiting: { color: '#F59E0B',              bg: 'rgba(245,158,11,0.12)'  },
-  skipped: { color: '#9CA3AF',              bg: 'rgba(156,163,175,0.15)' },
+// ── Status chip colour system ────────────────────────────────────────────────
+const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  open:       { label: 'OPEN',    color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)'  },
+  closed:     { label: 'CLOSED',  color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.1)', border: '1px solid rgba(156, 163, 175, 0.25)' },
+  missed:     { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)'  },
+  skipped:    { label: 'SKIPPED', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.08)', border: '1px solid rgba(148, 163, 184, 0.2)' },
+  error:      { label: 'ERROR',   color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)',  border: '1px solid rgba(239, 68, 68, 0.3)'   },
+  waiting:    { label: 'WAITING', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)',  border: '1px solid rgba(234, 179, 8, 0.3)'   },
+  pending:    { label: 'PENDING', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)',  border: '1px solid rgba(234, 179, 8, 0.3)'   },
+  no_trade:   { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)'  },
+  monitoring: { label: 'W&T',     color: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.10)', border: '1px solid rgba(45, 212, 191, 0.3)'  },
+  scheduled:  { label: 'SCHED',   color: '#4488FF', bg: 'rgba(68, 136, 255, 0.10)', border: '1px solid rgba(68, 136, 255, 0.3)'  },
+}
+
+function StatusChip({ status }: { status: string }) {
+  const s = STATUS_STYLES[status?.toLowerCase()] ?? {
+    label: status?.toUpperCase() || '—',
+    color: '#6B7280',
+    bg: 'rgba(107, 114, 128, 0.1)',
+    border: '1px solid rgba(107, 114, 128, 0.2)',
+  }
+  return (
+    <span style={{
+      display: 'inline-block',
+      fontSize: 10,
+      fontFamily: 'JetBrains Mono, monospace',
+      fontWeight: 600,
+      letterSpacing: 0.5,
+      padding: '3px 10px',
+      borderRadius: 20,
+      color: s.color,
+      background: s.bg,
+      border: s.border,
+      whiteSpace: 'nowrap',
+    }}>
+      {s.label}
+    </span>
+  )
 }
 
 // ── Algo card left status strip ─────────────────────────────────────────────
@@ -122,7 +152,7 @@ function getAlgoStatus(group: AlgoGroup): AlgoStatus {
 }
 
 function isMarketLive(): boolean {
-  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const ist = getISTNow()
   const day = ist.getDay()
   if (day === 0 || day === 6) return false
   const t = ist.getHours() * 60 + ist.getMinutes()
@@ -194,7 +224,6 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
   isOrbAlgo?: boolean
   isMarketHours?: boolean
 }) {
-  const st  = STATUS_STYLE[leg.status] ?? STATUS_STYLE['pending']
   const ltp = liveLtp ?? leg.ltp
 
   // W&T trigger calculation
@@ -234,7 +263,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
         )}
       </td>
       <td style={{ width: COLS[1], ...C, padding: '11px 4px' }}>
-        <span style={{ background: st.bg, boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 8px', fontSize: '10px', fontWeight: 700, color: st.color, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>{leg.status.toUpperCase()}</span>
+        <StatusChip status={leg.status} />
         {leg.reconcileStatus && (
           <div style={{ fontSize: '8px', color: '#F59E0B', fontWeight: 700, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
             SYNC
@@ -482,67 +511,76 @@ function setInlineStatus(setOrdersByDate: React.Dispatch<React.SetStateAction<Re
   }
 }
 
-function mapGroup(g: any): AlgoGroup {
+type RawGroup = Record<string, unknown>
+type RawOrder = Record<string, unknown>
+
+// Helper to extract typed values from raw record
+const str  = (v: unknown, fb = '')          => typeof v === 'string'  ? v : fb
+const num  = (v: unknown, fb = 0)           => typeof v === 'number'  ? v : fb
+const bool = (v: unknown, fb = false)       => typeof v === 'boolean' ? v : fb
+
+function mapGroup(g: RawGroup): AlgoGroup {
+  const orders = (g['orders'] as RawOrder[] | undefined) || []
   return {
-    algoId:       g.algo_id,
-    algoName:     g.algo_name || g.algo_id,
-    account:      g.account || '',
-    mtm:          g.mtm ?? 0,
-    closedPnl:    g.closed_pnl ?? 0,
-    openPnl:      g.open_pnl   ?? 0,
-    mtmSL:        g.mtm_sl ?? 0,
-    mtmTP:        g.mtm_tp ?? 0,
-    latest_error: g.latest_error ?? null,
-    gridEntryId:  g.grid_entry_id || undefined,
-    entryType:    g.entry_type || undefined,
-    orbEndTime:   g.orb_end_time ?? null,
-    orbHigh:      g.orb_high ?? null,
-    orbLow:       g.orb_low  ?? null,
-    legs: (g.orders || []).filter((o: any) => o.status !== 'cancelled').map((o: any): Leg => {
+    algoId:       str(g['algo_id']),
+    algoName:     str(g['algo_name']) || str(g['algo_id']),
+    account:      str(g['account']),
+    mtm:          num(g['mtm']),
+    mtmSL:        num(g['mtm_sl']),
+    mtmTP:        num(g['mtm_tp']),
+    latest_error: (g['latest_error'] as AlgoGroup['latest_error']) ?? null,
+    gridEntryId:  str(g['grid_entry_id']) || undefined,
+    entryType:    str(g['entry_type'])    || undefined,
+    orbEndTime:   (g['orb_end_time'] as string | null) ?? null,
+    orbHigh:      (g['orb_high']  as number | null) ?? null,
+    orbLow:       (g['orb_low']   as number | null) ?? null,
+    legs: orders.filter((o) => o['status'] !== 'cancelled').map((o): Leg => {
       // For auto-squareoff legs (exit_reason='sq'), prefer the algo-configured exit_time
       // over the actual timestamp — prevents the 15:35 EOD safety-net time from showing
       // instead of the algo's true exit time (e.g. 15:14 for SX-WIDE).
-      const algoExitTime = g.algo_exit_time as string | undefined
-      const resolvedExitTime = o.exit_time
-        ? (o.exit_reason === 'sq' && algoExitTime
+      const algoExitTime = str(g['algo_exit_time']) || undefined
+      const oExitTime    = str(o['exit_time']) || undefined
+      const oExitReason  = str(o['exit_reason'])
+      const resolvedExitTime = oExitTime
+        ? (oExitReason === 'sq' && algoExitTime
             ? algoExitTime.slice(0, 5)       // HH:MM from algo config
-            : fmtIST(o.exit_time))            // actual timestamp for all other exits
+            : fmtIST(oExitTime))             // actual timestamp for all other exits
         : undefined
       return ({
-      id:              o.id,
-      journeyLevel:    o.journey_level || '1',
-      status:          (o.status ?? 'pending') as LegStatus,
-      symbol:          o.symbol || '',
-      dir:             ((o.direction || 'buy').toUpperCase()) as 'BUY' | 'SELL',
-      lots:            String(o.lots ?? ''),
-      entryCondition:  o.entry_type || '',
-      instrumentToken: o.instrument_token ?? undefined,
-      errorMessage:    o.error_message ?? undefined,
-      fillPrice:       o.fill_price ?? undefined,
-      fillTime:        o.fill_time ? fmtIST(o.fill_time) : undefined,
-      ltp:             o.ltp ?? undefined,
-      slOrig:          o.sl_original ?? undefined,
-      slActual:        o.sl_actual ?? undefined,
-      slType:          o.sl_type ?? undefined,
-      tslTrailCount:   o.tsl_trail_count ?? undefined,
-      target:          o.target ?? undefined,
-      exitPrice:       o.exit_price ?? undefined,
-      exitPriceManual: o.exit_price_manual ?? undefined,
-      exitPriceRaw:    o.exit_price_raw ?? undefined,
+      id:              str(o['id']),
+      journeyLevel:    str(o['journey_level']) || '1',
+      status:          str(o['status'], 'pending') as LegStatus,
+      symbol:          str(o['symbol']),
+      dir:             (str(o['direction'], 'buy').toUpperCase()) as 'BUY' | 'SELL',
+      lots:            String(o['lots'] ?? ''),
+      entryCondition:  str(o['entry_type']),
+      instrumentToken: (o['instrument_token'] as number | undefined) ?? undefined,
+      errorMessage:    str(o['error_message']) || undefined,
+      fillPrice:       (o['fill_price'] as number | undefined) ?? undefined,
+      fillTime:        str(o['fill_time']) ? fmtIST(str(o['fill_time'])) : undefined,
+      ltp:             (o['ltp'] as number | undefined) ?? undefined,
+      slOrig:          (o['sl_original'] as number | undefined) ?? undefined,
+      slActual:        (o['sl_actual'] as number | undefined) ?? undefined,
+      slType:          str(o['sl_type']) || undefined,
+      tslTrailCount:   (o['tsl_trail_count'] as number | undefined) ?? undefined,
+      target:          (o['target'] as number | undefined) ?? undefined,
+      exitPrice:       (o['exit_price'] as number | undefined) ?? undefined,
+      exitPriceManual: (o['exit_price_manual'] as number | undefined) ?? undefined,
+      exitPriceRaw:    (o['exit_price_raw'] as number | undefined) ?? undefined,
       exitTime:        resolvedExitTime,
-      exitReason:      o.exit_reason ?? undefined,
-      pnl:             o.pnl ?? undefined,
-      reentryCount:    o.reentry_count ?? 0,
-      reentryTypeUsed: o.reentry_type_used ?? undefined,
-      wtEnabled:       o.wt_enabled ?? undefined,
-      wtValue:         o.wt_value ?? undefined,
-      wtUnit:          o.wt_unit ?? undefined,
-      wtDirection:     o.wt_direction ?? undefined,
-      entryReference:  o.entry_reference ?? undefined,
-      slWarning:       o.sl_warning ?? undefined,
-      slOrderStatus:   o.sl_order_status ?? undefined,
-      isOvernight:     o.is_overnight ?? false,
-    })}),
+      exitReason:      oExitReason || undefined,
+      pnl:             (o['pnl'] as number | undefined) ?? undefined,
+      reentryCount:    num(o['reentry_count']),
+      reentryTypeUsed: str(o['reentry_type_used']) || undefined,
+      wtEnabled:       bool(o['wt_enabled']) || undefined,
+      wtValue:         (o['wt_value'] as number | undefined) ?? undefined,
+      wtUnit:          str(o['wt_unit']) || undefined,
+      wtDirection:     str(o['wt_direction']) || undefined,
+      entryReference:  (o['entry_reference'] as number | undefined) ?? undefined,
+      slWarning:       str(o['sl_warning']) || undefined,
+      slOrderStatus:   str(o['sl_order_status']) || undefined,
+      isOvernight:     bool(o['is_overnight']),
+    })})
   }
 }
 
@@ -657,7 +695,7 @@ export default function OrdersPage() {
   const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const [weekPnl, setWeekPnl] = useState<Record<string, { total: number | null; closedPnl: number; openMtm: number } | null>>({})
+  const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
   const [showWeekends, setShowWeekends] = useState(() => {
     return localStorage.getItem('orders_show_weekends') === 'true'
   })
@@ -692,8 +730,8 @@ export default function OrdersPage() {
   useEffect(() => {
     accountsAPI.list()
       .then(res => {
-        const list: any[] = res.data?.accounts || res.data || []
-        setFetchedAccounts(list.filter((a: any) => a.nickname).map((a: any) => ({ id: a.id, nickname: a.nickname })))
+        const list = (res.data?.accounts || res.data || []) as { id: number; nickname: string }[]
+        setFetchedAccounts(list.filter((a) => a.nickname).map((a) => ({ id: a.id, nickname: a.nickname })))
       })
       .catch(() => {})
   }, [])
@@ -716,7 +754,7 @@ export default function OrdersPage() {
   // Fetch holidays once on mount
   useEffect(() => {
     holidaysAPI.list().then(res => {
-      const dates = new Set<string>((res.data || []).map((h: any) => h.date as string))
+      const dates = new Set<string>((res.data || []).map((h: { date: string }) => h.date))
       setHolidayDates(dates)
     }).catch(() => {})
   }, [isPractixMode])
@@ -727,24 +765,16 @@ export default function OrdersPage() {
     if (!monDate) return
     setWeekPnl({})  // clear stale values immediately so tabs don't show last week's data
     ordersAPI.weekSummary(monDate, isPractixMode)
-      .then((res: any) => {
-        const mtmByDate: Record<string, any> = res.data?.mtm_by_date || {}
-        const map: Record<string, { total: number | null; closedPnl: number; openMtm: number } | null> = {}
+      .then((res) => {
+        const mtmByDate: Record<string, number | { total?: number } | null> = res.data?.mtm_by_date || {}
+        const map: Record<string, number | null> = {}
         for (const [dateStr, val] of Object.entries(mtmByDate)) {
           const day = Object.entries(weekDates).find(([, d]) => d === dateStr)?.[0]
           if (!day) continue
-          if (val === null || val === undefined) {
-            map[day] = null
-          } else if (typeof val === 'number') {
-            map[day] = { total: val, closedPnl: val, openMtm: 0 }  // backward compat
-          } else if (typeof val === 'object') {
-            // New format: {closed_pnl, open_mtm, total}
-            map[day] = {
-              total:     (val as any).total    ?? null,
-              closedPnl: (val as any).closed_pnl ?? 0,
-              openMtm:   (val as any).open_mtm   ?? 0,
-            }
-          }
+          map[day] = val === null || val === undefined ? null
+            : typeof val === 'number' ? val
+            : typeof val === 'object' ? ((val as { total?: number }).total ?? null)
+            : null
         }
         setWeekPnl(map)
       })
@@ -758,7 +788,7 @@ export default function OrdersPage() {
     ordersAPI.list(date, isPractixMode)
       .then(res => {
         const data = res.data
-        const raw: any[] = Array.isArray(data) ? [] : (data?.groups || [])
+        const raw: RawGroup[] = Array.isArray(data) ? [] : (data?.groups || [])
         setOrdersByDate(prev => ({ ...prev, [date]: raw.map(mapGroup) }))
       })
       .catch(() => {
@@ -772,8 +802,7 @@ export default function OrdersPage() {
 
   // Live LTP via WebSocket
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const WS_BASE = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
+    const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
     let ws: WebSocket | null = null
     let retryTimeout: ReturnType<typeof setTimeout> | null = null
     let retryDelay = 2000
@@ -826,7 +855,7 @@ export default function OrdersPage() {
   useEffect(() => {
     const todayWaiting = waitingByDate[todayDate] ?? []
     const hasMonitoring = todayWaiting.some(
-      w => w.display_status === 'MONITORING' && (w.legs ?? []).some((l: any) => l.wt_enabled)
+      w => w.display_status === 'MONITORING' && (w.legs ?? []).some((l) => l.wt_enabled)
     )
     if (!hasMonitoring) return
     const poll = () => {
@@ -874,7 +903,8 @@ export default function OrdersPage() {
     // 2. Fire retry API call
     try {
       await ordersAPI.retryEntry(gridEntryId)
-    } catch (err: any) {
+    } catch (_err) {
+      const err = _err as { response?: { data?: { detail?: string } }; message?: string }
       const msg = err?.response?.data?.detail || err?.message || 'Retry failed'
       setInlineStatus(setOrdersByDate, dateAtCall, idx, msg, 'var(--red)', 0, true)
       setRetryingIds(prev => { const s = new Set(prev); s.delete(gridEntryId); return s })
@@ -894,7 +924,7 @@ export default function OrdersPage() {
         if (selectedDateRef.current === dateAtCall) {
           if (_wRes) setWaitingByDate(prev => ({ ...prev, [dateAtCall]: _wRes.data?.waiting || [] }))
           if (_oRes) {
-            const raw: any[] = Array.isArray(_oRes.data) ? [] : (_oRes.data?.groups || [])
+            const raw: RawGroup[] = Array.isArray(_oRes.data) ? [] : (_oRes.data?.groups || [])
             setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
           }
         }
@@ -918,15 +948,15 @@ export default function OrdersPage() {
           return
         }
         const res = await ordersAPI.list(dateAtCall, isPractixMode)
-        const raw: any[] = Array.isArray(res.data) ? [] : (res.data?.groups || [])
-        const updatedGroup = raw.find((g: any) => g.grid_entry_id === gridEntryId)
+        const raw: RawGroup[] = Array.isArray(res.data) ? [] : (res.data?.groups || [])
+        const updatedGroup = raw.find((g) => g['grid_entry_id'] === gridEntryId)
         if (updatedGroup) {
           // Derive status from orders in the group
-          const orders: any[] = updatedGroup.orders || []
-          const hasOpen    = orders.some((o: any) => o.status === 'open')
-          const hasPending = orders.some((o: any) => o.status === 'pending')
-          const hasError   = orders.some((o: any) => o.status === 'error')
-          const allError   = orders.length > 0 && orders.every((o: any) => o.status === 'error')
+          const orders: RawOrder[] = (updatedGroup['orders'] as RawOrder[]) || []
+          const hasOpen    = orders.some((o) => o['status'] === 'open')
+          const hasPending = orders.some((o) => o['status'] === 'pending')
+          const hasError   = orders.some((o) => o['status'] === 'error')
+          const allError   = orders.length > 0 && orders.every((o) => o['status'] === 'error')
 
           // Terminal SUCCESS — at least one leg opened
           if (hasOpen || hasPending) {
@@ -965,9 +995,10 @@ export default function OrdersPage() {
       await new Promise(r => setTimeout(r, 800))
       setInlineStatus(setOrdersByDate, dateAtCall, idx, 'Done', 'var(--green)', 3000)
       ordersAPI.list(dateAtCall, isPractixMode)
-        .then(r => { if (selectedDateRef.current !== dateAtCall) return; const raw: any[] = r.data?.groups || []; setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) })) })
+        .then(r => { if (selectedDateRef.current !== dateAtCall) return; const raw: RawGroup[] = r.data?.groups || []; setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) })) })
         .catch(() => {})
-    } catch (err: any) {
+    } catch (_err) {
+      const err = _err as { response?: { data?: { detail?: string } }; message?: string }
       const msg = err?.response?.data?.detail || err?.message || 'Retry legs failed'
       setInlineStatus(setOrdersByDate, dateAtCall, idx, msg, 'var(--red)', 0, true)
     } finally {
@@ -994,7 +1025,7 @@ export default function OrdersPage() {
       ordersAPI.list(dateAtCall, isPractixMode)
         .then(r => {
           if (selectedDateRef.current !== dateAtCall) return
-          const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
+          const raw: RawGroup[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
           setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
         })
         .catch(() => {})
@@ -1009,7 +1040,8 @@ export default function OrdersPage() {
         // Keep modal open to show per-leg results
         setInlineStatus(setOrdersByDate, dateAtCall, idx, `${nOk} squared off, ${nFail} failed`, 'var(--amber)')
       }
-    } catch (err: any) {
+    } catch (_err) {
+      const err = _err as { response?: { data?: { detail?: string } }; message?: string }
       const msg = err?.response?.data?.detail || err?.message || 'SQ failed'
       setSqError(msg)
       setInlineStatus(setOrdersByDate, dateAtCall, idx, 'SQ failed', 'var(--red)', 0, true)
@@ -1035,7 +1067,7 @@ export default function OrdersPage() {
       ordersAPI.list(dateAtCall, isPractixMode)
         .then(r => {
           if (selectedDateRef.current !== dateAtCall) return
-          const raw: any[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
+          const raw: RawGroup[] = Array.isArray(r.data) ? [] : (r.data?.groups || [])
           setOrdersByDate(prev => ({ ...prev, [dateAtCall]: raw.map(mapGroup) }))
         })
         .catch(() => {})
@@ -1047,7 +1079,8 @@ export default function OrdersPage() {
         setInlineStatus(setOrdersByDate, dateAtCall, idx, 'Algo terminated', 'var(--red)', 5000)
       }
       setModal(null)
-    } catch (err: any) {
+    } catch (_err) {
+      const err = _err as { response?: { data?: { detail?: string } }; message?: string }
       // Backend error — do NOT mark algo as terminated locally
       const msg = err?.response?.data?.detail || err?.message || 'Terminate failed'
       setInlineStatus(setOrdersByDate, dateAtCall, idx, msg, 'var(--red)', 0, true)
@@ -1145,7 +1178,7 @@ export default function OrdersPage() {
       // Refresh orders so corrected price + recalculated P&L are shown
       const _date = selectedDateRef.current
       const res = await ordersAPI.list(_date, isPractixMode)
-      const raw: any[] = Array.isArray(res.data) ? [] : (res.data?.groups || [])
+      const raw: RawGroup[] = Array.isArray(res.data) ? [] : (res.data?.groups || [])
       setOrdersByDate(prev => ({ ...prev, [_date]: raw.map(mapGroup) }))
     }
     catch { alert('Failed to save exit price') }
@@ -1154,7 +1187,7 @@ export default function OrdersPage() {
 
   // ── Filtering + grouping ─────────────────────────────────────────────────
   const activeAccountNickname = activeAccount
-    ? (storeAccounts as any[]).find((a: any) => String(a.id) === activeAccount)?.nickname ?? null
+    ? (storeAccounts as { id: string; nickname: string }[]).find((a) => String(a.id) === activeAccount)?.nickname ?? null
     : null
   const filteredOrders  = activeAccountNickname ? safeOrders.filter(g => g.account === activeAccountNickname) : safeOrders
   const filteredWaiting = activeAccountNickname ? safeWaiting.filter(w => w.account_name === activeAccountNickname) : safeWaiting
@@ -1166,36 +1199,26 @@ export default function OrdersPage() {
   // so the THU tab shows fresh P&L even when another day tab is active.
   // Do NOT filter isOvernight — STBT/BTST entered today live in today's date bucket
   // and must be included. The date bucket already excludes yesterday's overnight entries.
-  const liveTodaySplit = useMemo((): { total: number; closedPnl: number; openMtm: number } | null => {
+  // Always-live P&L for today pill — computed from ordersByDate[todayDate] + ltpData
+  const liveTodayPnl = useMemo((): number | null => {
     const todayOrders = accountFilter === 'all'
       ? (ordersByDate[todayDate] ?? [])
       : (ordersByDate[todayDate] ?? []).filter(g => g.account === accountFilter)
     if (!todayOrders.some(g => g.legs.length > 0)) return null
-    const closedPnl = todayOrders.flatMap(g => g.legs)
-      .filter(l => l.status === 'closed' && l.pnl != null)
-      .reduce((s, l) => s + (l.pnl ?? 0), 0)
-    const openMtm = todayOrders.flatMap(g => g.legs)
-      .filter(l => l.status === 'open')
-      .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
-    return { total: closedPnl + openMtm, closedPnl, openMtm }
+    return todayOrders.flatMap(g => g.legs).reduce((sum, l) =>
+      sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
   }, [ordersByDate, todayDate, ltpData, accountFilter])
 
-  // Day tab P&L split — computed from local order data for every past day.
-  // Falls back to server weekPnl only when a day's orders haven't been loaded yet.
-  const computedDaySplit = useMemo(() => {
-    const result: Record<string, { total: number | null; closedPnl: number; openMtm: number } | null> = { ...weekPnl }
+  // Past day P&L — computed from local order data if loaded, otherwise falls back to weekPnl
+  const computedDayPnl = useMemo(() => {
+    const result: Record<string, number | null> = { ...weekPnl }
     for (const [day, date] of Object.entries(weekDates)) {
-      if (!date || date === todayDate) continue  // today handled separately
+      if (!date || date === todayDate) continue
       const groups = ordersByDate[date]
       if (groups && groups.some(g => g.legs.length > 0)) {
         const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
-        const closedPnl = filtered.reduce((daySum, group) =>
-          daySum + group.legs.filter(l => l.status === 'closed').reduce((s, l) => s + (l.pnl ?? 0), 0)
-        , 0)
-        const openMtm = filtered.reduce((daySum, group) =>
-          daySum + group.legs.filter(l => l.status === 'open').reduce((s, l) => s + (l.pnl ?? 0), 0)
-        , 0)
-        result[day] = { total: closedPnl + openMtm, closedPnl, openMtm }
+        result[day] = filtered.reduce((daySum, group) =>
+          daySum + group.legs.reduce((s, l) => s + (l.pnl ?? 0), 0), 0)
       }
     }
     return result
@@ -1385,9 +1408,7 @@ export default function OrdersPage() {
                   const isActive   = selectedDate === date
                   const isHoliday  = date ? holidayDates.has(date) : false
                   const isDayToday = date === todayDate
-                  const split      = isDayToday ? liveTodaySplit : (computedDaySplit[day] ?? null)
-                  const rupee      = '\u20B9'
-                  const fmtPill    = (v: number) => `${v >= 0 ? '+' : ''}${rupee}${Math.abs(Math.round(v)).toLocaleString('en-IN')}`
+                  const dayPnl     = isDayToday ? liveTodayPnl : (computedDayPnl[day] ?? null)
                   return (
                     <button
                       key={day}
@@ -1408,19 +1429,10 @@ export default function OrdersPage() {
                       </span>
                       {isHoliday ? (
                         <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
-                      ) : split != null && split.total != null ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                          {/* Closed / realized P&L (primary) */}
-                          <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: split.closedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                            {fmtPill(split.closedPnl)}
-                          </span>
-                          {/* Open / unrealized (secondary, only if non-zero) */}
-                          {split.openMtm !== 0 && (
-                            <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#06B6D4', opacity: 0.7 }}>
-                              ~{fmtPill(split.openMtm)}
-                            </span>
-                          )}
-                        </div>
+                      ) : dayPnl != null ? (
+                        <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {fmtPnl(dayPnl)}
+                        </span>
                       ) : (
                         <span style={{ fontSize: '10px', color: 'var(--text-mute)' }}>—</span>
                       )}
@@ -1486,22 +1498,19 @@ export default function OrdersPage() {
               // ORB window awareness — disable RETRY if past orb_end_time (IST)
               const isOrbAlgo = w.entry_type === 'orb'
               const isOrbWindowPast = isOrbAlgo && !!w.orb_end_time && (() => {
-                const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+                const ist = getISTNow()
                 const [hh, mm] = w.orb_end_time!.split(':').map(Number)
                 return ist.getHours() * 60 + ist.getMinutes() >= hh * 60 + mm
               })()
 
-              // Card accent colours — red for ERROR, amber for WAITING/MISSED, grey for SKIPPED
-              const legStatusChip =
-                isMissed
-                ? { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' }
-                : w.display_status === 'MONITORING'
-                ? { label: 'W&T',     color: '#2dd4bf',               bg: 'rgba(45,212,191,0.10)'  }
-                : w.display_status === 'SCHEDULED'
-                ? { label: 'SCHED',   color: '#4488FF',               bg: 'rgba(68,136,255,0.10)'  }
-                : w.display_status === 'SKIPPED'
-                ? { label: 'SKIPPED', color: '#9CA3AF',               bg: 'rgba(156,163,175,0.10)' }
-                : { label: isError ? 'ERROR' : 'WAITING', color: isError ? '#FF4444' : '#FFD700', bg: isError ? 'rgba(255,68,68,0.10)' : 'rgba(255,215,0,0.10)' }
+              // Card accent colours — resolved via STATUS_STYLES
+              const legChipKey: string =
+                isMissed                            ? 'missed'
+                : w.display_status === 'MONITORING' ? 'monitoring'
+                : w.display_status === 'SCHEDULED'  ? 'scheduled'
+                : w.display_status === 'SKIPPED'    ? 'skipped'
+                : isError                           ? 'error'
+                : 'waiting'
               const displayStatus = w.display_status  // 'MONITORING' | 'SCHEDULED' | 'WAITING' | 'MISSED' | 'ERROR'
               const stripBg =
                 displayStatus === 'MONITORING' ? '#2dd4bf' :
@@ -1537,7 +1546,7 @@ export default function OrdersPage() {
                       ordersAPI.waiting(_date, isPractixMode).catch(() => null),
                       ordersAPI.list(_date, isPractixMode).catch(() => null),
                     ])
-                    const _stillWaiting = (_wRes?.data?.waiting || []).some((x: any) => x.grid_entry_id === _geid)
+                    const _stillWaiting = (_wRes?.data?.waiting || []).some((x: { grid_entry_id?: string }) => x.grid_entry_id === _geid)
                     if (_wRes) setWaitingByDate(prev => ({ ...prev, [_date]: _wRes.data?.waiting || [] }))
                     if (_oRes) setOrdersByDate(prev => ({ ...prev, [_date]: (_oRes.data?.groups || []).map(mapGroup) }))
                     if (!_stillWaiting) {
@@ -1686,7 +1695,7 @@ export default function OrdersPage() {
 
                   {/* ── Leg table ── */}
                   {(w.legs || []).length > 0 && (
-                    <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+                    <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
                       <table className="staax-table">
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead>
@@ -1709,9 +1718,7 @@ export default function OrdersPage() {
                             <tr key={leg.leg_number}>
                               <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
                               <td style={{ textAlign: 'center', padding: '11px 4px', verticalAlign: 'middle' }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, boxShadow: 'var(--neu-inset)', color: legStatusChip.color, background: legStatusChip.bg, fontFamily: 'var(--font-display)', letterSpacing: '0.5px' }}>
-                                  {legStatusChip.label}
-                                </span>
+                                <StatusChip status={legChipKey} />
                               </td>
                               <td style={{ textAlign: 'left', fontSize: 11, verticalAlign: 'middle' }}>
                                 <div style={{ fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leg.underlying} {leg.instrument?.toUpperCase()}</div>
@@ -1816,7 +1823,7 @@ export default function OrdersPage() {
                     const isOrbAlgo    = group.entryType === 'orb'
                     const isOrbMissed  = isOrbAlgo && !!group.orbEndTime && (() => {
                       const [hh, mm] = (group.orbEndTime || '').split(':').map(Number)
-                      const istNow   = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+                      const istNow   = getISTNow()
                       return istNow.getHours() > hh || (istNow.getHours() === hh && istNow.getMinutes() >= mm)
                     })()
                     // RETRY is available when: algo errored (all or some legs), or no_trade (missed entry)
@@ -1876,6 +1883,9 @@ export default function OrdersPage() {
                               {group.account || '—'}
                             </span>
 
+                            {/* Status chip */}
+                            <StatusChip status={algoSt} />
+
                             {/* Retry indicator — only shown during active retry, status visible in row */}
                             {isRetrying && (
                               <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 10px', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', color: '#06B6D4', whiteSpace: 'nowrap' }}>
@@ -1928,47 +1938,16 @@ export default function OrdersPage() {
                               {showSpark && (
                                 <SmoothedSparkline algoId={group.algoId} legs={group.legs} totalPnl={totalPnl} />
                               )}
-                              {(() => {
-                                // Split closed (realized) vs open (unrealized) P&L
-                                // Closed legs: use server pnl (already settled)
-                                // Open legs: prefer live WS pnl, fall back to server pnl
-                                const closedPnl = group.legs
-                                  .filter(l => l.status === 'closed')
-                                  .reduce((sum, l) => sum + (l.pnl ?? 0), 0)
-                                const openPnl = group.legs
-                                  .filter(l => l.status === 'open')
-                                  .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
-                                const hasOpen   = group.legs.some(l => l.status === 'open')
-                                const hasClosed = group.legs.some(l => l.status === 'closed')
-                                const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-                                return (
-                                  <div style={{
-                                    minWidth: '90px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
-                                    opacity: group.terminated ? 0.6 : 1,
-                                  }}>
-                                    {/* Closed / realized P&L — shown when there are closed legs */}
-                                    {hasClosed && (
-                                      <span style={{
-                                        fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
-                                        color: closedPnl >= 0 ? 'var(--green)' : 'var(--red)',
-                                      }}>
-                                        {fmtPnl(closedPnl)}
-                                      </span>
-                                    )}
-                                    {/* Open / unrealized P&L — shown only when non-zero */}
-                                    {hasOpen && openPnl !== 0 && (
-                                      <span style={{
-                                        fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: '11px',
-                                        color: '#06B6D4', opacity: 0.7,
-                                      }}>
-                                        ~{fmtPnl(openPnl)}
-                                      </span>
-                                    )}
-                                    {/* Fallback: all open with zero pnl — show nothing */}
-                                    {!hasClosed && !hasOpen && null}
-                                  </div>
-                                )
-                              })()}
+                              {totalPnl !== 0 && (
+                                <span style={{
+                                  fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
+                                  color: totalPnl >= 0 ? 'var(--green)' : 'var(--red)',
+                                  opacity: group.terminated ? 0.6 : 1,
+                                  minWidth: '90px', textAlign: 'right',
+                                }}>
+                                  {fmtPnl(totalPnl)}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -2019,7 +1998,7 @@ export default function OrdersPage() {
                         )}
 
                         {/* ── Legs table ── */}
-                        <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+                        <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
                             <table className="staax-table">
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                               <thead>

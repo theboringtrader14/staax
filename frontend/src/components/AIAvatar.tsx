@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 
 type AvatarState = 'idle' | 'listening' | 'processing' | 'speaking'
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const CSS_ANIMATIONS = `
 @keyframes float {
@@ -44,7 +44,7 @@ export default function AIAvatar() {
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
   const [mouthOpen, setMouthOpen] = useState(false)
-  const recognitionRef = useRef<any>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const transcriptRef = useRef('')
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
@@ -127,7 +127,7 @@ export default function AIAvatar() {
   }
 
   const startListening = () => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!SR) {
       alert('Speech recognition not supported in this browser. Try Chrome.')
       return

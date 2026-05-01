@@ -10,6 +10,7 @@ from typing import Optional
 from datetime import date, timedelta, datetime
 from zoneinfo import ZoneInfo
 import uuid as uuid_lib
+import logging
 from sqlalchemy import func
 from app.core.database import get_db
 from app.models.grid import GridEntry, GridStatus
@@ -18,6 +19,7 @@ from app.models.algo_state import AlgoState, AlgoRunStatus
 from app.models.order import Order, OrderStatus
 
 IST = ZoneInfo("Asia/Kolkata")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -115,8 +117,8 @@ def _compute_is_monitoring(ge, algo_legs, now_ist) -> bool:
                 window = _wt_ev._windows.get(grid_entry_id)
                 if window is not None and getattr(window, 'is_ref_set', False):
                     return True
-        except Exception:
-            pass
+        except Exception as _wt_err:
+            logger.debug(f"[GRID] W&T window check failed for entry {grid_entry_id}: {_wt_err}")
 
     # ORB monitoring: within ORB window
     algo = getattr(ge, '_algo_ref', None)  # injected below at call site if available
@@ -206,8 +208,8 @@ async def get_week_grid(
                 if aid_str not in legs_by_algo:
                     legs_by_algo[aid_str] = []
                 legs_by_algo[aid_str].append(leg)
-        except Exception:
-            pass
+        except Exception as _legs_err:
+            logger.warning(f"[GRID] AlgoLegs bulk fetch failed (is_monitoring will default False): {_legs_err}")
 
     _now_ist = datetime.now(IST)
 
@@ -469,8 +471,8 @@ async def cancel_entry(entry_id: str, request: Request, db: AsyncSession = Depen
             job = _scheduler._scheduler.get_job(job_id)
             if job:
                 job.remove()
-    except Exception:
-        pass
+    except Exception as _sched_err:
+        logger.warning(f"[GRID] Scheduler job removal failed for entry {entry_id}: {_sched_err}")
 
     await db.commit()
     return {"status": "ok", "entry_id": entry_id, "action": "cancelled"}

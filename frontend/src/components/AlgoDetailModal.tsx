@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { algosAPI } from '@/services/api'
+import type { Algo, AlgoLeg } from '@/types'
 
 export interface AlgoDetailModalProps {
   algoName: string | null   // null = hidden
@@ -7,7 +8,7 @@ export interface AlgoDetailModalProps {
 }
 
 export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<Algo | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
 
@@ -22,22 +23,22 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
     setData(null)
     // Fetch the list filtered by name to resolve the algo ID, then fetch full details
     algosAPI.list({ name: algoName })
-      .then((listRes: any) => {
-        const list: any[] = Array.isArray(listRes.data)
+      .then((listRes) => {
+        const list: Algo[] = Array.isArray(listRes.data)
           ? listRes.data
           : (listRes.data?.algos || listRes.data?.results || [])
         const match = list.find(
-          (a: any) => (a.name || a.algo_name || '').toLowerCase() === algoName.toLowerCase()
+          (a) => (a.name || '').toLowerCase() === algoName.toLowerCase()
         )
         if (!match) {
           setError(true)
           setLoading(false)
           return
         }
-        const algoId = String(match.id || match.algo_id)
+        const algoId = String(match.id || (match as any).algo_id)
         return algosAPI.get(algoId)
       })
-      .then((res: any) => {
+      .then((res) => {
         if (res) {
           setData(res.data)
         }
@@ -51,20 +52,20 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
 
   if (!algoName) return null
 
-  const legs: any[] = Array.isArray(data?.legs) ? data.legs : []
-  const hasSL = legs.some((l: any) => l.sl_value != null)
-  const hasTP = legs.some((l: any) => l.tp_value != null)
+  const legs: AlgoLeg[] = Array.isArray(data?.legs) ? data!.legs : []
+  const hasSL = legs.some((l) => l.sl_value != null)
+  const hasTP = legs.some((l) => l.tp_value != null)
   const hasSchedule = data && (data.entry_time || data.exit_time || data.entry_type || data.strategy_mode)
   const hasRisk = data && (data.mtm_sl != null || data.mtm_tp != null)
 
-  const fmtSL = (l: any) => {
+  const fmtSL = (l: AlgoLeg) => {
     if (l.sl_value == null) return '—'
-    const unit = l.sl_type === 'pct' ? '%' : l.sl_type === 'pts' ? ' pts' : ''
+    const unit = l.sl_type === 'pct_instrument' ? '%' : ' pts'
     return `${l.sl_value}${unit}`
   }
-  const fmtTP = (l: any) => {
+  const fmtTP = (l: AlgoLeg) => {
     if (l.tp_value == null) return '—'
-    const unit = l.tp_type === 'pct' ? '%' : l.tp_type === 'pts' ? ' pts' : ''
+    const unit = l.tp_type === 'pct_instrument' ? '%' : ' pts'
     return `${l.tp_value}${unit}`
   }
 
@@ -74,14 +75,14 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 20, color: 'var(--accent)' }}>{algoName}</div>
-            {data?.algo_id && (
+            {(data as any)?.algo_id && (
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 6, padding: '3px 10px' }}>
-                {data.algo_id}
+                {(data as any).algo_id}
               </span>
             )}
-            {data?.account_nickname && (
+            {(data as any)?.account_nickname && (
               <span style={{ fontSize: '11px', fontWeight: 600, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--accent)', padding: '3px 10px', borderRadius: '20px' }}>
-                {data.account_nickname}
+                {(data as any).account_nickname}
               </span>
             )}
           </div>
@@ -128,7 +129,7 @@ export function AlgoDetailModal({ algoName, onClose }: AlgoDetailModalProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {legs.map((leg: any, i: number) => (
+                      {legs.map((leg, i) => (
                         <tr key={i}>
                           <td style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{leg.leg_number ?? i + 1}</td>
                           <td style={{ fontSize: '11px', fontWeight: 600 }}>{leg.underlying || '—'}</td>

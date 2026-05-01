@@ -141,11 +141,9 @@ async def mobile_dashboard(
             )
         )
         for grid_entry, algo in grid_result.all():
-            # Use Algo.entry_time as display entry_time (HH:MM from HH:MM:SS)
             entry_time_raw = algo.entry_time or ""
             entry_time_display = entry_time_raw[:5] if entry_time_raw else None
 
-            # Map grid status to mobile-friendly status label
             status_map = {
                 GridStatus.ALGO_ACTIVE:   "waiting",
                 GridStatus.ORDER_PENDING: "pending",

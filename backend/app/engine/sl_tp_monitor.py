@@ -182,8 +182,7 @@ class SLTPMonitor:
             logger.debug(f"[SLTPMON] tick {m.symbol or order_id}: ltp={ltp}, sl={m.sl_actual:.2f}, tp={m.tp_level:.2f}")
 
             # Push unrealised PNL to MTMMonitor for algo-level SL/TP breach checks.
-            # This is the only place where per-token LTP is matched to a position,
-            # so it's the right place to compute and forward PNL.
+            # Per-token LTP is only matched to positions here, so PNL forwarding belongs here.
             if self._mtm_monitor:
                 pnl = m.unrealised_pnl(ltp)
                 try:

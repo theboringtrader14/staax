@@ -7,11 +7,11 @@ import axios from 'axios'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 
-const API = `${(import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'}/api/v1`
+const API = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1`
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('staax_token')}` } })
 const apiGet  = (p: string) => axios.get(`${API}${p}`, auth())
-const apiPost = (p: string, d: any = {}) => axios.post(`${API}${p}`, d, auth())
-const apiPatch= (p: string, d: any) => axios.patch(`${API}${p}`, d, auth())
+const apiPost = (p: string, d: object = {}) => axios.post(`${API}${p}`, d, auth())
+const apiPatch= (p: string, d: object) => axios.patch(`${API}${p}`, d, auth())
 const apiDel  = (p: string) => axios.delete(`${API}${p}`, auth())
 
 // Auto-compute current expiry (current month, rolls to next if <5 days to month end)
@@ -131,6 +131,8 @@ const ghostBtn: CSSProperties = {
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+type AccountOption = { id: string; nickname: string; broker: string }
+
 type Bot = {
   id: string; name: string; account_id: string; instrument: string
   exchange: string; expiry: string; indicator: string
@@ -172,7 +174,7 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCa
 
 // ── EditBotModal ───────────────────────────────────────────────────────────────
 function EditBotModal({ bot, accounts, onSave, onClose }: {
-  bot: Bot; accounts: any[]; onSave: (id: string, data: any) => void; onClose: () => void
+  bot: Bot; accounts: AccountOption[]; onSave: (id: string, data: Partial<Bot>) => void; onClose: () => void
 }) {
   const [form, setForm] = useState({
     name: bot.name, lots: bot.lots, account_id: bot.account_id,
@@ -181,7 +183,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
     channel_tf: bot.channel_tf || '60',
     tt_lookback: bot.tt_lookback || 5,
   })
-  const u = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const u = (k: keyof typeof form, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const ind = INDICATORS.find(i => i.value === bot.indicator)
   const labelStyle: CSSProperties = { fontSize: 11, color: 'var(--text-mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }
 
@@ -196,7 +198,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
           <div><label style={labelStyle}>Bot Name</label><input style={neuInputStyle} value={form.name} onChange={e => u('name', e.target.value)} /></div>
           <div><label style={labelStyle}>Account</label>
             <StaaxSelect value={form.account_id} onChange={v => u('account_id', v)}
-              options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
+              options={accounts.map((a) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
           </div>
           <div><label style={labelStyle}>Timeframe</label>
             <StaaxSelect value={String(form.timeframe_mins)} onChange={v => u('timeframe_mins', parseInt(v))}
@@ -232,7 +234,7 @@ function EditBotModal({ bot, accounts, onSave, onClose }: {
 
 // ── BotConfigurator ────────────────────────────────────────────────────────────
 function BotConfigurator({ accounts, onSave, onClose }: {
-  accounts: any[]; onSave: (data: any) => Promise<void>; onClose: () => void
+  accounts: AccountOption[]; onSave: (data: Omit<Bot, 'id' | 'status' | 'is_archived'>) => Promise<void>; onClose: () => void
 }) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
@@ -244,7 +246,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
-  const u = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const u = (k: keyof typeof form, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const ind = INDICATORS.find(i => i.value === form.indicator)
 
   const steps = [
@@ -262,8 +264,11 @@ function BotConfigurator({ accounts, onSave, onClose }: {
   const handleSave = async () => {
     if (!form.name.trim()) { setError('Bot name is required'); return }
     setSaving(true); setError('')
-    try { await onSave(form) }
-    catch (e: any) { setError(e?.response?.data?.detail || 'Save failed') }
+    try { await onSave(form as Omit<Bot, 'id' | 'status' | 'is_archived'>) }
+    catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setError(err?.response?.data?.detail || 'Save failed')
+    }
     finally { setSaving(false) }
   }
 
@@ -396,7 +401,7 @@ function BotConfigurator({ accounts, onSave, onClose }: {
             </div>
             <div><label style={labelStyle}>Account</label>
               <StaaxSelect value={form.account_id} onChange={v => u('account_id', v)}
-                options={accounts.map((a: any) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
+                options={accounts.map((a) => ({ value: String(a.id), label: `${a.nickname} (${a.broker})` }))} width="100%" />
             </div>
             <div><label style={labelStyle}>Lot Size</label>
               <input style={neuInputStyle} type="number" min={1} value={form.lots} onChange={e => u('lots', parseInt(e.target.value) || 1)} />
@@ -426,8 +431,8 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 
 // ── BotCard ────────────────────────────────────────────────────────────────────
 function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, onWarmup }: {
-  bot: Bot; accounts: any[]
-  onUpdate: (id: string, data: any) => void
+  bot: Bot; accounts: AccountOption[]
+  onUpdate: (id: string, data: Partial<Bot>) => void
   onArchive: (id: string) => void
   onUnarchive: (id: string) => void
   onDelete: (id: string) => void
@@ -440,7 +445,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
 
   // Chart toggle
   const [showChart, setShowChart] = useState(false)
-  const [chartData] = useState<{ candles: any[]; levels: any; signals: any[]; ltp: number | null } | null>(null)
+  const [chartData] = useState<{ candles: { time: number; open: number; high: number; low: number; close: number }[]; levels: Record<string, number>; signals: { time: number; price: number; direction?: string; label?: string }[]; ltp: number | null } | null>(null)
 
   // Live levels + LTP (fetched from chart-data endpoint every 30s)
   const [cardLevels, setCardLevels] = useState<Record<string, number> | null>(null)
@@ -515,7 +520,9 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
         const r = await botsAPI.botOrders(bot.id)
         setOrders(r.data || [])
         setOrdersLoaded(true)
-      } catch {}
+      } catch (e) {
+        console.warn('[IndicatorsPage] bot orders fetch failed', e)
+      }
       setOrdersLoading(false)
     }
     setShowOrders(v => !v)
@@ -523,7 +530,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
 
   const handleWarmup = async () => {
     setWarmingUp(true)
-    try { await onWarmup(bot.id) } catch {}
+    try { await onWarmup(bot.id) } catch (e) { console.warn('[IndicatorsPage] warmup failed', e) }
     setWarmingUp(false)
   }
 
@@ -761,7 +768,7 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
                 {chartData.levels?.tt_low         && <ReferenceLine y={chartData.levels.tt_low}         stroke="#FF4444" strokeDasharray="4 2" />}
                 {chartData.ltp && <ReferenceLine y={chartData.ltp} stroke="var(--accent)" strokeWidth={1}
                   label={{ value: `LTP ${chartData.ltp?.toLocaleString('en-IN')}`, position: 'insideTopRight', fontSize: 9, fill: 'var(--accent)' }} />}
-                {chartData.signals.filter((s: any) => s.time > 0 && s.price).map((sig: any, i: number) => (
+                {chartData.signals.filter((s) => s.time > 0 && s.price).map((sig, i) => (
                   <ReferenceDot key={i} x={sig.time} y={sig.price} r={4}
                     fill={sig.direction === 'buy' ? '#2DD4BF' : '#FF4444'} stroke="none"
                     label={{ value: sig.direction === 'buy' ? '▲' : '▼', position: sig.direction === 'buy' ? 'top' : 'bottom', fontSize: 10, fill: sig.direction === 'buy' ? '#2DD4BF' : '#FF4444' }} />
@@ -815,7 +822,7 @@ export default function IndicatorsPage() {
 
   // WebSocket — refresh bots list on notifications
   useEffect(() => {
-    const wsUrl = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:8000')
+    const wsUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
       .replace('http://', 'ws://')
       .replace('https://', 'wss://')
     const ws = new WebSocket(`${wsUrl}/ws/notifications`)
@@ -832,12 +839,12 @@ export default function IndicatorsPage() {
   }, [])
 
   // Handlers
-  const handleSave = async (form: any) => {
+  const handleSave = async (form: Omit<Bot, 'id' | 'status' | 'is_archived'>) => {
     const res = await apiPost('/bots/', { ...form, is_practix: isPractixMode })
-    setBots(prev => [res.data, ...prev])
+    setBots(prev => [res.data as Bot, ...prev])
     setShowCreate(false)
   }
-  const handleUpdate = async (id: string, data: any) => {
+  const handleUpdate = async (id: string, data: Partial<Bot>) => {
     await apiPatch(`/bots/${id}`, data)
     setBots(prev => prev.map(b => b.id === id ? { ...b, ...data } : b))
   }

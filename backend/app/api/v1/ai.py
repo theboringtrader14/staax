@@ -36,7 +36,6 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     IST = ZoneInfo("Asia/Kolkata")
     ctx = dict(body.context or {})
 
-    # Enrich context with live FY P&L
     try:
         from app.models.order import Order
         now = datetime.now(IST)
@@ -53,7 +52,6 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # Enrich context with active algo count
     try:
         from app.models.algo import Algo
         res = await db.execute(
@@ -81,7 +79,6 @@ async def ai_analyze(body: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     ctx = dict(body.context or {})
 
-    # Enrich with live stats (copy the enrichment logic from /chat if it exists)
     try:
         r = await db.execute(sql_text(
             "SELECT COALESCE(SUM(pnl),0) as fy_pnl, COUNT(*) as total FROM orders "

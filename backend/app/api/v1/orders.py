@@ -1195,7 +1195,7 @@ async def get_orders_ltp(
     ltp_cache = getattr(request.app.state, "ltp_cache", None)
 
     # Ensure open order tokens are subscribed to SmartStream so Redis stays warm.
-    # This is a no-op if already subscribed; safe to call on every poll.
+    # No-op if already subscribed; safe to call on every poll.
     ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
     _tokens: list = []
     if ltp_consumer and open_orders:
@@ -1728,8 +1728,7 @@ async def sync_order(
     if account.broker == BrokerType.ZERODHA:
         broker = getattr(request.app.state, "zerodha", None)
     elif account.broker == BrokerType.ANGELONE:
-        # Resolve the correct Angel One broker instance using client_id → state key mapping.
-        # This handles any number of AO accounts without hardcoding nicknames.
+        # client_id → state key avoids hardcoding nicknames across the codebase
         _CLIENT_ID_TO_BROKER_KEY = {k: v for k, v in [
             (_settings.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
             (_settings.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),

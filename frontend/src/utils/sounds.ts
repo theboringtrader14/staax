@@ -1,5 +1,7 @@
 // Click sounds using Web Audio API — no external files needed
-const ctx = typeof window !== 'undefined' ? new (window.AudioContext || (window as any).webkitAudioContext)() : null
+// window.webkitAudioContext is declared in src/global.d.ts
+const AudioCtx = typeof window !== 'undefined' ? (window.AudioContext ?? window.webkitAudioContext) : undefined
+const ctx = AudioCtx ? new AudioCtx() : null
 
 function playTone(freq: number, duration: number, type: OscillatorType = 'sine', gain = 0.1) {
   if (!ctx) return

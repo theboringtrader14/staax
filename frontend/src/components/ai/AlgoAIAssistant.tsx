@@ -74,14 +74,15 @@ function cleanResponse(text: string): string {
 }
 
 // ── Validate config has required fields ──────────────────────────────────────
-function isValidConfig(config: any): boolean {
-  return config &&
-         typeof config.algo_name === 'string' &&
-         typeof config.underlying === 'string' &&
-         typeof config.entry_time === 'string' &&
-         typeof config.exit_time === 'string' &&
-         Array.isArray(config.legs) &&
-         config.legs.length > 0
+function isValidConfig(config: unknown): config is AIAlgoConfig {
+  if (!config || typeof config !== 'object') return false
+  const c = config as Record<string, unknown>
+  return typeof c['algo_name']  === 'string' &&
+         typeof c['underlying'] === 'string' &&
+         typeof c['entry_time'] === 'string' &&
+         typeof c['exit_time']  === 'string' &&
+         Array.isArray(c['legs']) &&
+         (c['legs'] as unknown[]).length > 0
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -91,11 +92,45 @@ interface Message {
   ts: string
 }
 
+/** Structured algo config returned by the Gemini AI response (JSON-parsed) */
+export interface AIAlgoConfig {
+  algo_name: string
+  underlying: string
+  entry_time: string
+  exit_time: string
+  strategy_mode?: string
+  mtm_sl?: number
+  mtm_tp?: number
+  legs: {
+    direction: string
+    instrument: string
+    strike_type: string
+    lots?: number
+    sl_enabled?: boolean
+    sl_value?: number
+    sl_type?: string
+    tp_enabled?: boolean
+    tp_value?: number
+    tsl_enabled?: boolean
+    tsl_y?: number
+  }[]
+  [key: string]: unknown
+}
+
+/** Summarised existing algo passed in edit mode (from AlgoPage state — not the DB Algo type) */
+interface ExistingAlgoSummary {
+  name: string
+  strategy_mode?: string
+  et?: string
+  xt?: string
+  legs?: { d?: string; i?: string }[]
+}
+
 export interface Props {
   mode: 'create' | 'edit'
-  existingAlgo?: any
+  existingAlgo?: ExistingAlgoSummary
   accounts: { id: string; nickname: string; broker: string }[]
-  onComplete: (config: any, accountId: string, days: string[]) => void
+  onComplete: (config: AIAlgoConfig, accountId: string, days: string[]) => void
   onClose: () => void
 }
 
@@ -105,7 +140,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
   const [input,            setInput]            = useState('')
   const [isLoading,        setIsLoading]        = useState(false)
   const [chatDone,         setChatDone]         = useState(false)
-  const [parsedConfig,     setParsedConfig]     = useState<any | null>(null)
+  const [parsedConfig,     setParsedConfig]     = useState<AIAlgoConfig | null>(null)
   const [selectedAccount,  setSelectedAccount]  = useState<string | null>(null)
   const [selectedDays,     setSelectedDays]     = useState<string[]>([])
   const [isListening,      setIsListening]      = useState(false)
@@ -128,7 +163,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
       text = "Hi! Describe the algo you want to create.\nExample: 'Sell NIFTY straddle ATM 1 lot entry 9:35 exit 3:15'"
     } else if (existingAlgo) {
       const a   = existingAlgo
-      const legs = (a.legs || []).map((l: any) => `${l.d === 'S' ? 'SELL' : 'BUY'} ${l.i}`).join(' + ')
+      const legs = (a.legs || []).map((l) => `${l.d === 'S' ? 'SELL' : 'BUY'} ${l.i ?? ''}`).join(' + ')
       text = `Here's ${a.name}:\n${(a.strategy_mode || 'INTRADAY').toUpperCase()} · ${legs}\nEntry ${a.et} → Exit ${a.xt}\n\nWhat would you like to change?`
     } else {
       text = "What would you like to change about this algo?"
@@ -280,7 +315,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
   }, [input, isLoading, chatDone])
 
   function handleVoice() {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!SR) return
     const rec = new SR()
     rec.lang = 'en-IN'
@@ -308,13 +343,13 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
   const allWeek   = WEEKDAYS.every(d => selectedDays.includes(d))
   const canConfirm = !!(parsedConfig && selectedAccount && selectedDays.length > 0)
 
-  function legsSummary(cfg: any) {
-    return (cfg?.legs || []).map((l: any) =>
+  function legsSummary(cfg: AIAlgoConfig) {
+    return (cfg?.legs || []).map((l) =>
       `${(l.direction || '').toUpperCase()} ${(l.strike_type || '').toUpperCase()} ${(l.instrument || '').toUpperCase()}`
     ).join(' + ') || '—'
   }
 
-  function featureSummary(cfg: any) {
+  function featureSummary(cfg: AIAlgoConfig) {
     const parts: string[] = []
     const leg0 = cfg?.legs?.[0]
     if (leg0?.sl_enabled)  parts.push(`SL ${leg0.sl_value}${leg0.sl_type === 'pct_instrument' ? '%' : 'pts'}`)
@@ -409,8 +444,9 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
               </div>
               <span style={{
                 fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', marginTop: 2,
-                [m.role === 'user' ? 'marginRight' : 'marginLeft']: 4,
-              } as any}>{m.ts}</span>
+                marginRight: m.role === 'user' ? 4 : undefined,
+                marginLeft:  m.role !== 'user' ? 4 : undefined,
+              }}>{m.ts}</span>
             </div>
           ))}
 
@@ -497,7 +533,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
                   {parsedConfig.algo_name || '—'}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-body)', lineHeight: 1.7 }}>
-                  <div>{parsedConfig.underlying} · {parsedConfig.strategy_mode} · {parsedConfig.lots} lot{parsedConfig.lots !== 1 ? 's' : ''}</div>
+                  <div>{parsedConfig.underlying} · {parsedConfig.strategy_mode} · {parsedConfig.lots as number} lot{(parsedConfig.lots as number) !== 1 ? 's' : ''}</div>
                   <div>{legsSummary(parsedConfig)}</div>
                   <div>{featureSummary(parsedConfig)}</div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-mute)', marginTop: 2 }}>

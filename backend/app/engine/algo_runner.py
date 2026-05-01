@@ -2366,7 +2366,7 @@ class AlgoRunner:
             return
 
         # Load first leg to get underlying name — Algo model has no underlying field.
-        # This is a NEW session opened inside this function — safe because we own it.
+        # New session opened here; safe because this function owns its lifetime.
         async with AsyncSessionLocal() as _db:
             _legs_res = await _db.execute(
                 select(AlgoLeg)

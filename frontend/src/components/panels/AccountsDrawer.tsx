@@ -4,6 +4,24 @@ import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { showSuccess } from '@/utils/toast'
 // ── Types ──────────────────────────────────────────────────────────────────────
+/** Raw account shape returned by GET /accounts/ (superset of the store Account type) */
+interface RawAccount {
+  id: string
+  nickname: string
+  broker: 'zerodha' | 'angelone'
+  status: string
+  client_id?: string
+  global_sl?: number | null
+  global_tp?: number | null
+  fy_margin?: number | null
+  fy_brokerage?: number | null
+  has_api_key?: boolean
+  has_api_secret?: boolean
+  has_totp?: boolean
+  scope?: string
+  is_active?: boolean
+}
+
 interface AccountLocal {
   id: string; name: string; broker: string; type: string; status: string
   margin: number; pnl: number; token: string; color: string
@@ -85,7 +103,7 @@ export default function AccountsDrawer() {
   const [addSaving, setAddSaving] = useState(false)
   const [addError,  setAddError]  = useState('')
 
-  const mapAccounts = (data: any[]) => data.map((api: any) => ({
+  const mapAccounts = (data: RawAccount[]) => data.map((api) => ({
     id: api.id, name: api.nickname,
     broker: api.broker === 'zerodha' ? 'Zerodha' : 'Angel One',
     status: api.status === 'active' ? 'active' : 'pending',
@@ -103,7 +121,7 @@ export default function AccountsDrawer() {
   const fetchAccounts = useCallback(() => {
     accountsAPI.list().then(res => {
       const raw = res.data
-      const data: any[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.accounts) ? raw.accounts : [])
+      const data: RawAccount[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.accounts) ? raw.accounts : [])
       if (data.length > 0) setAccounts(mapAccounts(data))
     }).catch((e) => { console.warn('[AccountsDrawer] accounts list failed', e) })
   }, [])
@@ -111,7 +129,7 @@ export default function AccountsDrawer() {
   useEffect(() => { fetchAccounts() }, [fetchAccounts])
 
   useEffect(() => {
-    if (storeAccounts.length > 0) setAccounts(mapAccounts(storeAccounts as any[]))
+    if (storeAccounts.length > 0) setAccounts(mapAccounts(storeAccounts as RawAccount[]))
   }, [storeAccounts])
 
   const fetchAllFunds = async () => {
@@ -157,7 +175,9 @@ export default function AccountsDrawer() {
           'Karthik AO': kao.data?.connected  ?? false,
         }
         setTokenStatus(status)
-      } catch {}
+      } catch (e) {
+        console.warn('[AccountsDrawer] token status check failed', e)
+      }
     }
     check()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -266,7 +286,9 @@ export default function AccountsDrawer() {
         const res = await accountsAPI.zerodhaLoginUrl()
         if (res.data?.login_url) window.open(res.data.login_url, '_blank', 'width=800,height=600')
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[AccountsDrawer] broker login failed', e)
+    }
     finally { setLoginLoading(l => ({ ...l, [acc.id]: false })) }
   }
 
@@ -278,7 +300,10 @@ export default function AccountsDrawer() {
       setAddModal(false); setAddError('')
       fetchAccounts()
       showSuccess('Account added')
-    } catch (e: any) { setAddError(e?.response?.data?.detail || 'Failed to add account') }
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setAddError(err?.response?.data?.detail || 'Failed to add account')
+    }
     finally { setAddSaving(false) }
   }
 
@@ -287,7 +312,9 @@ export default function AccountsDrawer() {
     try {
       await fetch(`/api/v1/accounts/${confirmAction.accountId}/${confirmAction.type}`, { method: 'PATCH' })
       setConfirmAction(null); fetchAccounts()
-    } catch {}
+    } catch (e) {
+      console.warn('[AccountsDrawer] confirmed action failed', e)
+    }
   }
 
   // ── Account card for Broker panel ────────────────────────────────────────────

@@ -1,5 +1,18 @@
 import { useStore } from '@/store'
 import { reportsAPI } from '@/services/api'
+/** API /reports/metrics response shape (may include wins/losses counts directly) */
+interface MetricsRow {
+  algo_name: string
+  name?: string
+  algo_id?: string
+  trades?: number; wins?: number; losses?: number
+  win_pct?: number; loss_pct?: number
+  total_pnl?: number; pnl?: number
+  max_profit?: number; max_loss?: number
+  avg_day_pnl?: number; max_drawdown?: number; roi?: number
+  trade_count?: number
+  [key: string]: unknown
+}
 import { useState, useEffect, useMemo } from 'react'
 import React from 'react'
 import { StaaxSelect } from '@/components/StaaxSelect'
@@ -238,10 +251,10 @@ export default function ReportsPage() {
   const [downloadModal, setDownloadModal] = useState<'csv' | 'excel' | null>(null)
   const [downloadType, setDownloadType] = useState<'algo' | 'daywise'>('algo')
   const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
-  const [algoMetrics, setAlgoMetrics] = useState<any[]>([])
-  const [fyMetrics, setFyMetrics]     = useState<any[]>([])
+  const [algoMetrics, setAlgoMetrics] = useState<MetricsRow[]>([])
+  const [fyMetrics, setFyMetrics]     = useState<MetricsRow[]>([])
   const [calendarData, setCalendarData] = useState<Record<string, number>>({})
-  const [equityCurve, setEquityCurve] = useState<any[]>([])
+  const [equityCurve, setEquityCurve] = useState<{ date: string; cumulative: number }[]>([])
   const [fyTotal, setFyTotal]         = useState(0)
   const [chartModal, setChartModal]   = useState(false)
 
@@ -251,7 +264,7 @@ export default function ReportsPage() {
   }, [fy, isPractixMode, activeAccount])
 
   useEffect(() => {
-    let metricParams: Record<string, any> = { fy: metricFy }
+    let metricParams: Record<string, unknown> = { fy: metricFy }
     if (metricFilter === 'month' && metricMonth) {
       const [yr, mo] = metricMonth.split('-')
       const lastDay = new Date(parseInt(yr), parseInt(mo), 0).getDate()
@@ -265,7 +278,7 @@ export default function ReportsPage() {
     reportsAPI.metrics({ ...metricParams, ...acctParam, is_practix: isPractixMode }).then(r => setAlgoMetrics(r.data?.metrics || [])).catch(() => {})
     reportsAPI.calendar({ fy, is_practix: isPractixMode, ...acctParam }).then(r => {
       const map: Record<string, number> = {}
-      ;(r.data?.calendar || []).forEach((d: any) => { map[d.date] = d.pnl })
+      ;(r.data?.calendar || []).forEach((d: { date: string; pnl: number }) => { map[d.date] = d.pnl })
       setCalendarData(map)
     }).catch(() => {})
     reportsAPI.equityCurve({ fy, is_practix: isPractixMode, ...acctParam }).then(r => {
@@ -293,9 +306,9 @@ export default function ReportsPage() {
 
   const months = fyMonths(fy)
   const totalPnl = fyTotal
-  const fyWins   = fyMetrics.reduce((s: number, a: any) => s + a.wins, 0)
-  const fyLosses = fyMetrics.reduce((s: number, a: any) => s + a.losses, 0)
-  const fyTrades = fyMetrics.reduce((s: number, a: any) => s + a.trades, 0)
+  const fyWins   = fyMetrics.reduce((s, a) => s + (a.wins   ?? 0), 0)
+  const fyLosses = fyMetrics.reduce((s, a) => s + (a.losses ?? 0), 0)
+  const fyTrades = fyMetrics.reduce((s, a) => s + (a.trades ?? a.trade_count ?? 0), 0)
   const fyWinRate = fyTrades > 0 ? fyWins / fyTrades * 100 : 0
   const activePeriodLabel = metricFilter === 'fy' ? `FY ${metricFy}`
     : metricFilter === 'month' ? `${metricMonth} · FY ${fy}`
@@ -434,7 +447,7 @@ export default function ReportsPage() {
                   <XAxis dataKey="month" tick={{ fill: 'var(--text-dim)', fontSize: 11 }} />
                   <YAxis tick={{ fill: 'var(--text-dim)', fontSize: 11 }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
-                    formatter={(v: any) => [`₹${v.toLocaleString('en-IN')}`, 'Cumulative P&L']}
+                    formatter={(v: number) => [`₹${v.toLocaleString('en-IN')}`, 'Cumulative P&L']}
                     contentStyle={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: 'var(--neu-raised-sm)' }}
                     labelStyle={{ color: 'var(--text-dim)', fontSize: 11 }}
                     itemStyle={{ color: fyTotal >= 0 ? '#0ea66e' : '#FF4444' }}
@@ -550,15 +563,15 @@ export default function ReportsPage() {
             {metricFilter === 'month' && <StaaxSelect value={metricMonth} onChange={setMetricMonth} options={monthOptions} width="120px" />}
             {metricFilter === 'date' && (
               <input type="date" value={metricDate} onChange={e => setMetricDate(e.target.value)}
-                style={{ ...inpSt, width: '140px', colorScheme: 'dark' } as any} />
+                style={{ ...inpSt, width: '140px', colorScheme: 'dark' } as React.CSSProperties} />
             )}
             {metricFilter === 'custom' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <input type="date" value={metricFrom} onChange={e => setMetricFrom(e.target.value)}
-                  style={{ ...inpSt, width: '130px', colorScheme: 'dark' } as any} />
+                  style={{ ...inpSt, width: '130px', colorScheme: 'dark' } as React.CSSProperties} />
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>→</span>
                 <input type="date" value={metricTo} onChange={e => setMetricTo(e.target.value)}
-                  style={{ ...inpSt, width: '130px', colorScheme: 'dark' } as any} />
+                  style={{ ...inpSt, width: '130px', colorScheme: 'dark' } as React.CSSProperties} />
               </div>
             )}
           </div>
@@ -598,8 +611,8 @@ export default function ReportsPage() {
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', tableLayout: 'fixed' as const }}>
               <thead>
                 <tr>
-                  {algoMetrics.map((a: any) => (
-                    <th key={a.algo_id} onClick={() => setSelectedAlgo(a.name)} style={{
+                  {algoMetrics.map((a) => (
+                    <th key={a.algo_id} onClick={() => setSelectedAlgo(a.name ?? null)} style={{
                       minWidth: '100px', padding: '8px 14px 14px', textAlign: 'center', cursor: 'pointer',
                       background: 'var(--bg)', fontSize: '11px', fontWeight: 700, color: 'var(--accent)',
                       borderBottom: '1px solid var(--border)',
@@ -620,8 +633,8 @@ export default function ReportsPage() {
                       : String(Math.round(Math.abs(n)))
                   return (
                     <tr key={row.key} style={{ height: '30px' }}>
-                      {algoMetrics.map((a: any) => {
-                        const val = (a as any)[row.key]
+                      {algoMetrics.map((a) => {
+                        const val = (a[row.key] ?? 0) as number
                         const isNeg = (val || 0) < 0 || row.isLoss
                         return (
                           <td key={a.algo_id} style={{
@@ -661,7 +674,7 @@ export default function ReportsPage() {
                 {METRIC_ROWS.map((row, idx) => {
                   const isPct = row.key === 'win_pct' || row.key === 'loss_pct'
                   const isCurrency = row.key === 'total_pnl' || row.key === 'max_profit' || row.key === 'max_loss'
-                  const cumVal = algoMetrics.reduce((s: number, a: any) => s + (a[row.key] || 0), 0)
+                  const cumVal = algoMetrics.reduce((s, a) => s + ((a[row.key] as number) || 0), 0)
                   const cumFmt = isPct
                     ? (algoMetrics.length > 0 ? (cumVal / algoMetrics.length).toFixed(1) + '%' : '0%')
                     : isCurrency

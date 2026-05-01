@@ -2,10 +2,36 @@ import { useEffect, useRef, useState } from 'react'
 import { Warning, Prohibit, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
+import { getISTNow } from '@/utils/format'
 
 // ── Types ──────────────────────────────────────────────────────
 type ServiceStatus = 'running' | 'stopped' | 'starting' | 'stopping'
 interface Service { id: string; name: string; status: ServiceStatus; detail: string }
+
+interface HealthCheck { ok: boolean; connected?: boolean; [key: string]: unknown }
+interface HealthData {
+  is_market_hours?: boolean
+  engine_metrics?: any
+  checks?: {
+    database?:       HealthCheck
+    redis?:          HealthCheck
+    scheduler?:      HealthCheck
+    smartstream?:    HealthCheck
+    broker_zerodha?: HealthCheck
+    [key: string]:   HealthCheck | undefined
+  }
+}
+
+/** Minimal account shape used in the dashboard account list display */
+interface DashboardAccount {
+  id: string
+  nickname: string
+  name?: string
+  broker: string
+  token_valid_today?: boolean
+  status?: string
+  [key: string]: unknown
+}
 
 const INIT_SERVICES: Service[] = [
   { id: 'db',      name: 'PostgreSQL',  status: 'stopped', detail: 'localhost:5432' },
@@ -47,7 +73,7 @@ function dedupeLog(lines: string[]): string[] {
 }
 
 function isPast9am() {
-  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const ist = getISTNow()
   return ist.getHours() > 9 || (ist.getHours() === 9 && ist.getMinutes() >= 15)
 }
 
@@ -110,7 +136,7 @@ export default function DashboardPanel() {
   const setAccounts        = useStore(s => s.setAccounts)
 
   const [services, setServices]             = useState<Service[]>(INIT_SERVICES)
-  const [health, setHealth]                 = useState<any>(null)
+  const [health, setHealth]                 = useState<HealthData | null>(null)
   const [log, setLog]                       = useState<string[]>(['STAAX ready.'])
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
   const [logDate, setLogDate]               = useState<string>(todayIST())
@@ -154,10 +180,13 @@ export default function DashboardPanel() {
       const res = await systemAPI.activateKillSwitch(selKill)
       const d = res.data
       setKillActived(true)
-      setKilledIds(p => Array.from(new Set([...p, ...(selKill.length > 0 ? selKill : (accounts as any[]).map((a:any) => a.id))])))
+      setKilledIds(p => Array.from(new Set([...p, ...(selKill.length > 0 ? selKill : (accounts as unknown as DashboardAccount[]).map((a) => a.id))])))
       setKillResult({ positions_squared: d.positions_squared ?? 0, orders_cancelled: d.orders_cancelled ?? 0, errors: d.errors ?? [] })
       addLog('[CRITICAL] KILL — ' + (d.positions_squared ?? 0) + ' pos, ' + (d.orders_cancelled ?? 0) + ' orders', 'err')
-    } catch (err: any) { addLog('Kill failed — ' + (err?.response?.data?.detail || 'unknown'), 'err') }
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } } }
+      addLog('Kill failed — ' + (e?.response?.data?.detail || 'unknown'), 'err')
+    }
     finally { setKillLoading(false); setKillModal(false) }
   }
 
@@ -179,7 +208,7 @@ export default function DashboardPanel() {
     const fetchLogs = async () => {
       try {
         const res = await eventsAPI.list(100, logDateRef.current)
-        const entries: any[] = res.data || []
+        const entries: { ts?: string; level?: string; source?: string; msg?: string }[] = res.data || []
         const lines: string[] = []
         for (const e of entries) {
           const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
@@ -240,10 +269,9 @@ export default function DashboardPanel() {
   }, [])
 
   // ── Derived ───────────────────────────────────────────────────
-  const IST_OFFSET = 5.5 * 60 * 60 * 1000
-  const nowIST = new Date(Date.now() + IST_OFFSET - new Date().getTimezoneOffset() * 60000)
-  const day = nowIST.getUTCDay()
-  const minsNow = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes()
+  const nowIST = getISTNow()
+  const day = nowIST.getDay()
+  const minsNow = nowIST.getHours() * 60 + nowIST.getMinutes()
   const isMarketHours: boolean = health?.is_market_hours ?? (day >= 1 && day <= 5 && minsNow >= (9*60+15) && minsNow <= (15*60+30))
 
   const ssData = health?.checks?.smartstream
@@ -254,12 +282,12 @@ export default function DashboardPanel() {
   const overallColor = overallState === 'green' ? '#0ea66e' : overallState === 'amber' ? '#b45309' : '#FF4444'
   const statusLabel  = !health ? 'Loading…' : criticalRed ? 'Not Ready' : smartstreamAmber ? 'Feed Inactive' : 'System Ready'
 
-  const displayAccounts = (accounts as any[]).length > 0 ? (accounts as any[]) : [
+  const displayAccounts: DashboardAccount[] = (accounts as unknown as DashboardAccount[]).length > 0 ? (accounts as unknown as DashboardAccount[]) : [
     { id: '1', nickname: 'Karthik', broker: 'zerodha',  token_valid_today: false },
     { id: '2', nickname: 'Mom',     broker: 'angelone', token_valid_today: false },
     { id: '3', nickname: 'Wife',    broker: 'angelone', token_valid_today: false },
   ]
-  const dashboardAccounts = displayAccounts.filter((a: any) => a.nickname !== 'Karthik AO')
+  const dashboardAccounts = displayAccounts.filter((a) => a.nickname !== 'Karthik AO')
   const allRunning = services.every(s => s.status === 'running')
   const allStopped = services.every(s => s.status === 'stopped')
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -440,14 +468,14 @@ export default function DashboardPanel() {
 
             {/* Accounts needing login */}
             {(() => {
-              const needsLogin = (accounts as any[]).filter((a: any) => {
-                if (a.broker === 'zerodha') return a.token_valid === false || a.ok === false
-                return a.token_valid === false
+              const needsLogin = (accounts as unknown as DashboardAccount[]).filter((a) => {
+                if (a.broker === 'zerodha') return a['token_valid'] === false || a['ok'] === false
+                return a['token_valid'] === false
               })
               if (needsLogin.length === 0) return null
               return (
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {needsLogin.map((acc: any) => {
+                  {needsLogin.map((acc) => {
                     const isZerodha = acc.broker === 'zerodha'
                     const succeeded = loginSucceeded[acc.id] ?? false
                     return (
@@ -479,10 +507,10 @@ export default function DashboardPanel() {
           <div style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--border)' }}>
             {sectionLabel('Account Status')}
             <div style={{ display: 'flex', gap: 8 }}>
-              {dashboardAccounts.map((acc: any) => {
+              {dashboardAccounts.map((acc) => {
                 const isZerodha = acc.broker === 'zerodha'
                 const zerodhaOk = health?.checks?.broker_zerodha?.ok ?? false
-                const angeloneOk: boolean = isZerodha ? false : (health?.checks?.['broker_angelone_' + acc.id]?.token_valid ?? acc.token_valid_today ?? false)
+                const angeloneOk: boolean = isZerodha ? false : Boolean(health?.checks?.['broker_angelone_' + acc.id]?.['token_valid'] ?? acc.token_valid_today ?? false)
                 const isLive: boolean = isZerodha ? zerodhaOk : angeloneOk
                 return (
                   <div key={acc.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '10px 8px', borderRadius: 14, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)' }}>
@@ -644,7 +672,7 @@ export default function DashboardPanel() {
 
             {/* Account list */}
             <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {displayAccounts.map((acc: any) => {
+              {displayAccounts.map((acc) => {
                 const checked = selKill.includes(acc.id)
                 const killed = killedIds.includes(acc.id)
                 return (

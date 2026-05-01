@@ -5,6 +5,7 @@ import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI, api } from '@/services/api'
 import type { Order, Algo } from '@/types'
 import { getCurrentFY, getFYOptions } from '@/utils/fy'
+import { fmtPnl } from '@/utils/format'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { SortableHeader } from '@/components/SortableHeader'
@@ -30,10 +31,7 @@ type Tab = typeof TABS[number]
 
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
-function fmtPnl(v: number): string {
-  const sign = v >= 0 ? '+' : '-'
-  return `${sign}₹${Math.abs(Math.round(v)).toLocaleString('en-IN')}`
-}
+// fmtPnl is imported from @/utils/format
 
 function fmtPts(v: number): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`
@@ -59,8 +57,8 @@ function cleanAlgo(name: string): string {
   return name.replace(/^STAAX_Mom_/i, '')
 }
 
-function getOrderDate(o: any): string {
-  return (o.fill_time || o.created_at || o.trading_date || '').slice(0, 10)
+function getOrderDate(o: Order): string {
+  return (o.fill_time || (o as any).trading_date || '').slice(0, 10)
 }
 
 
@@ -104,7 +102,7 @@ const numStyle: CSSProperties = {
 
 
 // ── Recharts neumorphic tooltip ────────────────────────────────────────────────
-function PnlTooltip({ active, payload, label }: any) {
+function PnlTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null
   const v: number = payload[0].value
   return (
@@ -127,8 +125,8 @@ function CumulativePnlChart({ orders }: { orders: Order[] }) {
     const byDate: Record<string, number> = {}
     for (const o of orders) {
       const date = getOrderDate(o)
-      if (!date || (o as any).pnl == null) continue
-      byDate[date] = (byDate[date] ?? 0) + ((o as any).pnl ?? 0)
+      if (!date || o.pnl == null) continue
+      byDate[date] = (byDate[date] ?? 0) + (o.pnl ?? 0)
     }
     let cum = 0
     return Object.entries(byDate)
@@ -240,7 +238,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   scores: HealthScore[]
   avgScore: number
   fy: string
-  timeSlots: any[]
+  timeSlots: { hour: number; label: string; trades: number; win_rate: number; total_pnl: number }[]
 }) {
   const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
   const [showWeekends, setShowWeekends] = useState(false)
@@ -259,12 +257,12 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   const algoById = new Map<string, Algo>(algos.map(a => [a.id, a]))
   const stratGroups: Record<string, { count: number; totalPnl: number; wins: number }> = {}
   for (const o of periodOrders) {
-    const algo = algoById.get((o as any).algo_id)
-    const st = ((o as any).entry_type || (algo as any)?.strategy_mode || (algo as any)?.entry_type || 'unknown').toLowerCase()
+    const algo = algoById.get(o.algo_id)
+    const st = (o.entry_type || algo?.strategy_mode || algo?.entry_type || 'unknown').toLowerCase()
     if (!stratGroups[st]) stratGroups[st] = { count: 0, totalPnl: 0, wins: 0 }
     stratGroups[st].count++
-    stratGroups[st].totalPnl += (o as any).pnl ?? 0
-    if (((o as any).pnl ?? 0) > 0) stratGroups[st].wins++
+    stratGroups[st].totalPnl += o.pnl ?? 0
+    if ((o.pnl ?? 0) > 0) stratGroups[st].wins++
   }
   const stratRows = Object.entries(stratGroups)
     .map(([st, g]) => ({ strategy_type: st, count: g.count, total_pnl: g.totalPnl,
@@ -414,13 +412,13 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
 
       {/* Best Time to Trade */}
       {timeSlots.length > 0 && (() => {
-        const maxAbsPnl = Math.max(...timeSlots.map((s: any) => Math.abs(s.total_pnl)), 1)
+        const maxAbsPnl = Math.max(...timeSlots.map((s) => Math.abs(s.total_pnl)), 1)
         return (
           <div style={{ ...neuCard, marginBottom: 12 }}>
             <div style={secLabel}>Best Time to Trade</div>
             <div style={{ padding: '0 4px' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 110, paddingTop: 28 }}>
-                {timeSlots.map((slot: any) => {
+                {timeSlots.map((slot) => {
                   const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 56 * 0.7))
                   const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
                   const colorHex = slot.total_pnl >= 0 ? '#0EA66E' : '#FF4444'
@@ -852,7 +850,7 @@ export default function AnalyticsPage() {
   const [slippageData, setSlippageData] = useState<SlippageData | null>(null)
   const [healthScores, setHealthScores] = useState<HealthScore[]>([])
   const [healthAvg, setHealthAvg]     = useState(0)
-  const [timeSlots, setTimeSlots]     = useState<any[]>([])
+  const [timeSlots, setTimeSlots]     = useState<{ hour: number; label: string; trades: number; win_rate: number; total_pnl: number }[]>([])
   const [latencyData, setLatencyData] = useState<LatencyData | null>(null)
   const [loading, setLoading]         = useState(true)
   const [fy, setFy]                   = useState(getCurrentFY())
@@ -879,10 +877,10 @@ export default function AnalyticsPage() {
       reportsAPI.timeHeatmap({ fy, is_practix: isPractixMode }),
       reportsAPI.latency({ fy, is_practix: isPractixMode }),
     ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes, tRes, latRes]) => {
-      const rawMetrics: any[] = mRes.status === 'fulfilled'
+      const rawMetrics = (mRes.status === 'fulfilled'
         ? (Array.isArray(mRes.value.data) ? mRes.value.data : (mRes.value.data?.metrics || []))
-        : []
-      setMetrics(rawMetrics.map((r: any) => ({
+        : []) as any[]
+      setMetrics(rawMetrics.map((r) => ({
         algo_name: r.name || r.algo_name || '',
         trades:    r.trades || 0,
         wins:      r.wins || 0,
@@ -893,9 +891,9 @@ export default function AnalyticsPage() {
 
       if (oRes.status === 'fulfilled') {
         const oData = oRes.value.data
-        const rawGroups: any[] = Array.isArray(oData) ? [] : (oData?.groups || [])
-        const flat: Order[] = rawGroups.flatMap((g: any) =>
-          (g.orders || []).map((o: any) => ({ ...o, algo_name: o.algo_name || g.algo_name || '' }))
+        const rawGroups = (Array.isArray(oData) ? [] : (oData?.groups || [])) as Record<string, unknown>[]
+        const flat: Order[] = rawGroups.flatMap((g) =>
+          ((g['orders'] || []) as Record<string, unknown>[]).map((o) => ({ ...o, algo_name: (o['algo_name'] as string) || (g['algo_name'] as string) || '' } as Order))
         )
         setAllOrders(flat)
       }

@@ -1018,8 +1018,8 @@ async def terminate_algo(algo_id: str, request: Request, db: AsyncSession = Depe
                         cached = await ltp_cache.get(order.instrument_token)
                         if cached is not None:
                             ltp = cached
-                except Exception:
-                    pass
+                except Exception as _ltp_err:
+                    logger.warning(f"[TERMINATE] LTP cache read failed for order {order.id}: {_ltp_err}")
                 order.exit_price = ltp
             else:
                 # LIVE: attempt broker square-off, mark DB closed regardless of broker result

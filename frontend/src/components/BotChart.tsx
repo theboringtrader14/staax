@@ -58,7 +58,7 @@ export default function BotChart({ botId, symbol, timeframe: initTf = '5m' }: Bo
         if (d.lower?.length)   lowerBand.setData(d.lower)
         if (d.mid?.length)     midLine.setData(d.mid)
         if (d.entries?.length) {
-          createSeriesMarkers(candles, d.entries.map((e: any) => ({
+          createSeriesMarkers(candles, (d.entries as any[]).map((e) => ({
             time: e.time,
             position: e.direction === 'sell' ? 'aboveBar' : 'belowBar',
             color: e.direction === 'sell' ? '#FF4444' : '#0EA66E',
@@ -66,7 +66,9 @@ export default function BotChart({ botId, symbol, timeframe: initTf = '5m' }: Bo
             text: e.label || (e.direction === 'sell' ? 'S' : 'B'),
           })))
         }
-      } catch {}
+      } catch (e) {
+        console.warn('[BotChart] chart data fetch failed', e)
+      }
       setLoading(false)
     }
     fetchData()
