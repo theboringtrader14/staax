@@ -905,7 +905,6 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   }
 
   const maxAlgoMs = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
-  const minAlgoMs = Math.min(...data.by_algo.map(a => a.avg_ms), 0)
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
@@ -1015,7 +1014,29 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                 <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Avg (ms)</th>
                 <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Orders</th>
-                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Relative</th>
+                <th style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 12px' }}>
+                  {/* 0–500ms ruler: Excellent 30% | Good 20% | Acceptable 30% | Slow 20% */}
+                  <div style={{ display: 'flex', height: 14, borderRadius: 4, overflow: 'hidden', boxShadow: 'var(--neu-inset)' }}>
+                    {([
+                      { label: 'EXCELLENT', flex: 30, color: '#10B981' },
+                      { label: 'GOOD',      flex: 20, color: '#3B82F6' },
+                      { label: 'ACCEPTABLE',flex: 30, color: '#F59E0B' },
+                      { label: 'SLOW',      flex: 20, color: '#EF4444' },
+                    ] as const).map((z, i, arr) => (
+                      <div key={z.label} style={{
+                        flex: z.flex, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 7, fontWeight: 700, letterSpacing: '0.08em', color: '#000',
+                        background: z.color, opacity: 0.85,
+                        borderRight: i < arr.length - 1 ? '1px solid rgba(0,0,0,0.25)' : 'none',
+                      }}>{z.label}</div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, padding: '0 1px' }}>
+                    {['0', '150', '250', '400', '500ms'].map(t => (
+                      <span key={t} style={{ fontSize: 7, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{t}</span>
+                    ))}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1027,7 +1048,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
                       <div style={{
-                        width: `${Math.max(5, Math.round((maxAlgoMs - a.avg_ms) / (maxAlgoMs - minAlgoMs || 1) * 100))}%`,
+                        width: `${Math.min(100, Math.round(a.avg_ms / 500 * 100))}%`,
                         height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
                         background: algoBarGradient(a.avg_ms),
                       }} />
