@@ -213,6 +213,12 @@ export const eventsAPI = {
   export: () => api.get('/events/export', { responseType: 'blob' }),
 }
 
+// ── Risk ──────────────────────────────────────────────────────────────────────
+export const riskAPI = {
+  live: (isPractix?: boolean) =>
+    api.get('/risk/live', { params: isPractix !== undefined ? { is_practix: isPractix } : {} }),
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 export function createOrdersWebSocket(): WebSocket {
   const wsBase = API_BASE.replace('http', 'ws')

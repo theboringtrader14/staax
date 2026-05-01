@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Warning, Prohibit, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { useStore } from '@/store'
-import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
+import { servicesAPI, accountsAPI, systemAPI, eventsAPI, riskAPI } from '@/services/api'
 import { getISTNow } from '@/utils/format'
 
 // ── Types ──────────────────────────────────────────────────────
@@ -138,6 +138,7 @@ export default function DashboardPanel() {
   const [services, setServices]             = useState<Service[]>(INIT_SERVICES)
   const [health, setHealth]                 = useState<HealthData | null>(null)
   const [engineHealth, setEngineHealth]     = useState<any>(null)
+  const [riskData, setRiskData]             = useState<any>(null)
   const [log, setLog]                       = useState<string[]>(['STAAX ready.'])
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
   const [logDate, setLogDate]               = useState<string>(todayIST())
@@ -284,6 +285,15 @@ export default function DashboardPanel() {
     return () => clearInterval(t)
   }, [])
 
+  // ── Live risk poll — 10s ───────────────────────────────────────
+  useEffect(() => {
+    const fetchRisk = () =>
+      riskAPI.live(true).then(r => setRiskData(r.data)).catch(() => {})
+    fetchRisk()
+    const t = setInterval(fetchRisk, 10_000)
+    return () => clearInterval(t)
+  }, [])
+
   // ── Derived ───────────────────────────────────────────────────
   const nowIST = getISTNow()
   const day = nowIST.getDay()
@@ -314,6 +324,11 @@ export default function DashboardPanel() {
     { label: 'Scheduler',   ok: health?.checks?.scheduler?.ok ?? false, state: (health?.checks?.scheduler?.ok ?? false) ? 'green' : health ? 'red' : 'amber' },
     { label: 'SmartStream', ok: ssConnected,                            state: ssConnected ? 'green' : isMarketHours ? 'red' : 'amber' },
   ] as const
+
+  const riskColor = !riskData ? 'var(--text-mute)'
+    : riskData.risk_pct > 20 ? 'var(--red, #FF4444)'
+    : riskData.risk_pct >= 10 ? '#b45309'
+    : '#0ea66e'
 
   const sectionLabel = (text: string) => (
     <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const, marginBottom: 8 }}>
@@ -429,6 +444,35 @@ export default function DashboardPanel() {
                 System Health
               </div>
             </div>
+
+            {/* ── Live Risk strip — only when positions are open ── */}
+            {riskData && riskData.open_positions > 0 && (
+              <div style={{
+                marginBottom: 10, padding: '10px 12px', borderRadius: 12,
+                background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+                display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
+              }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text-mute)', textTransform: 'uppercase' }}>
+                  Live Risk
+                </div>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  Deployed: <span style={{ fontWeight: 700, color: 'var(--text)' }}>
+                    ₹{(riskData.deployed_capital / 1000).toFixed(1)}k
+                  </span>
+                </span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  At Risk: <span style={{ fontWeight: 700, color: riskColor }}>
+                    ₹{(riskData.max_loss_if_sl_hit / 1000).toFixed(1)}k ({riskData.risk_pct}%)
+                  </span>
+                </span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  P&amp;L: <span style={{ fontWeight: 700, color: riskData.current_unrealized_pnl >= 0 ? 'var(--green, #0ea66e)' : 'var(--red, #FF4444)' }}>
+                    {riskData.current_unrealized_pnl >= 0 ? '+' : ''}₹{(Math.abs(riskData.current_unrealized_pnl) / 1000).toFixed(1)}k
+                  </span>
+                </span>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {healthChips.map((chip) => {
                 const dotColor = chip.state === 'green' ? '#0ea66e' : chip.state === 'red' ? '#FF4444' : '#b45309'
