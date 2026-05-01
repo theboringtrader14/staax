@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { CSSProperties } from 'react'
-import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, LineChart, Line, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts'
 import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI, api } from '@/services/api'
 import type { Order, Algo } from '@/types'
@@ -501,6 +501,7 @@ interface ErrorsData {
   total_errors: number
   total_orders: number
   error_rate_pct: number
+  total_closed_orders: number
 }
 
 function FailuresTab({ data }: { data: ErrorsData | null }) {
@@ -513,16 +514,16 @@ function FailuresTab({ data }: { data: ErrorsData | null }) {
   const recent = data.recent ?? []
   const totalErrors = data.total_errors ?? 0
   const totalOrders = data.total_orders ?? 0
-  const errorRatePct = data.error_rate_pct ?? 0
+  const totalClosed = data.total_closed_orders ?? 0
   const mostFailed = perAlgo[0]?.algo || '—'
 
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
-        <SummaryCard label="Total Errors"     value={totalErrors.toString()} valueColor="var(--red)" />
-        <SummaryCard label="Error Rate"       value={`${errorRatePct.toFixed(1)}%`} sub={`of ${totalOrders} orders`} />
-        <SummaryCard label="Most Failed Algo" value={mostFailed} valueColor="var(--accent)" />
-        <SummaryCard label="Algos w/ Errors"  value={perAlgo.length.toString()} />
+        <SummaryCard label="Total Errors"        value={totalErrors.toString()} valueColor="var(--red)" />
+        <SummaryCard label="CLOSED + ERROR ORDERS" value={totalOrders.toString()} sub={`of ${totalClosed} closed`} />
+        <SummaryCard label="Most Failed Algo"    value={mostFailed} valueColor="var(--accent)" />
+        <SummaryCard label="Algos w/ Errors"     value={perAlgo.length.toString()} />
       </div>
 
       <div style={neuCard}>
@@ -608,11 +609,37 @@ interface SlippageData {
   exit_slippage: SlippageSide
   entry_slippage: SlippageSide
   by_date: { date: string; avg_exit_slip: number; avg_entry_slip: number; order_count: number }[]
+  total_closed_orders: number
+}
+
+function SlippageTrendChart({ byDate }: { byDate: { date: string; avg_exit_slip: number; avg_entry_slip: number; order_count: number }[] }) {
+  const data = [...byDate].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
+    date: d.date.slice(5), // MM-DD
+    exitSlip: d.avg_exit_slip,
+    entrySlip: d.avg_entry_slip,
+  }))
+  if (data.length < 2) return null
+  return (
+    <div style={{ ...neuCard, marginBottom: 12 }}>
+      <div style={secLabel}>Slippage Trend (pts / day)</div>
+      <div style={{ ...neuInset, padding: '10px 8px 4px' }}>
+        <ResponsiveContainer width="100%" height={120}>
+          <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-mute)' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 9, fill: 'var(--text-mute)' }} axisLine={false} tickLine={false} />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
+            <Tooltip contentStyle={{ background: 'var(--bg)', border: 'none', boxShadow: 'var(--neu-raised)', borderRadius: 8, fontSize: 11 }} />
+            <Line type="monotone" dataKey="exitSlip" stroke="#2dd4bf" strokeWidth={2} dot={false} name="Exit slip" />
+            <Line type="monotone" dataKey="entrySlip" stroke="var(--accent)" strokeWidth={1.5} dot={false} name="Entry slip" strokeDasharray="4 2" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
 }
 
 function SlippageTab({ data }: { data: SlippageData | null }) {
-  const [dateOpen, setDateOpen] = useState(false)
-  const [infoOpen, setInfoOpen] = useState(false)
+  const [showTip, setShowTip] = useState(false)
 
   if (!data) return (
     <div style={{ ...neuCard, textAlign: 'center', color: 'var(--text-mute)', padding: 48, fontSize: 12 }}>
@@ -630,7 +657,7 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
 
   function AlgoTable({ rows, label }: { rows: SlippageAlgoRow[]; label: string }) {
     return (
-      <div style={{ ...neuCard, marginBottom: 12 }}>
+      <div style={{ ...neuCard, width: '100%', marginBottom: 12 }}>
         <div style={secLabel}>{label}</div>
         {rows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-mute)', fontSize: 12 }}>No data on record</div>
@@ -666,6 +693,8 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
     )
   }
 
+  const totalClosed = data.total_closed_orders ?? 0
+
   return (
     <div>
       {/* Section 1 — 4 KPI cards */}
@@ -676,9 +705,9 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
           valueColor={slipColor(data.exit_slippage.avg_slip_pts)}
         />
         <SummaryCard
-          label="TOTAL ORDERS"
+          label="EXIT ORDERS WITH SL"
           value={data.exit_slippage.total_orders.toString()}
-          sub={`${data.entry_slippage.total_orders} entry orders`}
+          sub={`of ${totalClosed} closed`}
         />
         <SummaryCard
           label="BEST TRADE (pts)"
@@ -692,77 +721,70 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
         />
       </div>
 
-      {/* Section 2 — Exit slippage table */}
-      <AlgoTable rows={data.exit_slippage.per_algo} label="EXIT SLIPPAGE — SL & Target exits" />
+      {/* Section 2 — Exit slippage table with tooltip on header */}
+      <div style={{ ...neuCard, width: '100%', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <span style={{ ...secLabel, marginBottom: 0 }}>Exit Slippage — SL &amp; Target exits</span>
+          <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <span
+              onMouseEnter={() => setShowTip(true)}
+              onMouseLeave={() => setShowTip(false)}
+              style={{ cursor: 'help', color: 'var(--text-mute)', fontSize: 12, lineHeight: 1 }}
+            >ℹ</span>
+            {showTip && (
+              <div style={{
+                position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'var(--bg)', boxShadow: 'var(--neu-raised)',
+                borderRadius: 10, padding: '10px 14px', width: 280,
+                fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6,
+                zIndex: 100, pointerEvents: 'none',
+              }}>
+                <strong style={{ color: 'var(--text)', display: 'block', marginBottom: 6 }}>How slippage is calculated</strong>
+                Slippage = difference between your SL price and actual exit fill.<br />
+                <span style={{ color: 'var(--green)' }}>Positive</span> = filled better than SL (good).<br />
+                <span style={{ color: 'var(--red)' }}>Negative</span> = filled worse than SL (adverse).
+              </div>
+            )}
+          </span>
+        </div>
+        {data.exit_slippage.per_algo.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-mute)', fontSize: 12 }}>No data on record</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="staax-table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={thLeft}>ALGO</th>
+                  <th style={thStyle}>ORDERS</th>
+                  <th style={thStyle}>AVG SLIP (pts)</th>
+                  <th style={thStyle}>TOTAL IMPACT (₹)</th>
+                  <th style={thStyle}>BEST (pts)</th>
+                  <th style={thStyle}>WORST (pts)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.exit_slippage.per_algo.map(r => (
+                  <tr key={r.algo_name}>
+                    <td style={tdL}>{r.algo_name}</td>
+                    <td style={tdC}>{r.orders}</td>
+                    <td style={{ ...tdC, fontWeight: 700, color: slipColor(r.avg_slip_pts) }}>{fmtPts(r.avg_slip_pts)}</td>
+                    <td style={{ ...tdC, color: slipColor(r.total_impact_inr) }}>{fmtImpact(r.total_impact_inr)}</td>
+                    <td style={{ ...tdC, color: 'var(--green)' }}>{fmtPts(r.best_pts)}</td>
+                    <td style={{ ...tdC, color: 'var(--red)' }}>{fmtPts(r.worst_pts)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Section 3 — Entry slippage table */}
       <AlgoTable rows={data.entry_slippage.per_algo} label="ENTRY SLIPPAGE — Market entry fills vs reference" />
 
-      {/* Section 4 — By-date trend (collapsible) */}
-      <div style={{ ...neuCard, marginBottom: 12 }}>
-        <button
-          onClick={() => setDateOpen(o => !o)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0 }}
-        >
-          <span style={secLabel as any}>BY-DATE TREND</span>
-          <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginBottom: 10 }}>{dateOpen ? '▲' : '▼'}</span>
-        </button>
-        {dateOpen && (
-          data.by_date.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-mute)', fontSize: 12 }}>No daily data available</div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="staax-table" style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={thLeft}>DATE</th>
-                    <th style={thStyle}>EXIT SLIP (pts)</th>
-                    <th style={thStyle}>ENTRY SLIP (pts)</th>
-                    <th style={thStyle}>ORDERS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.by_date.map(d => (
-                    <tr key={d.date}>
-                      <td style={tdL}>{fmtDate(d.date)}</td>
-                      <td style={{ ...tdC, color: slipColor(d.avg_exit_slip) }}>{fmtPts(d.avg_exit_slip)}</td>
-                      <td style={{ ...tdC, color: slipColor(d.avg_entry_slip) }}>{fmtPts(d.avg_entry_slip)}</td>
-                      <td style={tdC}>{d.order_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
-      </div>
-
-      {/* Section 5 — Info box (collapsible) */}
-      <div style={{ ...neuCardSm, marginBottom: 4 }}>
-        <button
-          onClick={() => setInfoOpen(o => !o)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0 }}
-        >
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const, color: 'var(--text-mute)' }}>HOW SLIPPAGE IS CALCULATED</span>
-          <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{infoOpen ? '▲' : '▼'}</span>
-        </button>
-        {infoOpen && (
-          <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.7 }}>
-            <p style={{ margin: '0 0 6px' }}>
-              <strong style={{ color: 'var(--green)' }}>Positive slippage</strong> = filled at a better price than expected.
-              For SL exits: exit was filled above your SL level (BUY) or below your SL level (SELL).
-            </p>
-            <p style={{ margin: '0 0 6px' }}>
-              <strong style={{ color: 'var(--red)' }}>Negative slippage</strong> = filled worse than expected.
-              Typically occurs in fast-moving markets or when the order queue is deep.
-            </p>
-            <p style={{ margin: 0, color: 'var(--text-mute)' }}>
-              EXIT slippage compares your actual exit price vs the SL level at the time of trigger.
-              ENTRY slippage compares fill price vs the reference price stored at order placement.
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Section 4 — Slippage trend line chart */}
+      <SlippageTrendChart byDate={data.by_date} />
     </div>
   )
 }
@@ -776,6 +798,7 @@ interface LatencyData {
   p99_latency_ms: number
   max_latency_ms: number
   total_orders:   number
+  total_closed_orders: number
   success_rate:   number
   fast_pct:       number
   distribution:   { excellent: number; good: number; acceptable: number; slow: number }
@@ -820,10 +843,10 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
     <div>
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+        <SummaryCard label="ORDERS WITH TIMING" value={data.total_orders.toString()}
+          sub={`of ${data.total_closed_orders ?? data.total_orders} closed`} />
         <SummaryCard label="Avg Latency"  value={`${data.avg_latency_ms} ms`}
-          valueColor={latencyColor(data.avg_latency_ms)} sub={`${data.total_orders} orders`} />
-        <SummaryCard label="P50 / P99"   value={`${data.p50_latency_ms} / ${data.p99_latency_ms} ms`}
-          valueColor={latencyColor(data.p50_latency_ms)} />
+          valueColor={latencyColor(data.avg_latency_ms)} />
         <SummaryCard label="Fast Orders" value={`${data.fast_pct}%`}
           valueColor={data.fast_pct >= 80 ? 'var(--green)' : data.fast_pct >= 50 ? 'var(--accent-amber)' : 'var(--red)'}
           sub="<150ms" />

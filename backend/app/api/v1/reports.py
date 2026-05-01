@@ -447,13 +447,31 @@ async def error_analytics(
     total_orders = tot_res.scalar() or 0
     error_rate_pct = round(len(rows) / total_orders * 100, 1) if total_orders > 0 else 0.0
 
+    # Total closed orders for context label
+    closed_conds = [
+        Order.status == OrderStatus.CLOSED,
+        Order.fill_time >= fy_start,
+        Order.fill_time <= fy_end,
+    ]
+    if is_practix is not None:
+        closed_conds.append(Order.is_practix == is_practix)
+    if account_id:
+        import uuid as _uuid2
+        try:
+            closed_conds.append(Order.account_id == _uuid2.UUID(account_id))
+        except ValueError:
+            pass
+    closed_res = await db.execute(select(_func.count(Order.id)).where(*closed_conds))
+    total_closed_orders = closed_res.scalar() or 0
+
     return {
         # Frontend-expected fields
-        "per_algo":       per_algo,
-        "recent":         recent[:20],
-        "total_errors":   len(rows),
-        "total_orders":   total_orders,
-        "error_rate_pct": error_rate_pct,
+        "per_algo":             per_algo,
+        "recent":               recent[:20],
+        "total_errors":         len(rows),
+        "total_orders":         total_orders,
+        "error_rate_pct":       error_rate_pct,
+        "total_closed_orders":  total_closed_orders,
         # Raw data for future use
         "rows":    rows,
         "by_day":  [{"date": d, "count": c} for d, c in sorted(by_day.items(), reverse=True)],
@@ -596,10 +614,17 @@ async def slippage_analytics(
     entry_global = _global(entry_all)
     entry_global["per_algo"] = entry_per_algo_out
 
+    # Total closed orders for context label
+    from sqlalchemy import func as _func
+    closed_conds = list(base_conditions)
+    closed_res = await db.execute(select(_func.count(Order.id)).where(*closed_conds))
+    total_closed_orders = closed_res.scalar() or 0
+
     return {
         "exit_slippage": exit_global,
         "entry_slippage": entry_global,
         "by_date": by_date_out,
+        "total_closed_orders": total_closed_orders,
         "fy": fy,
     }
 
@@ -882,20 +907,40 @@ async def latency_analytics(
             "status":     o.status.value if o.status else "unknown",
         })
 
+    # Total closed orders for context label
+    from sqlalchemy import func as _func2
+    lat_closed_conds = [
+        Order.status == OrderStatus.CLOSED,
+        Order.pnl.isnot(None),
+        Order.fill_time >= fy_start,
+        Order.fill_time <= fy_end,
+    ]
+    if account_id:
+        import uuid as _uuid3
+        try:
+            lat_closed_conds.append(Order.account_id == _uuid3.UUID(account_id))
+        except ValueError:
+            pass
+    if is_practix is not None:
+        lat_closed_conds.append(Order.is_practix == is_practix)
+    lat_closed_res = await db.execute(select(_func2.count(Order.id)).where(*lat_closed_conds))
+    total_closed_orders = lat_closed_res.scalar() or 0
+
     return {
-        "avg_latency_ms": round(sum(all_ms) / total, 1),
-        "p50_latency_ms": percentile(all_ms, 50),
-        "p95_latency_ms": percentile(all_ms, 95),
-        "p99_latency_ms": percentile(all_ms, 99),
-        "max_latency_ms": float(all_ms[-1]),
-        "total_orders":   total_all,
-        "success_rate":   success_rate,
-        "fast_pct":       fast_pct,
-        "distribution":   dist,
-        "by_broker":      by_broker,
-        "by_algo":        by_algo,
-        "recent_orders":  recent_orders,
-        "fy":             fy,
+        "avg_latency_ms":      round(sum(all_ms) / total, 1),
+        "p50_latency_ms":      percentile(all_ms, 50),
+        "p95_latency_ms":      percentile(all_ms, 95),
+        "p99_latency_ms":      percentile(all_ms, 99),
+        "max_latency_ms":      float(all_ms[-1]),
+        "total_orders":        total_all,
+        "total_closed_orders": total_closed_orders,
+        "success_rate":        success_rate,
+        "fast_pct":            fast_pct,
+        "distribution":        dist,
+        "by_broker":           by_broker,
+        "by_algo":             by_algo,
+        "recent_orders":       recent_orders,
+        "fy":                  fy,
     }
 
 
