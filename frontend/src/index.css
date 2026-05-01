@@ -297,11 +297,10 @@ body {
 .staax-select:focus { border-color:var(--ox-border-hi); box-shadow:0 0 0 3px rgba(255,107,0,0.08); }
 
 /* ── TABLES ── */
-.staax-table { width:100%; border-collapse:collapse; table-layout:fixed; }
-.staax-table th { background:var(--bg); font-family:var(--font-display); font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); padding:10px 20px; text-align:left; border-bottom:1px solid var(--row-sep); white-space:nowrap; overflow:hidden; }
-.staax-table td { padding:11px 20px; border-bottom:1px solid var(--row-sep); font-size:13px; font-weight:400; color:var(--gs-muted); overflow:hidden; transition:background var(--dur-fast); }
+.staax-table { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; }
+.staax-table th { background:var(--bg); font-family:var(--font-display); font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); padding:10px 20px; text-align:left; border-bottom:none; white-space:nowrap; overflow:hidden; }
+.staax-table td { padding:11px 20px; border-top:1px solid var(--row-sep); border-bottom:none; font-size:13px; font-weight:400; color:var(--gs-muted); overflow:hidden; transition:background var(--dur-fast); }
 .staax-table tr:hover td { background:rgba(128,128,128,0.04); }
-.staax-table tr:last-child td { border-bottom: none; }
 .reports-table th {
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
