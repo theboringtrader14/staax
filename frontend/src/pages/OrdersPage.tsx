@@ -66,17 +66,17 @@ interface WaitingAlgo {
   display_status?: string       // "MONITORING" | "SCHEDULED" | "WAITING" | "MISSED" | "ERROR"
 }
 // ── Status chip colour system ────────────────────────────────────────────────
-const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  open:       { label: 'OPEN',    color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)'  },
-  closed:     { label: 'CLOSED',  color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.1)', border: '1px solid rgba(156, 163, 175, 0.25)' },
-  missed:     { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)'  },
-  skipped:    { label: 'SKIPPED', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.08)', border: '1px solid rgba(148, 163, 184, 0.2)' },
-  error:      { label: 'ERROR',   color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)',  border: '1px solid rgba(239, 68, 68, 0.3)'   },
-  waiting:    { label: 'WAITING', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)',  border: '1px solid rgba(234, 179, 8, 0.3)'   },
-  pending:    { label: 'PENDING', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)',  border: '1px solid rgba(234, 179, 8, 0.3)'   },
-  no_trade:   { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)'  },
-  monitoring: { label: 'W&T',     color: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.10)', border: '1px solid rgba(45, 212, 191, 0.3)'  },
-  scheduled:  { label: 'SCHED',   color: '#4488FF', bg: 'rgba(68, 136, 255, 0.10)', border: '1px solid rgba(68, 136, 255, 0.3)'  },
+const STATUS_STYLES: Record<string, { label: string; color: string; bg: string }> = {
+  open:       { label: 'OPEN',    color: '#10B981', bg: 'rgba(16, 185, 129, 0.15)'  },
+  closed:     { label: 'CLOSED',  color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.12)' },
+  missed:     { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)'  },
+  skipped:    { label: 'SKIPPED', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.10)' },
+  error:      { label: 'ERROR',   color: '#EF4444', bg: 'rgba(239, 68, 68, 0.15)'   },
+  waiting:    { label: 'WAITING', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.15)'   },
+  pending:    { label: 'PENDING', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.15)'   },
+  no_trade:   { label: 'MISSED',  color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)'  },
+  monitoring: { label: 'W&T',     color: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.12)'  },
+  scheduled:  { label: 'SCHED',   color: '#4488FF', bg: 'rgba(68, 136, 255, 0.12)'  },
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -84,7 +84,6 @@ function StatusChip({ status }: { status: string }) {
     label: status?.toUpperCase() || '—',
     color: '#6B7280',
     bg: 'rgba(107, 114, 128, 0.1)',
-    border: '1px solid rgba(107, 114, 128, 0.2)',
   }
   return (
     <span style={{
@@ -97,7 +96,7 @@ function StatusChip({ status }: { status: string }) {
       borderRadius: 20,
       color: s.color,
       background: s.bg,
-      border: s.border,
+      boxShadow: 'inset 1px 1px 3px rgba(0,0,0,0.4), inset -1px -1px 2px rgba(255,255,255,0.04)',
       whiteSpace: 'nowrap',
     }}>
       {s.label}
@@ -108,7 +107,7 @@ function StatusChip({ status }: { status: string }) {
 // ── Algo card left status strip ─────────────────────────────────────────────
 const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
   open:     { color: '#0ea66e',               glow: 'rgba(14,166,110,0.70)'  },
-  closed:   { color: 'rgba(14,166,110,0.60)', glow: 'rgba(14,166,110,0.40)'  },
+  closed:   { color: '#6B7280',               glow: 'rgba(107,114,128,0.30)' },
   error:    { color: '#FF2244',               glow: 'rgba(255,34,68,0.70)'   },
   pending:  { color: '#FF8C00',               glow: 'rgba(255,140,0,0.65)'   },
   waiting:  { color: '#D97706',               glow: 'rgba(217,119,6,0.65)'   },
@@ -1882,9 +1881,6 @@ export default function OrdersPage() {
                             <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
                               {group.account || '—'}
                             </span>
-
-                            {/* Status chip */}
-                            <StatusChip status={algoSt} />
 
                             {/* Retry indicator — only shown during active retry, status visible in row */}
                             {isRetrying && (

@@ -809,7 +809,8 @@ export default function GridPage() {
                                   const isMonitoring = cell?.is_monitoring === true
 
                                   const pillKey = `${algo.id}-${day}`
-                                  const canCancel = (s === 'waiting' || s === 'algo_active' || s === 'error') && !!cell?.gridEntryId
+                                  // Monitoring pills are display-only — no cancel hover
+                                  const canCancel = !isMonitoring && (s === 'waiting' || s === 'algo_active' || s === 'error') && !!cell?.gridEntryId
                                   const isPillHovered = hoveredPill === pillKey
 
                                   return (
@@ -817,48 +818,43 @@ export default function GridPage() {
                                       onClick={e => { e.stopPropagation(); void toggleDay(algo, day) }}
                                       onMouseEnter={() => canCancel && setHoveredPill(pillKey)}
                                       onMouseLeave={() => setHoveredPill(null)}
-                                      title={canCancel ? `${day} · hover for cancel` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
+                                      title={isMonitoring ? `${day} · W&T monitoring` : (canCancel ? `${day} · hover for cancel` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`)}
                                       style={{
-                                        width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
+                                        width:'32px', height:'32px', borderRadius:'50%', cursor: isMonitoring ? 'default' : 'pointer',
                                         fontFamily:'JetBrains Mono, monospace', fontSize:'10px',
                                         display:'flex', alignItems:'center', justifyContent:'center',
                                         position:'relative',
                                         transition:'all 0.15s ease', flexShrink:0,
                                         border: pillBorder,
                                         background: pillBg,
-                                        color: pillColor,
+                                        color: isMonitoring ? '#2dd4bf' : pillColor,
                                         fontWeight: pillWeight,
                                         boxShadow: pillShadow,
                                       }}>
-                                      {isMonitoring && !isPillHovered ? (
-                                        <>
-                                          <span style={{
-                                            display: 'inline-block',
-                                            width: 7, height: 7,
-                                            borderRadius: '50%',
-                                            background: '#2dd4bf',
-                                            animation: 'pillDotPulse 1.4s ease-in-out infinite',
-                                            marginRight: 3,
-                                            flexShrink: 0,
-                                          }} />
-                                          <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.3px' }}>W&T</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          {DAY_LBL[i]}
-                                          {showDot && !isPillHovered && !isMonitoring && (
-                                            <span style={{
-                                              position:'absolute',
-                                              top:'4px',
-                                              right:'4px',
-                                              width:'4px',
-                                              height:'4px',
-                                              borderRadius:'50%',
-                                              background: dotColor,
-                                              animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
-                                            }}/>
-                                          )}
-                                        </>
+                                      {DAY_LBL[i]}
+                                      {isMonitoring && (
+                                        <span style={{
+                                          position:'absolute',
+                                          top:'4px',
+                                          right:'4px',
+                                          width:'5px',
+                                          height:'5px',
+                                          borderRadius:'50%',
+                                          background: '#2dd4bf',
+                                          animation: 'pillDotPulse 1.4s ease-in-out infinite',
+                                        }}/>
+                                      )}
+                                      {showDot && !isPillHovered && !isMonitoring && (
+                                        <span style={{
+                                          position:'absolute',
+                                          top:'4px',
+                                          right:'4px',
+                                          width:'4px',
+                                          height:'4px',
+                                          borderRadius:'50%',
+                                          background: dotColor,
+                                          animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
+                                        }}/>
                                       )}
                                       {canCancel && isPillHovered && (
                                         <span
