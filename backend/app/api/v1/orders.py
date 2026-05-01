@@ -234,7 +234,9 @@ async def list_orders(
 
         for aid, group_orders in by_algo.items():
             meta = algo_meta.get(aid, {})
-            mtm  = round(sum((o.get("pnl") or 0.0) for o in group_orders), 2)
+            closed_pnl = round(sum((o.get("pnl") or 0.0) for o in group_orders if o.get("status") == "closed"), 2)
+            open_pnl   = round(sum((o.get("pnl") or 0.0) for o in group_orders if o.get("status") == "open"),   2)
+            mtm  = round(closed_pnl + open_pnl, 2)
 
             # Fetch latest FAILED execution log in the past hour for this algo
             latest_error = None
@@ -265,8 +267,10 @@ async def list_orders(
                 "algo_id":        aid,
                 "algo_name":      meta.get("algo_name", ""),
                 "account":        meta.get("account", ""),
-                "mtm":            mtm,
+                "closed_pnl":     closed_pnl,
+                "open_pnl":       open_pnl,
                 "total_pnl":      mtm,   # alias — open legs use ltp-based pnl, closed use exit pnl
+                "mtm":            mtm,   # keep for backwards compat
                 "mtm_sl":         meta.get("mtm_sl", 0),
                 "mtm_tp":         meta.get("mtm_tp", 0),
                 "latest_error":   latest_error,

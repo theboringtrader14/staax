@@ -38,6 +38,7 @@ interface Leg {
 }
 interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
+  closedPnl: number; openPnl: number
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
   isLive?: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
@@ -487,6 +488,8 @@ function mapGroup(g: any): AlgoGroup {
     algoName:     g.algo_name || g.algo_id,
     account:      g.account || '',
     mtm:          g.mtm ?? 0,
+    closedPnl:    g.closed_pnl ?? 0,
+    openPnl:      g.open_pnl   ?? 0,
     mtmSL:        g.mtm_sl ?? 0,
     mtmTP:        g.mtm_tp ?? 0,
     latest_error: g.latest_error ?? null,
@@ -654,7 +657,7 @@ export default function OrdersPage() {
   const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
+  const [weekPnl, setWeekPnl] = useState<Record<string, { total: number | null; closedPnl: number; openMtm: number } | null>>({})
   const [showWeekends, setShowWeekends] = useState(() => {
     return localStorage.getItem('orders_show_weekends') === 'true'
   })
@@ -726,18 +729,21 @@ export default function OrdersPage() {
     ordersAPI.weekSummary(monDate, isPractixMode)
       .then((res: any) => {
         const mtmByDate: Record<string, any> = res.data?.mtm_by_date || {}
-        const map: Record<string, number | null> = {}
+        const map: Record<string, { total: number | null; closedPnl: number; openMtm: number } | null> = {}
         for (const [dateStr, val] of Object.entries(mtmByDate)) {
           const day = Object.entries(weekDates).find(([, d]) => d === dateStr)?.[0]
           if (!day) continue
           if (val === null || val === undefined) {
             map[day] = null
           } else if (typeof val === 'number') {
-            map[day] = val  // backward compat
+            map[day] = { total: val, closedPnl: val, openMtm: 0 }  // backward compat
           } else if (typeof val === 'object') {
             // New format: {closed_pnl, open_mtm, total}
-            const total = (val as any).total
-            map[day] = total ?? null
+            map[day] = {
+              total:     (val as any).total    ?? null,
+              closedPnl: (val as any).closed_pnl ?? 0,
+              openMtm:   (val as any).open_mtm   ?? 0,
+            }
           }
         }
         setWeekPnl(map)
@@ -1160,32 +1166,36 @@ export default function OrdersPage() {
   // so the THU tab shows fresh P&L even when another day tab is active.
   // Do NOT filter isOvernight — STBT/BTST entered today live in today's date bucket
   // and must be included. The date bucket already excludes yesterday's overnight entries.
-  const liveTodayPnl = useMemo(() => {
+  const liveTodaySplit = useMemo((): { total: number; closedPnl: number; openMtm: number } | null => {
     const todayOrders = accountFilter === 'all'
       ? (ordersByDate[todayDate] ?? [])
       : (ordersByDate[todayDate] ?? []).filter(g => g.account === accountFilter)
     if (!todayOrders.some(g => g.legs.length > 0)) return null
-    const realized = todayOrders.flatMap(g => g.legs)
+    const closedPnl = todayOrders.flatMap(g => g.legs)
       .filter(l => l.status === 'closed' && l.pnl != null)
       .reduce((s, l) => s + (l.pnl ?? 0), 0)
     const openMtm = todayOrders.flatMap(g => g.legs)
       .filter(l => l.status === 'open')
       .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? 0), 0)
-    return realized + openMtm
+    return { total: closedPnl + openMtm, closedPnl, openMtm }
   }, [ordersByDate, todayDate, ltpData, accountFilter])
 
-  // Day tab P&L — computed from local order data (same logic as cards) for every past day.
+  // Day tab P&L split — computed from local order data for every past day.
   // Falls back to server weekPnl only when a day's orders haven't been loaded yet.
-  const computedDayPnl = useMemo(() => {
-    const result: Record<string, number | null> = { ...weekPnl }
+  const computedDaySplit = useMemo(() => {
+    const result: Record<string, { total: number | null; closedPnl: number; openMtm: number } | null> = { ...weekPnl }
     for (const [day, date] of Object.entries(weekDates)) {
-      if (!date || date === todayDate) continue  // today handled by liveTodayPnl
+      if (!date || date === todayDate) continue  // today handled separately
       const groups = ordersByDate[date]
       if (groups && groups.some(g => g.legs.length > 0)) {
         const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
-        result[day] = filtered.reduce((daySum, group) =>
-          daySum + group.legs.reduce((s, l) => s + (l.pnl ?? 0), 0)
+        const closedPnl = filtered.reduce((daySum, group) =>
+          daySum + group.legs.filter(l => l.status === 'closed').reduce((s, l) => s + (l.pnl ?? 0), 0)
         , 0)
+        const openMtm = filtered.reduce((daySum, group) =>
+          daySum + group.legs.filter(l => l.status === 'open').reduce((s, l) => s + (l.pnl ?? 0), 0)
+        , 0)
+        result[day] = { total: closedPnl + openMtm, closedPnl, openMtm }
       }
     }
     return result
@@ -1371,12 +1381,13 @@ export default function OrdersPage() {
                   pointerEvents: 'none',
                 }} />
                 {days.map(day => {
-                  const date      = weekDates[day]
-                  const isActive  = selectedDate === date
-                  const isHoliday = date ? holidayDates.has(date) : false
+                  const date       = weekDates[day]
+                  const isActive   = selectedDate === date
+                  const isHoliday  = date ? holidayDates.has(date) : false
                   const isDayToday = date === todayDate
-                  const pnl       = isDayToday ? liveTodayPnl : (computedDayPnl[day] ?? null)
-                  const rupee     = '\u20B9'
+                  const split      = isDayToday ? liveTodaySplit : (computedDaySplit[day] ?? null)
+                  const rupee      = '\u20B9'
+                  const fmtPill    = (v: number) => `${v >= 0 ? '+' : ''}${rupee}${Math.abs(Math.round(v)).toLocaleString('en-IN')}`
                   return (
                     <button
                       key={day}
@@ -1389,7 +1400,7 @@ export default function OrdersPage() {
                         letterSpacing: '1px', textTransform: 'uppercase' as const,
                         cursor: 'pointer', transition: 'color 0.25s ease',
                         position: 'relative', zIndex: 1,
-                        display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '3px',
+                        display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '2px',
                       }}
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1397,10 +1408,19 @@ export default function OrdersPage() {
                       </span>
                       {isHoliday ? (
                         <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 500 }}>Holiday</span>
-                      ) : pnl != null ? (
-                        <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                          {pnl >= 0 ? '+' : ''}{rupee}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
-                        </span>
+                      ) : split != null && split.total != null ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                          {/* Closed / realized P&L (primary) */}
+                          <span style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: split.closedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                            {fmtPill(split.closedPnl)}
+                          </span>
+                          {/* Open / unrealized (secondary, only if non-zero) */}
+                          {split.openMtm !== 0 && (
+                            <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#06B6D4', opacity: 0.7 }}>
+                              ~{fmtPill(split.openMtm)}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span style={{ fontSize: '10px', color: 'var(--text-mute)' }}>—</span>
                       )}
@@ -1909,17 +1929,44 @@ export default function OrdersPage() {
                                 <SmoothedSparkline algoId={group.algoId} legs={group.legs} totalPnl={totalPnl} />
                               )}
                               {(() => {
-                                // Sum every order: live WS pnl if available, else server pnl, else 0
-                                const displayMtm = group.legs.reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
+                                // Split closed (realized) vs open (unrealized) P&L
+                                // Closed legs: use server pnl (already settled)
+                                // Open legs: prefer live WS pnl, fall back to server pnl
+                                const closedPnl = group.legs
+                                  .filter(l => l.status === 'closed')
+                                  .reduce((sum, l) => sum + (l.pnl ?? 0), 0)
+                                const openPnl = group.legs
+                                  .filter(l => l.status === 'open')
+                                  .reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
+                                const hasOpen   = group.legs.some(l => l.status === 'open')
+                                const hasClosed = group.legs.some(l => l.status === 'closed')
+                                const fmtPnl = (v: number) => `${v >= 0 ? '+' : ''}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
                                 return (
-                                  <span style={{
-                                    minWidth: '90px', textAlign: 'center',
-                                    fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
-                                    color: displayMtm !== 0 ? (displayMtm >= 0 ? 'var(--green)' : 'var(--red)') : 'transparent',
+                                  <div style={{
+                                    minWidth: '90px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
                                     opacity: group.terminated ? 0.6 : 1,
                                   }}>
-                                    {displayMtm !== 0 ? `${displayMtm >= 0 ? '+' : ''}₹${displayMtm.toLocaleString('en-IN')}` : ''}
-                                  </span>
+                                    {/* Closed / realized P&L — shown when there are closed legs */}
+                                    {hasClosed && (
+                                      <span style={{
+                                        fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px',
+                                        color: closedPnl >= 0 ? 'var(--green)' : 'var(--red)',
+                                      }}>
+                                        {fmtPnl(closedPnl)}
+                                      </span>
+                                    )}
+                                    {/* Open / unrealized P&L — shown only when non-zero */}
+                                    {hasOpen && openPnl !== 0 && (
+                                      <span style={{
+                                        fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: '11px',
+                                        color: '#06B6D4', opacity: 0.7,
+                                      }}>
+                                        ~{fmtPnl(openPnl)}
+                                      </span>
+                                    )}
+                                    {/* Fallback: all open with zero pnl — show nothing */}
+                                    {!hasClosed && !hasOpen && null}
+                                  </div>
                                 )
                               })()}
                             </div>
