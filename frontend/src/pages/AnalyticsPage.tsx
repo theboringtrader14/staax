@@ -905,6 +905,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   }
 
   const maxAlgoMs = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
+  const minAlgoMs = Math.min(...data.by_algo.map(a => a.avg_ms), 0)
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
@@ -1017,8 +1018,10 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                   <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
                   <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
                     <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
-                      <div style={{ width: `${Math.round(a.avg_ms / maxAlgoMs * 100)}%`, height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
-                        background: 'linear-gradient(to right, #10B981, #3B82F6 35%, #F59E0B 70%, #EF4444)',
+                      <div style={{
+                        width: `${Math.max(5, Math.round((maxAlgoMs - a.avg_ms) / (maxAlgoMs - minAlgoMs || 1) * 100))}%`,
+                        height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
+                        background: 'linear-gradient(to right, #EF4444, #F59E0B 35%, #3B82F6 65%, #10B981)',
                       }} />
                     </div>
                   </td>
