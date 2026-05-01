@@ -42,6 +42,8 @@ class Account(Base):
     global_tp   = Column(Float, nullable=True)                     # account-level TP ₹
     is_active   = Column(Boolean, default=True)
     scope       = Column(String(10), nullable=True, default='fo')   # 'fo' (F&O) or 'mcx'
+    initial_capital        = Column(Numeric(14, 2), nullable=True)   # snapshot of net available used as baseline
+    initial_capital_set_at = Column(DateTime(timezone=True), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 

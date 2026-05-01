@@ -595,8 +595,13 @@ export default function GridPage() {
 
               {/* By Index bar chart */}
               <div style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', borderRadius:14, padding:'12px 16px' }}>
-                <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-mute)', marginBottom:8, fontFamily:'var(--font-display)' }}>
-                  By Index
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-mute)', fontFamily:'var(--font-display)' }}>
+                    By Index
+                  </div>
+                  <div style={{ background:'var(--bg)', boxShadow:'var(--neu-inset)', borderRadius:100, padding:'2px 8px', fontSize:10, fontWeight:800, fontFamily:'var(--font-mono)', color:'var(--accent)' }}>
+                    {visibleAlgos.length}
+                  </div>
                 </div>
                 <div style={{ display:'flex', alignItems:'flex-end', gap:8, height:52 }}>
                   {insData.map(({ ins, count:cnt }) => {
@@ -604,7 +609,7 @@ export default function GridPage() {
                     return (
                       <div key={ins} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
                         <span style={{ fontSize:8, fontWeight:800, color:'var(--accent)', fontFamily:'var(--font-mono)', lineHeight:1 }}>{cnt}</span>
-                        <div style={{ width:'100%', height:barH, borderRadius:'3px 3px 0 0',
+                        <div style={{ width:'50%', height:barH, borderRadius:'3px 3px 0 0',
                           background:'linear-gradient(to top, rgba(229,90,0,0.45), rgba(229,90,0,0.9))',
                           transition:'height 0.4s cubic-bezier(0.4,0,0.2,1)',
                           flexShrink:0,

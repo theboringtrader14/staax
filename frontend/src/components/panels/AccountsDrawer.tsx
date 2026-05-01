@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { PencilSimple, FloppyDisk, CheckCircle, Warning } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
-import { showSuccess } from '@/utils/toast'
+import { showSuccess, showError } from '@/utils/toast'
 // ── Types ──────────────────────────────────────────────────────────────────────
 /** Raw account shape returned by GET /accounts/ (superset of the store Account type) */
 interface RawAccount {
@@ -20,6 +20,9 @@ interface RawAccount {
   has_totp?: boolean
   scope?: string
   is_active?: boolean
+  token_valid_today?: boolean
+  initial_capital?: number | null
+  initial_capital_set_at?: string | null
 }
 
 interface AccountLocal {
@@ -28,7 +31,8 @@ interface AccountLocal {
   globalSL: number | null; globalTP: number | null; fyBrokerage: number | null
   client_id?: string
   has_api_key?: boolean; has_api_secret?: boolean; has_totp?: boolean
-  scope?: string; is_active?: boolean
+  scope?: string; is_active?: boolean; token_valid_today?: boolean
+  initial_capital?: number | null; initial_capital_set_at?: string | null
 }
 interface EditCredsState {
   id: string; nickname: string; broker: string; client_id: string
@@ -96,6 +100,9 @@ export default function AccountsDrawer() {
   const [fyMarginEdits, setFYMarginEdits] = useState<Record<string, { margin?: string; brokerage?: string }>>({})
   const [savingFY,      setSavingFY]      = useState<Record<string, boolean>>({})
 
+  // Initial capital feedback (per account_id → success message or null)
+  const [capitalSetMsg, setCapitalSetMsg] = useState<Record<string, string | null>>({})
+
   // Add Account modal
   const [addModal,  setAddModal]  = useState(false)
   const [addStep,   setAddStep]   = useState<1|2>(1)
@@ -116,6 +123,9 @@ export default function AccountsDrawer() {
     has_api_secret: api.has_api_secret ?? false,
     has_totp: api.has_totp ?? false,
     scope: api.scope ?? 'fo', is_active: api.is_active ?? true,
+    token_valid_today: api.token_valid_today ?? false,
+    initial_capital: api.initial_capital ?? null,
+    initial_capital_set_at: api.initial_capital_set_at ?? null,
   }))
 
   const fetchAccounts = useCallback(() => {
@@ -454,7 +464,11 @@ export default function AccountsDrawer() {
 
           {/* ── Panel 2: Margin / Funds ─── */}
           {openPanel === 'margin' && (() => {
-            const fmt = (v: number | null) => v === null ? '—' : `₹${Math.abs(v).toLocaleString('en-IN')}`
+            const formatINR = (v: number) => Math.abs(v).toLocaleString('en-IN')
+            const fmt = (v: number | null, isOffline?: boolean) =>
+              v === null
+                ? (isOffline ? 'Offline' : '—')
+                : `₹${Math.abs(v).toLocaleString('en-IN')}`
             const today = new Date()
             const fyYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
             const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`
@@ -487,9 +501,15 @@ export default function AccountsDrawer() {
 
                 {/* ── Per-account cards ── */}
                 {allFunds.map(f => {
-                  const netColor = f.net === null ? 'var(--text-dim)' : f.net >= 0 ? '#0ea66e' : '#FF4444'
-                  const fyRow    = fyMarginData[f.account_id] || { fy_margin: null, fy_brokerage: null }
-                  const fyEdit   = fyMarginEdits[f.account_id] || {}
+                  const netColor   = f.net === null ? 'var(--text-dim)' : f.net > 0 ? 'var(--accent)' : f.net < 0 ? '#FF4444' : 'var(--text-dim)'
+                  const fyRow      = fyMarginData[f.account_id] || { fy_margin: null, fy_brokerage: null }
+                  const fyEdit     = fyMarginEdits[f.account_id] || {}
+                  // Look up matching account for initial_capital and token status
+                  const accRecord  = accounts.find(a => a.id === f.account_id)
+                  const isOffline  = !tokenStatus[f.nickname] && (accRecord?.status !== 'active')
+                  const initialCap = accRecord?.initial_capital ?? null
+                  const initialCapSetAt = accRecord?.initial_capital_set_at ?? null
+                  const capMsg     = capitalSetMsg[f.account_id] ?? null
                   return (
                     <div key={f.account_id} style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
                       {/* Card header */}
@@ -509,7 +529,7 @@ export default function AccountsDrawer() {
                           const hasPledged = f.collateral !== null && f.cash !== null && Math.abs(f.collateral - f.cash) > 100
                           return ([
                             { label: 'Cash',       value: f.cash,     color: '#0ea66e' },
-                            { label: hasPledged ? 'Collateral' : 'Collateral',
+                            { label: 'Collateral',
                               value: hasPledged ? f.collateral : null,
                               color: '#4488FF',
                               note: hasPledged ? undefined : 'No pledged holdings' },
@@ -519,16 +539,73 @@ export default function AccountsDrawer() {
                               <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{row.label}</span>
                               {row.note
                                 ? <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>{row.note}</span>
-                                : <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: row.color }}>{fmt(row.value)}</span>}
+                                : <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: row.color }}>{fmt(row.value, isOffline)}</span>}
                             </div>
                           ))
                         })()}
                         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Net Available</span>
-                          <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--font-mono)', color: netColor }}>
-                            {f.net !== null && f.net < 0 ? '-' : ''}{fmt(f.net)}
+                          <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', color: netColor }}>
+                            {f.net !== null && f.net < 0 ? '-' : ''}{fmt(f.net, isOffline)}
                           </span>
                         </div>
+
+                        {/* Set as Initial Capital button — shown only when net > 0 */}
+                        {f.net !== null && f.net > 0 && (
+                          <div style={{ marginTop: 2 }}>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await accountsAPI.setInitialCapital(f.account_id, f.net!)
+                                  setCapitalSetMsg(m => ({ ...m, [f.account_id]: `₹${formatINR(f.net!)}` }))
+                                  setTimeout(() => setCapitalSetMsg(m => { const n = { ...m }; delete n[f.account_id]; return n }), 4000)
+                                  showSuccess(`Initial capital set to ₹${formatINR(f.net!)}`)
+                                  // Refresh accounts so initial_capital shows updated value
+                                  fetchAccounts()
+                                } catch {
+                                  showError('Failed to set initial capital')
+                                }
+                              }}
+                              style={{
+                                width: '100%', padding: '7px 0', borderRadius: 8,
+                                border: '1px solid rgba(45,212,191,0.25)',
+                                background: 'rgba(45,212,191,0.06)',
+                                color: 'var(--accent)', fontSize: 11,
+                                fontFamily: 'var(--font-mono)', letterSpacing: 1,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                                justifyContent: 'center', gap: 6,
+                              }}
+                            >
+                              📸 Set as Initial Capital
+                            </button>
+                            {capMsg && (
+                              <div style={{ marginTop: 4, fontSize: 10, color: '#0ea66e', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+                                ✓ Baseline set to {capMsg}
+                              </div>
+                            )}
+                            {initialCap !== null && !capMsg && (
+                              <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
+                                Baseline: ₹{formatINR(initialCap)}
+                                {initialCapSetAt && (
+                                  <span style={{ marginLeft: 6, opacity: 0.6 }}>
+                                    set {new Date(initialCapSetAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* Show baseline even when net is null/0 (offline state) */}
+                        {(f.net === null || f.net === 0) && initialCap !== null && (
+                          <div style={{ marginTop: 2, fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>
+                            Baseline: ₹{formatINR(initialCap)}
+                            {initialCapSetAt && (
+                              <span style={{ marginLeft: 6, opacity: 0.6 }}>
+                                set {new Date(initialCapSetAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* FY Margin & Brokerage */}
@@ -537,7 +614,8 @@ export default function AccountsDrawer() {
                         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                           <div style={{ flex: 1 }}>
                             <label style={lbl}>FY Margin (₹)</label>
-                            <input style={inp} type="number" placeholder="₹ Margin"
+                            <input style={inp} type="number"
+                              placeholder={initialCap ? `e.g. ₹${formatINR(initialCap)}` : '₹ Margin'}
                               value={fyEdit.margin !== undefined ? fyEdit.margin : (fyRow.fy_margin ?? '')}
                               onChange={e => setFYMarginEdits(ed => ({ ...ed, [f.account_id]: { ...fyEdit, margin: e.target.value } }))} />
                           </div>

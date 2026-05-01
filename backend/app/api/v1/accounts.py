@@ -74,6 +74,9 @@ def _account_to_dict(acc: Account) -> dict:
         "has_api_key":    bool(acc.api_key),
         "has_api_secret": bool(acc.api_secret),
         "has_totp":       bool(acc.totp_secret),
+        # Initial capital baseline (set by user via Set as Initial Capital button)
+        "initial_capital":        float(acc.initial_capital) if acc.initial_capital is not None else None,
+        "initial_capital_set_at": acc.initial_capital_set_at.isoformat() if acc.initial_capital_set_at else None,
     }
 
 
@@ -200,6 +203,32 @@ async def update_global_risk(
 
     await db.commit()
     return {"status": "ok", "message": "Global risk settings saved"}
+
+
+@router.post("/{account_id}/set-initial-capital")
+async def set_initial_capital(
+    account_id: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Snapshot a net-available figure as the initial capital baseline for an account."""
+    try:
+        amount = float(body.get("amount", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid amount")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="amount must be > 0")
+
+    result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    from datetime import datetime, timezone
+    account.initial_capital        = amount
+    account.initial_capital_set_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"success": True, "initial_capital": amount}
 
 
 @router.patch("/{account_id}/nickname")
