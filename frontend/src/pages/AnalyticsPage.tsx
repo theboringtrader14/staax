@@ -876,7 +876,8 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 
   function latencyColor(ms: number): string {
     if (ms < 150)  return 'var(--green)'
-    if (ms < 250)  return 'var(--accent-amber)'
+    if (ms < 250)  return '#22DD88'
+    if (ms < 400)  return 'var(--accent-amber)'
     return 'var(--red)'
   }
 
