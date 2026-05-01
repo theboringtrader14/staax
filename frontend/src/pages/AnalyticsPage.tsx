@@ -29,6 +29,14 @@ interface HealthScore {
 const TABS = ['Performance', 'Failures', 'Slippage', 'Latency'] as const
 type Tab = typeof TABS[number]
 
+interface StratRow {
+  strategy_type: string
+  trades: number
+  total_pnl: number
+  avg_pnl: number
+  win_rate: number
+}
+
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 // fmtPnl is imported from @/utils/format
@@ -231,15 +239,25 @@ function NeuChip({ label, active, onClick }: { label: string; active: boolean; o
 
 
 // ── Tab 1: Performance ─────────────────────────────────────────────────────────
-function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore, fy, timeSlots }: {
+interface AdvMetrics {
+  sharpe_ratio: number | null
+  max_drawdown: number
+  days_to_recovery: number | null
+  max_win_streak: number
+  max_loss_streak: number
+  total_trading_days: number
+}
+
+function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, timeSlots, advMetrics, stratRows }: {
   metrics: MetricRow[]
   breakdown: Record<string, Record<string, { pnl: number; trades: number }>>
   allOrders: Order[]
-  algos: Algo[]
   scores: HealthScore[]
   avgScore: number
   fy: string
   timeSlots: { hour: number; label: string; trades: number; win_rate: number; total_pnl: number }[]
+  advMetrics: AdvMetrics | null
+  stratRows: StratRow[]
 }) {
   const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
   const [showWeekends, setShowWeekends] = useState(false)
@@ -252,29 +270,71 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
   const needsAttn      = scores.length > 0 ? [...scores].sort((a, b) => a.score - b.score)[0] : null
   const mostConsistent = scores.length > 0 ? [...scores].sort((a, b) => b.trades - a.trades)[0] : null
 
-  const fyYear = parseInt(fy.split('-')[0])
-  const fyStart = `${fyYear}-04-01`, fyEnd = `${fyYear + 1}-03-31`
-  const periodOrders = allOrders.filter(o => { const d = getOrderDate(o); return d >= fyStart && d <= fyEnd })
-  const algoById = new Map<string, Algo>(algos.map(a => [a.id, a]))
-  const stratGroups: Record<string, { count: number; totalPnl: number; wins: number }> = {}
-  for (const o of periodOrders) {
-    const algo = algoById.get(o.algo_id)
-    const st = (o.entry_type || algo?.strategy_mode || algo?.entry_type || 'unknown').toLowerCase()
-    if (!stratGroups[st]) stratGroups[st] = { count: 0, totalPnl: 0, wins: 0 }
-    stratGroups[st].count++
-    stratGroups[st].totalPnl += o.pnl ?? 0
-    if ((o.pnl ?? 0) > 0) stratGroups[st].wins++
-  }
-  const stratRows = Object.entries(stratGroups)
-    .map(([st, g]) => ({ strategy_type: st, count: g.count, total_pnl: g.totalPnl,
-      avg_pnl: g.count > 0 ? g.totalPnl / g.count : 0, win_rate: g.count > 0 ? g.wins / g.count * 100 : 0 }))
-    .sort((a, b) => b.total_pnl - a.total_pnl)
-
   const heatmapAlgos = Object.keys(breakdown).sort()
+
+  const sharpeColor = advMetrics?.sharpe_ratio != null
+    ? (advMetrics.sharpe_ratio > 1 ? 'var(--green)' : advMetrics.sharpe_ratio >= 0 ? 'var(--accent-amber)' : 'var(--red)')
+    : 'var(--text-dim)'
+
+  const advCardLabel: CSSProperties = {
+    fontSize: 9, textTransform: 'uppercase', color: 'var(--text-mute)',
+    marginBottom: 6, fontWeight: 700, letterSpacing: '0.1em', fontFamily: 'var(--font-display)',
+  }
+  const advCardVal = (color: string): CSSProperties => ({
+    fontSize: 22, fontWeight: 700, lineHeight: 1.2, color, fontFamily: 'var(--font-mono)',
+  })
 
   return (
     <div>
-      {/* Row 1 — 6 summary cards */}
+      {/* Row 1 — Advanced Metrics (4 cards) */}
+      {advMetrics && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
+          {/* Sharpe Ratio */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Sharpe Ratio</div>
+            <div style={advCardVal(sharpeColor)}>
+              {advMetrics.sharpe_ratio != null ? advMetrics.sharpe_ratio.toFixed(3) : '—'}
+            </div>
+          </div>
+
+          {/* Max Drawdown + Recovery */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Max Drawdown</div>
+            <div style={advCardVal('var(--red)')}>
+              ₹{Math.abs(advMetrics.max_drawdown).toLocaleString('en-IN')}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4 }}>
+              Recovery: {advMetrics.days_to_recovery != null ? `${advMetrics.days_to_recovery}d` : 'Ongoing'}
+            </div>
+          </div>
+
+          {/* Streak — split card */}
+          <div style={{ ...neuCardSm, display: 'flex', flexDirection: 'column' }}>
+            <div style={advCardLabel}>Streak</div>
+            <div style={{ display: 'flex', flex: 1, alignItems: 'center' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ fontSize: 9, color: 'var(--green)', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.1em', marginBottom: 3 }}>WIN ↑</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>{advMetrics.max_win_streak}d</div>
+              </div>
+              <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--row-sep)', margin: '2px 0' }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ fontSize: 9, color: 'var(--red)', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.1em', marginBottom: 3 }}>LOSS ↓</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{advMetrics.max_loss_streak}d</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Trading Days */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Trading Days</div>
+            <div style={advCardVal('var(--text-dim)')}>
+              {advMetrics.total_trading_days}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Row 2 — 6 summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
         <SummaryCard label="Best Algo" value={bestAlgo?.algo_name || '—'}
           sub={bestAlgo ? `${fmtPnl(bestAlgo.pnl)} · ${bestAlgo.wins}W/${bestAlgo.losses}L` : undefined}
@@ -476,7 +536,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, algos, scores, avgScore
                 {stratRows.map(r => (
                   <tr key={r.strategy_type}>
                     <td style={{ fontWeight: 600, textTransform: 'capitalize', textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{r.strategy_type}</td>
-                    <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid var(--border)' }}>{r.count}</td>
+                    <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid var(--border)' }}>{r.trades}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.total_pnl >= 0 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{fmtPnl(r.total_pnl)}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.avg_pnl >= 0 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{fmtPnl(r.avg_pnl)}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.win_rate >= 50 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{r.win_rate.toFixed(1)}%</td>
@@ -613,17 +673,32 @@ interface SlippageData {
 }
 
 function SlippageTrendChart({ byDate }: { byDate: { date: string; avg_exit_slip: number; avg_entry_slip: number; order_count: number }[] }) {
-  const data = [...byDate].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
-    date: d.date.slice(5), // MM-DD
-    exitSlip: d.avg_exit_slip,
-    entrySlip: d.avg_entry_slip,
-  }))
+  const data = [...byDate].sort((a, b) => a.date.localeCompare(b.date)).map(d => {
+    const [y, m, dd] = d.date.slice(0, 10).split('-')
+    return {
+      date: `${dd}-${m}-${y}`,
+      exitSlip: d.avg_exit_slip,
+      entrySlip: d.avg_entry_slip,
+    }
+  })
   if (data.length < 2) return null
   return (
     <div style={{ ...neuCard, marginBottom: 12 }}>
-      <div style={secLabel}>Slippage Trend (pts / day)</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={secLabel}>Slippage Trend (pts / day)</div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 20, height: 2, background: '#2dd4bf', borderRadius: 2 }} />
+            <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Exit Slip</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 2, backgroundImage: 'repeating-linear-gradient(to right, var(--accent) 0, var(--accent) 4px, transparent 4px, transparent 6px)' }} />
+            <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Entry Slip</span>
+          </div>
+        </div>
+      </div>
       <div style={{ ...neuInset, padding: '10px 8px 4px' }}>
-        <ResponsiveContainer width="100%" height={120}>
+        <ResponsiveContainer width="100%" height={156}>
           <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-mute)' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 9, fill: 'var(--text-mute)' }} axisLine={false} tickLine={false} />
@@ -650,7 +725,7 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
   const slipColor = (v: number) => v >= 0 ? 'var(--green)' : 'var(--red)'
   const fmtImpact = (v: number) => `${v >= 0 ? '+' : '−'}₹${Math.abs(Math.round(v)).toLocaleString('en-IN')}`
 
-  const thStyle: CSSProperties = { textAlign: 'center', borderBottom: '0.5px solid var(--border)', fontWeight: 700, fontSize: 10, letterSpacing: '0.08em', color: 'var(--text-mute)' }
+  const thStyle: CSSProperties = { textAlign: 'center', borderBottom: '0.5px solid var(--border)', fontWeight: 600, fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)' }
   const thLeft: CSSProperties  = { ...thStyle, textAlign: 'left' }
   const tdC: CSSProperties     = { textAlign: 'center', ...numStyle, borderBottom: '0.5px solid var(--row-sep)' }
   const tdL: CSSProperties     = { fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--row-sep)', fontSize: 12 }
@@ -981,7 +1056,7 @@ export default function AnalyticsPage() {
   })
   const [metrics, setMetrics]         = useState<MetricRow[]>([])
   const [allOrders, setAllOrders]     = useState<Order[]>([])
-  const [algos, setAlgos]             = useState<Algo[]>([])
+  const [, setAlgos]                  = useState<Algo[]>([])
   const [breakdown, setBreakdown]     = useState<Record<string, Record<string, { pnl: number; trades: number }>>>({})
   const [errorsData, setErrorsData]   = useState<ErrorsData | null>(null)
   const [slippageData, setSlippageData] = useState<SlippageData | null>(null)
@@ -989,16 +1064,10 @@ export default function AnalyticsPage() {
   const [healthAvg, setHealthAvg]     = useState(0)
   const [timeSlots, setTimeSlots]     = useState<{ hour: number; label: string; trades: number; win_rate: number; total_pnl: number }[]>([])
   const [latencyData, setLatencyData] = useState<LatencyData | null>(null)
+  const [stratRows, setStratRows]     = useState<StratRow[]>([])
   const [loading, setLoading]         = useState(true)
   const [fy, setFy]                   = useState(getCurrentFY())
-  const [advMetrics, setAdvMetrics]   = useState<{
-    sharpe_ratio: number | null;
-    max_drawdown: number;
-    days_to_recovery: number | null;
-    max_win_streak: number;
-    max_loss_streak: number;
-    total_trading_days: number;
-  } | null>(null)
+  const [advMetrics, setAdvMetrics]   = useState<AdvMetrics | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -1013,7 +1082,8 @@ export default function AnalyticsPage() {
       reportsAPI.healthScores({ fy, is_practix: isPractixMode }),
       reportsAPI.timeHeatmap({ fy, is_practix: isPractixMode }),
       reportsAPI.latency({ fy, is_practix: isPractixMode }),
-    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes, tRes, latRes]) => {
+      reportsAPI.strategyBreakdown({ fy, is_practix: isPractixMode }),
+    ]).then(([mRes, oRes, aRes, bdRes, errRes, slipRes, hRes, tRes, latRes, stratRes]) => {
       const rawMetrics = (mRes.status === 'fulfilled'
         ? (Array.isArray(mRes.value.data) ? mRes.value.data : (mRes.value.data?.metrics || []))
         : []) as any[]
@@ -1050,6 +1120,7 @@ export default function AnalyticsPage() {
       }
       if (tRes.status === 'fulfilled') setTimeSlots(tRes.value.data?.slots || [])
       if (latRes.status === 'fulfilled') setLatencyData(latRes.value.data || null)
+      if (stratRes.status === 'fulfilled') setStratRows(stratRes.value.data?.breakdown || [])
     }).finally(() => setLoading(false))
 
     api.get('/analytics/advanced-metrics', { params: { is_practix: isPractixMode } })
@@ -1116,8 +1187,9 @@ export default function AnalyticsPage() {
             {activeTab === 'Performance' && (
               <PerformanceTab
                 metrics={metrics} breakdown={breakdown} allOrders={allOrders}
-                algos={algos} scores={healthScores} avgScore={healthAvg}
-                fy={fy} timeSlots={timeSlots}
+                scores={healthScores} avgScore={healthAvg}
+                fy={fy} timeSlots={timeSlots} advMetrics={advMetrics}
+                stratRows={stratRows}
               />
             )}
             {activeTab === 'Failures' && <FailuresTab data={errorsData} />}
@@ -1126,33 +1198,6 @@ export default function AnalyticsPage() {
           </>
         )}
 
-        {/* Advanced Metrics — Performance tab only */}
-        {!loading && activeTab === 'Performance' && (
-          <div style={{ ...neuCard, marginTop: 12 }}>
-            <div style={secLabel}>Advanced Metrics</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-              {(() => {
-                const sharpeColor = advMetrics?.sharpe_ratio != null
-                  ? (advMetrics.sharpe_ratio > 1 ? 'var(--green)' : advMetrics.sharpe_ratio >= 0 ? 'var(--accent-amber)' : 'var(--red)')
-                  : 'var(--text)'
-                const items = [
-                  { label: 'Sharpe Ratio',    value: advMetrics?.sharpe_ratio != null ? advMetrics.sharpe_ratio.toFixed(3) : '—', color: sharpeColor },
-                  { label: 'Max Drawdown',    value: advMetrics ? `₹${Math.abs(advMetrics.max_drawdown).toLocaleString('en-IN')}` : '—', color: 'var(--red)' },
-                  { label: 'Days to Recovery', value: advMetrics?.days_to_recovery != null ? `${advMetrics.days_to_recovery}d` : advMetrics ? 'Ongoing' : '—', color: 'var(--text-mute)' },
-                  { label: 'Max Win Streak',  value: advMetrics ? `${advMetrics.max_win_streak}d` : '—', color: 'var(--green)' },
-                  { label: 'Max Loss Streak', value: advMetrics ? `${advMetrics.max_loss_streak}d` : '—', color: 'var(--red)' },
-                  { label: 'Trading Days',    value: advMetrics ? `${advMetrics.total_trading_days}` : '—', color: 'var(--text-dim)' },
-                ]
-                return items.map(({ label, value, color }) => (
-                  <div key={label} style={{ ...neuCardSm }}>
-                    <div style={{ fontSize: 9, textTransform: 'uppercase', color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6, fontFamily: 'var(--font-display)' }}>{label}</div>
-                    <div style={{ ...numStyle, fontSize: 18, color }}>{value}</div>
-                  </div>
-                ))
-              })()}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

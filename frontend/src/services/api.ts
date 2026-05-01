@@ -175,7 +175,8 @@ export const reportsAPI = {
   slippage:      (params?: object) => api.get('/reports/slippage',       { params }),
   healthScores:  (params?: object) => api.get('/reports/health-scores',  { params }),
   timeHeatmap:   (params?: object) => api.get('/reports/time-heatmap',   { params }),
-  latency:       (params?: object) => api.get('/reports/latency',        { params }),
+  latency:            (params?: object) => api.get('/reports/latency',             { params }),
+  strategyBreakdown:  (params?: object) => api.get('/reports/strategy-breakdown',  { params }),
 }
 
 // ── System
