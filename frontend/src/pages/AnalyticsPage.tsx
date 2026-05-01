@@ -259,9 +259,7 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
   advMetrics: AdvMetrics | null
   stratRows: StratRow[]
 }) {
-  const [activeView, setActiveView] = useState<'heatmap' | 'health'>(() =>
-    localStorage.getItem('analytics_perf_view') === 'health' ? 'health' : 'heatmap'
-  )
+  const [activeView, setActiveView] = useState<'heatmap' | 'health'>('heatmap')
   const [showWeekends, setShowWeekends] = useState(false)
   const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
   const { sorted: sortedScores, sortKey: scoresSortKey, sortDir: scoresSortDir, handleSort: handleScoresSort } = useSort<HealthScore>(scores, 'total_pnl')
@@ -288,17 +286,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
 
   return (
     <div>
-      {/* Row 1 — Advanced Metrics (6-col grid aligned with Row 2) */}
+      {/* Row 1 — Advanced Metrics (5 cards) */}
       {advMetrics && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 10 }}>
-          {/* Trading Days */}
-          <div style={{ ...neuCardSm }}>
-            <div style={advCardLabel}>Trading Days</div>
-            <div style={advCardVal('var(--text-dim)')}>
-              {advMetrics.total_trading_days}
-            </div>
-          </div>
-
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 10 }}>
           {/* Sharpe Ratio */}
           <div style={{ ...neuCardSm }}>
             <div style={advCardLabel}>Sharpe Ratio</div>
@@ -334,38 +324,34 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
             </div>
           </div>
 
-          {/* Best Time to Trade — mini bar chart, spans 2 cols */}
-          <div style={{ ...neuCardSm, gridColumn: 'span 2' }}>
+          {/* Trading Days */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Trading Days</div>
+            <div style={advCardVal('var(--text-dim)')}>
+              {advMetrics.total_trading_days}
+            </div>
+          </div>
+
+          {/* Best Time to Trade */}
+          <div style={{ ...neuCardSm }}>
             <div style={advCardLabel}>Best Time</div>
             {timeSlots.length === 0 ? (
               <div style={{ color: 'var(--text-mute)', fontSize: 12 }}>—</div>
-            ) : (() => {
-              const maxAbs = Math.max(...timeSlots.map(s => Math.abs(s.total_pnl)), 1)
-              const BAR_MAX = 30
-              return (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: BAR_MAX + 18, paddingTop: 4 }}>
-                  {timeSlots.map(slot => {
-                    const h = Math.max(3, Math.round((Math.abs(slot.total_pnl) / maxAbs) * BAR_MAX))
-                    const tip = `${slot.hour}:00\n${slot.trades} trades · ${slot.win_rate}% win\n${slot.total_pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(slot.total_pnl)).toLocaleString('en-IN')}`
-                    return (
-                      <div key={slot.hour} title={tip} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'help' }}>
-                        <div style={{
-                          width: '75%', height: h,
-                          background: slot.total_pnl >= 0
-                            ? 'linear-gradient(to top, rgba(14,166,110,0.5), rgba(14,166,110,0.9))'
-                            : 'linear-gradient(to top, rgba(255,68,68,0.5), rgba(255,68,68,0.9))',
-                          borderRadius: '3px 3px 0 0',
-                          transition: 'height 0.4s cubic-bezier(0.4,0,0.2,1)',
-                        }} />
-                        <div style={{ fontSize: 8, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
-                          {slot.hour}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
+            ) : (
+              [...timeSlots]
+                .sort((a, b) => b.total_pnl - a.total_pnl)
+                .slice(0, 5)
+                .map(slot => (
+                  <div key={slot.hour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)' }}>
+                      {slot.hour}AM
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {slot.total_pnl >= 0 ? '+' : '−'}₹{(Math.abs(slot.total_pnl) / 1000).toFixed(1)}k
+                    </span>
+                  </div>
+                ))
+            )}
           </div>
         </div>
       )}
@@ -402,8 +388,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
       <div style={{ ...neuCard, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <NeuChip label="P&L Heatmap"   active={activeView === 'heatmap'} onClick={() => { setActiveView('heatmap'); localStorage.setItem('analytics_perf_view', 'heatmap') }} />
-            <NeuChip label="Health Scores" active={activeView === 'health'}  onClick={() => { setActiveView('health');  localStorage.setItem('analytics_perf_view', 'health')  }} />
+            <NeuChip label="P&L Heatmap"   active={activeView === 'heatmap'} onClick={() => setActiveView('heatmap')} />
+            <NeuChip label="Health Scores" active={activeView === 'health'}  onClick={() => setActiveView('health')} />
           </div>
           {activeView === 'heatmap' && (
             <NeuChip label="Weekends" active={showWeekends} onClick={() => setShowWeekends(!showWeekends)} />
@@ -489,9 +475,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
                               <td style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 8px' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
                                   <div style={{ ...neuInset, height: 10, borderRadius: 6, padding: '2px 3px' }}>
-                                    {s.score > 0 && <div style={{ width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(to right, #EF4444, #F59E0B 50%, #0EA66E)', backgroundSize: `${(100 / Math.min(s.score, 100) * 100).toFixed(1)}% 100%`, transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)' }} />}
+                                    <div style={{ width: `${Math.min(s.score, 100)}%`, height: '100%', borderRadius: 4, background: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)' }} />
                                   </div>
-                                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: s.score >= 60 ? 'var(--green)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', minWidth: 36, textAlign: 'right' }}>{s.score}</span>
+                                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: s.score >= 60 ? 'var(--accent)' : s.score >= 30 ? 'var(--accent-amber)' : 'var(--red)', minWidth: 36, textAlign: 'right' }}>{s.score}</span>
                                 </div>
                               </td>
                               <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', fontSize: 12, borderBottom: '0.5px solid var(--border)' }}>{s.trades}</td>
@@ -527,18 +513,11 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
               <tbody>
                 {stratRows.map(r => (
                   <tr key={r.strategy_type}>
-                    <td style={{ fontWeight: 600, textTransform: 'uppercase', textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{r.strategy_type}</td>
+                    <td style={{ fontWeight: 600, textTransform: 'capitalize', textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{r.strategy_type}</td>
                     <td style={{ textAlign: 'center', ...numStyle, borderBottom: '0.5px solid var(--border)' }}>{r.trades}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.total_pnl >= 0 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{fmtPnl(r.total_pnl)}</td>
                     <td style={{ textAlign: 'center', ...numStyle, color: r.avg_pnl >= 0 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{fmtPnl(r.avg_pnl)}</td>
-                    <td style={{ borderBottom: '0.5px solid var(--border)', padding: '6px 12px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8 }}>
-                        <div style={{ ...neuInset, height: 10, borderRadius: 6, padding: '2px 3px' }}>
-                          {r.win_rate > 0 && <div style={{ width: `${r.win_rate}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(to right, #EF4444, #F59E0B 50%, #0EA66E)', backgroundSize: `${(100 / r.win_rate * 100).toFixed(1)}% 100%`, transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)' }} />}
-                        </div>
-                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, color: r.win_rate >= 50 ? 'var(--green)' : r.win_rate >= 33 ? 'var(--accent-amber)' : 'var(--red)', minWidth: 36, textAlign: 'right' }}>{r.win_rate.toFixed(1)}%</span>
-                      </div>
-                    </td>
+                    <td style={{ textAlign: 'center', ...numStyle, color: r.win_rate >= 50 ? 'var(--green)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{r.win_rate.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -865,74 +844,20 @@ function SlippageTab({ data }: { data: SlippageData | null }) {
 
 
 // ── Tab 4: Latency Tracker ─────────────────────────────────────────────────────
-interface LatencyAlgoRow {
-  algo_name:  string
-  count:      number
-  avg_ms:     number
-  p50_ms:     number
-  p95_ms:     number
-  max_ms:     number
-  // legacy fields kept for backward compat
-  total_orders?: number
-}
-
-interface LatencyTrendPoint {
-  date:   string   // YYYY-MM-DD
-  avg_ms: number
-  p95_ms: number
-}
-
 interface LatencyData {
-  avg_latency_ms:      number
-  p50_latency_ms:      number
-  p95_latency_ms:      number
-  p99_latency_ms:      number
-  max_latency_ms:      number
-  total_orders:        number
+  avg_latency_ms: number
+  p50_latency_ms: number
+  p95_latency_ms: number
+  p99_latency_ms: number
+  max_latency_ms: number
+  total_orders:   number
   total_closed_orders: number
-  success_rate:        number
-  fast_pct:            number
-  distribution: { excellent: number; good: number; acceptable: number; slow: number }
+  success_rate:   number
+  fast_pct:       number
+  distribution:   { excellent: number; good: number; acceptable: number; slow: number }
   by_broker: { broker: string; avg_ms: number; p50_ms: number; p99_ms: number; fast_pct: number; count: number }[]
-  by_algo:   LatencyAlgoRow[]
+  by_algo:   { algo_name: string; avg_ms: number; count: number; total_orders: number }[]
   recent_orders: { time: string; symbol: string; broker: string; latency_ms: number | null; status: string }[]
-  by_date?: LatencyTrendPoint[]
-}
-
-// Colour-code a latency cell: green <500 ms, amber 500–1500, red >1500
-function latencyCellColor(ms: number): string {
-  if (ms < 500)  return '#0EA66E'
-  if (ms <= 1500) return '#F59E0B'
-  return '#FF4444'
-}
-
-// Format YYYY-MM-DD → DD-MM-YYYY
-function fmtLatencyDate(s: string): string {
-  if (!s || s.length < 10) return s
-  const [y, m, d] = s.slice(0, 10).split('-')
-  return `${d}-${m}-${y}`
-}
-
-// Slowest algo derived from by_algo array
-function slowestAlgo(rows: LatencyAlgoRow[]): { name: string; ms: number } | null {
-  if (!rows.length) return null
-  const top = rows.reduce((a, b) => (b.avg_ms > a.avg_ms ? b : a), rows[0])
-  return { name: cleanAlgo(top.algo_name), ms: top.avg_ms }
-}
-
-// Recharts tooltip for the latency trend chart
-function LatencyTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 10, padding: '8px 12px', fontSize: 11 }}>
-      <div style={{ color: 'var(--text-mute)', marginBottom: 4 }}>{label}</div>
-      {payload.map(p => (
-        <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: p.color }}>
-          <span>{p.name}</span><span>{p.value} ms</span>
-        </div>
-      ))}
-    </div>
-  )
 }
 
 function LatencyTab({ data }: { data: LatencyData | null }) {
@@ -944,148 +869,155 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
     )
   }
 
-  const tblHeaderStyle: CSSProperties = {
-    fontFamily: 'var(--font-display)',
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: '1.5px',
-    textTransform: 'uppercase',
-    color: 'var(--text-dim)',
-    borderBottom: '0.5px solid var(--row-sep)',
-    padding: '8px 10px',
-    whiteSpace: 'nowrap',
+  const maxAlgoMs = Math.max(...data.by_algo.map(a => a.avg_ms), 1)
+  const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
+
+  function latencyColor(ms: number): string {
+    if (ms < 150)  return 'var(--green)'
+    if (ms < 250)  return 'var(--green)'
+    if (ms < 400)  return 'var(--accent-amber)' // Acceptable — amber
+    return 'var(--red)'                    // Slow — red
   }
 
-  const slowest = slowestAlgo(data.by_algo || [])
+  function statusColor(s: string): string {
+    if (s === 'filled') return 'var(--green)'
+    if (s === 'error')  return 'var(--red)'
+    return 'var(--text-mute)'
+  }
 
-  // Build trend data — fall back to synthetic single-point if by_date absent
-  const trendData: LatencyTrendPoint[] = (() => {
-    if (data.by_date && data.by_date.length > 0) return data.by_date
-    return []
-  })()
+  const distBuckets = [
+    { key: 'excellent',  label: 'Excellent  <150ms',    color: 'var(--green)',        count: data.distribution.excellent  },
+    { key: 'good',       label: 'Good       150–250ms',  color: '#22DD88',             count: data.distribution.good       },
+    { key: 'acceptable', label: 'Acceptable 250–400ms',  color: 'var(--accent-amber)', count: data.distribution.acceptable },
+    { key: 'slow',       label: 'Slow       >400ms',     color: 'var(--red)',          count: data.distribution.slow       },
+  ]
 
   return (
     <div>
-      {/* ── SECTION 1: KPI row ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
-        {/* AVG TOTAL LATENCY */}
-        <div style={neuCardSm}>
-          <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
-            AVG TOTAL LATENCY
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: latencyCellColor(data.avg_latency_ms), lineHeight: 1 }}>
-            {data.avg_latency_ms}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4 }}>ms</div>
-        </div>
+      {/* Summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+        <SummaryCard label="ORDERS WITH TIMING" value={data.total_orders.toString()}
+          sub={`of ${data.total_closed_orders ?? data.total_orders} closed`} />
+        <SummaryCard label="Avg Latency"  value={`${data.avg_latency_ms} ms`}
+          valueColor={latencyColor(data.avg_latency_ms)} />
+        <SummaryCard label="Fast Orders" value={`${data.fast_pct}%`}
+          valueColor={data.fast_pct >= 80 ? 'var(--green)' : data.fast_pct >= 50 ? 'var(--accent-amber)' : 'var(--red)'}
+          sub="<150ms" />
+        <SummaryCard label="Success Rate" value={`${data.success_rate}%`}
+          valueColor={data.success_rate >= 95 ? 'var(--green)' : data.success_rate >= 80 ? 'var(--accent-amber)' : 'var(--red)'} />
+      </div>
 
-        {/* P95 LATENCY */}
-        <div style={neuCardSm}>
-          <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
-            P95 LATENCY
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: latencyCellColor(data.p95_latency_ms), lineHeight: 1 }}>
-            {data.p95_latency_ms}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4 }}>ms</div>
-        </div>
-
-        {/* SLOWEST ALGO */}
-        <div style={neuCardSm}>
-          <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
-            SLOWEST ALGO
-          </div>
-          {slowest ? (
-            <>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: latencyCellColor(slowest.ms), lineHeight: 1.3, wordBreak: 'break-all' }}>
-                {slowest.name}
+      {/* Latency distribution */}
+      <div style={{ ...neuCard, marginBottom: 12 }}>
+        <div style={secLabel}>Latency Distribution</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {distBuckets.map(b => {
+            const pct = distTotal > 0 ? b.count / distTotal * 100 : 0
+            return (
+              <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 160, fontSize: 11, color: 'var(--text-dim)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{b.label}</div>
+                <div style={{ flex: 1, height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: b.color, borderRadius: 4, transition: 'width 0.4s ease', opacity: 0.9 }} />
+                </div>
+                <div style={{ width: 40, textAlign: 'right', fontSize: 12, fontWeight: 700, color: b.color, fontFamily: 'var(--font-mono)' }}>{b.count}</div>
+                <div style={{ width: 36, textAlign: 'right', fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{pct.toFixed(0)}%</div>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{slowest.ms} ms avg</div>
-            </>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>—</div>
-          )}
+            )
+          })}
         </div>
       </div>
 
-      {/* ── SECTION 2: Per-algo table ── */}
-      {data.by_algo && data.by_algo.length > 0 && (
-        <div style={{ ...neuCard, marginBottom: 14 }}>
-          <div style={secLabel}>Per-Algo Latency</div>
-          <div style={{ ...neuInset }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {(['ALGO', 'ORDERS', 'AVG (ms)', 'P50 (ms)', 'P95 (ms)', 'SLOWEST (ms)'] as const).map((h, i) => (
-                    <th key={h} style={{ ...tblHeaderStyle, textAlign: i === 0 ? 'left' : 'center' }}>{h}</th>
-                  ))}
+      {/* By Broker */}
+      {data.by_broker.length > 0 && (
+        <div style={{ ...neuCard, marginBottom: 12 }}>
+          <div style={secLabel}>By Broker</div>
+          <table className="staax-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                {(['Broker', 'Avg', 'P50', 'P99', 'Fast%', 'Orders'] as const).map(h => (
+                  <th key={h} style={{ textAlign: h === 'Broker' ? 'left' : 'center', borderBottom: '0.5px solid var(--border)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.by_broker.map(b => (
+                <tr key={b.broker}>
+                  <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{b.broker}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(b.avg_ms), borderBottom: '0.5px solid var(--border)' }}>{b.avg_ms}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: latencyColor(b.p50_ms), borderBottom: '0.5px solid var(--border)' }}>{b.p50_ms}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: latencyColor(b.p99_ms), borderBottom: '0.5px solid var(--border)' }}>{b.p99_ms}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: b.fast_pct >= 80 ? 'var(--green)' : b.fast_pct >= 50 ? 'var(--accent-amber)' : 'var(--red)', borderBottom: '0.5px solid var(--border)' }}>{b.fast_pct}%</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{b.count}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.by_algo.map((a, idx) => {
-                  const rowBorder = idx < data.by_algo.length - 1 ? '0.5px solid var(--row-sep)' : 'none'
-                  const tdBase: CSSProperties = { padding: '10px 10px', borderBottom: rowBorder, fontFamily: 'var(--font-mono)', fontSize: 12 }
-                  return (
-                    <tr key={a.algo_name}>
-                      <td style={{ ...tdBase, fontWeight: 600, color: 'var(--text)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cleanAlgo(a.algo_name)}
-                      </td>
-                      <td style={{ ...tdBase, textAlign: 'center', color: 'var(--text-dim)' }}>{a.count ?? a.total_orders ?? 0}</td>
-                      <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700, color: latencyCellColor(a.avg_ms) }}>{a.avg_ms}</td>
-                      <td style={{ ...tdBase, textAlign: 'center', color: latencyCellColor(a.p50_ms ?? a.avg_ms) }}>{a.p50_ms ?? '—'}</td>
-                      <td style={{ ...tdBase, textAlign: 'center', color: latencyCellColor(a.p95_ms ?? a.avg_ms) }}>{a.p95_ms ?? '—'}</td>
-                      <td style={{ ...tdBase, textAlign: 'center', color: latencyCellColor(a.max_ms ?? a.avg_ms) }}>{a.max_ms ?? '—'}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* ── SECTION 3: Latency trend line chart ── */}
-      {trendData.length >= 2 && (
-        <div style={{ ...neuCard }}>
-          <div style={secLabel}>Latency Trend</div>
-          <div style={{ ...neuInset, padding: '10px 8px 4px' }}>
-            <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={trendData.map(p => ({ ...p, date: fmtLatencyDate(p.date) }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 9, fill: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}
-                  axisLine={false} tickLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  tick={{ fontSize: 9, fill: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}
-                  axisLine={false} tickLine={false}
-                  width={38}
-                  tickFormatter={(v: number) => `${v}`}
-                />
-                <Tooltip content={<LatencyTooltip />} cursor={{ stroke: 'var(--border)', strokeWidth: 1 }} />
-                <Line
-                  type="monotone" dataKey="avg_ms" name="Avg"
-                  stroke="#0EA66E" strokeWidth={1.5} dot={false}
-                  activeDot={{ r: 3, fill: '#0EA66E', strokeWidth: 0 }}
-                />
-                <Line
-                  type="monotone" dataKey="p95_ms" name="P95"
-                  stroke="#F59E0B" strokeWidth={1.5} dot={false}
-                  activeDot={{ r: 3, fill: '#F59E0B', strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          {/* Legend */}
-          <div style={{ display: 'flex', gap: 16, marginTop: 8, paddingLeft: 8 }}>
-            {[{ color: '#0EA66E', label: 'Avg' }, { color: '#F59E0B', label: 'P95' }].map(l => (
-              <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 16, height: 2, background: l.color, borderRadius: 1 }} />
-                <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{l.label}</span>
-              </div>
-            ))}
-          </div>
+      {/* By Algo */}
+      {data.by_algo.length > 0 && (
+        <div style={{ ...neuCard, marginBottom: 12 }}>
+          <div style={secLabel}>By Algo</div>
+          <table className="staax-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 160 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 80 }} />
+              <col />
+            </colgroup>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left',   borderBottom: '0.5px solid var(--border)' }}>Algo</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Avg (ms)</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)', padding: '10px 8px' }}>Orders</th>
+                <th style={{ textAlign: 'center', borderBottom: '0.5px solid var(--border)' }}>Bar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.by_algo.map(a => (
+                <tr key={a.algo_name}>
+                  <td style={{ fontWeight: 600, textAlign: 'left', borderBottom: '0.5px solid var(--border)' }}>{a.algo_name}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: latencyColor(a.avg_ms), borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.avg_ms}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', padding: '11px 8px' }}>{a.count}</td>
+                  <td style={{ textAlign: 'center', padding: '6px 12px', borderBottom: '0.5px solid var(--border)' }}>
+                    <div style={{ height: 10, borderRadius: 6, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', padding: '2px 3px' }}>
+                      <div style={{ width: `${Math.min(Math.round(a.avg_ms / maxAlgoMs * 300), 100)}%`, height: '100%', background: latencyColor(a.avg_ms), borderRadius: 4, opacity: 0.85, transition: 'width 0.3s' }} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Recent orders */}
+      {data.recent_orders.length > 0 && (
+        <div style={neuCard}>
+          <div style={secLabel}>Recent Orders</div>
+          <table className="staax-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                {(['Time', 'Symbol', 'Broker', 'Latency', 'Status'] as const).map(h => (
+                  <th key={h} style={{ textAlign: h === 'Symbol' ? 'left' : 'center', borderBottom: '0.5px solid var(--border)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.recent_orders.map((o, i) => (
+                <tr key={i}>
+                  <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{o.time}</td>
+                  <td style={{ textAlign: 'left', fontWeight: 600, borderBottom: '0.5px solid var(--border)' }}>{o.symbol}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.broker}</td>
+                  <td style={{ textAlign: 'center', ...numStyle, fontWeight: 700, color: o.latency_ms != null ? latencyColor(o.latency_ms) : 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>
+                    {o.latency_ms != null ? `${o.latency_ms} ms` : '—'}
+                  </td>
+                  <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: statusColor(o.status), borderBottom: '0.5px solid var(--border)' }}>{o.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
