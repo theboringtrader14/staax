@@ -469,56 +469,137 @@ async def slippage_analytics(
     account_id: str | None = Query(None),
     is_practix: bool | None = Query(None),
 ):
-    """Historical slippage analytics — fill price vs LTP at entry (trigger price)."""
+    """Direction-aware slippage analytics — exit (SL/target) and entry (fill vs reference)."""
     from app.models.algo import Algo
-    conditions = _base_query(fy, account_id, is_practix)
-    conditions.append(Order.fill_price.isnot(None))
-    conditions.append(Order.ltp.isnot(None))
+    from collections import defaultdict
 
+    # ── Base conditions (closed orders in FY) ────────────────────────────────
+    base_conditions = _base_query(fy, account_id, is_practix)
+
+    # Fetch all closed orders for the period
     result = await db.execute(
         select(Order, Algo.name.label('algo_name'))
         .join(Algo, Order.algo_id == Algo.id, isouter=True)
-        .where(*conditions)
+        .where(*base_conditions)
         .order_by(Order.fill_time.desc())
     )
     rows = result.all()
 
-    per_algo: dict = {}
-    all_slippages = []
+    # ── Accumulators ─────────────────────────────────────────────────────────
+    exit_all: list[float] = []
+    exit_per_algo: dict = defaultdict(lambda: {"slippages": [], "total_inr": 0.0})
+
+    entry_all: list[float] = []
+    entry_per_algo: dict = defaultdict(lambda: {"slippages": [], "total_inr": 0.0})
+
+    by_date: dict = defaultdict(lambda: {"exit_slips": [], "entry_slips": [], "orders": 0})
+
     for r in rows:
         o = r.Order
-        try:
-            ref = float(o.ltp)
-            fill = float(o.fill_price)
-            slip = (fill - ref) if o.direction == 'buy' else (ref - fill)
-            slip_inr = slip * (o.quantity or 1)
-        except (TypeError, ValueError):
-            continue
+        algo_name = r.algo_name or "unknown"
+        order_date = o.fill_time.strftime("%Y-%m-%d") if o.fill_time else None
 
-        all_slippages.append(slip)
-        name = r.algo_name
-        if name not in per_algo:
-            per_algo[name] = {"slippages": [], "total_inr": 0.0}
-        per_algo[name]["slippages"].append(slip)
-        per_algo[name]["total_inr"] += slip_inr
+        # ── EXIT slippage — SL/target exits (exit_price vs sl_actual) ────────
+        if o.exit_price is not None and o.sl_actual is not None:
+            try:
+                ep = float(o.exit_price)
+                sl = float(o.sl_actual)
+                # BFO corruption guard
+                if abs(ep - sl) >= 500 or ep >= 5000:
+                    pass
+                else:
+                    # BUY: exited above SL = positive (better); SELL: exited below SL = positive
+                    slip = (ep - sl) if o.direction == 'buy' else (sl - ep)
+                    slip_inr = slip * (o.quantity or 1)
+                    exit_all.append(slip)
+                    exit_per_algo[algo_name]["slippages"].append(slip)
+                    exit_per_algo[algo_name]["total_inr"] += slip_inr
+                    if order_date:
+                        by_date[order_date]["exit_slips"].append(slip)
+                        by_date[order_date]["orders"] += 1
+            except (TypeError, ValueError):
+                pass
 
-    per_algo_out = [
-        {
-            "algo": name,
-            "orders": len(v["slippages"]),
-            "avg_slip_pts": round(sum(v["slippages"]) / len(v["slippages"]), 2),
-            "total_slip_inr": round(v["total_inr"], 2),
-            "best": round(min(v["slippages"]), 2),
-            "worst": round(max(v["slippages"]), 2),
+        # ── ENTRY slippage — fill_price vs entry_reference ────────────────────
+        if o.fill_price is not None and o.entry_reference is not None:
+            # entry_reference may be stored as "ORB High: 100.5" or plain "100.5"
+            try:
+                ref_str = str(o.entry_reference).strip()
+                # Extract last float-like token
+                import re as _re2
+                m = _re2.search(r"([\d]+\.?[\d]*)\s*$", ref_str)
+                if not m:
+                    raise ValueError("no numeric ref")
+                ref = float(m.group(1))
+                fill = float(o.fill_price)
+                # BUY: filled cheaper = positive; SELL: sold higher = positive
+                slip = (ref - fill) if o.direction == 'buy' else (fill - ref)
+                slip_inr = slip * (o.quantity or 1)
+                entry_all.append(slip)
+                entry_per_algo[algo_name]["slippages"].append(slip)
+                entry_per_algo[algo_name]["total_inr"] += slip_inr
+                if order_date:
+                    by_date[order_date]["entry_slips"].append(slip)
+            except (TypeError, ValueError):
+                pass
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+    def _summarise(slips: list[float], total_inr: float, name: str) -> dict:
+        return {
+            "algo_name": name,
+            "orders": len(slips),
+            "avg_slip_pts": round(sum(slips) / len(slips), 2),
+            "total_impact_inr": round(total_inr, 2),
+            "best_pts": round(max(slips), 2),
+            "worst_pts": round(min(slips), 2),
         }
-        for name, v in per_algo.items()
+
+    def _global(slips: list[float]) -> dict:
+        if not slips:
+            return {"avg_slip_pts": 0.0, "total_orders": 0, "best_pts": 0.0, "worst_pts": 0.0}
+        return {
+            "avg_slip_pts": round(sum(slips) / len(slips), 2),
+            "total_orders": len(slips),
+            "best_pts": round(max(slips), 2),
+            "worst_pts": round(min(slips), 2),
+        }
+
+    # Build per-algo lists
+    exit_per_algo_out = [
+        _summarise(v["slippages"], v["total_inr"], name)
+        for name, v in exit_per_algo.items() if v["slippages"]
     ]
-    per_algo_out.sort(key=lambda x: abs(x["avg_slip_pts"]), reverse=True)
+    exit_per_algo_out.sort(key=lambda x: abs(x["avg_slip_pts"]), reverse=True)
+
+    entry_per_algo_out = [
+        _summarise(v["slippages"], v["total_inr"], name)
+        for name, v in entry_per_algo.items() if v["slippages"]
+    ]
+    entry_per_algo_out.sort(key=lambda x: abs(x["avg_slip_pts"]), reverse=True)
+
+    # By-date rows (most recent first)
+    by_date_out = []
+    for dt in sorted(by_date.keys(), reverse=True):
+        d = by_date[dt]
+        es = d["exit_slips"]
+        ns = d["entry_slips"]
+        by_date_out.append({
+            "date": dt,
+            "avg_exit_slip": round(sum(es) / len(es), 2) if es else 0.0,
+            "avg_entry_slip": round(sum(ns) / len(ns), 2) if ns else 0.0,
+            "order_count": d["orders"],
+        })
+
+    exit_global = _global(exit_all)
+    exit_global["per_algo"] = exit_per_algo_out
+
+    entry_global = _global(entry_all)
+    entry_global["per_algo"] = entry_per_algo_out
 
     return {
-        "per_algo": per_algo_out,
-        "avg_slippage_pts": round(sum(all_slippages) / len(all_slippages), 2) if all_slippages else 0,
-        "total_orders_with_ref": len(all_slippages),
+        "exit_slippage": exit_global,
+        "entry_slippage": entry_global,
+        "by_date": by_date_out,
         "fy": fy,
     }
 
