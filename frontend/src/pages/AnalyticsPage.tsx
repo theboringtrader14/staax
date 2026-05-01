@@ -286,9 +286,9 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
 
   return (
     <div>
-      {/* Row 1 — Advanced Metrics (4 cards) */}
+      {/* Row 1 — Advanced Metrics (5 cards) */}
       {advMetrics && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 10 }}>
           {/* Sharpe Ratio */}
           <div style={{ ...neuCardSm }}>
             <div style={advCardLabel}>Sharpe Ratio</div>
@@ -330,6 +330,28 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
             <div style={advCardVal('var(--text-dim)')}>
               {advMetrics.total_trading_days}
             </div>
+          </div>
+
+          {/* Best Time to Trade */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Best Time</div>
+            {timeSlots.length === 0 ? (
+              <div style={{ color: 'var(--text-mute)', fontSize: 12 }}>—</div>
+            ) : (
+              [...timeSlots]
+                .sort((a, b) => b.total_pnl - a.total_pnl)
+                .slice(0, 5)
+                .map(slot => (
+                  <div key={slot.hour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)' }}>
+                      {slot.hour}AM
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {slot.total_pnl >= 0 ? '+' : '−'}₹{(Math.abs(slot.total_pnl) / 1000).toFixed(1)}k
+                    </span>
+                  </div>
+                ))
+            )}
           </div>
         </div>
       )}
@@ -470,50 +492,6 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
         )}
 
       </div>
-
-      {/* Best Time to Trade */}
-      {timeSlots.length > 0 && (() => {
-        const maxAbsPnl = Math.max(...timeSlots.map((s) => Math.abs(s.total_pnl)), 1)
-        return (
-          <div style={{ ...neuCard, marginBottom: 12 }}>
-            <div style={secLabel}>Best Time to Trade</div>
-            <div style={{ padding: '0 4px' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 110, paddingTop: 28 }}>
-                {timeSlots.map((slot) => {
-                  const barH = Math.max(4, Math.round((Math.abs(slot.total_pnl) / maxAbsPnl) * 56 * 0.7))
-                  const color = slot.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
-                  const colorHex = slot.total_pnl >= 0 ? '#0EA66E' : '#FF4444'
-                  const title = `${slot.label}\n${slot.trades} trades · ${slot.win_rate}% win\n${slot.total_pnl >= 0 ? '+' : ''}₹${Math.abs(Math.round(slot.total_pnl)).toLocaleString('en-IN')}`
-                  return (
-                    <div key={slot.hour} title={title} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'help' }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color, textAlign: 'center' }}>
-                        {slot.total_pnl !== 0 ? `${slot.total_pnl >= 0 ? '+' : ''}${Math.abs(slot.total_pnl) >= 1000 ? (slot.total_pnl / 1000).toFixed(1) + 'k' : Math.round(slot.total_pnl)}` : '—'}
-                      </div>
-                      <div style={{
-                        width: '100%', height: `${barH}px`,
-                        background: slot.total_pnl >= 0
-                          ? `linear-gradient(to top, rgba(14,166,110,0.5), rgba(14,166,110,0.9))`
-                          : `linear-gradient(to top, rgba(255,68,68,0.5), rgba(255,68,68,0.9))`,
-                        borderRadius: '3px 3px 0 0',
-                        boxShadow: slot.total_pnl !== 0 ? `0 0 6px ${colorHex}55` : 'none',
-                        transition: 'height 0.4s cubic-bezier(0.4,0,0.2,1)',
-                      }} />
-                      <div style={{ fontSize: 9, color: 'var(--text-mute)', textAlign: 'center', whiteSpace: 'nowrap' }}>{slot.hour}AM</div>
-                      <div style={{ fontSize: 9, color: 'var(--text-dim)', textAlign: 'center' }}>{slot.trades > 0 ? `${slot.win_rate}%` : '—'}</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 10, color: 'var(--text-mute)' }}>
-              <span>Bar height = P&L magnitude</span>
-              <span style={{ color: 'var(--green)' }}>■ Profit</span>
-              <span style={{ color: 'var(--red)' }}>■ Loss</span>
-              <span>% = win rate · hover for details</span>
-            </div>
-          </div>
-        )
-      })()}
 
       {/* Strategy Type Breakdown */}
       <div style={neuCard}>
