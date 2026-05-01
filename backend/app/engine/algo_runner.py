@@ -1719,9 +1719,24 @@ class AlgoRunner:
                                     token=str(token),
                                 )
                                 if rest_ltp and rest_ltp > 0:
-                                    label = "PRACTIX" if order.is_practix else "LIVE (WS stale)"
-                                    logger.info(f"[{label} EXIT] REST LTP for {order.symbol}: {rest_ltp}")
-                                    ltp = rest_ltp
+                                    # Sanity guard: REST ltpData("BFO",...) sometimes returns
+                                    # the SENSEX index price (~80000) instead of the option
+                                    # premium (<2000).  If rest_ltp is more than 50× the
+                                    # fill_price we almost certainly got the index LTP —
+                                    # discard it and keep the fallback fill_price-based value.
+                                    _fill_for_guard = float(order.fill_price or 0)
+                                    if _fill_for_guard > 0 and rest_ltp > _fill_for_guard * 50:
+                                        logger.error(
+                                            f"[CORRUPT LTP GUARD] {order.symbol}: REST ltpData "
+                                            f"returned {rest_ltp} which is "
+                                            f"{rest_ltp/_fill_for_guard:.0f}× fill={_fill_for_guard} "
+                                            f"— looks like index price contamination (BFO/exchangeType). "
+                                            f"Discarding REST LTP; using fill_price as exit fallback."
+                                        )
+                                    else:
+                                        label = "PRACTIX" if order.is_practix else "LIVE (WS stale)"
+                                        logger.info(f"[{label} EXIT] REST LTP for {order.symbol}: {rest_ltp}")
+                                        ltp = rest_ltp
                             except Exception as _e:
                                 logger.warning(f"[EXIT] LTP REST fetch failed for {order.symbol}: {_e}")
 
