@@ -210,6 +210,43 @@ class AlgoRunner:
 
         logger.info("✅ AlgoRunner engines wired")
 
+    # ── Decision Trace ────────────────────────────────────────────────────────
+
+    async def _log_decision(
+        self, db, order, event_type: str, reason: str,
+        trigger_value=None, threshold_value=None,
+        ltp=None, metadata: dict | None = None
+    ):
+        """Record WHY an exit/entry decision was made. Non-fatal — never raises."""
+        try:
+            from sqlalchemy import text as _text
+            import json as _json
+            await db.execute(_text('''
+                INSERT INTO decision_log
+                (user_id, algo_id, order_id, event_type, reason,
+                 trigger_value, threshold_value, ltp, sl_price, target_price,
+                 metadata, is_practix)
+                VALUES
+                (:uid, :aid, :oid, :et, :reason,
+                 :tv, :thv, :ltp, :sl, :target,
+                 :meta, :ip)
+            '''), {
+                "uid":    str(order.user_id)  if order and order.user_id  else None,
+                "aid":    str(order.algo_id)  if order and order.algo_id  else None,
+                "oid":    str(order.id)       if order                    else None,
+                "et":     event_type,
+                "reason": reason,
+                "tv":     trigger_value,
+                "thv":    threshold_value,
+                "ltp":    ltp,
+                "sl":     getattr(order, 'sl_actual', None) if order else None,
+                "target": getattr(order, 'target',    None) if order else None,
+                "meta":   _json.dumps(metadata) if metadata else None,
+                "ip":     order.is_practix if order else True,
+            })
+        except Exception as e:
+            logger.warning(f"decision_log write failed (non-fatal): {e}")
+
     # ── SmartStream reconnect — re-arm W&T monitors ───────────────────────────
 
     async def rearm_wt_monitors(self):
@@ -1820,6 +1857,9 @@ class AlgoRunner:
                     await self._cancel_broker_sl(order)
 
                 await self._close_order(db, order, ltp, reason)
+                if reason in ("terminate", "sq"):
+                    await self._log_decision(db, order, "MANUAL_SQ",
+                        "Manual square-off triggered by user", ltp=ltp)
 
                 # ── System Log: per-order exit event ──────────────────────────
                 try:
@@ -2024,6 +2064,9 @@ class AlgoRunner:
                                 logger.warning(f"[SL FILL] Fill fetch error for {order.symbol}: {_fill_err}")
 
                     await self._close_order(db, order, exit_price, "sl")
+                    await self._log_decision(db, order, "SL_TRIGGERED",
+                        f"LTP {exit_price} crossed SL {order.sl_actual}",
+                        trigger_value=exit_price, threshold_value=order.sl_actual, ltp=exit_price)
 
                     # Deregister
                     if self._tsl_engine:
@@ -2096,6 +2139,9 @@ class AlgoRunner:
                     _algo_name = _algo_name_res.scalar_one_or_none() or ""
 
                     await self._close_order(db, order, ltp, "tp")
+                    await self._log_decision(db, order, "TARGET_TRIGGERED",
+                        f"LTP {ltp} reached target {order.target}",
+                        trigger_value=ltp, threshold_value=order.target, ltp=ltp)
 
                     # Capture TSL trail state BEFORE deregister clears in-memory state
                     tsl_trailed = (
