@@ -334,8 +334,8 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
             </div>
           </div>
 
-          {/* Best Time to Trade — spans cols 5+6 */}
-          <div style={{ ...neuCardSm, gridColumn: 'span 2' }}>
+          {/* Best Time to Trade */}
+          <div style={{ ...neuCardSm }}>
             <div style={advCardLabel}>Best Time</div>
             {timeSlots.length === 0 ? (
               <div style={{ color: 'var(--text-mute)', fontSize: 12 }}>—</div>
@@ -364,6 +364,24 @@ function PerformanceTab({ metrics, breakdown, allOrders, scores, avgScore, fy, t
                 </div>
               )
             })()}
+          </div>
+          {/* Strategy Mix */}
+          <div style={{ ...neuCardSm }}>
+            <div style={advCardLabel}>Strategy Mix</div>
+            {stratRows.length === 0 ? (
+              <div style={{ color: 'var(--text-mute)', fontSize: 12 }}>—</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {stratRows.slice(0, 5).map(s => (
+                  <div key={s.strategy_type} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ color: 'var(--text-dim)', letterSpacing: 0.5, textTransform: 'uppercase' }}>{s.strategy_type}</span>
+                    <span style={{ fontWeight: 600, color: s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {s.total_pnl >= 0 ? '+' : ''}₹{(Math.abs(s.total_pnl) / 1000).toFixed(1)}k
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

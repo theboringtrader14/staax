@@ -137,6 +137,7 @@ export default function DashboardPanel() {
 
   const [services, setServices]             = useState<Service[]>(INIT_SERVICES)
   const [health, setHealth]                 = useState<HealthData | null>(null)
+  const [engineHealth, setEngineHealth]     = useState<any>(null)
   const [log, setLog]                       = useState<string[]>(['STAAX ready.'])
   const [loginSucceeded, setLoginSucceeded] = useState<Record<string, boolean>>({})
   const [logDate, setLogDate]               = useState<string>(todayIST())
@@ -266,6 +267,21 @@ export default function DashboardPanel() {
     }
     poll()
     return () => { if (svcTimerRef.current) clearTimeout(svcTimerRef.current) }
+  }, [])
+
+  // ── Engine health poll — 30s ───────────────────────────────────
+  useEffect(() => {
+    const API_BASE_EH = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const fetch30 = () =>
+      fetch(`${API_BASE_EH}/api/v1/engine/health`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('staax_token') ?? ''}` },
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setEngineHealth(d) })
+        .catch(() => {})
+    fetch30()
+    const t = setInterval(fetch30, 30_000)
+    return () => clearInterval(t)
   }, [])
 
   // ── Derived ───────────────────────────────────────────────────
@@ -417,6 +433,19 @@ export default function DashboardPanel() {
               {healthChips.map((chip) => {
                 const dotColor = chip.state === 'green' ? '#0ea66e' : chip.state === 'red' ? '#FF4444' : '#b45309'
                 const statusText = chip.state === 'amber' ? 'inactive' : chip.ok ? 'ok' : 'down'
+                // Engine health detail per chip
+                let detail: string | null = null
+                if (chip.label === 'SmartStream' && engineHealth?.smartstream) {
+                  const ss = engineHealth.smartstream
+                  const parts = []
+                  if (ss.last_tick_ago_ms != null) parts.push(`${ss.last_tick_ago_ms}ms`)
+                  if (ss.subscribed_tokens != null) parts.push(`${ss.subscribed_tokens} tokens`)
+                  if (ss.reconnect_count != null) parts.push(`${ss.reconnect_count} reconnects`)
+                  if (parts.length) detail = parts.join(' · ')
+                } else if (chip.label === 'Scheduler' && engineHealth?.scheduler) {
+                  const sc = engineHealth.scheduler
+                  if (sc.jobs_count != null) detail = `${sc.jobs_count} jobs`
+                }
                 return (
                   <div key={chip.label} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -427,11 +456,29 @@ export default function DashboardPanel() {
                     <div>
                       <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-mute)', lineHeight: 1.3 }}>{chip.label}</div>
                       <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, color: dotColor }}>{statusText}</div>
+                      {detail && <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', marginTop: 1 }}>{detail}</div>}
                     </div>
                   </div>
                 )
               })}
             </div>
+            {/* Monitors row */}
+            {engineHealth?.monitors && (
+              <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 12, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', display: 'flex', gap: 16 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text-mute)', textTransform: 'uppercase', alignSelf: 'center', marginRight: 4 }}>Monitors</div>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  SL: <span style={{ fontWeight: 700, color: (engineHealth.monitors.active_sl_monitors ?? 0) > 0 ? '#0ea66e' : 'var(--text-mute)' }}>{engineHealth.monitors.active_sl_monitors ?? 0}</span>
+                </span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  MTM: <span style={{ fontWeight: 700, color: (engineHealth.monitors.active_mtm_monitors ?? 0) > 0 ? '#0ea66e' : 'var(--text-mute)' }}>{engineHealth.monitors.active_mtm_monitors ?? 0}</span>
+                </span>
+                {engineHealth.engine?.orders_today != null && (
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                    Orders: <span style={{ fontWeight: 700, color: 'var(--text)' }}>{engineHealth.engine.orders_today}</span>
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Engine Metrics — P5 */}
             {health?.engine_metrics && !health.engine_metrics.error && (() => {
