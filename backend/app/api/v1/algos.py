@@ -350,8 +350,10 @@ async def list_algos(
     include_archived: bool = False,
     db: AsyncSession = Depends(get_db)
 ):
-    """List all algos. Excludes archived by default."""
+    """List all algos. Excludes archived and soft-deleted by default."""
     q = select(Algo, Account).join(Account, Algo.account_id == Account.id).order_by(Algo.created_at)
+    # Always hide soft-deleted algos — they are permanently hidden from all UI queries
+    q = q.where((Algo.is_deleted == False) | (Algo.is_deleted == None))
     if not include_archived:
         q = q.where(Algo.is_archived == False)
     result = await db.execute(q)
@@ -455,7 +457,7 @@ async def get_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
     """Get full algo config including all legs."""
     result = await db.execute(select(Algo).where(Algo.id == algo_id))
     algo = result.scalar_one_or_none()
-    if not algo:
+    if not algo or algo.is_deleted:
         raise HTTPException(status_code=404, detail="Algo not found")
     legs_result = await db.execute(
         select(AlgoLeg).where(AlgoLeg.algo_id == algo_id, AlgoLeg.is_archived == False).order_by(AlgoLeg.leg_number)
@@ -611,15 +613,20 @@ async def deploy_week(algo_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/{algo_id}")
 async def delete_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
-    """Soft-delete (archive) an algo. All historical data is preserved."""
+    """
+    Soft-delete an algo. Sets is_deleted=TRUE and deleted_at=NOW().
+    The algo is permanently hidden from all UI queries.
+    All orders, P&L and trade history are preserved — no rows are ever hard-deleted.
+    """
     result = await db.execute(select(Algo).where(Algo.id == algo_id))
     algo = result.scalar_one_or_none()
     if not algo:
         raise HTTPException(status_code=404, detail="Algo not found")
 
-    algo.is_archived = True
+    algo.is_deleted = True
+    algo.deleted_at = datetime.now(timezone.utc)
     await db.commit()
-    return {"status": "archived", "id": str(algo_id)}
+    return {"status": "deleted", "id": str(algo_id)}
 
 
 # ── Archive / Unarchive ───────────────────────────────────────────────────────

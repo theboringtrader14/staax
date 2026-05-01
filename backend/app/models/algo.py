@@ -62,6 +62,8 @@ class Algo(Base):
     order_type   = Column(Enum(OrderType, values_callable=lambda x: [e.value for e in x]), default=OrderType.MARKET)
     is_active    = Column(Boolean, default=True)
     is_archived  = Column(Boolean, default=False)
+    is_deleted   = Column(Boolean, default=False)
+    deleted_at   = Column(DateTime(timezone=True), nullable=True)
     is_live      = Column(Boolean, default=False, nullable=False)
 
     # ── Timing ────────────────────────────────────────────────────────────────

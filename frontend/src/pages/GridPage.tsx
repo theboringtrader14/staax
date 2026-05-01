@@ -127,6 +127,7 @@ export default function GridPage() {
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [statFilter,      setStatFilter]      = useState<string|null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [deleteConfirm,  setDeleteConfirm]  = useState<string|null>(null)
   const [showDeferModal, setShowDeferModal] = useState(false)
   const [deferAlgo,      setDeferAlgo]      = useState<Algo|null>(null)
   const [deferDay,       setDeferDay]       = useState('')
@@ -383,6 +384,12 @@ export default function GridPage() {
       await algosAPI.duplicate(algoId)
       await loadData()
     } catch { showError('Duplicate failed') }
+  }
+
+  const deleteAlgo = async (algoId: string) => {
+    setAlgos(a => a.filter(x => x.id !== algoId))
+    setGrid(g => { const n = { ...g }; delete n[algoId]; return n })
+    try { await algosAPI.delete(algoId) } catch { loadData(); showError('Delete failed') }
   }
 
   const active   = algos.filter(a => !a.arch)
@@ -943,8 +950,8 @@ export default function GridPage() {
 
                               {/* Remove */}
                               <button
-                                onClick={() => setArchConfirm(algo.id)}
-                                title="Remove (archive)"
+                                onClick={() => setDeleteConfirm(algo.id)}
+                                title="Delete algo"
                                 style={{
                                   display:'flex', alignItems:'center', justifyContent:'center',
                                   width:40, height:40, borderRadius:12,
@@ -1034,6 +1041,37 @@ export default function GridPage() {
           </div>
         </div>
       )}
+
+      {/* ── Delete confirm modal ─────────────────────────────────────────── */}
+      {deleteConfirm && (() => {
+        const a = algos.find(x => x.id === deleteConfirm)
+        return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth:'380px' }}>
+              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Delete {a?.name}?</div>
+              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>
+                This algo will be removed from your dashboard. All orders, P&L and trade history are permanently preserved.
+              </div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                  onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
+                  onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                >Cancel</button>
+                <button
+                  onClick={() => { deleteAlgo(deleteConfirm); setDeleteConfirm(null) }}
+                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#FF4444', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                  onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
+                  onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                >Delete Algo</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Defer removal modal ── */}
       {showDeferModal && deferAlgo && (
