@@ -215,8 +215,8 @@ async function handleRetrySL(orderId: string) {
 }
 
 // ── LegRow ───────────────────────────────────────────────────────────────────
-function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHigh, orbLow, isOrbAlgo, isMarketHours }: {
-  leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean; livePnl?: number
+function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit, orbHigh, orbLow, isOrbAlgo, isMarketHours }: {
+  leg: Leg; isChild: boolean; liveLtp?: number; hasLivePoll?: boolean
   onEditExit?: (orderId: string, price: number) => void
   orbHigh?: number | null
   orbLow?: number | null
@@ -420,8 +420,8 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, livePnl, onEditExit, orbHi
             </span>
           : <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>}
       </td>
-      <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'center', color: (livePnl ?? leg.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
-        {(() => { const p = livePnl ?? leg.pnl; return p != null && p !== 0 ? `${p >= 0 ? '+' : ''}₹${Math.abs(p).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—' })()}
+      <td style={{ width: COLS[10], fontWeight: 700, textAlign: 'center', color: (leg.pnl ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+        {(() => { const p = leg.pnl; return p != null && p !== 0 ? `${p >= 0 ? '+' : ''}₹${Math.abs(p).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—' })()}
       </td>
     </tr>
     {leg.status === 'error' && leg.errorMessage && (
@@ -694,13 +694,11 @@ export default function OrdersPage() {
   const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set())
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const [weekPnl, setWeekPnl] = useState<Record<string, number | null>>({})
   const [showWeekends, setShowWeekends] = useState(() => {
     return localStorage.getItem('orders_show_weekends') === 'true'
   })
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
-  const [ltpData, setLtpData]         = useState<Record<string, { ltp: number; pnl: number; fill_price: number }>>({})
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
   const [retryModal, setRetryModal] = useState<{ algoIdx: number; legs: Leg[] } | null>(null)
   const [retryChecked, setRetryChecked] = useState<Record<string, boolean>>({})
@@ -758,28 +756,6 @@ export default function OrdersPage() {
     }).catch(() => {})
   }, [isPractixMode])
 
-  // Fetch week P&L summary — re-runs whenever the displayed week changes
-  useEffect(() => {
-    const monDate = weekDates['MON']
-    if (!monDate) return
-    setWeekPnl({})  // clear stale values immediately so tabs don't show last week's data
-    ordersAPI.weekSummary(monDate, isPractixMode)
-      .then((res) => {
-        const mtmByDate: Record<string, number | { total?: number } | null> = res.data?.mtm_by_date || {}
-        const map: Record<string, number | null> = {}
-        for (const [dateStr, val] of Object.entries(mtmByDate)) {
-          const day = Object.entries(weekDates).find(([, d]) => d === dateStr)?.[0]
-          if (!day) continue
-          map[day] = val === null || val === undefined ? null
-            : typeof val === 'number' ? val
-            : typeof val === 'object' ? ((val as { total?: number }).total ?? null)
-            : null
-        }
-        setWeekPnl(map)
-      })
-      .catch(() => {})
-  }, [weekDates, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Load orders + waiting algos for selectedDate — skip if already cached
   useEffect(() => {
     const date = selectedDate
@@ -820,30 +796,6 @@ export default function OrdersPage() {
     }
     connect()
     return () => { if (retryTimeout) clearTimeout(retryTimeout); ws?.close() }
-  }, [])
-
-  // Live LTP polling every 1 second when today has open orders.
-  // Runs regardless of which day tab is active so the today pill stays live
-  // even when the user is viewing a past-day tab (no flicker on tab switch).
-  useEffect(() => {
-    const todayOrders = ordersByDate[todayDate] ?? []
-    const hasOpenOrders = todayOrders.some(g => g.legs.some(l => l.status === 'open'))
-    if (!hasOpenOrders) return
-    const poll = () => {
-      ordersAPI.ltp()
-        .then(res => { if (res.data?.ltp) setLtpData(res.data.ltp) })
-        .catch(() => {})
-    }
-    poll()
-    const interval = setInterval(poll, 1000)
-    return () => clearInterval(interval)
-  }, [ordersByDate, todayDate])
-
-  // Seed LTP data immediately on mount — prevents ₹0 flash before first poll fires
-  useEffect(() => {
-    ordersAPI.ltp()
-      .then(res => { if (res.data?.ltp) setLtpData(res.data.ltp) })
-      .catch(() => {})
   }, [])
 
   // Live poll /orders/waiting every 3s when today has MONITORING W&T legs.
@@ -1194,34 +1146,27 @@ export default function OrdersPage() {
   // Past-day detection — ISO date string compare is safe (both are YYYY-MM-DD)
   const isPastDay = selectedDate < todayDate
 
-  // Always-live P&L for today's pill — computed from ordersByDate[todayDate] + ltpData
-  // so the THU tab shows fresh P&L even when another day tab is active.
-  // Do NOT filter isOvernight — STBT/BTST entered today live in today's date bucket
-  // and must be included. The date bucket already excludes yesterday's overnight entries.
-  // Always-live P&L for today pill — computed from ordersByDate[todayDate] + ltpData
-  const liveTodayPnl = useMemo((): number | null => {
-    const todayOrders = accountFilter === 'all'
-      ? (ordersByDate[todayDate] ?? [])
-      : (ordersByDate[todayDate] ?? []).filter(g => g.account === accountFilter)
-    if (!todayOrders.some(g => g.legs.length > 0)) return null
-    return todayOrders.flatMap(g => g.legs).reduce((sum, l) =>
-      sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
-  }, [ordersByDate, todayDate, ltpData, accountFilter])
-
-  // Past day P&L — computed from local order data if loaded, otherwise falls back to weekPnl
-  const computedDayPnl = useMemo(() => {
-    const result: Record<string, number | null> = { ...weekPnl }
+  // Day tab P&L — computed from loaded ordersByDate for each day.
+  // For days where orders haven't been loaded yet → returns null (shows '—').
+  const dayPnlByDay = useMemo(() => {
+    const result: Record<string, number | null> = {}
     for (const [day, date] of Object.entries(weekDates)) {
-      if (!date || date === todayDate) continue
+      if (!date) continue
       const groups = ordersByDate[date]
-      if (groups && groups.some(g => g.legs.length > 0)) {
+      if (groups === undefined) {
+        result[day] = null  // not yet loaded
+      } else {
         const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
-        result[day] = filtered.reduce((daySum, group) =>
-          daySum + group.legs.reduce((s, l) => s + (l.pnl ?? 0), 0), 0)
+        if (!filtered.some(g => g.legs.length > 0)) {
+          result[day] = null  // loaded but empty
+        } else {
+          result[day] = filtered.reduce((daySum, group) =>
+            daySum + group.legs.reduce((s, l) => s + (l.pnl ?? 0), 0), 0)
+        }
       }
     }
     return result
-  }, [weekPnl, ordersByDate, accountFilter, weekDates, todayDate])
+  }, [ordersByDate, accountFilter, weekDates])
 
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
@@ -1406,8 +1351,7 @@ export default function OrdersPage() {
                   const date       = weekDates[day]
                   const isActive   = selectedDate === date
                   const isHoliday  = date ? holidayDates.has(date) : false
-                  const isDayToday = date === todayDate
-                  const dayPnl     = isDayToday ? liveTodayPnl : (computedDayPnl[day] ?? null)
+                  const dayPnl     = dayPnlByDay[day] ?? null
                   return (
                     <button
                       key={day}
@@ -1811,7 +1755,7 @@ export default function OrdersPage() {
                     )
                     const isClosed = isFullyClosed
                     const closedL  = group.legs.filter(l => l.status === 'closed' && l.fillPrice != null && l.exitPrice != null)
-                    const totalPnl = group.legs.reduce((sum, l) => sum + (ltpData[l.id]?.pnl ?? l.pnl ?? 0), 0)
+                    const totalPnl = group.legs.reduce((sum, l) => sum + (l.pnl ?? 0), 0)
                     const showSpark = closedL.length > 0 && !group.legs.some(l => l.status === 'open' || l.status === 'pending')
 
                     // Action button helper booleans
@@ -2014,18 +1958,14 @@ export default function OrdersPage() {
                               </thead>
                               <tbody>
                                 {buildRows(group.legs).map(({ leg, isChild }) => {
-                                  const pollEntry = ltpData[leg.id]
                                   // Coerce instrumentToken to number — JSON may deserialise it as string
                                   const tokenKey = leg.instrumentToken != null ? Number(leg.instrumentToken) : undefined
-                                  const resolvedLtp = pollEntry?.ltp ?? (tokenKey ? ltpMap[tokenKey] : undefined)
-                                  const isLive = pollEntry?.ltp !== null &&
-                                                 pollEntry?.ltp !== undefined &&
-                                                 typeof pollEntry?.ltp === 'number'
+                                  const resolvedLtp = tokenKey ? ltpMap[tokenKey] : undefined
+                                  const isLive = resolvedLtp !== undefined
                                   return (
                                     <LegRow key={leg.id} leg={leg} isChild={isChild}
                                       liveLtp={resolvedLtp}
                                       hasLivePoll={isLive}
-                                      livePnl={leg.status === 'open' ? pollEntry?.pnl : undefined}
                                       onEditExit={(id, price) => setEditExit({ orderId: id, value: String(price) })}
                                       orbHigh={group.orbHigh}
                                       orbLow={group.orbLow}
