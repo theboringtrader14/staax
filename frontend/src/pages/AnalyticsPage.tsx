@@ -909,10 +909,18 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
   const distTotal = data.distribution.excellent + data.distribution.good + data.distribution.acceptable + data.distribution.slow
 
   function latencyColor(ms: number): string {
-    if (ms < 150)  return '#10B981'           // Excellent — emerald
-    if (ms < 250)  return '#3B82F6'           // Good — blue
-    if (ms < 400)  return 'var(--accent-amber)' // Acceptable — amber
-    return 'var(--red)'                        // Slow — red
+    if (ms < 150)  return '#10B981'
+    if (ms < 250)  return '#3B82F6'
+    if (ms < 400)  return 'var(--accent-amber)'
+    return 'var(--red)'
+  }
+
+  // Bar gradient shows only the colours the algo has "earned" by being fast enough
+  function algoBarGradient(ms: number): string {
+    if (ms < 150)  return 'linear-gradient(to right, #EF4444, #F59E0B 35%, #3B82F6 65%, #10B981)' // all 4
+    if (ms < 250)  return 'linear-gradient(to right, #EF4444, #F59E0B 40%, #3B82F6)'              // red→amber→blue
+    if (ms < 400)  return 'linear-gradient(to right, #EF4444, #F59E0B)'                           // red→amber
+    return '#EF4444'                                                                               // red only
   }
 
   function statusColor(s: string): string {
@@ -1021,7 +1029,7 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
                       <div style={{
                         width: `${Math.max(5, Math.round((maxAlgoMs - a.avg_ms) / (maxAlgoMs - minAlgoMs || 1) * 100))}%`,
                         height: '100%', borderRadius: 4, opacity: 0.9, transition: 'width 0.3s',
-                        background: 'linear-gradient(to right, #EF4444, #F59E0B 35%, #3B82F6 65%, #10B981)',
+                        background: algoBarGradient(a.avg_ms),
                       }} />
                     </div>
                   </td>
