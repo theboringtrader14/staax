@@ -92,10 +92,7 @@ async def _handle_positions():
 
     async with AsyncSessionLocal() as db:
         q = await db.execute(
-            select(Order).where(
-                Order.status == OrderStatus.OPEN,
-                Order.is_practix == False,
-            )
+            select(Order).where(Order.status == OrderStatus.OPEN)
         )
         orders = q.scalars().all()
 
@@ -103,11 +100,15 @@ async def _handle_positions():
         await _reply("<b>POSITIONS</b>\n\nNo open positions.")
         return
 
-    lines = [f"<b>OPEN POSITIONS ({len(orders)})</b>"]
+    total_pnl = sum(o.pnl or 0 for o in orders)
+    sign      = "+" if total_pnl >= 0 else ""
+    lines     = [f"<b>OPEN POSITIONS ({len(orders)})</b>"]
     for o in orders[:15]:
-        lines.append(f"• {o.symbol} | {o.side} | entry {o.entry_price:.2f}")
+        tag = " [P]" if o.is_practix else ""
+        lines.append(f"• {o.symbol} | {o.direction} | {o.fill_price:.2f}{tag}")
     if len(orders) > 15:
         lines.append(f"... and {len(orders) - 15} more")
+    lines.append(f"\nUnrealized P&amp;L: {sign}Rs{total_pnl:,.0f}")
     await _reply("\n".join(lines))
 
 
