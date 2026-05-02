@@ -318,7 +318,7 @@ export default function LandingPage() {
       FINEX:  'https://finex.lifexos.co.in',
     }
     const url = urls[moduleId]
-    if (url) window.open(token ? `${url}?token=${token}` : url, '_self')
+    if (url) window.location.href = token ? `${url}?token=${encodeURIComponent(token)}` : url
   }
 
   // ── Login wall ────────────────────────────────────────────────────────────

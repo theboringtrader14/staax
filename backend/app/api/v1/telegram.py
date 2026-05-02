@@ -122,9 +122,17 @@ async def tg_edit(chat_id: str, message_id: int, text: str, keyboard: list = Non
         payload["reply_markup"] = {"inline_keyboard": keyboard}
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
-            await client.post(f"{TG_API}/editMessageText", json=payload)
+            r = await client.post(f"{TG_API}/editMessageText", json=payload)
+            data = r.json()
+            if not data.get("ok"):
+                logger.warning(
+                    f"tg_edit failed ({data.get('error_code')}): {data.get('description')} "
+                    f"— chat={chat_id} msg={message_id} preview={text[:40]!r} — falling back to send"
+                )
+                await tg_send(chat_id, text, keyboard)
         except Exception as e:
-            logger.error(f"[TG] edit failed: {e}")
+            logger.error(f"[TG] edit exception: {e} — falling back to send")
+            await tg_send(chat_id, text, keyboard)
 
 
 async def tg_answer(callback_query_id: str, text: str = ""):
