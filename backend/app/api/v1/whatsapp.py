@@ -6,11 +6,13 @@ Endpoints:
   POST /api/v1/whatsapp/webhook      — Incoming Meta events (log + acknowledge)
   GET  /api/v1/whatsapp/eod-summary  — EOD P&L summary (n8n internal use only)
 """
+import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import httpx
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
@@ -33,9 +35,13 @@ async def wa_verify(request: Request):
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
+_N8N_INCOMING_URL = "http://localhost:5678/webhook/whatsapp-incoming"
+
+
 @router.post("/whatsapp/webhook")
 async def wa_incoming(request: Request):
-    """Receive incoming Meta Cloud API events. Log only — processing handled in n8n."""
+    """Receive incoming Meta Cloud API events. Log + forward to n8n for processing."""
+    body = {}
     try:
         body = await request.json()
         text = ""
@@ -52,6 +58,16 @@ async def wa_incoming(request: Request):
         logger.info(f"[WA] Incoming: {text!r}")
     except Exception as e:
         logger.warning(f"[WA] Incoming parse error: {e}")
+
+    # Forward to n8n for command processing (fire-and-forget)
+    async def _forward():
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(_N8N_INCOMING_URL, json=body)
+        except Exception as _fe:
+            logger.warning(f"[WA] n8n forward failed: {_fe}")
+
+    asyncio.create_task(_forward())
     return {"status": "ok"}
 
 
