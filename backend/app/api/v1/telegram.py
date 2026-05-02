@@ -86,29 +86,29 @@ async def _handle_health():
 
 
 async def _handle_positions():
-    from app.core.database import AsyncSessionLocal
-    from app.models.order import Order, OrderStatus
-    from sqlalchemy import select
+    import httpx
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get("http://localhost:8000/api/v1/orders/open-positions")
+        data = resp.json()
 
-    async with AsyncSessionLocal() as db:
-        q = await db.execute(
-            select(Order).where(Order.status == OrderStatus.OPEN)
-        )
-        orders = q.scalars().all()
-
-    if not orders:
+    groups = data.get("open_positions", [])
+    if not groups:
         await _reply("<b>POSITIONS</b>\n\nNo open positions.")
         return
 
-    total_pnl = sum(o.pnl or 0 for o in orders)
+    total_pnl = sum(g.get("pnl") or 0 for g in groups)
     sign      = "+" if total_pnl >= 0 else ""
-    lines     = [f"<b>OPEN POSITIONS ({len(orders)})</b>"]
-    for o in orders[:15]:
-        tag = " [P]" if o.is_practix else ""
-        lines.append(f"• {o.symbol} | {o.direction} | {o.fill_price:.2f}{tag}")
-    if len(orders) > 15:
-        lines.append(f"... and {len(orders) - 15} more")
-    lines.append(f"\nUnrealized P&amp;L: {sign}Rs{total_pnl:,.0f}")
+    lines     = [f"<b>OPEN POSITIONS ({len(groups)} algos)</b>"]
+    for g in groups[:15]:
+        pnl  = g.get("pnl") or 0
+        psign = "+" if pnl >= 0 else ""
+        tag  = " [P]" if any(o.get("is_practix") for o in g.get("orders", [])) else ""
+        lines.append(
+            f"• {g['algo_name']}{tag} | {g['open_count']} pos | {psign}Rs{pnl:,.0f}"
+        )
+    if len(groups) > 15:
+        lines.append(f"... and {len(groups) - 15} more")
+    lines.append(f"\nTotal P&amp;L: {sign}Rs{total_pnl:,.0f}")
     await _reply("\n".join(lines))
 
 
