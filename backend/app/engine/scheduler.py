@@ -1164,9 +1164,11 @@ class AlgoScheduler:
                 try:
                     import asyncio as _aio
                     from app.engine.wa_notifier import wa_notifier as _wa
+                    from app.engine.tg_notifier import tg_notifier as _tg
                     _aio.create_task(_wa.notify("eod_report", {"trigger": "scheduler", "closed": len(rows)}))
+                    _aio.create_task(_tg.notify("eod_report", {"trigger": "scheduler", "closed": len(rows)}))
                 except Exception as _wa_err:
-                    logger.error(f"EOD WhatsApp notify failed: {_wa_err}")
+                    logger.error(f"EOD notify failed: {_wa_err}")
 
             except Exception as e:
                 await db.rollback()

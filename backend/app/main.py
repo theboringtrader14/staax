@@ -30,7 +30,7 @@ from app.core.database import engine as db_engine, Base
 from app.core.logging_config import setup_logging
 
 # ── API routers ────────────────────────────────────────────────────────────────
-from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots, holidays as holidays_api, logs as logs_api, ai as ai_api, mobile as mobile_api, analytics as analytics_api, whatsapp as whatsapp_api
+from app.api.v1 import auth, accounts, algos, grid, orders, services, system, reports, events, bots, holidays as holidays_api, logs as logs_api, ai as ai_api, mobile as mobile_api, analytics as analytics_api, whatsapp as whatsapp_api, telegram as telegram_api
 from app.api.v1.engine_health import router as engine_health_router
 from app.api.v1.system import daily_system_reset
 from app.engine.broker_reconnect   import broker_reconnect_manager
@@ -1192,6 +1192,7 @@ app.include_router(mobile_api.router,    prefix="/api/v1/mobile",    tags=["mobi
 app.include_router(analytics_api.router, prefix="/api/v1")
 app.include_router(engine_health_router, prefix="/api/v1/engine", tags=["engine"])
 app.include_router(whatsapp_api.router,  prefix="/api/v1",          tags=["whatsapp"])
+app.include_router(telegram_api.router,  prefix="/api/v1",          tags=["telegram"])
 
 # ── WebSocket routes ───────────────────────────────────────────────────────────
 app.include_router(ws_routes.router, tags=["websocket"])

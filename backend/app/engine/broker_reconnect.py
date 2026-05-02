@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 from app.engine.wa_notifier import wa_notifier as _wa_notifier
+from app.engine.tg_notifier import tg_notifier as _tg_notifier
 
 IST = ZoneInfo("Asia/Kolkata")
 STALE_THRESHOLD_SECONDS  = 30   # Fix 2: raised from 5→30 — 5s was too aggressive, caused false reconnects
@@ -193,6 +194,7 @@ class BrokerReconnectManager:
             try:
                 logger.warning("[RECONNECT MGR] SmartStream _connected=False — triggering reconnect")
                 asyncio.create_task(_wa_notifier.notify("feed_down", {"status": "disconnected"}))
+                asyncio.create_task(_tg_notifier.notify("feed_down", {"status": "disconnected"}))
                 await self._do_reconnect()
             finally:
                 _reconnecting = False
@@ -306,6 +308,7 @@ class BrokerReconnectManager:
                 f"(total reconnects: {self._reconnect_count})"
             )
             asyncio.create_task(_wa_notifier.notify("feed_up", {"status": "reconnected"}))
+            asyncio.create_task(_tg_notifier.notify("feed_up", {"status": "reconnected"}))
 
         except Exception as e:
             self._consecutive_failures += 1
