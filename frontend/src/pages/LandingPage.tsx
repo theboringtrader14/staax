@@ -190,6 +190,17 @@ export default function LandingPage() {
     window.scrollTo(0, 0)
   }, [])
 
+  // ── Token validation on hub mount — logout if token expired/invalid ────────
+  useEffect(() => {
+    if (!isAuthenticated || !token) return
+    const apiBase = import.meta.env.VITE_API_URL || ''
+    fetch(`${apiBase}/api/v1/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => {
+      if (r.status === 401) logout()
+    }).catch(() => {}) // network error → stay logged in (offline tolerance)
+  }, [])
+
   // ── System status fetch ───────────────────────────────────────────────────
   useEffect(() => {
     const ok = '#10b981'
@@ -234,12 +245,10 @@ export default function LandingPage() {
   // ── GSAP: login card entrance ─────────────────────────────────────────────
   useGSAP(() => {
     if (!isAuthenticated && loginCardRef.current) {
-      gsap.from(loginCardRef.current, {
-        y: 40,
-        opacity: 0,
-        duration: 0.8,
-        ease: 'power3.out',
-      })
+      gsap.fromTo(loginCardRef.current,
+        { y: 40, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out', immediateRender: false }
+      )
     }
   }, { dependencies: [isAuthenticated] })
 
