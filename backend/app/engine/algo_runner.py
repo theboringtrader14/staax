@@ -57,6 +57,14 @@ from app.engine.ltp_consumer import LTPConsumer
 from app.engine import event_logger as _ev
 from app.engine import push_sender as _push
 from app.engine import order_audit as _audit
+import app.engine.wa_notifier as _wa_mod
+
+
+async def _wa_notify(event: str, payload: dict) -> None:
+    try:
+        await _wa_mod.wa_notifier.notify(event, payload)
+    except Exception:
+        pass
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
@@ -965,6 +973,13 @@ class AlgoRunner:
                 "⚡ Entry",
                 f"{algo.name} {sign} {_sym} @ {_fill:.2f}",
             ))
+            asyncio.create_task(_wa_notify("entry_executed", {
+                "algo_name":  algo.name,
+                "account":    "",
+                "symbol":     _sym,
+                "fill_price": _fill,
+                "lots":       1,
+            }))
         logger.info(
             f"✅ Entry complete: {algo.name} | {len(placed_orders)} orders placed"
         )
@@ -2096,6 +2111,12 @@ class AlgoRunner:
                         "🔴 SL Hit",
                         f"{_algo_name or 'Algo'} — SL triggered on {order.symbol}",
                     ))
+                    asyncio.create_task(_wa_notify("sl_hit", {
+                        "algo_name":  _algo_name,
+                        "account":    str(order.account_id),
+                        "exit_price": exit_price,
+                        "pnl":        order.pnl or 0.0,
+                    }))
                     # Bug B: broadcast sl_hit event for frontend toast + sound
                     if self._ws_manager:
                         try:
@@ -2174,6 +2195,12 @@ class AlgoRunner:
                         "✅ TP Hit",
                         f"{_algo_name or 'Algo'} — Target reached on {order.symbol}!",
                     ))
+                    asyncio.create_task(_wa_notify("tp_hit", {
+                        "algo_name":  _algo_name,
+                        "account":    str(order.account_id),
+                        "exit_price": ltp,
+                        "pnl":        order.pnl or 0.0,
+                    }))
 
                     if self._reentry_engine:
                         await self._reentry_engine.on_exit(

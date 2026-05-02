@@ -1161,6 +1161,12 @@ class AlgoScheduler:
                     await self._algo_runner.exit_all(geid, reason="auto_sq")
 
                 logger.info(f"✅ EOD cleanup: {len(rows)} algos closed ({len(active_ids)} via exit_all)")
+                try:
+                    import asyncio as _aio
+                    from app.engine.wa_notifier import wa_notifier as _wa
+                    _aio.create_task(_wa.notify("eod_report", {"trigger": "scheduler", "closed": len(rows)}))
+                except Exception as _wa_err:
+                    logger.error(f"EOD WhatsApp notify failed: {_wa_err}")
 
             except Exception as e:
                 await db.rollback()

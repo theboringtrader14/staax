@@ -25,6 +25,7 @@ Integration:
 Kill Switch integration:
     - If global_kill_switch.disabled is True → skip reconnect (engine is halted)
 """
+import asyncio
 import logging
 import time as _time
 from datetime import datetime, timezone
@@ -32,6 +33,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+from app.engine.wa_notifier import wa_notifier as _wa_notifier
 
 IST = ZoneInfo("Asia/Kolkata")
 STALE_THRESHOLD_SECONDS  = 30   # Fix 2: raised from 5→30 — 5s was too aggressive, caused false reconnects
@@ -190,6 +192,7 @@ class BrokerReconnectManager:
             _reconnecting = True
             try:
                 logger.warning("[RECONNECT MGR] SmartStream _connected=False — triggering reconnect")
+                asyncio.create_task(_wa_notifier.notify("feed_down", {"status": "disconnected"}))
                 await self._do_reconnect()
             finally:
                 _reconnecting = False
@@ -302,6 +305,7 @@ class BrokerReconnectManager:
                 f"[RECONNECT MGR] ✅ Reconnect initiated "
                 f"(total reconnects: {self._reconnect_count})"
             )
+            asyncio.create_task(_wa_notifier.notify("feed_up", {"status": "reconnected"}))
 
         except Exception as e:
             self._consecutive_failures += 1
