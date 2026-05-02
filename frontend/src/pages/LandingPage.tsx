@@ -193,8 +193,7 @@ export default function LandingPage() {
   // ── Token validation on hub mount — logout if token expired/invalid ────────
   useEffect(() => {
     if (!isAuthenticated || !token) return
-    const apiBase = import.meta.env.VITE_API_URL || ''
-    fetch(`${apiBase}/api/v1/me`, {
+    fetch(`/api/v1/me`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then(r => {
       if (r.status === 401) logout()
@@ -272,8 +271,7 @@ export default function LandingPage() {
   const handleLogin = async () => {
     setLoginForm(f => ({ ...f, loading: true, error: '' }))
     try {
-      const apiBase = import.meta.env.VITE_API_URL || ''
-      const res = await fetch(`${apiBase}/api/v1/login`, {
+      const res = await fetch('/api/v1/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: loginForm.username, password: loginForm.password }),
