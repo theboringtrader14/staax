@@ -4,6 +4,7 @@ Accounts: Karthik (Zerodha F&O), Mom (Angel One F&O), Wife (Angel One MCX Phase 
 """
 from sqlalchemy import Column, String, Float, Boolean, DateTime, Text, Enum, Integer, Date, Numeric, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 import enum
@@ -44,8 +45,11 @@ class Account(Base):
     scope       = Column(String(10), nullable=True, default='fo')   # 'fo' (F&O) or 'mcx'
     initial_capital        = Column(Numeric(14, 2), nullable=True)   # snapshot of net available used as baseline
     initial_capital_set_at = Column(DateTime(timezone=True), nullable=True)
+    user_id     = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+    owner = relationship("User", back_populates="accounts", lazy="select")
 
 
 class AccountFYMargin(Base):

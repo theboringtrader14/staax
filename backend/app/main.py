@@ -352,6 +352,7 @@ async def lifespan(app: FastAPI):
 
     # ── 16. DB schema migrations (ADD COLUMN IF NOT EXISTS — idempotent) ──────
     await _run_startup_migrations()
+    await _seed_owner_user()
 
     # ── 17. Fix today's open orders that have quantity=1 (lot size not applied) ─
     import asyncio as _aio
@@ -1212,6 +1213,36 @@ async def _run_startup_migrations() -> None:
     migrations = [
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS lot_size INTEGER DEFAULT 1",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconcile_status VARCHAR(20) DEFAULT NULL",
+        # ── Multi-user foundation (2026-05-02) ──────────────────────────────
+        """CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            email VARCHAR(255) UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            display_name VARCHAR(100),
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            is_owner BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ
+        )""",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL",
+        "CREATE INDEX IF NOT EXISTS ix_accounts_user_id ON accounts(user_id) WHERE user_id IS NOT NULL",
+        """CREATE TABLE IF NOT EXISTS telegram_subscriptions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            chat_id VARCHAR(50) NOT NULL,
+            display_name VARCHAR(100),
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            notify_entry BOOLEAN NOT NULL DEFAULT TRUE,
+            notify_sl BOOLEAN NOT NULL DEFAULT TRUE,
+            notify_tp BOOLEAN NOT NULL DEFAULT TRUE,
+            notify_error BOOLEAN NOT NULL DEFAULT TRUE,
+            notify_eod BOOLEAN NOT NULL DEFAULT TRUE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            linked_at TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_telegram_subscriptions_chat_id ON telegram_subscriptions(chat_id)",
+        "CREATE INDEX IF NOT EXISTS ix_telegram_subscriptions_account_id ON telegram_subscriptions(account_id)",
     ]
     try:
         async with AsyncSessionLocal() as db:
@@ -1221,6 +1252,41 @@ async def _run_startup_migrations() -> None:
         logger.info(f"[STARTUP] DB migrations complete ({len(migrations)} statements)")
     except Exception as _e:
         logger.warning(f"[STARTUP] DB migration failed (non-fatal): {_e}")
+
+
+async def _seed_owner_user() -> None:
+    """Insert owner user from .env if not already present. Assign all accounts to owner."""
+    import uuid as _uuid
+    from sqlalchemy import text
+    from app.core.database import AsyncSessionLocal
+    from app.core.config import settings
+    username      = getattr(settings, "STAAX_USERNAME", "karthikeyan")
+    password_hash = getattr(settings, "STAAX_PASSWORD_HASH", "")
+    display_name  = username.capitalize()
+    if not password_hash:
+        logger.warning("[STARTUP] STAAX_PASSWORD_HASH not set — skipping owner seed")
+        return
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("""
+                INSERT INTO users (id, username, password_hash, display_name, is_active, is_owner)
+                VALUES (:id, :username, :password_hash, :display_name, TRUE, TRUE)
+                ON CONFLICT (username) DO NOTHING
+            """), {
+                "id": str(_uuid.uuid4()),
+                "username": username,
+                "password_hash": password_hash,
+                "display_name": display_name,
+            })
+            await db.execute(text("""
+                UPDATE accounts
+                SET user_id = (SELECT id FROM users WHERE username = :username LIMIT 1)
+                WHERE user_id IS NULL
+            """), {"username": username})
+            await db.commit()
+        logger.info(f"[STARTUP] Owner user seeded: {username}")
+    except Exception as _e:
+        logger.warning(f"[STARTUP] Owner seed failed (non-fatal): {_e}")
 
 
 async def _fix_today_order_quantities() -> None:

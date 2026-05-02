@@ -11,6 +11,19 @@ import IndicatorsPage from '@/pages/IndicatorsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import { useStore } from '@/store'
 import { useEffect, useState } from 'react'
+import React from 'react'
+
+const RequireAuth = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = useStore()
+  useEffect(() => {
+    if (!isAuthenticated) {
+      const isLocal = window.location.hostname === 'localhost'
+      window.location.href = isLocal ? 'http://localhost:3000' : 'https://lifexos.co.in'
+    }
+  }, [isAuthenticated])
+  if (!isAuthenticated) return null
+  return <>{children}</>
+}
 import { accountsAPI } from '@/services/api'
 import DashboardPanel from '@/components/panels/DashboardPanel'
 import AccountsDrawer from '@/components/panels/AccountsDrawer'
@@ -22,6 +35,16 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('staax_theme') ?? 'dark'
     document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (token) {
+      useStore.getState().login(token)
+      window.history.replaceState({}, '', window.location.pathname)
+      window.location.replace('/grid')
+    }
   }, [])
 
   // Global Zerodha OAuth popup handler
@@ -118,7 +141,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
 
           {/* App routes — Layout is a pathless wrapper */}
-          <Route element={<Layout />}>
+          <Route element={<RequireAuth><Layout /></RequireAuth>}>
             <Route path="/dashboard"  element={<Navigate to="/grid" replace />} />
             <Route path="/grid"       element={<GridPage />} />
             <Route path="/orders"     element={<OrdersPage />} />

@@ -86,7 +86,7 @@ export default function TopNav() {
         }}>
 
           {/* LEFT — Wordmark */}
-          <NavLink to="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <a href={window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://lifexos.co.in'} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
             <span style={{ fontFamily: "var(--font-body)", fontSize: 20, fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '-0.03em' }}>
               <span style={{
                 background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
@@ -99,7 +99,7 @@ export default function TopNav() {
               <span style={{ color: 'var(--text-dim)', WebkitTextFillColor: 'var(--text-dim)' }}>{' · '}</span>
               <span style={{ color: 'var(--accent)', WebkitTextFillColor: 'var(--accent)' }}>STAAX</span>
             </span>
-          </NavLink>
+          </a>
 
           {/* CENTER — Nav tabs */}
           <nav style={{ display: 'flex', alignItems: 'center', gap: 32, height: '100%' }}>

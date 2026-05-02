@@ -1,10 +1,29 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
-import { useEffect } from 'react'
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
 import AIAvatar from '@/components/AIAvatar'
 
-const MODULES = [
+gsap.registerPlugin()
+
+type Metric = { label: string; value: string }
+
+const MODULES: {
+  id: string
+  tagline: string
+  description: string
+  accent: string
+  accentDim: string
+  accentKey: string
+  status: string
+  statusColor: string
+  externalUrl?: string | null
+  path?: string | null
+  building?: boolean
+  comingSoon?: boolean
+  metrics?: Metric[]
+}[] = [
   {
     id: 'STAAX',
     tagline: 'Algorithmic Trading Intelligence',
@@ -15,6 +34,11 @@ const MODULES = [
     status: 'LIVE',
     statusColor: '#10b981',
     externalUrl: 'https://staax.lifexos.co.in',
+    metrics: [
+      { label: 'Active Algos', value: '12' },
+      { label: 'Open Positions', value: '—' },
+      { label: 'Day P&L', value: '—' },
+    ],
   },
   {
     id: 'INVEX',
@@ -27,6 +51,11 @@ const MODULES = [
     statusColor: '#f59e0b',
     path: null,
     externalUrl: 'https://invex.lifexos.co.in',
+    metrics: [
+      { label: 'Holdings', value: '—' },
+      { label: "Today's Gain", value: '—' },
+      { label: 'Portfolio Value', value: '—' },
+    ],
   },
   {
     id: 'BUDGEX',
@@ -39,6 +68,11 @@ const MODULES = [
     statusColor: '#f59e0b',
     path: null,
     externalUrl: 'https://budgex.lifexos.co.in',
+    metrics: [
+      { label: 'Month Spend', value: '—' },
+      { label: 'Budget Left', value: '—' },
+      { label: 'Top Category', value: '—' },
+    ],
   },
   {
     id: 'FINEX',
@@ -51,6 +85,11 @@ const MODULES = [
     statusColor: '#F59E0B',
     path: null,
     externalUrl: 'https://finex.lifexos.co.in',
+    metrics: [
+      { label: 'Net Worth', value: '—' },
+      { label: 'LIFEX Score', value: '—' },
+      { label: 'Goal Progress', value: '—' },
+    ],
   },
   {
     id: 'TRAVEX',
@@ -65,6 +104,7 @@ const MODULES = [
     comingSoon: false,
     externalUrl: null,
     path: null,
+    metrics: [],
   },
   {
     id: 'HEALTHEX',
@@ -76,6 +116,8 @@ const MODULES = [
     status: 'COMING SOON',
     statusColor: 'rgba(232,232,248,0.4)',
     path: null,
+    comingSoon: true,
+    metrics: [],
   },
   {
     id: 'HISTEX',
@@ -89,6 +131,7 @@ const MODULES = [
     path: null,
     comingSoon: true,
     externalUrl: null,
+    metrics: [],
   },
 ]
 
@@ -99,7 +142,6 @@ const STATS = [
   { value: '₹0', label: 'Setup Cost' },
   { value: '100%', label: 'Private' },
 ]
-
 
 const CosmosBackground = () => (
   <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
@@ -124,23 +166,31 @@ const CosmosBackground = () => (
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const isAuthenticated = useStore(s => s.isAuthenticated)
+  const { isAuthenticated, login, logout, token } = useStore()
 
-  useEffect(() => {
-    if (isAuthenticated) navigate('/dashboard', { replace: true })
-  }, [isAuthenticated, navigate])
+  // ── Login form state ──────────────────────────────────────────────────────
+  const [loginForm, setLoginForm] = useState({
+    username: '', password: '', error: '', loading: false
+  })
+  const loginCardRef = useRef<HTMLDivElement>(null)
+
+  // ── Landing state ─────────────────────────────────────────────────────────
+  const landingRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [hoveredModule, setHoveredModule] = useState<string | null>(null)
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  const [sysLines, setSysLines] = useState([
+    { color: 'rgba(232,232,248,0.35)', text: '⟳ loading system status...' },
+  ])
+
 
   useEffect(() => {
     history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
   }, [])
 
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  const [sysLines, setSysLines] = useState([
-    { color: 'rgba(232,232,248,0.35)', text: '⟳ loading system status...' },
-  ])
-
+  // ── System status fetch ───────────────────────────────────────────────────
   useEffect(() => {
     const ok = '#10b981'
     const err = '#ef4444'
@@ -149,20 +199,19 @@ export default function LandingPage() {
     fetch(`${apiBase}/api/v1/system/health`)
       .then(r => r.json())
       .then(async (data: { checks: { database: { ok: boolean }, redis: { ok: boolean }, smartstream: { ok: boolean, connected?: boolean }, scheduler: { ok: boolean } } }) => {
-        const db = data.checks?.database?.ok
+        const db    = data.checks?.database?.ok
         const redis = data.checks?.redis?.ok
-        const ss = data.checks?.smartstream?.ok && data.checks?.smartstream?.connected !== false
+        const ss    = data.checks?.smartstream?.ok && data.checks?.smartstream?.connected !== false
         const sched = data.checks?.scheduler?.ok
-        // Also probe FINEX health
         let finexOk = false
         try {
           const fr = await fetch('https://finex-api.lifexos.co.in/health', { signal: AbortSignal.timeout(4000) })
           finexOk = fr.ok
         } catch { /* unreachable */ }
         setSysLines([
-          { color: db ? ok : err,    text: `${db    ? '✓' : '✗'} Database      — ${db    ? 'connected' : 'down'}` },
+          { color: db    ? ok : err, text: `${db    ? '✓' : '✗'} Database      — ${db    ? 'connected' : 'down'}` },
           { color: redis ? ok : err, text: `${redis  ? '✓' : '✗'} Redis         — ${redis  ? 'connected' : 'down'}` },
-          { color: ss ? ok : err,    text: `${ss     ? '✓' : '✗'} SmartStream   — ${ss     ? 'active'    : 'down'}` },
+          { color: ss    ? ok : err, text: `${ss     ? '✓' : '✗'} SmartStream   — ${ss     ? 'active'    : 'down'}` },
           { color: sched ? ok : err, text: `${sched  ? '✓' : '✗'} Scheduler     — ${sched  ? 'running'   : 'down'}` },
           { color: finexOk ? ok : err, text: `${finexOk ? '✓' : '✗'} FINEX         — ${finexOk ? 'online' : 'offline'}` },
           { color: unk,              text: '— TRAVEX        — building' },
@@ -182,25 +231,219 @@ export default function LandingPage() {
       })
   }, [])
 
-  const handleEnter = () => navigate(isAuthenticated ? '/dashboard' : '/login')
+  // ── GSAP: login card entrance ─────────────────────────────────────────────
+  useGSAP(() => {
+    if (!isAuthenticated && loginCardRef.current) {
+      gsap.from(loginCardRef.current, {
+        y: 40,
+        opacity: 0,
+        duration: 0.8,
+        ease: 'power3.out',
+      })
+    }
+  }, { dependencies: [isAuthenticated] })
+
+  // ── GSAP: landing page entrance (authenticated) ───────────────────────────
+  useGSAP(() => {
+    if (!isAuthenticated || !landingRef.current) return
+    const ctx = gsap.context(() => {
+      gsap.from('[data-animate]', {
+        y: 30,
+        opacity: 0,
+        duration: 0.7,
+        stagger: 0.1,
+        ease: 'power3.out',
+        delay: 0.2,
+      })
+    }, landingRef)
+    return () => ctx.revert()
+  }, { dependencies: [isAuthenticated] })
+
+  // ── Login handler ─────────────────────────────────────────────────────────
+  const handleLogin = async () => {
+    setLoginForm(f => ({ ...f, loading: true, error: '' }))
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || ''
+      const res = await fetch(`${apiBase}/api/v1/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginForm.username, password: loginForm.password }),
+      })
+      const data = await res.json()
+      if (res.ok && data.access_token) {
+        gsap.to(loginCardRef.current, {
+          y: -20, opacity: 0, duration: 0.4, ease: 'power2.in',
+          onComplete: () => login(data.access_token),
+        })
+      } else {
+        gsap.timeline()
+          .to(loginCardRef.current, { x: -10, duration: 0.08 })
+          .to(loginCardRef.current, { x: 10,  duration: 0.08 })
+          .to(loginCardRef.current, { x: -8,  duration: 0.08 })
+          .to(loginCardRef.current, { x: 8,   duration: 0.08 })
+          .to(loginCardRef.current, { x: 0,   duration: 0.08 })
+        setLoginForm(f => ({ ...f, error: data.detail || 'Invalid credentials', loading: false }))
+      }
+    } catch {
+      setLoginForm(f => ({ ...f, error: 'Connection error', loading: false }))
+    }
+  }
 
   const handleModuleClick = (moduleId: string) => {
+    const isLocal = window.location.hostname === 'localhost'
+    if (isLocal) {
+      const localPaths: Record<string, string> = {
+        STAAX:  '/grid',
+        INVEX:  '/grid',
+        BUDGEX: '/grid',
+        FINEX:  '/grid',
+      }
+      const path = localPaths[moduleId]
+      if (path) navigate(path)
+      return
+    }
     const urls: Record<string, string> = {
-      STAAX:  'https://staax.lifexos.co.in/dashboard',
+      STAAX:  'https://staax.lifexos.co.in',
       INVEX:  'https://invex.lifexos.co.in',
       BUDGEX: 'https://budgex.lifexos.co.in',
       FINEX:  'https://finex.lifexos.co.in',
     }
     const url = urls[moduleId]
-    if (url) window.open(url, '_self')
+    if (url) window.open(token ? `${url}?token=${token}` : url, '_self')
   }
 
+  // ── Login wall ────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#0A0A0B',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <div ref={loginCardRef} style={{
+          background: '#111114',
+          borderRadius: '20px',
+          padding: '48px 40px',
+          width: '380px',
+          boxShadow: '8px 8px 24px #050506, -4px -4px 14px #1a1a1f',
+          border: '1px solid rgba(255,255,255,0.04)',
+          position: 'relative',
+          zIndex: 10,
+        }}>
+          {/* Logo mark */}
+          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              fontSize: '32px', fontWeight: 800,
+              fontFamily: 'var(--font-body)',
+              letterSpacing: '-0.03em',
+            }}>LIFEX OS</div>
+            <div style={{
+              color: '#9A9AAA', fontSize: '12px', marginTop: '4px',
+              fontFamily: 'var(--font-body)', letterSpacing: '0.04em',
+            }}>Intelligence Suite</div>
+          </div>
+
+          {/* Username */}
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              type="text"
+              placeholder="Username"
+              value={loginForm.username}
+              onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              autoComplete="username"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: '#1a1a20',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '13px 16px',
+                color: '#F0EDE8',
+                fontSize: '14px',
+                fontFamily: 'var(--font-body)',
+                boxShadow: 'inset 3px 3px 8px #0a0a0c, inset -1px -1px 5px #28282f',
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          {/* Password */}
+          <div style={{ marginBottom: '20px' }}>
+            <input
+              type="password"
+              placeholder="Password"
+              value={loginForm.password}
+              onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              autoComplete="current-password"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: '#1a1a20',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '13px 16px',
+                color: '#F0EDE8',
+                fontSize: '14px',
+                fontFamily: 'var(--font-body)',
+                boxShadow: 'inset 3px 3px 8px #0a0a0c, inset -1px -1px 5px #28282f',
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          {loginForm.error && (
+            <div style={{
+              color: '#FF4444', fontSize: '13px',
+              marginBottom: '14px', textAlign: 'center',
+              fontFamily: 'var(--font-body)',
+            }}>{loginForm.error}</div>
+          )}
+
+          <button
+            onClick={handleLogin}
+            disabled={loginForm.loading}
+            style={{
+              width: '100%',
+              background: loginForm.loading
+                ? '#1a1a20'
+                : 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+              border: 'none', borderRadius: '12px',
+              padding: '14px',
+              color: loginForm.loading ? '#9A9AAA' : '#fff',
+              fontSize: '13px', fontWeight: 700,
+              fontFamily: 'var(--font-display)',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase' as const,
+              cursor: loginForm.loading ? 'not-allowed' : 'pointer',
+              textShadow: loginForm.loading ? 'none' : 'inset 0 1px 2px rgba(0,0,0,0.4)',
+              boxShadow: loginForm.loading
+                ? 'inset 2px 2px 6px #050506, inset -1px -1px 4px #1c1c20'
+                : '0 4px 18px rgba(139,92,246,0.35)',
+              transition: 'box-shadow 0.2s ease, opacity 0.2s ease',
+            }}
+          >
+            {loginForm.loading ? 'Signing in...' : 'Sign In →'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Authenticated landing page ────────────────────────────────────────────
   return (
-    <div style={{
+    <div ref={landingRef} style={{
       minHeight: '100vh',
       background: '#050510',
       color: '#f0f0ff',
-      fontFamily: "var(--font-body)",
+      fontFamily: 'var(--font-body)',
       overflowX: 'hidden',
       position: 'relative',
     }}>
@@ -263,33 +506,6 @@ export default function LandingPage() {
           90%  { opacity: 1; }
           100% { transform: translateY(600%); opacity: 0; }
         }
-        .landing-module-card {
-          position: relative;
-          transition: all 0.25s ease;
-        }
-        .landing-module-card::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          padding: 1px;
-          background: linear-gradient(135deg, rgba(99,102,241,0.3) 0%, transparent 40%, transparent 60%, rgba(167,139,250,0.15) 100%);
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          pointer-events: none;
-          opacity: 0.6;
-          transition: opacity 0.25s ease;
-        }
-        .landing-module-card:hover { transform: translateY(-6px); }
-        .landing-module-card:hover::before { opacity: 1; }
-        .landing-module-card[data-accent="orange"]:hover  { box-shadow: 0 0 40px rgba(255,107,0,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="teal"]:hover    { box-shadow: 0 0 40px rgba(0,201,167,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="purple"]:hover  { box-shadow: 0 0 40px rgba(124,58,237,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="gold"]:hover    { box-shadow: 0 0 40px rgba(245,158,11,0.2),   0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="red"]:hover     { box-shadow: 0 0 40px rgba(239,68,68,0.2),    0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="sky"]:hover     { box-shadow: 0 0 40px rgba(56,189,248,0.15), 0 0 80px rgba(52,211,153,0.08), 0 12px 40px rgba(0,0,0,0.5) !important; }
-        .landing-module-card[data-accent="muted"]:hover   { transform: none !important; box-shadow: none !important; }
         .landing-terminal { position: relative; overflow: hidden; }
         .landing-terminal::after {
           content: '';
@@ -299,10 +515,6 @@ export default function LandingPage() {
           background: linear-gradient(to bottom, transparent, rgba(99,102,241,0.06), transparent);
           animation: scan 4s linear infinite;
           pointer-events: none;
-        }
-        .landing-cta-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 0 40px rgba(99,102,241,0.8) !important;
         }
         .landing-cta-ghost:hover {
           background: rgba(99,102,241,0.08) !important;
@@ -318,7 +530,7 @@ export default function LandingPage() {
       `}</style>
 
       {/* Nav */}
-      <nav className="landing-nav" style={{
+      <nav data-animate style={{
         position: 'sticky', top: 0, zIndex: 50,
         background: 'rgba(5,5,16,0.92)',
         backdropFilter: 'blur(20px)',
@@ -353,7 +565,7 @@ export default function LandingPage() {
         {/* Nav actions */}
         <div className="landing-nav-items" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
-            onClick={handleEnter}
+            onClick={() => logout()}
             style={{
               background: 'transparent', border: '1px solid rgba(99,102,241,0.3)',
               color: 'rgba(232,232,248,0.8)', borderRadius: '6px',
@@ -361,7 +573,7 @@ export default function LandingPage() {
               cursor: 'pointer', transition: 'all 0.2s',
             }}
             className="landing-cta-ghost"
-          >Sign In</button>
+          >Logout</button>
         </div>
 
         {/* Hamburger */}
@@ -378,13 +590,12 @@ export default function LandingPage() {
       </div>
 
       {/* Hero */}
-      <section className="landing-hero" style={{
+      <section data-animate className="landing-hero" style={{
         position: 'relative', zIndex: 1,
         maxWidth: '1100px', margin: '0 auto',
         padding: '80px 32px 60px',
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px',
         alignItems: 'center',
-        animation: 'fadeUp 0.6s ease both',
       }}>
         {/* Left: copy */}
         <div>
@@ -493,7 +704,7 @@ export default function LandingPage() {
       </section>
 
       {/* Stats bar */}
-      <div style={{
+      <div data-animate style={{
         position: 'relative', zIndex: 1,
         borderTop: '1px solid rgba(99,102,241,0.1)',
         borderBottom: '1px solid rgba(99,102,241,0.1)',
@@ -505,7 +716,7 @@ export default function LandingPage() {
           display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: '16px',
         }}>
           {STATS.map((stat, i) => (
-            <div key={i} style={{display:"contents"}}>
+            <div key={i} style={{ display: 'contents' }}>
               {i > 0 && <div key={`div-${i}`} style={{ width: '1px', height: '40px', background: 'rgba(99,102,241,0.15)', alignSelf: 'center' }} />}
               <div key={stat.label} style={{ textAlign: 'center' }}>
                 <div style={{
@@ -526,7 +737,7 @@ export default function LandingPage() {
       </div>
 
       {/* Module cards */}
-      <section className="landing-section" style={{
+      <section data-animate className="landing-section" style={{
         position: 'relative', zIndex: 1,
         maxWidth: '1100px', margin: '0 auto',
         padding: '60px 32px',
@@ -552,77 +763,146 @@ export default function LandingPage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',
         }}>
-          {MODULES.map(mod => (
-            <div
-              key={mod.id}
-              className="landing-module-card"
-              data-accent={mod.accentKey}
-              onClick={() => { if (!('comingSoon' in mod && mod.comingSoon) && ('externalUrl' in mod) && mod.externalUrl) handleModuleClick(mod.id) }}
-              style={{
-                background: `rgba(10,10,26,0.7)`,
-                border: ('comingSoon' in mod && mod.comingSoon)
-                  ? '0.5px solid rgba(255,255,255,0.08)'
-                  : ('building' in mod && mod.building)
-                    ? '1px solid rgba(56,189,248,0.3)'
-                    : `1px solid ${mod.accent}30`,
-                borderRadius: '12px',
-                padding: '20px',
-                cursor: ('comingSoon' in mod && mod.comingSoon) ? 'default' : (('externalUrl' in mod && mod.externalUrl) ? 'pointer' : 'default'),
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                borderTop: ('comingSoon' in mod && mod.comingSoon)
-                  ? '0.5px solid rgba(255,255,255,0.08)'
-                  : ('building' in mod && mod.building)
-                    ? '2px solid #38bdf8'
-                    : `2px solid ${mod.accent}`,
-                boxShadow: ('comingSoon' in mod && mod.comingSoon)
-                  ? 'none'
-                  : ('building' in mod && mod.building)
-                    ? '0 0 40px rgba(56,189,248,0.15), 0 0 80px rgba(52,211,153,0.08), 0 12px 40px rgba(0,0,0,0.5)'
-                    : `inset 0 1px 0 ${mod.accent}20, 0 4px 24px rgba(0,0,0,0.4)`,
-                opacity: ('comingSoon' in mod && mod.comingSoon) ? 0.55 : 1,
-              } as React.CSSProperties}
-            >
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <div style={{
-                  fontSize: '15px', fontWeight: 800, letterSpacing: '0.05em',
-                  color: ('building' in mod && mod.building) ? undefined : mod.accent,
-                  ...(('building' in mod && mod.building) ? {
-                    background: 'linear-gradient(135deg, #38bdf8, #2dd4bf, #34d399)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  } : {}),
-                }}>{mod.id}</div>
-                <span style={{
-                  fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em',
-                  color: mod.statusColor,
-                  background: `${mod.statusColor}18`,
-                  border: `1px solid ${mod.statusColor}40`,
-                  borderRadius: '20px', padding: '2px 7px',
-                }}>{mod.status}</span>
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#e8e8f8', marginBottom: '8px' }}>
-                {mod.tagline}
-              </div>
-              <div style={{ fontSize: '11px', color: 'rgba(232,232,248,0.5)', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
-                {mod.description}
-              </div>
-              {('externalUrl' in mod && mod.externalUrl) && (
-                <div style={{
-                  marginTop: '14px', fontSize: '11px', fontWeight: 700,
-                  color: mod.accent, display: 'flex', alignItems: 'center', gap: '4px',
-                }}>
-                  Open module →
+          {MODULES.map(mod => {
+            const isComingSoon = !!(mod.comingSoon)
+            const isClickable  = !isComingSoon && !!mod.externalUrl
+            return (
+              <div key={mod.id}>
+                {/* Card */}
+                <div
+                  ref={el => { cardRefs.current[mod.id] = el }}
+                  onClick={() => isClickable && handleModuleClick(mod.id)}
+                  onMouseEnter={() => {
+                    if (isComingSoon) return
+                    setHoveredModule(mod.id)
+                    gsap.to(cardRefs.current[mod.id], {
+                      boxShadow: '8px 8px 22px #040405, -4px -4px 14px #1e1e26, inset 0 0 0 1px rgba(255,107,0,0.10)',
+                      y: -4,
+                      duration: 0.3,
+                      ease: 'power2.out',
+                    })
+                    if (mod.metrics && mod.metrics.length > 0) {
+                      gsap.from(`.metric-card-${mod.id}`, {
+                        y: 12,
+                        opacity: 0,
+                        duration: 0.35,
+                        stagger: 0.07,
+                        ease: 'power2.out',
+                      })
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (isComingSoon) return
+                    setHoveredModule(null)
+                    gsap.to(cardRefs.current[mod.id], {
+                      boxShadow: '6px 6px 16px #060607, -3px -3px 10px #1a1a1f',
+                      y: 0,
+                      duration: 0.3,
+                      ease: 'power2.inOut',
+                    })
+                  }}
+                  style={isComingSoon ? {
+                    background: '#0F0F12',
+                    borderRadius: '16px',
+                    padding: '20px',
+                    boxShadow: 'inset 2px 2px 8px #060607, inset -1px -1px 4px #161619',
+                    border: '1px solid rgba(255,255,255,0.02)',
+                    opacity: 0.55,
+                    cursor: 'default',
+                  } : {
+                    background: '#111114',
+                    borderRadius: '16px',
+                    padding: '20px',
+                    boxShadow: '6px 6px 16px #060607, -3px -3px 10px #1a1a1f',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                    cursor: isClickable ? 'pointer' : 'default',
+                    transition: 'border-color 0.2s ease',
+                  }}
+                >
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{
+                      fontSize: '15px', fontWeight: 800, letterSpacing: '0.05em',
+                      color: mod.building ? undefined : mod.accent,
+                      ...(mod.building ? {
+                        background: 'linear-gradient(135deg, #38bdf8, #2dd4bf, #34d399)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                      } : {}),
+                    }}>{mod.id}</div>
+                    <span style={{
+                      fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em',
+                      color: mod.statusColor,
+                      background: `${mod.statusColor}18`,
+                      border: `1px solid ${mod.statusColor}40`,
+                      borderRadius: '20px', padding: '2px 7px',
+                    }}>{mod.status}</span>
+                  </div>
+
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#e8e8f8', marginBottom: '8px' }}>
+                    {mod.tagline}
+                  </div>
+                  <div style={{
+                    fontSize: '11px', color: 'rgba(232,232,248,0.5)', lineHeight: 1.6,
+                    display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  } as React.CSSProperties}>
+                    {mod.description}
+                  </div>
+
+                  {mod.externalUrl && (
+                    <div style={{
+                      marginTop: '14px', fontSize: '11px', fontWeight: 700,
+                      color: mod.accent, display: 'flex', alignItems: 'center', gap: '4px',
+                    }}>
+                      Open module →
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* Metric cards — shown on hover */}
+                {hoveredModule === mod.id && mod.metrics && mod.metrics.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    {mod.metrics.map((metric, i) => (
+                      <div
+                        key={i}
+                        className={`metric-card-${mod.id}`}
+                        style={{
+                          flex: 1,
+                          background: '#0A0A0B',
+                          borderRadius: '12px',
+                          padding: '12px 10px',
+                          boxShadow: 'inset 2px 2px 6px #050506, inset -1px -1px 4px #161619',
+                          border: '1px solid rgba(255,255,255,0.03)',
+                        }}
+                      >
+                        <div style={{
+                          color: '#9A9AAA', fontSize: '9px',
+                          fontFamily: 'var(--font-mono)',
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          marginBottom: '6px',
+                        }}>
+                          {metric.label}
+                        </div>
+                        <div style={{
+                          color: '#F0EDE8', fontSize: '15px',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-display)',
+                        }}>
+                          {metric.value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </section>
 
       {/* Roadmap */}
-      <section id="roadmap" style={{
+      <section data-animate id="roadmap" style={{
         position: 'relative', zIndex: 1,
         maxWidth: '1100px', margin: '0 auto',
         padding: '60px 32px 80px',
@@ -653,11 +933,8 @@ export default function LandingPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
           {[
             {
-              phase: 'Phase 1',
-              title: 'Foundation',
-              status: 'complete',
-              statusLabel: 'COMPLETE',
-              statusColor: '#10b981',
+              phase: 'Phase 1', title: 'Foundation',
+              status: 'complete', statusLabel: 'COMPLETE', statusColor: '#10b981',
               items: [
                 'STAAX algo engine — deploy, monitor, SmartStream execution',
                 'INVEX portfolio tracker — holdings, growth charts',
@@ -666,11 +943,8 @@ export default function LandingPage() {
               ],
             },
             {
-              phase: 'Phase 2',
-              title: 'Expansion',
-              status: 'active',
-              statusLabel: 'IN PROGRESS',
-              statusColor: '#FF6B00',
+              phase: 'Phase 2', title: 'Expansion',
+              status: 'active', statusLabel: 'IN PROGRESS', statusColor: '#FF6B00',
               items: [
                 'BUDGEX — expense categorisation and budget tracking',
                 'STAAX analytics — per-algo P&L breakdown and reports',
@@ -679,11 +953,8 @@ export default function LandingPage() {
               ],
             },
             {
-              phase: 'Phase 3',
-              title: 'Intelligence',
-              status: 'planned',
-              statusLabel: 'PLANNED',
-              statusColor: 'rgba(167,139,250,0.6)',
+              phase: 'Phase 3', title: 'Intelligence',
+              status: 'planned', statusLabel: 'PLANNED', statusColor: 'rgba(167,139,250,0.6)',
               items: [
                 'HEALTHEX — workouts, nutrition, wearable integration',
                 'HISTEX — historical data, strategy backtesting',
@@ -692,11 +963,8 @@ export default function LandingPage() {
               ],
             },
             {
-              phase: 'Phase 4',
-              title: 'Horizon',
-              status: 'future',
-              statusLabel: 'FUTURE',
-              statusColor: 'rgba(232,232,248,0.25)',
+              phase: 'Phase 4', title: 'Horizon',
+              status: 'future', statusLabel: 'FUTURE', statusColor: 'rgba(232,232,248,0.25)',
               items: [
                 'Collaborative family dashboard',
                 'Tax-aware rebalancing suggestions',
@@ -777,7 +1045,7 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer style={{
+      <footer data-animate style={{
         position: 'relative', zIndex: 1,
         borderTop: '1px solid rgba(99,102,241,0.1)',
         padding: '24px 32px',
