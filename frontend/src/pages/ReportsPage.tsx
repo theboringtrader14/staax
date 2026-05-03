@@ -54,6 +54,14 @@ const cardSt: React.CSSProperties = {
   padding: '20px 24px',
 }
 
+const kpiCardSt: React.CSSProperties = {
+  background: 'var(--bg)',
+  boxShadow: 'var(--neu-raised-sm)',
+  borderRadius: 12,
+  padding: '12px 14px',
+  minHeight: 90,
+}
+
 const neuModal: React.CSSProperties = {
   background: 'var(--bg)',
   boxShadow: 'var(--neu-raised-lg, var(--neu-raised))',
@@ -332,7 +340,7 @@ export default function ReportsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr', gap: '10px', marginBottom: '12px' }}>
 
         {/* FY P&L */}
-        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 120, cursor: 'pointer' }} onClick={() => setChartModal(true)}>
+        <div style={{ ...kpiCardSt, cursor: 'pointer' }} onClick={() => setChartModal(true)}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontWeight: 600 }}>
             FY {fy} Total P&L
           </div>
@@ -368,14 +376,14 @@ export default function ReportsPage() {
         </div>
 
         {/* Total Trades */}
-        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 120 }}>
+        <div style={{ ...kpiCardSt }}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Total Trades</div>
           <div style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{fyTrades}</div>
           <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '5px' }}>{fyMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
-        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 120 }}>
+        <div style={{ ...kpiCardSt }}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Win Rate</div>
           <div style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, color: fyWins > 0 ? '#0ea66e' : 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
             {fyTrades > 0 ? fyWinRate.toFixed(1) + '%' : '—'}
@@ -384,7 +392,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Day P&L bars */}
-        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 120 }}>
+        <div style={{ ...kpiCardSt }}>
           <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>P&L by Day</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '56px', gap: '6px' }}>
             {DAY_NAMES.map(day => {
