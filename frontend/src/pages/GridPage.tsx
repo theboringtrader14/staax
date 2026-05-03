@@ -571,7 +571,7 @@ export default function GridPage() {
 
         return (
           <div style={{ flexShrink:0, padding:'0 28px 14px' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr) 2fr', gap:10 }}>
+            <div className="algo-stats-bar" style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr) 2fr', gap:10 }}>
               {kpiCards.map(({ key, label, count, color }) => {
                 const isActive = statFilter === key
                 return (
@@ -730,7 +730,7 @@ export default function GridPage() {
 
 
                             {/* Card row body */}
-                            <div style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'16px 20px' }}>
+                            <div className="algo-card-row" style={{ flex:1, display:'flex', alignItems:'center', gap:'16px', padding:'16px 20px' }}>
 
                               {/* ── Name + account ── */}
                               <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'120px', flexShrink:0 }}>

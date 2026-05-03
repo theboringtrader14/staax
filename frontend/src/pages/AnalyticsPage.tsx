@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { CSSProperties } from 'react'
+import ReportsPage from '@/pages/ReportsPage'
 import { AreaChart, Area, XAxis, YAxis, LineChart, Line, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts'
 import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI, api } from '@/services/api'
@@ -26,7 +27,7 @@ interface HealthScore {
   trades: number; win_pct: number; total_pnl: number
 }
 
-const TABS = ['Performance', 'Failures', 'Slippage', 'Latency'] as const
+const TABS = ['Reports', 'Performance', 'Failures', 'Slippage', 'Latency'] as const
 type Tab = typeof TABS[number]
 
 interface StratRow {
@@ -1110,7 +1111,7 @@ export default function AnalyticsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
   const [activeTab, setActiveTab]     = useState<Tab>(() => {
     const saved = localStorage.getItem('analytics_tab') as Tab
-    return TABS.includes(saved) ? saved : 'Performance'
+    return TABS.includes(saved) ? saved : 'Reports'
   })
   const [metrics, setMetrics]         = useState<MetricRow[]>([])
   const [allOrders, setAllOrders]     = useState<Order[]>([])
@@ -1192,8 +1193,8 @@ export default function AnalyticsPage() {
       {/* Page header */}
       <div className="page-header" style={{ marginBottom: 0, padding: '0 28px' }}>
         <div>
-          <h1 style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22 }}>Analytics</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 3 }}>Performance deep-dive</p>
+          <h1 style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22 }}>Trade & Analytics</h1>
+          <p style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 3 }}>Reports · Performance deep-dive</p>
         </div>
         <div className="page-header-actions">
           <StaaxSelect value={fy} onChange={setFy} options={getFYOptions(3)} width="140px" />
@@ -1237,8 +1238,8 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px 24px' }}>
-        {loading ? (
+      <div style={{ flex: 1, overflowY: 'auto', padding: activeTab === 'Reports' ? 0 : '20px 28px 24px' }}>
+        {activeTab === 'Reports' ? <ReportsPage /> : loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : (
           <>

@@ -85,9 +85,19 @@ def _account_to_dict(acc: Account) -> dict:
 @router.get("/")
 async def list_accounts(db: AsyncSession = Depends(get_db)):
     """List all configured broker accounts."""
+    from app.models.telegram_subscription import TelegramSubscription
     result = await db.execute(select(Account).order_by(Account.created_at))
     accounts = result.scalars().all()
-    return [_account_to_dict(a) for a in accounts]
+    tg_result = await db.execute(
+        select(TelegramSubscription.account_id, TelegramSubscription.chat_id)
+        .where(TelegramSubscription.is_active == True)  # noqa: E712
+    )
+    tg_map: dict = {}
+    for row in tg_result.all():
+        aid = str(row.account_id)
+        if aid not in tg_map:
+            tg_map[aid] = row.chat_id
+    return [{**_account_to_dict(a), "telegram_chat_id": tg_map.get(str(a.id))} for a in accounts]
 
 
 @router.post("/")

@@ -239,7 +239,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit, orbHigh, orbLo
   const C: React.CSSProperties = { textAlign: 'center' }
   return (
     <>
-    <tr style={{ background: isChild ? 'rgba(255,107,0,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #FF4444' : undefined }}>
+    <tr className="order-row" style={{ background: isChild ? 'rgba(255,107,0,0.025)' : undefined, boxShadow: leg.status === 'error' ? 'inset 3px 0 0 #FF4444' : undefined }}>
       <td style={{ textAlign: 'center', width: COLS[0] }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: isChild ? 600 : 400 }}>{leg.journeyLevel}</span>
         {(leg.reentryCount ?? 0) > 0 && (
@@ -1331,7 +1331,7 @@ export default function OrdersPage() {
 
           return (
             <div style={{ padding: '6px 0 6px' }}>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+              <div className="orders-stats-bar" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
                 {[
                   { f: 'open',    label: 'Open Algos',   val: openAlgosCount,   color: openAlgosCount   > 0 ? '#0ea66e' : 'var(--text-mute)' },
                   { f: 'closed',  label: 'Closed Algos', val: closedAlgosCount, color: closedAlgosCount > 0 ? '#0ea66e' : 'var(--text-mute)' },
@@ -1362,7 +1362,7 @@ export default function OrdersPage() {
           const days = showWeekends ? ['MON','TUE','WED','THU','FRI','SAT','SUN'] : ['MON','TUE','WED','THU','FRI']
           const activeDayIdx = Math.max(0, days.findIndex(d => weekDates[d] === selectedDate))
           return (
-            <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0 16px', gap: 10 }}>
+            <div className="week-day-bar" style={{ display: 'flex', alignItems: 'center', margin: '12px 0 16px', gap: 10 }}>
               {/* Day tabs pill trough */}
               <div style={{
                 display: 'flex', flex: 1, position: 'relative',
@@ -1675,7 +1675,7 @@ export default function OrdersPage() {
                     <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
                       <table className="staax-table">
                         <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-                        <thead>
+                        <thead className="order-table-header">
                           <tr>
                             <th style={{ textAlign: 'left',   background: 'var(--bg)', color: 'var(--text-mute)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>#</th>
                             <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Status</th>
@@ -1692,7 +1692,7 @@ export default function OrdersPage() {
                         </thead>
                         <tbody>
                           {(w.legs || []).map(leg => (
-                            <tr key={leg.leg_number}>
+                            <tr className="order-row" key={leg.leg_number}>
                               <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.leg_number}</td>
                               <td style={{ textAlign: 'center', padding: '11px 4px', verticalAlign: 'middle' }}>
                                 <StatusChip status={legChipKey} />
@@ -1844,7 +1844,7 @@ export default function OrdersPage() {
                           <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: bar.color, boxShadow: `0 0 8px ${bar.glow}, 0 0 20px ${bar.glow}` }}/>
 
                           {/* Info row */}
-                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <div className="algo-group-header" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap', minWidth: 0 }}>
 
                             {group.terminated && <span title="Algo terminated" style={{ display: 'flex', alignItems: 'center' }}><XCircle size={14} weight="fill" color="#EF4444" /></span>}
 
@@ -1975,7 +1975,7 @@ export default function OrdersPage() {
                         <div className="orders-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
                             <table className="staax-table">
                               <colgroup>{COLS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-                              <thead>
+                              <thead className="order-table-header">
                                 <tr>
                                   <th style={{ textAlign: 'left', background: 'var(--bg)', color: 'var(--text-mute)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>#</th>
                                   <th style={{ textAlign: 'center', background: 'var(--bg)', color: 'var(--text-mute)', fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 20px', verticalAlign: 'middle' }}>Status</th>

@@ -5,7 +5,7 @@ import LandingPage from '@/pages/LandingPage'
 import GridPage from '@/pages/GridPage'
 import OrdersPage from '@/pages/OrdersPage'
 import AlgoPage from '@/pages/AlgoPage'
-import ReportsPage from '@/pages/ReportsPage'
+// ReportsPage is now embedded in AnalyticsPage as the first tab
 import IndicatorsPage from '@/pages/IndicatorsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import ZerodhaCallbackPage from '@/pages/ZerodhaCallbackPage'
@@ -101,7 +101,7 @@ export default function App() {
             <Route path="/orders"     element={<OrdersPage />} />
             <Route path="/algo/new"   element={<AlgoPage />} />
             <Route path="/algo/:id"   element={<AlgoPage />} />
-            <Route path="/reports"    element={<ReportsPage />} />
+            <Route path="/reports"    element={<Navigate to="/analytics" replace />} />
             <Route path="/accounts"   element={<Navigate to="/grid" replace />} />
             <Route path="/indicators" element={<IndicatorsPage />} />
             <Route path="/analytics"  element={<AnalyticsPage />} />

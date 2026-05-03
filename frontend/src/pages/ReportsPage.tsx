@@ -229,7 +229,7 @@ function MonthDetail({ month, year, calendarData }: { month: number, year: numbe
 export default function ReportsPage() {
   const isPractixMode  = useStore(s => s.isPractixMode)
   const activeAccount  = useStore(s => s.activeAccount)
-  const [fy, setFy]    = useState(getCurrentFY())
+  const [fy]           = useState(getCurrentFY())
   const [monthModal, setMonthModal]     = useState<{ month: number, year: number, label: string } | null>(null)
   const [metricFilter, setMetricFilter] = useState('fy')
   const [metricFy, setMetricFy]         = useState(getCurrentFY())
@@ -248,7 +248,8 @@ export default function ReportsPage() {
   const [metricFrom, setMetricFrom]   = useState('')
   const [metricTo, setMetricTo]       = useState('')
   const [downloading, setDownloading] = useState(false)
-  const [downloadModal, setDownloadModal] = useState<'csv' | 'excel' | null>(null)
+  const [downloadModal, setDownloadModal] = useState(false)
+  const [downloadFormat, setDownloadFormat] = useState<'csv' | 'excel'>('csv')
   const [downloadType, setDownloadType] = useState<'algo' | 'daywise'>('algo')
   const [selectedAlgo, setSelectedAlgo] = useState<string | null>(null)
   const [algoMetrics, setAlgoMetrics] = useState<MetricsRow[]>([])
@@ -299,7 +300,7 @@ export default function ReportsPage() {
       a.download = `STAAX_${typeLabel}_FY${fy}.${format === 'excel' ? 'xlsx' : 'csv'}`
       document.body.appendChild(a); a.click()
       window.URL.revokeObjectURL(url); document.body.removeChild(a)
-      setDownloadModal(null)
+      setDownloadModal(false)
     } catch { alert('Download failed — no data found for this FY') }
     finally { setDownloading(false) }
   }
@@ -325,32 +326,13 @@ export default function ReportsPage() {
   const maxAbsDow = Math.max(...Object.values(dowPnl).map(Math.abs), 1)
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 24px' }}>
-
-      {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>Reports</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-mute)', marginTop: '4px' }}>Performance analytics</p>
-        </div>
-        <div className="page-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <StaaxSelect value={fy} onChange={setFy} options={getFYOptions(3)} width="130px" />
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button style={dlBtnSt} onClick={() => { setDownloadType('algo'); setDownloadModal('csv') }}>
-              <DownloadSimple size={13} /> CSV
-            </button>
-            <button style={dlBtnSt} onClick={() => { setDownloadType('algo'); setDownloadModal('excel') }}>
-              <DownloadSimple size={13} /> Excel
-            </button>
-          </div>
-        </div>
-      </div>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 28px 24px' }}>
 
       {/* Top KPI cards — 4 columns */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr', gap: '10px', marginBottom: '12px' }}>
 
         {/* FY P&L */}
-        <div style={{ ...cardSt, padding: '18px 22px', cursor: 'pointer' }} onClick={() => setChartModal(true)}>
+        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 90, cursor: 'pointer' }} onClick={() => setChartModal(true)}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontWeight: 600 }}>
             FY {fy} Total P&L
           </div>
@@ -386,14 +368,14 @@ export default function ReportsPage() {
         </div>
 
         {/* Total Trades */}
-        <div style={{ ...cardSt, padding: '18px 22px' }}>
+        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 90 }}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Total Trades</div>
           <div style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{fyTrades}</div>
           <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '5px' }}>{fyMetrics.length} algos</div>
         </div>
 
         {/* Win Rate */}
-        <div style={{ ...cardSt, padding: '18px 22px' }}>
+        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 90 }}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Win Rate</div>
           <div style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1, color: fyWins > 0 ? '#0ea66e' : 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
             {fyTrades > 0 ? fyWinRate.toFixed(1) + '%' : '—'}
@@ -402,7 +384,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Day P&L bars */}
-        <div style={{ ...cardSt, padding: '18px 22px' }}>
+        <div style={{ ...cardSt, padding: '18px 22px', minHeight: 90 }}>
           <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>P&L by Day</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '56px', gap: '6px' }}>
             {DAY_NAMES.map(day => {
@@ -467,19 +449,19 @@ export default function ReportsPage() {
 
       {/* Download modal */}
       {downloadModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setDownloadModal(null)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', animation: 'fadeIn 0.15s ease' }} onClick={() => setDownloadModal(false)}>
           <div style={{ ...neuModal, width: '320px', maxWidth: '90vw', animation: 'slideUp 0.18s ease' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: 'var(--text)' }}>
-                Export {downloadModal.toUpperCase()}
+                Export
               </span>
-              <button style={closeBtnSt} onClick={() => setDownloadModal(null)}>
+              <button style={closeBtnSt} onClick={() => setDownloadModal(false)}>
                 <IconX size={14} weight="bold" />
               </button>
             </div>
-            {/* Options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+            {/* Report type options */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
               {([
                 { value: 'algo',    label: 'Per-Algo Metrics',  desc: 'Aggregated metrics per algorithm' },
                 { value: 'daywise', label: 'Day-wise Logs',     desc: 'Daily P&L log for the full FY'   },
@@ -499,10 +481,25 @@ export default function ReportsPage() {
                 </button>
               ))}
             </div>
+            {/* Format radio buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+              {(['csv', 'excel'] as const).map(fmt => (
+                <button key={fmt} onClick={() => setDownloadFormat(fmt)} style={{
+                  flex: 1, height: '32px', borderRadius: '100px', border: 'none', cursor: 'pointer',
+                  background: 'var(--bg)',
+                  boxShadow: downloadFormat === fmt ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                  fontSize: '11px', fontWeight: 700, fontFamily: 'inherit',
+                  color: downloadFormat === fmt ? 'var(--accent)' : 'var(--text-dim)',
+                  transition: 'box-shadow 0.15s, color 0.15s',
+                }}>
+                  {fmt.toUpperCase()}
+                </button>
+              ))}
+            </div>
             {/* Download button */}
             <button
               disabled={downloading}
-              onClick={() => handleDownload(downloadModal, downloadType)}
+              onClick={() => handleDownload(downloadFormat, downloadType)}
               style={{
                 width: '100%', height: '38px', borderRadius: '100px', border: 'none', cursor: 'pointer',
                 background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
@@ -526,14 +523,9 @@ export default function ReportsPage() {
       <div style={{ ...cardSt, padding: '16px 20px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>FY {fy} — Full Year Calendar</div>
-          <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-dim)', alignItems: 'center' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#0ea66e', display: 'inline-block' }} />Profit
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#FF4444', display: 'inline-block' }} />Loss
-            </span>
-          </div>
+          <button style={dlBtnSt} onClick={() => { setDownloadType('algo'); setDownloadModal(true) }}>
+            <DownloadSimple size={13} /> Download
+          </button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', width: '100%', boxSizing: 'border-box' as const }}>
           {months.map(m => (

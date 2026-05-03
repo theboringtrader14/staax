@@ -23,6 +23,7 @@ interface RawAccount {
   token_valid_today?: boolean
   initial_capital?: number | null
   initial_capital_set_at?: string | null
+  telegram_chat_id?: string | null
 }
 
 interface AccountLocal {
@@ -33,6 +34,7 @@ interface AccountLocal {
   has_api_key?: boolean; has_api_secret?: boolean; has_totp?: boolean
   scope?: string; is_active?: boolean; token_valid_today?: boolean
   initial_capital?: number | null; initial_capital_set_at?: string | null
+  telegram_chat_id?: string | null
 }
 interface EditCredsState {
   id: string; nickname: string; broker: string; client_id: string
@@ -92,7 +94,7 @@ export default function AccountsDrawer() {
   // All-accounts funds panel state
   const [allFunds,        setAllFunds]        = useState<AccountFunds[]>([])
   const [allFundsLoading, setAllFundsLoading] = useState(false)
-  const [allFundsUpdated, setAllFundsUpdated] = useState<string | null>(null)
+  const [, setAllFundsUpdated] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ type: 'deactivate' | 'reactivate'; accountId: string; nickname: string } | null>(null)
 
   // FY margin data (from new account_fy_margin table)
@@ -102,6 +104,9 @@ export default function AccountsDrawer() {
 
   // Initial capital feedback (per account_id → success message or null)
   const [capitalSetMsg, setCapitalSetMsg] = useState<Record<string, string | null>>({})
+
+  const [fixMarginSaving,   setFixMarginSaving]   = useState(false)
+  const [fixMarginWarnings, setFixMarginWarnings] = useState<Record<string, boolean>>({})
 
   // Add Account modal
   const [addModal,  setAddModal]  = useState(false)
@@ -126,6 +131,7 @@ export default function AccountsDrawer() {
     token_valid_today: api.token_valid_today ?? false,
     initial_capital: api.initial_capital ?? null,
     initial_capital_set_at: api.initial_capital_set_at ?? null,
+    telegram_chat_id: api.telegram_chat_id ?? null,
   }))
 
   const fetchAccounts = useCallback(() => {
@@ -269,6 +275,26 @@ export default function AccountsDrawer() {
     setSavingFY(s => ({ ...s, [accountId]: false }))
   }
 
+  const fixAllMargins = async () => {
+    setFixMarginSaving(true)
+    const warnings: Record<string, boolean> = {}
+    const saves: Promise<void>[] = []
+    for (const f of allFunds) {
+      const fyRow  = fyMarginData[f.account_id] || { fy_margin: null, fy_brokerage: null }
+      const fyEdit = fyMarginEdits[f.account_id] || {}
+      const margin = fyEdit.margin !== undefined ? parseFloat(fyEdit.margin) : (fyRow.fy_margin ?? 0)
+      if (!margin || margin <= 0) {
+        warnings[f.account_id] = true
+      } else {
+        saves.push(saveFYMarginForAccount(f.account_id))
+      }
+    }
+    setFixMarginWarnings(warnings)
+    await Promise.all(saves)
+    setFixMarginSaving(false)
+    if (saves.length > 0) showSuccess('Margins fixed for all accounts')
+  }
+
   const saveRisk = async (acc: AccountLocal) => {
     const sl = parseFloat(editSL[acc.id] || String(acc.globalSL ?? ''))
     const tp = parseFloat(editTP[acc.id] || String(acc.globalTP ?? ''))
@@ -393,6 +419,9 @@ export default function AccountsDrawer() {
             </div>
           )
         })()}
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+          📱 {acc.telegram_chat_id ? `Linked: ${acc.telegram_chat_id}` : 'Telegram: Not linked'}
+        </div>
       </div>
     )
   }
@@ -480,13 +509,19 @@ export default function AccountsDrawer() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live Funds</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {allFundsUpdated && <span style={{ fontSize: 9, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{allFundsUpdated}</span>}
                     <button onClick={fetchAllFunds} disabled={allFundsLoading}
                       style={{ height: 26, padding: '0 10px', borderRadius: 100, fontSize: 10, fontWeight: 700, border: 'none', cursor: allFundsLoading ? 'default' : 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontFamily: 'var(--font-display)' }}
                       onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
                       onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
                       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
                       {allFundsLoading ? '…' : 'Refresh'}
+                    </button>
+                    <button onClick={fixAllMargins} disabled={fixMarginSaving}
+                      style={{ height: 26, padding: '0 10px', borderRadius: 100, fontSize: 10, fontWeight: 700, border: 'none', cursor: fixMarginSaving ? 'default' : 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', fontFamily: 'var(--font-display)' }}
+                      onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
+                      onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
+                      onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}>
+                      {fixMarginSaving ? '…' : 'Fix Margin'}
                     </button>
                   </div>
                 </div>
@@ -520,6 +555,9 @@ export default function AccountsDrawer() {
                             {f.broker === 'zerodha' ? 'Zerodha' : 'Angel One'}
                           </span>
                         </div>
+                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', color: netColor }}>
+                          {f.net !== null ? `${f.net < 0 ? '-' : ''}₹${Math.abs(f.net).toLocaleString('en-IN')}` : (isOffline ? 'Offline' : '—')}
+                        </span>
                       </div>
 
                       {/* Funds grid */}
@@ -543,13 +581,6 @@ export default function AccountsDrawer() {
                             </div>
                           ))
                         })()}
-                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Net Available</span>
-                          <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', color: netColor }}>
-                            {f.net !== null && f.net < 0 ? '-' : ''}{fmt(f.net, isOffline)}
-                          </span>
-                        </div>
-
                         {/* Set as Initial Capital button — shown only when net > 0 */}
                         {f.net !== null && f.net > 0 && (
                           <div style={{ marginTop: 2 }}>
@@ -625,7 +656,7 @@ export default function AccountsDrawer() {
                               value={fyEdit.brokerage !== undefined ? fyEdit.brokerage : (fyRow.fy_brokerage ?? '')}
                               onChange={e => setFYMarginEdits(ed => ({ ...ed, [f.account_id]: { ...fyEdit, brokerage: e.target.value } }))} />
                           </div>
-                          <button onClick={() => saveFYMarginForAccount(f.account_id)} disabled={savingFY[f.account_id]} title="Save"
+                          <button onClick={() => { setFixMarginWarnings(w => { const n = { ...w }; delete n[f.account_id]; return n }); saveFYMarginForAccount(f.account_id) }} disabled={savingFY[f.account_id]} title="Save"
                             style={{ width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 0.15s', opacity: savingFY[f.account_id] ? 0.5 : 1 }}
                             onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
                             onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
@@ -633,6 +664,11 @@ export default function AccountsDrawer() {
                             <FloppyDisk size={15} weight="bold" />
                           </button>
                         </div>
+                      {fixMarginWarnings[f.account_id] && (
+                        <div style={{ marginTop: 8, fontSize: 11, color: '#F59E0B', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Warning size={12} weight="fill" /> Margin not set — update and fix again
+                        </div>
+                      )}
                       </div>
                     </div>
                   )

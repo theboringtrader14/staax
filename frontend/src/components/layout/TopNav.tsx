@@ -7,11 +7,10 @@ import { showSuccess, showWarning } from '@/utils/toast'
 declare global { interface Window { __staaxDirty?: boolean } }
 
 const NAV_TABS = [
-  { path: '/grid',       label: 'Algos'     },
-  { path: '/indicators', label: 'Bots'      },
-  { path: '/orders',     label: 'Orders'    },
-  { path: '/reports',    label: 'Reports'   },
-  { path: '/analytics',  label: 'Analytics' },
+  { path: '/grid',       label: 'Algos'             },
+  { path: '/indicators', label: 'Bots'              },
+  { path: '/orders',     label: 'Orders'            },
+  { path: '/analytics',  label: 'Trade & Analytics' },
 ]
 
 const iconBtnStyle: React.CSSProperties = {
@@ -43,6 +42,7 @@ export default function TopNav() {
   const setIsPractixMode  = useStore(s => s.setIsPractixMode)
 
   const [pendingPath, setPendingPath] = useState<string | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     const rupee = '₹'
@@ -102,7 +102,7 @@ export default function TopNav() {
           </a>
 
           {/* CENTER — Nav tabs */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 32, height: '100%' }}>
+          <nav className="desktop-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 32, height: '100%' }}>
             {NAV_TABS.map(({ path, label }) => (
               <NavLink
                 key={path}
@@ -184,8 +184,33 @@ export default function TopNav() {
               onMouseLeave={e => { if (!isProfileOpen) onLeave(e) }}>
               <User size={16} weight="regular" />
             </button>
+
+            {/* Hamburger — hidden on desktop, shown via CSS on mobile */}
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(o => !o)}
+              style={{ display: 'none' }}
+            >
+              {mobileMenuOpen ? '✕' : '☰'}
+            </button>
           </div>
         </header>
+
+        {/* Mobile nav dropdown */}
+        {mobileMenuOpen && (
+          <div className="mobile-nav-dropdown">
+            {NAV_TABS.map(({ path, label }) => (
+              <NavLink
+                key={path}
+                to={path}
+                onClick={(e) => { handleNavClick(e, path); setMobileMenuOpen(false) }}
+                className={({ isActive }) => isActive ? 'active' : ''}
+              >
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Unsaved changes modal */}
