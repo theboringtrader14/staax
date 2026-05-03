@@ -1429,7 +1429,7 @@ class AlgoScheduler:
                     .join(Algo, GridEntry.algo_id == Algo.id)
                     .where(
                         and_(
-                            AlgoState.trading_date == str(prev_trading_day),
+                            AlgoState.trading_date <= str(prev_trading_day),
                             Algo.strategy_mode.in_([StrategyMode.BTST, StrategyMode.STBT]),
                             AlgoState.status == AlgoRunStatus.ACTIVE,
                         )

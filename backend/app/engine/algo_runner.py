@@ -2632,20 +2632,29 @@ class AlgoRunner:
             logger.info(f"Overnight SL check: {len(orders)} open positions")
 
             for order in orders:
-                if order.sl_actual and order.ltp:
-                    sl_hit = (
-                        order.ltp <= order.sl_actual if order.direction == "buy"
-                        else order.ltp >= order.sl_actual
+                if not order.sl_actual:
+                    continue
+                ltp = 0.0
+                if self._ltp_consumer and order.instrument_token:
+                    ltp = self._ltp_consumer.get_ltp(int(order.instrument_token))
+                if ltp <= 0:
+                    ltp = order.ltp or 0.0
+                if ltp <= 0:
+                    logger.warning(f"[OVERNIGHT-SL] No LTP for {order.symbol} — skipping SL check")
+                    continue
+                sl_hit = (
+                    ltp <= order.sl_actual if order.direction == "buy"
+                    else ltp >= order.sl_actual
+                )
+                if sl_hit:
+                    logger.info(
+                        f"🔴 Overnight SL hit: {order.symbol} | "
+                        f"ltp={ltp} sl={order.sl_actual}"
                     )
-                    if sl_hit:
-                        logger.info(
-                            f"🔴 Overnight SL hit: {order.symbol} | "
-                            f"ltp={order.ltp} sl={order.sl_actual}"
-                        )
-                        await self.exit_all(
-                            str(order.grid_entry_id),
-                            reason="overnight_sl",
-                        )
+                    await self.exit_all(
+                        str(order.grid_entry_id),
+                        reason="overnight_sl",
+                    )
 
     # ── Check if algo is fully done ───────────────────────────────────────────
 
