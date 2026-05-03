@@ -81,9 +81,10 @@ class Algo(Base):
     # Only relevant when strategy_mode = 'positional'. Ignored for all other modes.
 
     # ── MTM controls (algo-level) ─────────────────────────────────────────────
-    mtm_sl   = Column(Float, nullable=True)
-    mtm_tp   = Column(Float, nullable=True)
-    mtm_unit = Column(String(5), nullable=True)    # "amt" or "pct"
+    mtm_sl       = Column(Float, nullable=True)
+    mtm_tp       = Column(Float, nullable=True)
+    mtm_unit     = Column(String(5), nullable=True)    # "amt" or "pct"
+    mslc_enabled = Column(Boolean, default=False, nullable=False, server_default='false')
 
     # ── Order delays ──────────────────────────────────────────────────────────
     entry_delay_buy_secs  = Column(Integer, default=0)

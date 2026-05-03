@@ -93,6 +93,7 @@ class AlgoCreateRequest(BaseModel):
     mtm_sl:                Optional[float] = None
     mtm_tp:                Optional[float] = None
     mtm_unit:              Optional[str]  = None
+    mslc_enabled:          bool           = False
     entry_delay_buy_secs:  int            = 0
     entry_delay_sell_secs: int            = 0
     exit_delay_buy_secs:   int            = 0
@@ -127,6 +128,7 @@ class AlgoUpdateRequest(BaseModel):
     mtm_sl:                Optional[float]         = None
     mtm_tp:                Optional[float]         = None
     mtm_unit:              Optional[str]           = None
+    mslc_enabled:          Optional[bool]          = None
     entry_delay_buy_secs:  Optional[int]           = None
     entry_delay_sell_secs: Optional[int]           = None
     exit_delay_buy_secs:   Optional[int]           = None
@@ -213,6 +215,7 @@ def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -
         "mtm_sl":                algo.mtm_sl,
         "mtm_tp":                algo.mtm_tp,
         "mtm_unit":              algo.mtm_unit,
+        "mslc_enabled":          getattr(algo, 'mslc_enabled', False),
         "entry_delay_buy_secs":  algo.entry_delay_buy_secs,
         "entry_delay_sell_secs": algo.entry_delay_sell_secs,
         "exit_delay_buy_secs":   algo.exit_delay_buy_secs,
@@ -391,6 +394,7 @@ async def create_algo(body: AlgoCreateRequest, db: AsyncSession = Depends(get_db
         mtm_sl=body.mtm_sl,
         mtm_tp=body.mtm_tp,
         mtm_unit=body.mtm_unit,
+        mslc_enabled=body.mslc_enabled,
         entry_delay_buy_secs=body.entry_delay_buy_secs,
         entry_delay_sell_secs=body.entry_delay_sell_secs,
         exit_delay_buy_secs=body.exit_delay_buy_secs,
@@ -493,6 +497,7 @@ async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = 
         if body.mtm_sl                is not None: algo.mtm_sl                = body.mtm_sl
         if body.mtm_tp                is not None: algo.mtm_tp                = body.mtm_tp
         if body.mtm_unit              is not None: algo.mtm_unit              = body.mtm_unit
+        if body.mslc_enabled          is not None: algo.mslc_enabled          = body.mslc_enabled
         if body.entry_delay_buy_secs  is not None: algo.entry_delay_buy_secs  = body.entry_delay_buy_secs
         if body.entry_delay_sell_secs is not None: algo.entry_delay_sell_secs = body.entry_delay_sell_secs
         if body.exit_delay_buy_secs   is not None: algo.exit_delay_buy_secs   = body.exit_delay_buy_secs
@@ -701,6 +706,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
         mtm_sl=src.mtm_sl,
         mtm_tp=src.mtm_tp,
         mtm_unit=src.mtm_unit,
+        mslc_enabled=getattr(src, 'mslc_enabled', False),
         entry_delay_buy_secs=src.entry_delay_buy_secs,
         entry_delay_sell_secs=src.entry_delay_sell_secs,
         exit_delay_buy_secs=src.exit_delay_buy_secs,

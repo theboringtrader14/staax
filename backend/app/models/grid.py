@@ -33,8 +33,9 @@ class GridEntry(Base):
     trading_date = Column(Date, nullable=False, index=True)
     day_of_week  = Column(String(3), nullable=False)    # "mon", "tue", "wed", "thu", "fri"
     lot_multiplier = Column(Integer, default=1)          # M: value shown in the grid cell
-    is_enabled   = Column(Boolean, default=True)
-    is_practix   = Column(Boolean, default=True)         # PRACTIX/LIVE toggle per cell
+    is_enabled      = Column(Boolean, default=True)
+    mslc_triggered  = Column(Boolean, default=False)
+    is_practix      = Column(Boolean, default=True)         # PRACTIX/LIVE toggle per cell
     is_archived  = Column(Boolean, default=False)        # archived algos hidden from active grid
     status       = Column(Enum(GridStatus, values_callable=lambda x: [e.value for e in x]), default=GridStatus.NO_TRADE, index=True)
     created_at   = Column(DateTime(timezone=True), server_default=func.now())

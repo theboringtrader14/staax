@@ -594,7 +594,7 @@ export default function GridPage() {
                     style={{
                       background:'var(--bg)',
                       boxShadow: isActive ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-                      borderRadius:14, padding:'12px 14px',
+                      borderRadius:14, padding:'12px 14px', minHeight:90,
                       cursor:'pointer', transition:'box-shadow 0.15s',
                     }}>
                     <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color: isActive ? color : 'var(--text-mute)', marginBottom:8, fontFamily:'var(--font-display)', transition:'color 0.15s' }}>
@@ -608,7 +608,7 @@ export default function GridPage() {
               })}
 
               {/* By Index bar chart */}
-              <div style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', borderRadius:14, padding:'12px 16px' }}>
+              <div style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', borderRadius:14, padding:'12px 16px', minHeight:90 }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
                   <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-mute)', fontFamily:'var(--font-display)' }}>
                     By Index

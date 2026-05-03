@@ -1212,6 +1212,8 @@ async def _run_startup_migrations() -> None:
     from app.core.database import AsyncSessionLocal
     migrations = [
         "ALTER TABLE algos ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE algos ADD COLUMN IF NOT EXISTS mslc_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE grid_entries ADD COLUMN IF NOT EXISTS mslc_triggered BOOLEAN DEFAULT FALSE",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS lot_size INTEGER DEFAULT 1",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS reconcile_status VARCHAR(20) DEFAULT NULL",
         # ── Multi-user foundation (2026-05-02) ──────────────────────────────

@@ -124,6 +124,43 @@ class TokenBucketRateLimiter:
         await asyncio.sleep(wait)
 
 
+async def _handle_mslc_after_sl_hit(grid_entry_id: str, sl_monitor) -> None:
+    """Move SL to cost (fill_price) for all remaining OPEN legs in the same grid entry."""
+    try:
+        async with AsyncSessionLocal() as db:
+            ge_result = await db.execute(
+                select(GridEntry).where(GridEntry.id == uuid.UUID(grid_entry_id))
+            )
+            ge = ge_result.scalar_one_or_none()
+            if not ge or ge.mslc_triggered:
+                return
+
+            algo_result = await db.execute(
+                select(Algo).where(Algo.id == ge.algo_id)
+            )
+            algo = algo_result.scalar_one_or_none()
+            if not algo or not getattr(algo, 'mslc_enabled', False):
+                return
+
+            orders_result = await db.execute(
+                select(Order).where(
+                    and_(
+                        Order.grid_entry_id == ge.id,
+                        Order.status == OrderStatus.OPEN,
+                    )
+                )
+            )
+            open_orders = orders_result.scalars().all()
+            for o in open_orders:
+                if o.fill_price and o.fill_price > 0 and sl_monitor:
+                    sl_monitor.update_sl(str(o.id), o.fill_price)
+
+            ge.mslc_triggered = True
+            await db.commit()
+    except Exception as _e:
+        logger.warning(f"[MSLC] failed for grid_entry {grid_entry_id}: {_e}")
+
+
 class AlgoRunner:
     """
     Central coordinator for algo execution.
@@ -2154,6 +2191,11 @@ class AlgoRunner:
                         await self._reentry_engine.on_exit(
                             db, order, "sl", tsl_trailed=tsl_trailed
                         )
+
+                    # MSLC: move remaining open legs' SL to their fill price
+                    asyncio.create_task(
+                        _handle_mslc_after_sl_hit(str(order.grid_entry_id), self._sl_tp_monitor)
+                    )
 
                     # Check if this was the last open leg
                     await self._check_algo_complete(str(order.grid_entry_id))

@@ -724,6 +724,7 @@ export default function AlgoPage() {
   const [mtmUnit, setMtmUnit]       = useState('amt')
   const [mtmSL, setMtmSL]          = useState('')
   const [mtmTP, setMtmTP]          = useState('')
+  const [mslcEnabled, setMslcEnabled] = useState(false)
   // F2 — BUY/SELL scope for delays
   const [entryDelay, setEntryDelay]         = useState('0')
   const [entryDelayScope, setEntryDelayScope] = useState('all')
@@ -766,7 +767,7 @@ const [saveError, setSaveError]   = useState('')
     if (!formLoadedRef.current) return
     setIsDirty(true)
   }, [algoName, stratMode, entryType, orbRangeSource, lotMult, entryTime, orbEnd, exitTime, dte, account,
-      mtmUnit, mtmSL, mtmTP, errorMargin, errorEntry, legs])
+      mtmUnit, mtmSL, mtmTP, mslcEnabled, errorMargin, errorEntry, legs])
 
   const [dragIdx, setDragIdx]       = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -803,6 +804,7 @@ const [saveError, setSaveError]   = useState('')
         setMtmUnit(a.mtm_unit || 'amt')
         setMtmSL(a.mtm_sl != null ? String(a.mtm_sl) : '')
         setMtmTP(a.mtm_tp != null ? String(a.mtm_tp) : '')
+        setMslcEnabled(!!a.mslc_enabled)
         setRecurringDays(Array.isArray(a.recurring_days) ? a.recurring_days : [])
         setNextDayExitTime(a.next_day_exit_time || '09:15:00')
         if (a.exit_on_margin_error  != null) setErrorMargin(!!a.exit_on_margin_error)
@@ -915,6 +917,7 @@ const [saveError, setSaveError]   = useState('')
     if (config.mtm_sl != null) setMtmSL(String(config.mtm_sl))
     if (config.mtm_tp != null) setMtmTP(String(config.mtm_tp))
     if (config.mtm_unit)       setMtmUnit(config.mtm_unit as string)
+    if (config.mslc_enabled != null) setMslcEnabled(!!config.mslc_enabled)
 
     if (Array.isArray(config.legs) && config.legs.length > 0) {
       const mapped: Leg[] = (config.legs as any[]).map((l, i) => {
@@ -1033,6 +1036,7 @@ const [saveError, setSaveError]   = useState('')
     mtm_sl:              mtmSL ? parseFloat(mtmSL) : undefined,
     mtm_tp:              mtmTP ? parseFloat(mtmTP) : undefined,
     mtm_unit:            mtmUnit,
+    mslc_enabled:        mslcEnabled,
     entry_delay_buy_secs:  entryDelayScope !== 'sell' ? (parseInt(entryDelay) || 0) : 0,
     entry_delay_sell_secs: entryDelayScope !== 'buy'  ? (parseInt(entryDelay) || 0) : 0,
     exit_delay_buy_secs:   exitDelayScope  !== 'sell' ? (parseInt(exitDelay)  || 0) : 0,
@@ -1335,23 +1339,43 @@ const [saveError, setSaveError]   = useState('')
           {/* Vertical separator */}
           <div style={{ width: '1px', background: 'var(--border)', alignSelf: 'stretch', minHeight: '60px' }} />
 
-          {/* MTM Controls */}
+          {/* MTM & MSLC Controls */}
           <div>
-            <SubSection title="MTM Controls — Algo Level" />
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unit</label>
-                <StaaxSelect value={mtmUnit} onChange={setMtmUnit} options={[{ value: 'amt', label: '₹ Amount' }, { value: 'pct', label: '% Premium' }]} width="96px" height="28px" borderRadius="6px" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM SL</label>
-                <input value={mtmSL} onChange={e => setMtmSL(e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) setMtmSL('1') }} type="number" min={1} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM TP</label>
-                <input value={mtmTP} onChange={e => setMtmTP(e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) setMtmTP('1') }} type="number" min={1} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
-              </div>
-            </div>
+            <SubSection title="MTM & MSLC Controls — Algo Level" />
+            {(() => {
+              const mslcDisabled = legs.some(l => l.active.reentry && (l.vals.reentry.onSl || l.vals.reentry.onTp))
+              return (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unit</label>
+                    <StaaxSelect value={mtmUnit} onChange={setMtmUnit} options={[{ value: 'amt', label: '₹ Amount' }, { value: 'pct', label: '% Premium' }]} width="96px" height="28px" borderRadius="6px" />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM SL</label>
+                    <input value={mtmSL} onChange={e => setMtmSL(e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) setMtmSL('1') }} type="number" min={1} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MTM TP</label>
+                    <input value={mtmTP} onChange={e => setMtmTP(e.target.value)} onBlur={e => { if (e.target.value !== '' && Number(e.target.value) < 1) setMtmTP('1') }} type="number" min={1} placeholder="None" className="staax-input" style={{ width: '80px', fontSize: '12px' }} />
+                  </div>
+                  <div style={{ width: '1px', background: 'var(--border)', alignSelf: 'stretch', minHeight: '28px' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '80px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MSLC</label>
+                    <div style={{ opacity: mslcDisabled ? 0.5 : 1, pointerEvents: mslcDisabled ? 'none' : 'auto' }} title={mslcDisabled ? 'Disabled — incompatible with Re-entry' : 'Move SL to cost on first SL hit'}>
+                      <StaaxSelect
+                        value={mslcEnabled ? 'yes' : 'no'}
+                        onChange={v => setMslcEnabled(v === 'yes')}
+                        options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]}
+                        width="80px" height="28px" borderRadius="6px"
+                      />
+                    </div>
+                    {mslcDisabled && (
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>⚠️ Re-entry active</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </div>
       </div>
