@@ -44,55 +44,45 @@ async def _get_redis():
 
 def kb_main():
     return [
-        [
-            {"text": "📊 Trades",  "callback_data": "menu_trades"},
-            {"text": "⚙️ System",  "callback_data": "menu_system"},
-            {"text": "📈 Reports", "callback_data": "menu_reports"},
-        ]
+        [{"text": "📉 Trades",  "callback_data": "menu_trades"}],
+        [{"text": "🖥️ System",  "callback_data": "menu_system"}],
+        [{"text": "📋 Reports", "callback_data": "menu_reports"}],
     ]
 
 def kb_trades():
     return [
-        [
-            {"text": "📈 Positions",   "callback_data": "cmd_positions"},
-            {"text": "💰 P&L Today",   "callback_data": "cmd_pnl"},
-        ],
-        [
-            {"text": "⚠️ Errors",      "callback_data": "cmd_errors"},
-            {"text": "🔁 Retry Errors","callback_data": "cmd_retry_list"},
-        ],
-        [{"text": "🔙 Main Menu", "callback_data": "menu_main"}],
+        [{"text": "📍 Positions",   "callback_data": "cmd_positions"}],
+        [{"text": "💹 P&L Today",   "callback_data": "cmd_pnl"}],
+        [{"text": "🔴 Errors",      "callback_data": "cmd_errors"}],
+        [{"text": "🔃 Retry",       "callback_data": "cmd_retry_list"}],
+        [{"text": "◀️ Menu",        "callback_data": "menu_main"}],
     ]
 
 def kb_system():
     return [
-        [
-            {"text": "🟢 Health",     "callback_data": "cmd_health"},
-            {"text": "🚨 Kill Switch","callback_data": "cmd_kill_confirm"},
-        ],
-        [{"text": "🔙 Main Menu", "callback_data": "menu_main"}],
+        [{"text": "💚 Health",      "callback_data": "cmd_health"}],
+        [{"text": "⛔ Kill Switch", "callback_data": "cmd_kill_confirm"}],
+        [{"text": "◀️ Menu",        "callback_data": "menu_main"}],
     ]
 
 def kb_reports():
     return [
-        [
-            {"text": "📊 EOD Summary","callback_data": "cmd_eod"},
-            {"text": "❌ Error Log",  "callback_data": "cmd_errors"},
-        ],
-        [{"text": "🔙 Main Menu", "callback_data": "menu_main"}],
+        [{"text": "📊 EOD Summary", "callback_data": "cmd_eod"}],
+        [{"text": "🗒️ Error Log",   "callback_data": "cmd_errors"}],
+        [{"text": "◀️ Menu",        "callback_data": "menu_main"}],
     ]
 
 def kb_kill_confirm():
     return [[{"text": "❌ Cancel", "callback_data": "menu_system"}]]
 
 def kb_back_trades():
-    return [[{"text": "🔙 Trades", "callback_data": "menu_trades"}]]
+    return [[{"text": "◀️ Trades", "callback_data": "menu_trades"}]]
 
 def kb_view_trades():
-    return [[{"text": "📊 View Trades", "callback_data": "cmd_positions"}]]
+    return [[{"text": "📍 View Trades", "callback_data": "cmd_positions"}]]
 
 def kb_health_check():
-    return [[{"text": "🟢 Health Check", "callback_data": "cmd_health"}]]
+    return [[{"text": "💚 Health Check", "callback_data": "cmd_health"}]]
 
 def kb_eod():
     return [[{"text": "📊 Full Report", "callback_data": "cmd_eod"}]]
@@ -302,7 +292,7 @@ async def handle_retry_list() -> tuple:
     """Returns (text, keyboard) with one retry button per error entry."""
     text, errors = await handle_errors()
     if not errors:
-        return "✅ No errors to retry.", [[{"text": "🔙 Trades", "callback_data": "menu_trades"}]]
+        return "✅ No errors to retry.", [[{"text": "◀️ Trades", "callback_data": "menu_trades"}]]
 
     keyboard = []
     for err in errors[:8]:
@@ -311,7 +301,7 @@ async def handle_retry_list() -> tuple:
                 "text": f"🔁 Retry {err['algo_name']}",
                 "callback_data": f"retry_{err['grid_entry_id']}",
             }])
-    keyboard.append([{"text": "🔙 Trades", "callback_data": "menu_trades"}])
+    keyboard.append([{"text": "◀️ Trades", "callback_data": "menu_trades"}])
 
     msg = "🔁 <b>Retry Error Orders</b>\n━━━━━━━━━━━━━━━\nTap to retry individual algos:"
     return msg, keyboard
@@ -363,15 +353,15 @@ async def handle_callback(chat_id: str, message_id: int, callback_id: str, data:
 
     elif data == "menu_trades":
         await tg_edit(chat_id, message_id,
-            "📊 <b>Trades</b>\nSelect an option:", kb_trades())
+            "📉 <b>Trades</b>\nSelect an option:", kb_trades())
 
     elif data == "menu_system":
         await tg_edit(chat_id, message_id,
-            "⚙️ <b>System</b>\nSelect an option:", kb_system())
+            "🖥️ <b>System</b>\nSelect an option:", kb_system())
 
     elif data == "menu_reports":
         await tg_edit(chat_id, message_id,
-            "📈 <b>Reports</b>\nSelect an option:", kb_reports())
+            "📋 <b>Reports</b>\nSelect an option:", kb_reports())
 
     elif data == "cmd_health":
         text = await handle_health()
@@ -388,14 +378,14 @@ async def handle_callback(chat_id: str, message_id: int, callback_id: str, data:
     elif data == "cmd_errors":
         text, _ = await handle_errors()
         await tg_edit(chat_id, message_id, text, [
-            [{"text": "🔁 Retry Errors", "callback_data": "cmd_retry_list"}],
-            [{"text": "🔙 Trades",        "callback_data": "menu_trades"}],
+            [{"text": "🔃 Retry",   "callback_data": "cmd_retry_list"}],
+            [{"text": "◀️ Trades",  "callback_data": "menu_trades"}],
         ])
 
     elif data == "cmd_eod":
         text = await handle_eod()
         await tg_edit(chat_id, message_id, text,
-            [[{"text": "🔙 Reports", "callback_data": "menu_reports"}]])
+            [[{"text": "◀️ Reports", "callback_data": "menu_reports"}]])
 
     elif data == "cmd_retry_list":
         text, keyboard = await handle_retry_list()
@@ -407,8 +397,8 @@ async def handle_callback(chat_id: str, message_id: int, callback_id: str, data:
             f"🔄 Retrying <code>{grid_entry_id[:8]}…</code>", [])
         result = await handle_retry_execute(grid_entry_id)
         await tg_send(chat_id, result, [
-            [{"text": "🔁 Retry More",    "callback_data": "cmd_retry_list"},
-             {"text": "📊 Positions",     "callback_data": "cmd_positions"}],
+            [{"text": "🔃 Retry More",  "callback_data": "cmd_retry_list"}],
+            [{"text": "📍 Positions",   "callback_data": "cmd_positions"}],
         ])
 
     elif data == "cmd_kill_confirm":
@@ -464,8 +454,8 @@ async def handle_message(chat_id: str, text: str):
     elif cmd == "/errors":
         t, _ = await handle_errors()
         await tg_send(chat_id, t, [
-            [{"text": "🔁 Retry Errors", "callback_data": "cmd_retry_list"}],
-            [{"text": "🔙 Main Menu",    "callback_data": "menu_main"}],
+            [{"text": "🔃 Retry",  "callback_data": "cmd_retry_list"}],
+            [{"text": "◀️ Menu",   "callback_data": "menu_main"}],
         ])
 
     elif cmd == "/retry":

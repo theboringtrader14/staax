@@ -31,11 +31,11 @@ class TGNotifier:
             logger.error(f"[TG ERROR] send: {e}")
 
     _KEYBOARDS = {
-        "entry_executed": {"inline_keyboard": [[{"text": "📊 View Trades",  "callback_data": "cmd_positions"}]]},
-        "sl_hit":         {"inline_keyboard": [[{"text": "📊 View Trades",  "callback_data": "cmd_positions"}]]},
-        "tp_hit":         {"inline_keyboard": [[{"text": "📊 View Trades",  "callback_data": "cmd_positions"}]]},
-        "feed_down":      {"inline_keyboard": [[{"text": "🟢 Health Check", "callback_data": "cmd_health"}]]},
-        "feed_up":        {"inline_keyboard": [[{"text": "🟢 Health Check", "callback_data": "cmd_health"}]]},
+        "entry_executed": {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
+        "sl_hit":         {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
+        "tp_hit":         {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
+        "feed_down":      {"inline_keyboard": [[{"text": "💚 Health Check", "callback_data": "cmd_health"}]]},
+        "feed_up":        {"inline_keyboard": [[{"text": "💚 Health Check", "callback_data": "cmd_health"}]]},
         "eod_report":     {"inline_keyboard": [[{"text": "📊 Full Report",  "callback_data": "cmd_eod"}]]},
     }
 
