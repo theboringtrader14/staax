@@ -652,7 +652,7 @@ export default function GridPage() {
                 <span style={{ fontFamily:'var(--font-display)', fontSize:'13px', fontWeight:700, color:'#FF6B00', letterSpacing:'1px' }}>
                   {stickyHeader}
                 </span>
-                <span style={{ fontSize:'11px', color:'var(--text-mute)' }}>
+                <span style={{ fontSize:'11px', fontFamily:'var(--font-mono)', fontWeight:500, padding:'2px 8px', borderRadius:'100px', background:'var(--bg)', boxShadow:'var(--neu-inset)', color:'var(--text-dim)', whiteSpace:'nowrap' }}>
                   {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
                 </span>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"
@@ -698,7 +698,7 @@ export default function GridPage() {
                   <span style={{ fontFamily:'var(--font-display)', fontSize:'13px', fontWeight:700, color:'#FF6B00', letterSpacing:'1px' }}>
                     {instrument}
                   </span>
-                  <span style={{ fontSize:'11px', color:'var(--text-mute)' }}>
+                  <span style={{ fontSize:'11px', fontFamily:'var(--font-mono)', fontWeight:500, padding:'2px 8px', borderRadius:'100px', background:'var(--bg)', boxShadow:'var(--neu-inset)', color:'var(--text-dim)', whiteSpace:'nowrap' }}>
                     {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
                   </span>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,0,0.55)" strokeWidth="2.5"

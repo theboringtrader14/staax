@@ -1768,7 +1768,7 @@ export default function OrdersPage() {
                 <span style={{ fontFamily: 'var(--font-display)', fontSize: '12px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase' }}>
                   {instrument}
                 </span>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, padding: '2px 8px', borderRadius: '100px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
                   {groupAlgos.length} algo{groupAlgos.length !== 1 ? 's' : ''}
                 </span>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" opacity="0.55"

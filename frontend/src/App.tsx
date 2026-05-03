@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Toaster } from 'sonner'
+import { Toaster, toast, useSonner } from 'sonner'
 import Layout from '@/components/layout/Layout'
 import LandingPage from '@/pages/LandingPage'
 import GridPage from '@/pages/GridPage'
@@ -12,6 +12,28 @@ import ZerodhaCallbackPage from '@/pages/ZerodhaCallbackPage'
 import { useStore } from '@/store'
 import { useEffect } from 'react'
 import React from 'react'
+
+function ToastClearAll() {
+  const { toasts } = useSonner()
+  if (toasts.length < 2) return null
+  return (
+    <button
+      onClick={() => toast.dismiss()}
+      style={{
+        position: 'fixed', top: '88px', right: 16, zIndex: 9999,
+        alignSelf: 'flex-end',
+        background: 'rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '6px',
+        color: 'rgba(229,231,235,0.6)',
+        fontSize: '11px',
+        padding: '3px 10px',
+        cursor: 'pointer',
+        fontFamily: 'var(--font-mono)',
+      }}
+    >Clear all</button>
+  )
+}
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useStore()
@@ -61,7 +83,9 @@ export default function App() {
 
   return (
     <>
-      <Toaster position="bottom-right" />
+      <style>{`[data-sonner-toaster]{top:88px!important}`}</style>
+      <Toaster position="top-right" />
+      <ToastClearAll />
       <BrowserRouter>
         <DashboardPanel />
         <AccountsDrawer />

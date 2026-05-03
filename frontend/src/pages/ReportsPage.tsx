@@ -607,7 +607,8 @@ export default function ReportsPage() {
           </div>
 
           {/* Middle: algo columns, scrollable */}
-          <div style={{ flex: 1, minWidth: 0, overflowX: 'scroll', paddingBottom: 8 }}>
+          <style>{`.algo-metrics-scroll{scrollbar-width:thin;scrollbar-color:rgba(255,107,0,0.5) rgba(0,0,0,0.3)}.algo-metrics-scroll::-webkit-scrollbar{height:10px}.algo-metrics-scroll::-webkit-scrollbar-track{background:rgba(0,0,0,0.3);border-radius:100px;box-shadow:inset 2px 2px 6px rgba(0,0,0,0.6),inset -1px -1px 3px rgba(255,255,255,0.04)}.algo-metrics-scroll::-webkit-scrollbar-thumb{background:rgba(255,107,0,0.5);border-radius:100px;border:2px solid transparent;background-clip:padding-box;box-shadow:0 1px 3px rgba(0,0,0,0.4);transition:background 0.2s ease}.algo-metrics-scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,107,0,0.75);background-clip:padding-box}[data-theme="light"] .algo-metrics-scroll{scrollbar-color:rgba(255,107,0,0.45) transparent}[data-theme="light"] .algo-metrics-scroll::-webkit-scrollbar-track{background:transparent;box-shadow:inset 0 0 6px rgba(0,0,0,0.15)}`}</style>
+          <div className="algo-metrics-scroll" style={{ flex: 1, minWidth: 0, overflowX: 'auto', paddingBottom: 8 }}>
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', tableLayout: 'fixed' as const }}>
               <thead>
                 <tr>
