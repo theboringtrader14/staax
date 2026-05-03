@@ -1123,16 +1123,37 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
     gap: 8px !important;
   }
 
-  /* GridPage algo card */
+  /* GridPage algo card row — stack vertically */
   .algo-card-row {
+    display: flex !important;
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 10px !important;
   }
+  /* Hide day selector and action buttons on mobile — tap card to edit */
+  .algo-card-days    { display: none !important; }
+  .algo-card-actions { display: none !important; }
 
-  /* GridPage stats bar */
+  /* GridPage stats bar — horizontal scroll */
   .algo-stats-bar {
-    grid-template-columns: repeat(3, 1fr) !important;
-    overflow-x: visible;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(90px, 1fr)) !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
   }
+  .algo-stats-bar > * {
+    min-width: 90px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Page horizontal padding */
+  .page-container, main {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  /* Orders table extra rules */
+  table { width: 100% !important; }
+  td    { padding: 4px 6px !important; }
 }
