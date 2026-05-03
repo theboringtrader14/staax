@@ -5,8 +5,10 @@ Endpoints:
   POST /api/v1/telegram/webhook  — Incoming Telegram updates (messages + callback_query)
 """
 import asyncio
+import json
 import logging
 import os
+import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -14,9 +16,12 @@ import httpx
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, cast
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.types import Date
 
 from app.core.database import AsyncSessionLocal
+from app.models.account import Account
 from app.models.order import Order, OrderStatus
 
 logger = logging.getLogger(__name__)
@@ -46,7 +51,6 @@ def kb_main():
     return [
         [{"text": "📉 Trades",  "callback_data": "menu_trades"}],
         [{"text": "🖥️ System",  "callback_data": "menu_system"}],
-        [{"text": "📋 Reports", "callback_data": "menu_reports"}],
     ]
 
 def kb_trades():
@@ -65,15 +69,21 @@ def kb_system():
         [{"text": "◀️ Menu",        "callback_data": "menu_main"}],
     ]
 
-def kb_reports():
-    return [
-        [{"text": "📊 EOD Summary", "callback_data": "cmd_eod"}],
-        [{"text": "🗒️ Error Log",   "callback_data": "cmd_errors"}],
-        [{"text": "◀️ Menu",        "callback_data": "menu_main"}],
-    ]
-
 def kb_kill_confirm():
     return [[{"text": "❌ Cancel", "callback_data": "menu_system"}]]
+
+def kb_kill_accounts(accounts: list):
+    _BROKER_DISPLAY = {"angelone": "Angel One", "zerodha": "Zerodha"}
+    keyboard = []
+    for a in accounts:
+        broker_display = _BROKER_DISPLAY.get(a["broker"], a["broker"].capitalize())
+        keyboard.append([{
+            "text": f"⛔ {a['nickname']} — {broker_display}",
+            "callback_data": f"kill_acct_{a['id']}",
+        }])
+    keyboard.append([{"text": "🚨 Kill ALL Accounts", "callback_data": "kill_acct_ALL"}])
+    keyboard.append([{"text": "◀️ Menu",              "callback_data": "menu_main"}])
+    return keyboard
 
 def kb_back_trades():
     return [[{"text": "◀️ Trades", "callback_data": "menu_trades"}]]
@@ -321,24 +331,109 @@ async def handle_retry_execute(grid_entry_id: str) -> str:
             return f"❌ Retry error: {str(e)[:100]}"
 
 
-async def handle_kill_switch() -> str:
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            res = await client.post(
-                "http://localhost:8000/api/v1/system/kill-switch",
-                json={"account_ids": []},
+async def handle_kill_accounts(db: AsyncSession) -> tuple:
+    result = await db.execute(
+        select(Account).where(Account.is_active == True).order_by(Account.nickname)
+    )
+    accounts = result.scalars().all()
+    acct_list = [{"id": str(a.id), "nickname": a.nickname, "broker": a.broker.value} for a in accounts]
+    text = "⛔ <b>Kill Switch</b>\n━━━━━━━━━━━━━━━\nSelect account to kill:"
+    return text, kb_kill_accounts(acct_list)
+
+
+async def handle_kill_account_summary(account_id: str, db: AsyncSession) -> tuple:
+    result = await db.execute(select(Account).where(Account.id == _uuid.UUID(account_id)))
+    account = result.scalar_one_or_none()
+    if not account:
+        return "Account not found.", kb_main()
+
+    open_result = await db.execute(
+        select(Order).where(
+            and_(Order.account_id == _uuid.UUID(account_id), Order.status == OrderStatus.OPEN)
+        )
+    )
+    open_orders = open_result.scalars().all()
+    open_count = len(open_orders)
+    unrealized_pnl = sum(o.pnl or 0 for o in open_orders)
+
+    today_ist = datetime.now(IST).date()
+    closed_result = await db.execute(
+        select(Order).where(
+            and_(
+                Order.account_id == _uuid.UUID(account_id),
+                Order.status == OrderStatus.CLOSED,
+                cast(func.timezone("Asia/Kolkata", Order.updated_at), Date) == today_ist,
             )
-            if res.status_code == 200:
-                data = res.json()
-                return (
-                    "🚨 <b>Kill Switch Activated</b>\n"
-                    "━━━━━━━━━━━━━━━\n"
-                    f"Status: {data.get('status', 'done')}\n"
-                    f"{data.get('message', '')}"
-                )
-            return f"❌ Kill switch failed: {res.status_code}"
-        except Exception as e:
-            return f"❌ Kill switch error: {str(e)[:100]}"
+        )
+    )
+    closed_orders = closed_result.scalars().all()
+    realized_pnl = sum(o.pnl or 0 for o in closed_orders)
+
+    def fmt_pnl(v):
+        return f"+₹{v:,.0f}" if v >= 0 else f"-₹{abs(v):,.0f}"
+
+    _SCOPE_DISPLAY  = {"fo": "F&O", "mcx": "MCX"}
+    _BROKER_DISPLAY = {"angelone": "Angel One", "zerodha": "Zerodha"}
+    scope_str  = _SCOPE_DISPLAY.get(account.scope or "fo", account.scope or "F&O")
+    broker_str = _BROKER_DISPLAY.get(account.broker.value, account.broker.value.capitalize())
+    confirm_code = account.nickname.upper().replace(" ", "_")
+
+    text = (
+        f"⛔ <b>Kill Switch — {account.nickname}</b>\n"
+        f"<i>{broker_str} · {scope_str}</i>\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"Open Positions: {open_count}\n"
+        f"Realized P&amp;L: {fmt_pnl(realized_pnl)}\n"
+        f"Unrealized P&amp;L: {fmt_pnl(unrealized_pnl)}\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"⚠️ This will:\n"
+        f"• Square off ALL open positions\n"
+        f"• Cancel pending orders\n"
+        f"• Stop all algos for today\n\n"
+        f"Type exactly:\n"
+        f"<code>CONFIRM KILL {confirm_code}</code>\n\n"
+        f"Expires in 2 minutes."
+    )
+    keyboard = [[{"text": "❌ Cancel", "callback_data": "cmd_kill_confirm"}]]
+    return text, keyboard
+
+
+async def handle_kill_all_summary(db: AsyncSession) -> tuple:
+    open_result = await db.execute(select(Order).where(Order.status == OrderStatus.OPEN))
+    open_orders = open_result.scalars().all()
+    open_count = len(open_orders)
+    unrealized_pnl = sum(o.pnl or 0 for o in open_orders)
+
+    today_ist = datetime.now(IST).date()
+    closed_result = await db.execute(
+        select(Order).where(
+            and_(
+                Order.status == OrderStatus.CLOSED,
+                cast(func.timezone("Asia/Kolkata", Order.updated_at), Date) == today_ist,
+            )
+        )
+    )
+    closed_orders = closed_result.scalars().all()
+    realized_pnl = sum(o.pnl or 0 for o in closed_orders)
+
+    def fmt_pnl(v):
+        return f"+₹{v:,.0f}" if v >= 0 else f"-₹{abs(v):,.0f}"
+
+    text = (
+        f"🚨 <b>Kill ALL Accounts</b>\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"Total Open Positions: {open_count}\n"
+        f"Realized P&amp;L: {fmt_pnl(realized_pnl)}\n"
+        f"Unrealized P&amp;L: {fmt_pnl(unrealized_pnl)}\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"⚠️ This will square off ALL positions\n"
+        f"across ALL accounts.\n\n"
+        f"Type exactly:\n"
+        f"<code>CONFIRM KILL ALL</code>\n\n"
+        f"Expires in 2 minutes."
+    )
+    keyboard = [[{"text": "❌ Cancel", "callback_data": "cmd_kill_confirm"}]]
+    return text, keyboard
 
 
 # ─── Callback router ──────────────────────────────────────────────────────────
@@ -359,10 +454,6 @@ async def handle_callback(chat_id: str, message_id: int, callback_id: str, data:
         await tg_edit(chat_id, message_id,
             "🖥️ <b>System</b>\nSelect an option:", kb_system())
 
-    elif data == "menu_reports":
-        await tg_edit(chat_id, message_id,
-            "📋 <b>Reports</b>\nSelect an option:", kb_reports())
-
     elif data == "cmd_health":
         text = await handle_health()
         await tg_edit(chat_id, message_id, text, kb_system())
@@ -382,11 +473,6 @@ async def handle_callback(chat_id: str, message_id: int, callback_id: str, data:
             [{"text": "◀️ Trades",  "callback_data": "menu_trades"}],
         ])
 
-    elif data == "cmd_eod":
-        text = await handle_eod()
-        await tg_edit(chat_id, message_id, text,
-            [[{"text": "◀️ Reports", "callback_data": "menu_reports"}]])
-
     elif data == "cmd_retry_list":
         text, keyboard = await handle_retry_list()
         await tg_edit(chat_id, message_id, text, keyboard)
@@ -402,15 +488,24 @@ async def handle_callback(chat_id: str, message_id: int, callback_id: str, data:
         ])
 
     elif data == "cmd_kill_confirm":
+        async with AsyncSessionLocal() as db:
+            text, keyboard = await handle_kill_accounts(db)
+        await tg_edit(chat_id, message_id, text, keyboard)
+
+    elif data.startswith("kill_acct_"):
+        acct_part = data.replace("kill_acct_", "")
         redis = await _get_redis()
-        await redis.setex(f"tg:kill_pending:{chat_id}", 120, "1")
-        await tg_edit(chat_id, message_id,
-            "⚠️ <b>Kill Switch</b>\n"
-            "━━━━━━━━━━━━━━━\n"
-            "This will square off <b>ALL</b> open positions.\n\n"
-            "Type exactly:\n<code>CONFIRM KILL</code>\n\n"
-            "Code expires in 2 minutes.",
-            kb_kill_confirm())
+        if acct_part == "ALL":
+            await redis.setex(f"tg:kill_pending:{chat_id}", 120,
+                json.dumps({"account_id": "ALL"}))
+            async with AsyncSessionLocal() as db:
+                text, keyboard = await handle_kill_all_summary(db)
+        else:
+            await redis.setex(f"tg:kill_pending:{chat_id}", 120,
+                json.dumps({"account_id": acct_part}))
+            async with AsyncSessionLocal() as db:
+                text, keyboard = await handle_kill_account_summary(acct_part, db)
+        await tg_edit(chat_id, message_id, text, keyboard)
 
     else:
         await tg_edit(chat_id, message_id,
@@ -423,16 +518,50 @@ async def handle_message(chat_id: str, text: str):
     text = text.strip()
 
     # Kill switch confirmation
-    if text.upper() == "CONFIRM KILL":
+    if text.upper().startswith("CONFIRM KILL"):
         redis = await _get_redis()
-        pending = await redis.get(f"tg:kill_pending:{chat_id}")
-        if pending:
-            await redis.delete(f"tg:kill_pending:{chat_id}")
-            result = await handle_kill_switch()
-            await tg_send(chat_id, result, kb_main())
-        else:
+        pending_raw = await redis.get(f"tg:kill_pending:{chat_id}")
+        if not pending_raw:
             await tg_send(chat_id,
-                "⚠️ No pending kill switch.\nUse the menu to initiate.", kb_main())
+                "⚠️ No pending kill request.\nUse /kill to start.", kb_main())
+            return
+
+        pending    = json.loads(pending_raw)
+        account_id = pending.get("account_id")
+        typed      = text.upper().replace("CONFIRM KILL", "").strip()
+
+        if account_id == "ALL":
+            expected = "ALL"
+        else:
+            async with AsyncSessionLocal() as db:
+                res = await db.execute(
+                    select(Account).where(Account.id == _uuid.UUID(account_id)))
+                account = res.scalar_one_or_none()
+            expected = account.nickname.upper().replace(" ", "_") if account else ""
+
+        if typed != expected:
+            await tg_send(chat_id,
+                f"❌ Wrong confirmation code.\n"
+                f"Expected: <code>CONFIRM KILL {expected}</code>",
+                kb_main())
+            return
+
+        await redis.delete(f"tg:kill_pending:{chat_id}")
+        body = {"account_ids": []} if account_id == "ALL" else {"account_ids": [account_id]}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.post(
+                "http://localhost:8000/api/v1/system/kill-switch", json=body)
+
+        if res.status_code == 200:
+            scope = "ALL accounts" if account_id == "ALL" else f"account {expected}"
+            await tg_send(chat_id,
+                f"🚨 <b>Kill Switch Activated</b>\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"Scope: {scope}\n"
+                f"All positions being squared off.",
+                kb_main())
+        else:
+            await tg_send(chat_id, f"❌ Kill switch failed: {res.status_code}", kb_main())
         return
 
     cmd = text.lower().split()[0] if text else ""
@@ -466,15 +595,9 @@ async def handle_message(chat_id: str, text: str):
         await tg_send(chat_id, await handle_eod(), kb_main())
 
     elif cmd == "/kill":
-        redis = await _get_redis()
-        await redis.setex(f"tg:kill_pending:{chat_id}", 120, "1")
-        await tg_send(chat_id,
-            "⚠️ <b>Kill Switch</b>\n"
-            "━━━━━━━━━━━━━━━\n"
-            "This will square off <b>ALL</b> open positions.\n\n"
-            "Type exactly:\n<code>CONFIRM KILL</code>\n\n"
-            "Code expires in 2 minutes.",
-            kb_kill_confirm())
+        async with AsyncSessionLocal() as db:
+            text, keyboard = await handle_kill_accounts(db)
+        await tg_send(chat_id, text, keyboard)
 
     else:
         await tg_send(chat_id,

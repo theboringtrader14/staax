@@ -87,6 +87,19 @@ def get_scheduler() -> Optional["AlgoScheduler"]:
     return _scheduler_instance
 
 
+async def _job_mcx_eod_report():
+    """MCX EOD report — fires at 23:59 IST midnight."""
+    logger.info("MCX EOD report triggered")
+    try:
+        import asyncio
+        from app.engine.tg_notifier import tg_notifier
+        from app.engine.wa_notifier import wa_notifier
+        asyncio.create_task(tg_notifier.notify("eod_report", {"trigger": "mcx_midnight"}))
+        asyncio.create_task(wa_notifier.notify("eod_report", {"trigger": "mcx_midnight"}))
+    except Exception as e:
+        logger.error(f"MCX EOD notify failed: {e}")
+
+
 async def _run_orb_safe(coro, algo_id: str, grid_entry_id: str):
     """Run ORB coroutine with error handling — logs failures so they are never silently dropped."""
     try:
@@ -188,6 +201,15 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
+        # 23:59 — MCX EOD report (midnight IST)
+        self._scheduler.add_job(
+            _job_mcx_eod_report,
+            CronTrigger(hour=23, minute=59, timezone=IST),
+            id="mcx_eod_report",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+
         # Broker reconnect check — every 10 seconds
         # Checks: _connected=False (fast path), zombie (>60s stale), normal staleness (5s)
         self._scheduler.add_job(
@@ -226,7 +248,7 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, broker_reconnect, missed_entry_recovery, state_reconciler")
+        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
