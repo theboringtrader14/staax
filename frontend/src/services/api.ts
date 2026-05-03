@@ -86,6 +86,7 @@ export const algosAPI = {
     api.patch(`/algos/${id}/recurring-days`, { days }),
   scheduleRemoval: (id: string, day: string) =>
     api.post(`/algos/${id}/schedule-removal`, { day }),
+  toggle: (id: string) => api.patch(`/algos/${id}/toggle`),
 }
 
 // ── Grid ──────────────────────────────────────────────────────────────────────

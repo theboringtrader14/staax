@@ -61,6 +61,7 @@ class Algo(Base):
     entry_type   = Column(Enum(EntryType, values_callable=lambda x: [e.value for e in x]), nullable=False)            # direct or orb only
     order_type   = Column(Enum(OrderType, values_callable=lambda x: [e.value for e in x]), default=OrderType.MARKET)
     is_active    = Column(Boolean, default=True)
+    is_enabled   = Column(Boolean, default=True, nullable=False, server_default='true')
     is_archived  = Column(Boolean, default=False)
     is_deleted   = Column(Boolean, default=False)
     deleted_at   = Column(DateTime(timezone=True), nullable=True)

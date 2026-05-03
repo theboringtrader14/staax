@@ -617,6 +617,7 @@ class AlgoScheduler:
                             GridEntry.is_enabled == True,
                             GridEntry.is_archived == False,
                             Algo.is_active == True,
+                            Algo.is_enabled == True,
                         )
                     )
                 )
@@ -724,6 +725,7 @@ class AlgoScheduler:
                             GridEntry.is_enabled == True,
                             GridEntry.is_archived == False,
                             Algo.is_active == True,
+                            Algo.is_enabled == True,
                         )
                     )
                 )

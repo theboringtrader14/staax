@@ -39,7 +39,7 @@ interface RawAlgoLeg {
 interface RawAlgo {
   id: string | number; name: string; account_nickname?: string; legs?: RawAlgoLeg[]
   entry_time?: string; exit_time?: string; next_day_exit_time?: string; strategy_mode?: string
-  is_archived?: boolean; recurring_days?: string[]; is_live?: boolean
+  is_archived?: boolean; recurring_days?: string[]; is_live?: boolean; is_enabled?: boolean
   mtm_sl?: number; mtm_tp?: number; mtm_unit?: string; entry_type?: string; order_type?: string
 }
 interface RawGridEntry {
@@ -59,6 +59,7 @@ interface Algo {
   arch:          boolean
   recurringDays: string[]
   is_live:       boolean
+  is_enabled:    boolean
   mtm_sl?:        number
   mtm_tp?:        number
   mtm_unit?:      string
@@ -192,6 +193,7 @@ export default function GridPage() {
         arch:         a.is_archived || false,
         recurringDays:Array.isArray(a.recurring_days) ? a.recurring_days : [],
         is_live:      a.is_live || false,
+        is_enabled:   a.is_enabled !== false,
         mtm_sl:       a.mtm_sl   ?? undefined,
         mtm_tp:       a.mtm_tp   ?? undefined,
         mtm_unit:     a.mtm_unit ?? undefined,
@@ -336,6 +338,18 @@ export default function GridPage() {
     setCardMults(prev => ({ ...prev, [algoId]:newVal }))
     const cell = grid[algoId]?.[todayDay]
     if (cell) void setM(algoId, todayDay, newVal)
+  }
+
+  // ── Enable / Disable toggle ───────────────────────────────────────────────────
+  const handleToggleAlgo = async (algoId: string, currentEnabled: boolean) => {
+    setAlgos(a => a.map(x => x.id === algoId ? { ...x, is_enabled: !currentEnabled } : x))
+    try {
+      await algosAPI.toggle(algoId)
+      showSuccess(currentEnabled ? 'Algo disabled' : 'Algo enabled')
+    } catch {
+      setAlgos(a => a.map(x => x.id === algoId ? { ...x, is_enabled: currentEnabled } : x))
+      showError('Failed to toggle algo')
+    }
   }
 
   // ── Promote / Demote ──────────────────────────────────────────────────────────
@@ -720,13 +734,23 @@ export default function GridPage() {
                           style={{ display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:20,
                             background:'var(--bg)', border:'none',
                             boxShadow:'var(--neu-raised)',
-                            transition:'box-shadow 0.18s ease',
+                            opacity: algo.is_enabled ? 1 : 0.45,
+                            transition:'box-shadow 0.18s ease, opacity 0.3s ease',
                           }}
                           onMouseEnter={e => { e.currentTarget.style.boxShadow='var(--neu-raised-lg)' }}
                           onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised)' }}>
 
                           {/* ── Main row ── */}
-                          <div className="algo-card" style={{ display:'flex', alignItems:'stretch', minHeight:'88px' }}>
+                          <div className="algo-card" style={{ display:'flex', alignItems:'stretch', minHeight:'88px', position:'relative' }}>
+
+                            {/* Enable/disable vertical strip */}
+                            <div
+                              className={`algo-enable-strip${algo.is_enabled ? ' enabled' : ' disabled'}`}
+                              onClick={e => { e.stopPropagation(); handleToggleAlgo(algo.id, algo.is_enabled) }}
+                              title={algo.is_enabled ? 'Click to disable algo' : 'Click to enable algo'}
+                            >
+                              <div className="algo-enable-strip-thumb" />
+                            </div>
 
 
                             {/* Card row body */}

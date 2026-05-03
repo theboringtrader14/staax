@@ -202,6 +202,7 @@ def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -
         "entry_type":            algo.entry_type.value if algo.entry_type else None,
         "order_type":            algo.order_type.value if algo.order_type else None,
         "is_active":             algo.is_active,
+        "is_enabled":            getattr(algo, 'is_enabled', True),
         "is_archived":           getattr(algo, 'is_archived', False),
         "entry_time":            algo.entry_time,
         "exit_time":             algo.exit_time,
@@ -654,6 +655,19 @@ async def unarchive_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
 
 
 # ── Duplicate ─────────────────────────────────────────────────────────────────
+
+@router.patch("/{algo_id}/toggle")
+async def toggle_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
+    """Toggle algo is_enabled on/off. Returns updated algo dict."""
+    result = await db.execute(select(Algo).where(Algo.id == uuid_lib.UUID(algo_id)))
+    algo = result.scalar_one_or_none()
+    if not algo:
+        raise HTTPException(status_code=404, detail="Algo not found")
+    algo.is_enabled = not getattr(algo, 'is_enabled', True)
+    await db.commit()
+    await db.refresh(algo)
+    return _algo_to_dict(algo)
+
 
 @router.post("/{algo_id}/duplicate")
 async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
