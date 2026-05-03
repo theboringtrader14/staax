@@ -1193,7 +1193,7 @@ export default function AnalyticsPage() {
       {/* Page header */}
       <div className="page-header" style={{ marginBottom: 0, padding: '0 28px' }}>
         <div>
-          <h1 style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22 }}>Trade & Analytics</h1>
+          <h1 style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22 }}>Quant</h1>
           <p style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 3 }}>Reports · Performance deep-dive</p>
         </div>
         <div className="page-header-actions">

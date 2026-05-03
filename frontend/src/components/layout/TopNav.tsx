@@ -10,7 +10,7 @@ const NAV_TABS = [
   { path: '/grid',       label: 'Algos'             },
   { path: '/indicators', label: 'Bots'              },
   { path: '/orders',     label: 'Orders'            },
-  { path: '/analytics',  label: 'Trade & Analytics' },
+  { path: '/analytics',  label: 'Quant'             },
 ]
 
 const iconBtnStyle: React.CSSProperties = {
