@@ -120,52 +120,6 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
     return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
   }
 
-  // Gemma API call — prepend system prompt as conversation turns (no system_instruction)
-  async function callGemma(userHistory: { role: string; parts: { text: string }[] }[]) {
-    const systemTurn = { role: 'user', parts: [{ text: SYSTEM_PROMPT }] }
-    const systemAck  = { role: 'model', parts: [{ text: 'Understood. I will help create trading algorithms.' }] }
-    const contents   = [systemTurn, systemAck, ...userHistory]
-
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${import.meta.env.VITE_GOOGLE_AI_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents,
-          generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
-        }),
-      }
-    )
-    if (!res.ok) {
-      console.error('[AI] API error status:', res.status)
-      throw new Error(`API ${res.status}`)
-    }
-    const d = await res.json()
-
-    // Debug logging
-    console.log('[AI] API response structure:', JSON.stringify(d).substring(0, 400))
-
-    if (d.error) {
-      console.error('[AI] API error:', d.error)
-      return `Error: ${d.error.message || 'Unknown error'}`
-    }
-
-    const text = d.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!text) {
-      console.error('[AI] No text in response. Full response:', JSON.stringify(d).substring(0, 300))
-      // Try alternative paths
-      const alt = d.candidates?.[0]?.output || d.text || d.response
-      if (alt) return alt
-      // Check for blocked content
-      if (d.candidates?.[0]?.finishReason === 'SAFETY') {
-        return 'Response blocked by safety filter. Please rephrase your request.'
-      }
-    }
-
-    return text || 'Could not process. Please try again.'
-  }
-
   const handleSend = useCallback(async () => {
     // Triple guard: ref flag + timestamp debounce + isLoading state
     const now = Date.now()
