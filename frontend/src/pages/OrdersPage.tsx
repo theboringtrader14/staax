@@ -1586,12 +1586,51 @@ export default function OrdersPage() {
               ]
 
               return (
-                <div key={w.grid_entry_id}
-                  style={{
-                    borderRadius: '20px', overflow: 'hidden', marginBottom: 14,
-                    background: 'var(--bg)',
-                    boxShadow: 'var(--neu-raised)',
-                  }}>
+                <div key={w.grid_entry_id}>
+
+                  {/* ── Compact summary row ── */}
+                  {compactMode && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      padding: '0 0 0 4px', background: 'var(--bg)',
+                      boxShadow: 'var(--neu-raised-sm)', borderRadius: '12px',
+                      marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
+                    }} onClick={() => toggleExpand(w.grid_entry_id)}>
+                      <div style={{ width: 4, alignSelf: 'stretch', background: stripBg, flexShrink: 0, boxShadow: `0 0 8px ${stripGlow}` }} />
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--text)' }}>{w.algo_name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{w.account_name || '—'}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
+                          padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+                          color: stripBg, whiteSpace: 'nowrap' as const }}>
+                        {isMissed ? 'MISSED' : isError ? 'ERROR' : isSkipped ? 'SKIPPED' : (displayStatus || 'WAITING')}
+                      </span>
+                      <div style={{ flex: 1 }} />
+                      <div style={{ display: 'flex', gap: 6, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
+                        {missedBtns.map((btn, bi) => (
+                          <button key={bi} disabled={btn.disabled} onClick={btn.action}
+                            style={{ height: 24, padding: '0 8px', borderRadius: 100, border: 'none',
+                              background: 'var(--bg)', boxShadow: btn.disabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                              fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
+                              color: btn.disabled ? 'var(--text-mute)' : btn.col,
+                              cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                              opacity: btn.disabled ? 0.35 : 1, letterSpacing: '0.5px', whiteSpace: 'nowrap' as const,
+                            }}>{btn.label}</button>
+                        ))}
+                      </div>
+                      <span style={{ fontSize: 10, color: 'var(--text-dim)', padding: '0 12px', flexShrink: 0 }}>
+                        {expandedAlgos.has(w.grid_entry_id) ? '▲' : '▼'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ── Full card ── */}
+                  {(!compactMode || expandedAlgos.has(w.grid_entry_id)) && (
+                  <div
+                    style={{
+                      borderRadius: '20px', overflow: 'hidden', marginBottom: 14,
+                      background: 'var(--bg)',
+                      boxShadow: 'var(--neu-raised)',
+                    }}>
 
                   {/* ── Card header ── */}
                   <div style={{ background: 'var(--bg)', display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--row-sep)' }}>
@@ -1761,6 +1800,8 @@ export default function OrdersPage() {
                         </tbody>
                       </table>
                     </div>
+                  )}
+                  </div>
                   )}
                 </div>
               )
