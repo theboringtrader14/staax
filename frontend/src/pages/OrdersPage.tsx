@@ -1592,7 +1592,7 @@ export default function OrdersPage() {
                   {compactMode && (
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: '12px',
-                      padding: '0 0 0 4px', background: 'var(--bg)',
+                      background: 'var(--bg)',
                       boxShadow: 'var(--neu-raised-sm)', borderRadius: '12px',
                       marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
                     }} onClick={() => toggleExpand(w.grid_entry_id)}>
@@ -1917,7 +1917,7 @@ export default function OrdersPage() {
                         {compactMode && (
                           <div style={{
                             display: 'flex', alignItems: 'center', gap: '12px',
-                            padding: '0 0 0 4px', background: 'var(--bg)',
+                            background: 'var(--bg)',
                             boxShadow: 'var(--neu-raised-sm)', borderRadius: '12px',
                             marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
                           }} onClick={() => toggleExpand(group.algoId)}>
