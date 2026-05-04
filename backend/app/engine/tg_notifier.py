@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from datetime import datetime
@@ -15,6 +16,7 @@ class TGNotifier:
     def __init__(self):
         self._token   = os.getenv("TG_BOT_TOKEN", "")
         self._chat_id = os.getenv("TG_CHAT_ID", "")
+        self._pending_entries: dict = {}  # algo_name → {"legs": []}
 
     async def send(self, text: str, reply_markup: dict = None) -> None:
         if not self._token or not self._chat_id:
@@ -38,6 +40,28 @@ class TGNotifier:
         "feed_down":      {"inline_keyboard": [[{"text": "💚 Health Check", "callback_data": "cmd_health"}]]},
         "feed_up":        {"inline_keyboard": [[{"text": "💚 Health Check", "callback_data": "cmd_health"}]]},
     }
+
+    async def _flush_entry(self, algo_name: str) -> None:
+        """Aggregation window: collect all legs for 5s, then send one message."""
+        await asyncio.sleep(5)
+        data = self._pending_entries.pop(algo_name, None)
+        if not data:
+            return
+        legs = data.get("legs", [])
+        if not legs:
+            return
+        ts  = datetime.now(IST).strftime("%H:%M:%S IST")
+        msg = f"✅ <b>{algo_name}</b> — Entry\n"
+        for leg in legs:
+            sym = leg.get("symbol") or "-"
+            fp  = leg.get("fill_price") or 0
+            try:
+                msg += f"  • {sym} @ ₹{float(fp):.2f}\n"
+            except (TypeError, ValueError):
+                msg += f"  • {sym}\n"
+        msg += f"<i>{ts}</i>"
+        kb = self._KEYBOARDS.get("entry_executed")
+        await self.send(msg, reply_markup=kb)
 
     async def _fetch_eod_data(self) -> dict:
         from app.core.database import AsyncSessionLocal
@@ -128,6 +152,18 @@ class TGNotifier:
             await self.send(msg, reply_markup=None)
             return
 
+        # Aggregate entry notifications per algo — one message after 5s window
+        if event_type == "entry_executed":
+            algo_name = payload.get("algo_name", "Unknown")
+            if algo_name not in self._pending_entries:
+                self._pending_entries[algo_name] = {"legs": []}
+                asyncio.ensure_future(self._flush_entry(algo_name))
+            self._pending_entries[algo_name]["legs"].append({
+                "symbol":     payload.get("symbol"),
+                "fill_price": payload.get("fill_price"),
+            })
+            return
+
         ts  = datetime.now(IST).strftime("%H:%M:%S IST")
         msg = self._format(event_type, payload, ts)
         if msg:
@@ -139,7 +175,7 @@ class TGNotifier:
         if event_type == "entry_executed":
             sign = "BUY" if payload.get("lots", 0) >= 0 else "SELL"
             return (
-                f"<b>ENTRY</b>\n"
+                f"✅ <b>ENTRY</b>\n"
                 f"Algo: {payload.get('algo_name', '-')}\n"
                 f"Symbol: {payload.get('symbol', '-')}\n"
                 f"Fill: {payload.get('fill_price', 0):.2f}\n"
@@ -174,7 +210,7 @@ class TGNotifier:
             pnl  = payload.get("pnl", 0)
             sign = "+" if pnl >= 0 else ""
             return (
-                f"<b>SL HIT</b>\n"
+                f"🔴 <b>SL HIT</b>\n"
                 f"Algo: {payload.get('algo_name', '-')}\n"
                 f"Account: {payload.get('account', '-')}\n"
                 f"Exit: {payload.get('exit_price', 0):.2f}\n"
@@ -185,7 +221,7 @@ class TGNotifier:
             pnl  = payload.get("pnl", 0)
             sign = "+" if pnl >= 0 else ""
             return (
-                f"<b>TARGET HIT</b>\n"
+                f"🎯 <b>TARGET HIT</b>\n"
                 f"Algo: {payload.get('algo_name', '-')}\n"
                 f"Account: {payload.get('account', '-')}\n"
                 f"Exit: {payload.get('exit_price', 0):.2f}\n"
@@ -193,9 +229,9 @@ class TGNotifier:
                 f"<i>{ts}</i>"
             )
         if event_type == "feed_down":
-            return f"<b>FEED DOWN</b>\nSmartStream disconnected. Monitor manually.\n<i>{ts}</i>"
+            return f"🔌 <b>FEED DOWN</b>\nSmartStream disconnected. Monitor manually.\n<i>{ts}</i>"
         if event_type == "feed_up":
-            return f"<b>FEED UP</b>\nSmartStream reconnected.\n<i>{ts}</i>"
+            return f"🟢 <b>FEED UP</b>\nSmartStream reconnected.\n<i>{ts}</i>"
         return ""
 
 

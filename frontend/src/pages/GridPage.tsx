@@ -139,6 +139,7 @@ export default function GridPage() {
   const [aiAccounts,     setAiAccounts]     = useState<{id:string,nickname:string,broker:string}[]>([])
   const listScrollRef    = useRef<HTMLDivElement>(null)
   const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
+  const autoFillRan      = useRef(false)
 
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
@@ -231,25 +232,28 @@ export default function GridPage() {
       }
       setGrid(newGrid)
 
-      // Auto-fill recurring days
-      let filled = 0
-      const updAlgos = [...apiAlgos]
-      await Promise.all((isPractixMode ? apiAlgos.filter(a => !a.arch && a.recurringDays.length > 0) : []).map(async algo => {
-        const missing = DAYS.filter(d => algo.recurringDays.includes(d) && !newGrid[algo.id]?.[d])
-        for (const day of missing) {
-          try {
-            const res = await gridAPI.deploy({ algo_id:algo.id, trading_date:weekDates[day], lot_multiplier:1, is_practix:true })
-            newGrid[algo.id] = newGrid[algo.id] || {}
-            newGrid[algo.id][day] = { gridEntryId:String(res.data?.id||''), multiplier:1, status:mapStatus(res.data?.status||'no_trade'), mode:'practix', entry:algo.et, exit:algo.xt }
-            const idx = updAlgos.findIndex(a => a.id === algo.id)
-            if (idx >= 0 && Array.isArray(res.data?.algo_recurring_days)) updAlgos[idx] = { ...updAlgos[idx], recurringDays:res.data.algo_recurring_days }
-            filled++
-          } catch { /* silent */ }
+      // Auto-fill recurring days — guarded to prevent double-fire (React StrictMode)
+      if (!autoFillRan.current) {
+        autoFillRan.current = true
+        let filled = 0
+        const updAlgos = [...apiAlgos]
+        await Promise.all((isPractixMode ? apiAlgos.filter(a => !a.arch && a.recurringDays.length > 0) : []).map(async algo => {
+          const missing = DAYS.filter(d => algo.recurringDays.includes(d) && !newGrid[algo.id]?.[d])
+          for (const day of missing) {
+            try {
+              const res = await gridAPI.deploy({ algo_id:algo.id, trading_date:weekDates[day], lot_multiplier:1, is_practix:true })
+              newGrid[algo.id] = newGrid[algo.id] || {}
+              newGrid[algo.id][day] = { gridEntryId:String(res.data?.id||''), multiplier:1, status:mapStatus(res.data?.status||'no_trade'), mode:'practix', entry:algo.et, exit:algo.xt }
+              const idx = updAlgos.findIndex(a => a.id === algo.id)
+              if (idx >= 0 && Array.isArray(res.data?.algo_recurring_days)) updAlgos[idx] = { ...updAlgos[idx], recurringDays:res.data.algo_recurring_days }
+              filled++
+            } catch { /* silent */ }
+          }
+        }))
+        if (filled > 0) {
+          setGrid({ ...newGrid }); setAlgos(updAlgos)
+          console.debug(`Auto-filled ${filled} recurring day${filled > 1 ? 's' : ''}`)
         }
-      }))
-      if (filled > 0) {
-        setGrid({ ...newGrid }); setAlgos(updAlgos)
-        showSuccess(`Auto-filled ${filled} recurring day${filled > 1 ? 's' : ''}`)
       }
     } catch { /* API unreachable */ } finally { setLoading(false) }
   }, [isPractixMode, activeAccount])
@@ -893,23 +897,6 @@ export default function GridPage() {
                               display:'flex', alignSelf:'stretch', gap:8, alignItems:'center',
                               padding:'0 20px',
                             }}>
-                              {/* AI Edit */}
-                              <button
-                                onClick={() => { setAiEditAlgo(algo); setShowAI(true) }}
-                                title="Edit with AI"
-                                style={{
-                                  display:'flex', alignItems:'center', justifyContent:'center',
-                                  width:40, height:40, borderRadius:12,
-                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
-                                  cursor:'pointer', color:'var(--accent)', transition:'box-shadow 0.12s',
-                                  animation:'aiGlow 3s ease-in-out infinite',
-                                }}
-                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
-                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <Sparkle size={16} weight="fill" color="var(--accent)" style={{ animation:'sparkleRotate 2.5s ease-in-out infinite' }} />
-                              </button>
-
                               {/* GO LIVE / DEMOTE */}
                               <button
                                 onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}

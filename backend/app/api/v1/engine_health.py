@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -196,4 +196,44 @@ async def engine_health(request: Request):
         "scheduler":   scheduler_section,
         "monitors":    monitors,
         "engine":      engine,
+    }
+
+
+@router.get("/logs")
+async def get_engine_logs(
+    limit:     int           = Query(50, ge=1, le=500),
+    offset:    int           = Query(0, ge=0),
+    level:     Optional[str] = Query(None, description="Filter by level: info/warn/error/success"),
+    algo_name: Optional[str] = Query(None, description="Filter by algo name"),
+):
+    """Recent engine event log entries from the event_log table. Newest first."""
+    from app.core.database import AsyncSessionLocal
+    from app.models.event_log import EventLog
+    from sqlalchemy import select, desc
+
+    async with AsyncSessionLocal() as db:
+        stmt = select(EventLog).order_by(desc(EventLog.ts))
+        if level:
+            stmt = stmt.where(EventLog.level == level)
+        if algo_name:
+            stmt = stmt.where(EventLog.algo_name == algo_name)
+        stmt = stmt.limit(limit).offset(offset)
+        result = await db.execute(stmt)
+        logs = result.scalars().all()
+
+    return {
+        "logs": [
+            {
+                "id":        log.id,
+                "ts":        log.ts.isoformat() if log.ts else None,
+                "level":     log.level,
+                "msg":       log.msg,
+                "algo_name": log.algo_name,
+                "algo_id":   log.algo_id,
+                "source":    log.source,
+                "details":   log.details,
+            }
+            for log in logs
+        ],
+        "count": len(logs),
     }
