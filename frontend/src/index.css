@@ -798,6 +798,10 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 /* ── Mobile Responsive (≤768px) ── */
 @media (max-width: 768px) {
 
+  /* Hide KPI stat chip bars on mobile */
+  .algo-stats-bar   { display: none !important; }
+  .orders-stats-bar { display: none !important; }
+
   /* ── SMART CARDS — horizontal swipe carousel ── */
   .algo-cards-container {
     display: flex !important;

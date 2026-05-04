@@ -170,7 +170,7 @@ async def engine_health(request: Request):
             try:
                 sl_result = await db.execute(_text("""
                     SELECT
-                        CASE WHEN transaction_type = 'BUY' OR side = 'BUY'
+                        CASE WHEN direction = 'buy'
                              THEN (fill_price - COALESCE(sl_actual, fill_price))
                                   * lots * COALESCE(lot_size, 1)
                              ELSE (COALESCE(sl_actual, fill_price) - fill_price)

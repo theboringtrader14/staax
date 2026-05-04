@@ -727,7 +727,7 @@ export default function GridPage() {
                 </div>{/* end sticky wrapper */}
 
                 {/* ── Group cards ── */}
-                  {!isCollapsed && <div style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px' }}>
+                  {!isCollapsed && <div className="algo-cards-container" style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'4px' }}>
                     {groupAlgos.map(algo => {
                       const mult        = cardMults[algo.id] || 1
                       const typeStr     = algo.account?.toLowerCase().includes('ao') ? 'Direct' : 'Broker'

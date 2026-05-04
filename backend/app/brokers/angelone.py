@@ -97,6 +97,10 @@ class AngelOneBroker(BaseBroker):
         self._feed_token:   Optional[str] = None
         self._refresh_token: Optional[str] = None
 
+    @property
+    def client_code(self) -> str:
+        return self.client_id
+
     # ── Initialise SmartConnect (lazy) ────────────────────────────────────────
 
     def _get_client(self):

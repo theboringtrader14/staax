@@ -340,7 +340,7 @@ export default function ReportsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr', gap: '10px', marginBottom: '12px' }}>
 
         {/* FY P&L */}
-        <div style={{ ...kpiCardSt, cursor: 'pointer' }} onClick={() => setChartModal(true)}>
+        <div style={{ ...kpiCardSt, cursor: 'pointer', minHeight: 96 }} onClick={() => setChartModal(true)}>
           <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontWeight: 600 }}>
             FY {fy} Total P&L
           </div>
@@ -357,21 +357,23 @@ export default function ReportsPage() {
                 {totalPnl !== 0 ? (totalPnl > 0 ? '▲ Profit' : '▼ Loss') : 'No trades'}
               </div>
             </div>
-            <div style={{ flex: 1, height: '46px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={equityCurve} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-                  <defs>
-                    <linearGradient id="miniEqGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={totalPnl >= 0 ? '#0ea66e' : '#FF4444'} stopOpacity={0.4} />
-                      <stop offset="95%" stopColor={totalPnl >= 0 ? '#0ea66e' : '#FF4444'} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area type="monotone" dataKey="cumulative"
-                    stroke={totalPnl >= 0 ? '#0ea66e' : '#FF4444'}
-                    strokeWidth={2} fill="url(#miniEqGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {equityCurve.length > 0 && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <ResponsiveContainer width="100%" height={46}>
+                  <AreaChart data={equityCurve} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                    <defs>
+                      <linearGradient id="miniEqGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={totalPnl >= 0 ? '#0ea66e' : '#FF4444'} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={totalPnl >= 0 ? '#0ea66e' : '#FF4444'} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="natural" dataKey="cumulative"
+                      stroke={totalPnl >= 0 ? '#0ea66e' : '#FF4444'}
+                      strokeWidth={1.5} fill="url(#miniEqGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         </div>
 

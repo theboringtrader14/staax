@@ -213,7 +213,7 @@ export default function DashboardPanel() {
         const entries: { ts?: string; level?: string; source?: string; msg?: string }[] = res.data || []
         const lines: string[] = []
         for (const e of entries) {
-          const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--'
+          const ts = e.ts ? new Date(e.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '--:--:--'
           const lvl: LogLevel = e.level === 'success' ? 'ok' : e.level === 'error' ? 'err' : e.level === 'warn' ? 'wrn' : 'inf'
           // Normalize multiline msg (exception tracebacks) to single line so the regex always matches
           const msg = (e.msg ?? '').replace(/\r?\n/g, ' ').trim()
