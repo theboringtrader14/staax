@@ -1,172 +1,87 @@
 """
-LIFEX AI Agent — powered by Gemma 4 via Google AI Studio.
-Queries live trade data from DB and sends to Gemma for analysis.
+STAAX AI Agent — powered by Claude Haiku via Anthropic API.
+Handles algo create/edit assistance through conversational interface.
 """
-from google import genai
-from google.genai import types
+import logging
+import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
 
-MODEL = "gemma-4-31b-it"
+logger = logging.getLogger(__name__)
 
-_client = None
+MODEL = "claude-haiku-4-5-20251001"
 
-def get_client() -> genai.Client:
+_client: anthropic.Anthropic | None = None
+
+
+def get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
         from app.core.config import settings
-        key = settings.GOOGLE_AI_API_KEY
-        if not key:
-            raise ValueError("GOOGLE_AI_API_KEY not configured in settings")
-        _client = genai.Client(api_key=key)
+        if not settings.ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY not configured in settings")
+        _client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     return _client
 
-SYSTEM_PROMPT = """You are LIFEX, a personal financial AI assistant for Karthikeyan. You speak naturally and warmly, like a knowledgeable friend who understands Indian markets.
 
-Rules:
-- Keep responses to 2-3 sentences maximum
-- Use ₹ symbol for amounts
-- Be specific with numbers from the data provided
-- Sound natural when spoken aloud — avoid bullet points, lists, markdown, asterisks, or special characters
-- Use conversational phrases: "Your best performer is...", "Looks like...", "Based on your trades..."
-- If data shows good performance: be encouraging
-- If data shows losses: be matter-of-fact, not alarming
-- Never say "I cannot" — always try to help"""
+SYSTEM_PROMPT = """You are STAAX AI, an algo trading assistant for LIFEX OS.
+Your ONLY purpose is to help the user CREATE a new algo or EDIT an existing algo.
+You do not answer general market questions, give investment advice, or discuss anything outside algo configuration.
 
+RULES:
+- Only help with creating/editing algos. Refuse all other questions with: "I can only help with creating and editing algos."
+- Output ONLY your response. No internal reasoning, no asterisks, no analysis.
+- Keep responses under 4 lines. Be concise.
+- Use ₹ symbol. No markdown, no bullets.
 
-async def query_trade_data(db: AsyncSession, question: str) -> str:
-    data_parts = []
-    q = question.lower()
+FLOW:
+1. User describes algo → confirm in 2 lines what you understood
+2. Ask ALL missing optionals in one message: SL, TP, MTM SL/TP, W&T, TSL (skip any already mentioned)
+3. After optionals → suggest name like NF-STRD-40 (NF=NIFTY, BN=BANKNIFTY, STRD=straddle, STRG=strangle)
+4. After name confirmed → output FINAL_CONFIG: followed by JSON
 
-    try:
-        # Always fetch algo performance summary
-        result = await db.execute(text("""
-            SELECT
-                a.name, a.strategy_mode, a.entry_type,
-                COUNT(o.id) as trades,
-                COALESCE(SUM(o.pnl), 0) as total_pnl,
-                COALESCE(AVG(o.pnl), 0) as avg_pnl,
-                COUNT(CASE WHEN o.pnl > 0 THEN 1 END) as wins,
-                COUNT(CASE WHEN o.pnl <= 0 THEN 1 END) as losses
-            FROM algos a
-            LEFT JOIN orders o ON o.algo_id = a.id AND o.status = 'CLOSED'
-            GROUP BY a.id, a.name, a.strategy_mode, a.entry_type
-            HAVING COUNT(o.id) > 0
-            ORDER BY total_pnl DESC
-        """))
-        rows = result.fetchall()
-        if rows:
-            data_parts.append("Algo Performance:")
-            for r in rows:
-                wr = round(r.wins / (r.trades) * 100) if r.trades > 0 else 0
-                data_parts.append(
-                    f"  {r.name} ({r.entry_type}/{r.strategy_mode}): "
-                    f"{r.trades} trades, P&L ₹{float(r.total_pnl):,.0f}, "
-                    f"Win rate {wr}%, Avg ₹{float(r.avg_pnl):,.0f}/trade"
-                )
-    except Exception as e:
-        data_parts.append(f"[DB error: {e}]")
+PATTERNS: straddle=SELL ATM CE+PE, strangle=SELL OTM CE+PE, STBT=sell today buy tomorrow
 
-    # Day analysis if relevant
-    if any(w in q for w in ["day", "monday", "tuesday", "wednesday", "thursday", "friday", "week"]):
-        try:
-            result = await db.execute(text("""
-                SELECT
-                    TO_CHAR(o.fill_time AT TIME ZONE 'Asia/Kolkata', 'Dy') as day,
-                    COUNT(*) as trades,
-                    COALESCE(SUM(o.pnl), 0) as pnl,
-                    COUNT(CASE WHEN o.pnl > 0 THEN 1 END) as wins
-                FROM orders o
-                WHERE o.status = 'CLOSED' AND o.pnl IS NOT NULL
-                GROUP BY day
-                ORDER BY MIN(EXTRACT(DOW FROM o.fill_time))
-            """))
-            rows = result.fetchall()
-            if rows:
-                data_parts.append("Day-wise breakdown:")
-                for r in rows:
-                    wr = round(r.wins / r.trades * 100) if r.trades > 0 else 0
-                    data_parts.append(f"  {r.day}: {r.trades} trades, P&L ₹{float(r.pnl):,.0f}, Win {wr}%")
-        except Exception:
-            pass
-
-    # Strategy comparison if relevant
-    if any(w in q for w in ["strategy", "direct", "w&t", "orb", "compare", "better", "best"]):
-        try:
-            result = await db.execute(text("""
-                SELECT
-                    a.entry_type, a.strategy_mode,
-                    COUNT(o.id) as trades,
-                    COALESCE(SUM(o.pnl), 0) as pnl,
-                    ROUND(COUNT(CASE WHEN o.pnl > 0 THEN 1 END) * 100.0 / NULLIF(COUNT(*),0), 1) as win_rate
-                FROM orders o JOIN algos a ON o.algo_id = a.id
-                WHERE o.status = 'CLOSED'
-                GROUP BY a.entry_type, a.strategy_mode
-            """))
-            rows = result.fetchall()
-            if rows:
-                data_parts.append("Strategy comparison:")
-                for r in rows:
-                    data_parts.append(
-                        f"  {r.entry_type}/{r.strategy_mode}: {r.trades} trades, "
-                        f"P&L ₹{float(r.pnl):,.0f}, Win {r.win_rate}%"
-                    )
-        except Exception:
-            pass
-
-    return "\n".join(data_parts) if data_parts else "No trade data available yet."
+FINAL_CONFIG JSON format:
+{"algo_name":"","underlying":"NIFTY","strategy_mode":"intraday","entry_type":"direct","entry_time":"09:35","exit_time":"15:15","lots":1,"legs":[{"direction":"sell","instrument":"ce","strike_type":"atm","expiry":"current_weekly","sl_enabled":false,"sl_type":null,"sl_value":null,"tsl_enabled":false,"tp_enabled":false,"wt_enabled":false}],"mtm_sl":null,"mtm_tp":null}"""
 
 
 async def chat(message: str, context: dict | None = None) -> str | None:
-    """Rule-based fast response for simple queries. Returns None to signal AI needed."""
-    ctx = context or {}
+    """Rule-based fast response. Returns None to signal AI needed."""
     q = message.lower()
-    fy_pnl = ctx.get("fy_pnl", 0)
-    active_algos = ctx.get("active_algos", 0)
-
     if any(w in q for w in ["hello", "hi", "hey"]):
-        return f"Hello Karthikeyan. {active_algos} algos active, FY P&L ₹{fy_pnl:,.0f}."
-    if any(w in q for w in ["p&l", "profit", "pnl"]) and not any(w in q for w in ["which", "compare", "best", "why"]):
-        return f"FY P&L is ₹{fy_pnl:,.0f}."
-    if any(w in q for w in ["how many algo", "active algo"]):
-        return f"{active_algos} algos are active."
-    return None  # Signal to use AI
+        return "Hi! I can help you create or edit trading algos. What would you like to build?"
+    return None
 
 
-async def chat_with_db(message: str, context: dict, db: AsyncSession) -> str:
-    """Full AI analysis — Gemma first, rule-based fallback on any exception."""
-    import logging
-    logger = logging.getLogger(__name__)
-
-    trade_data = await query_trade_data(db, message)
-    ctx = context or {}
-
-    prompt = f"""{SYSTEM_PROMPT}
-
-Live platform data:
-- FY P&L: ₹{ctx.get('fy_pnl', 0):,.0f}
-- Active algos: {ctx.get('active_algos', 0)}
-
-{trade_data}
-
-User question: {message}"""
+async def chat_with_db(
+    message: str,
+    context: dict,
+    db: AsyncSession,
+    history: list | None = None,
+) -> str:
+    """Full AI response via Claude Haiku with optional conversation history."""
+    messages: list[dict] = []
+    if history:
+        for h in history:
+            role    = h.get("role", "user")
+            content = h.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": message})
 
     try:
-        response = get_client().models.generate_content(
+        response = get_client().messages.create(
             model=MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                max_output_tokens=200,
-                temperature=0.3,
-            ),
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=messages,
         )
-        return response.text.strip()
+        return response.content[0].text.strip()
     except Exception as e:
-        logger.warning(f"[AI] Gemma failed: {e} — falling back to rule-based")
-        fallback = await chat(message, ctx)
-        return fallback or f"Data available: {trade_data[:200]}"
+        logger.warning(f"[AI] Claude failed: {e} — falling back to rule-based")
+        fallback = await chat(message, context)
+        return fallback or "AI service unavailable. Please try again."
 
 
-# Keep legacy alias so existing /chat endpoint still works
 async def chat_with_data(message: str, context: dict, db: AsyncSession) -> str:
     return await chat_with_db(message, context, db)

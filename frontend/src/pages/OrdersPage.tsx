@@ -707,6 +707,13 @@ export default function OrdersPage() {
     try { return sessionStorage.getItem('staax_status_filter') ?? null } catch { return null }
   })
   const [isMarketHours, setIsMarketHours] = useState(false)
+  const [compactMode, setCompactMode] = useState(() => {
+    return localStorage.getItem('orders_compact_mode') !== 'false'
+  })
+  const [expandedAlgos, setExpandedAlgos] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('orders_expanded_algos') || '[]')) }
+    catch { return new Set() }
+  })
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
     if (!monDate) return ''
@@ -858,6 +865,17 @@ export default function OrdersPage() {
   useEffect(() => {
     try { localStorage.setItem(LS_DAY_KEY, selectedDate) } catch {}
   }, [selectedDate])
+
+  useEffect(() => { localStorage.setItem('orders_compact_mode', String(compactMode)) }, [compactMode])
+  useEffect(() => { localStorage.setItem('orders_expanded_algos', JSON.stringify([...expandedAlgos])) }, [expandedAlgos])
+
+  const toggleExpand = (algoId: string) => {
+    setExpandedAlgos(prev => {
+      const next = new Set(prev)
+      if (next.has(algoId)) next.delete(algoId); else next.add(algoId)
+      return next
+    })
+  }
 
   const safeOrders  = ordersByDate[selectedDate] ?? []
   const safeWaiting = waitingByDate[selectedDate] ?? []
@@ -1276,6 +1294,17 @@ export default function OrdersPage() {
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
               ><CaretRight size={13} /></button>
             </div>
+            <button
+              onClick={() => setCompactMode(m => !m)}
+              title={compactMode ? 'Switch to expanded view' : 'Switch to compact view'}
+              style={{ height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+                background: 'var(--bg)', boxShadow: compactMode ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-body)',
+                display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1 }}>{compactMode ? '⊞' : '⊟'}</span>
+              {compactMode ? 'Expand' : 'Compact'}
+            </button>
             {statusFilter !== null && (
               <button
                 style={{ height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)' }}
@@ -1833,8 +1862,62 @@ export default function OrdersPage() {
                       { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
                     ]
 
+                    const openCount     = group.legs.filter(l => l.status === 'open').length
+                    const closedCount   = group.legs.filter(l => l.status === 'closed').length
+                    const realizedPnl   = group.legs.filter(l => l.status === 'closed').reduce((s, l) => s + (l.pnl ?? 0), 0)
+                    const unrealizedPnl = group.legs.filter(l => l.status === 'open').reduce((s, l) => s + (l.pnl ?? 0), 0)
+
                     return (
-                      <div key={group.algoId}
+                      <div key={group.algoId}>
+
+                        {/* ── Compact summary row ── */}
+                        {compactMode && (
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: '12px',
+                            padding: '0 0 0 4px', background: 'var(--bg)',
+                            boxShadow: 'var(--neu-raised-sm)', borderRadius: '12px',
+                            marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
+                          }} onClick={() => toggleExpand(group.algoId)}>
+                            <div style={{ width: 4, alignSelf: 'stretch', background: bar.color, flexShrink: 0, boxShadow: `0 0 8px ${bar.glow}` }} />
+                            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--text)' }}>{group.algoName}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{group.account || '—'}</span>
+                            <span style={{ fontSize: 12, minWidth: 55 }}>
+                              {openCount > 0
+                                ? <span style={{ color: 'var(--accent)' }}>{openCount} open</span>
+                                : <span style={{ color: 'var(--text-dim)' }}>0 open</span>}
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 65 }}>{closedCount} closed</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, minWidth: 85,
+                              color: realizedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              {realizedPnl >= 0 ? '+' : ''}₹{Math.abs(realizedPnl).toLocaleString('en-IN')}
+                            </span>
+                            {openCount > 0 && (
+                              <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>
+                                ({unrealizedPnl >= 0 ? '+' : ''}₹{Math.abs(unrealizedPnl).toLocaleString('en-IN')} live)
+                              </span>
+                            )}
+                            <div style={{ flex: 1 }} />
+                            <div style={{ display: 'flex', gap: 6, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
+                              {BTNS.map((btn, bi) => (
+                                <button key={bi} disabled={btn.disabled} title={btn.title} onClick={btn.action}
+                                  style={{ height: 24, padding: '0 8px', borderRadius: 100, border: 'none',
+                                    background: 'var(--bg)', boxShadow: btn.disabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                                    fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
+                                    color: btn.disabled ? 'var(--text-mute)' : btn.col,
+                                    cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                                    opacity: btn.disabled ? 0.35 : 1, letterSpacing: '0.5px', whiteSpace: 'nowrap' as const,
+                                  }}>{btn.label}</button>
+                              ))}
+                            </div>
+                            <span style={{ fontSize: 10, color: 'var(--text-dim)', padding: '0 12px', flexShrink: 0 }}>
+                              {expandedAlgos.has(group.algoId) ? '▲' : '▼'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* ── Full card ── */}
+                        {(!compactMode || expandedAlgos.has(group.algoId)) && (
+                      <div
                         id={`algo-card-${group.algoId}`}
                         style={{ opacity: group.terminated ? 0.65 : 1, borderRadius: '20px', overflow: 'hidden', background: 'var(--bg)', boxShadow: 'var(--neu-raised)', marginBottom: 14 }}>
 
@@ -2013,6 +2096,8 @@ export default function OrdersPage() {
                             </table>
                         </div>
 
+                      </div>
+                        )}
                       </div>
                     )
                   })}

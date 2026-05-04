@@ -12,6 +12,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str
     context: Optional[dict] = None
+    history: Optional[list] = None
 
 
 class PortfolioAnalysisRequest(BaseModel):
@@ -61,12 +62,12 @@ async def ai_chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # Try Gemma first — fall back to rule-based only on exception
+    from app.engine.ai_agent import MODEL
     try:
-        result = await chat_with_db(body.message, ctx, db)
-        return {"response": result, "model": "gemma-4-31b-it"}
+        result = await chat_with_db(body.message, ctx, db, history=body.history)
+        return {"response": result, "model": MODEL}
     except Exception as e:
-        logger.warning(f"[AI/CHAT] Gemma failed: {e} — falling back to rule-based")
+        logger.warning(f"[AI/CHAT] Claude failed: {e} — falling back to rule-based")
         fallback = await chat(body.message, ctx)
         return {"response": fallback or "AI service unavailable. Please try again.", "model": "rule-based"}
 
@@ -97,8 +98,9 @@ async def ai_analyze(body: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
+    from app.engine.ai_agent import MODEL
     result = await chat_with_db(body.message, ctx, db)
-    return {"response": result, "model": "gemma-4-31b-it"}
+    return {"response": result, "model": MODEL}
 
 
 @router.post("/analyze-portfolio")

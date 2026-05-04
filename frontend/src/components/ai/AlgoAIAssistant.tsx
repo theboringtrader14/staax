@@ -1,76 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sparkle, X, Microphone, ArrowRight, Check, PencilSimple } from '@phosphor-icons/react'
 
-// ── Gemma 4 config ────────────────────────────────────────────────────────────
-const MODEL = 'gemma-4-31b-it'
-
-const SYSTEM_PROMPT = `You help create trading algorithms through chat.
-
-RULES:
-- Only help with creating/editing algos. Refuse all other questions with: "I can only help with creating and editing algos."
-- Output ONLY your response. No internal reasoning, no *asterisks*, no analysis.
-- Keep responses under 4 lines. Be concise.
-
-FLOW:
-1. User describes algo → confirm in 2 lines what you understood
-2. Ask ALL missing optionals in one message: SL, TP, MTM SL/TP, W&T, TSL (skip any already mentioned)
-3. After optionals → suggest name like NF-STRD-40 (NF=NIFTY, BN=BANKNIFTY, STRD=straddle, STRG=strangle)
-4. After name confirmed → output FINAL_CONFIG: followed by JSON
-
-PATTERNS: straddle=SELL ATM CE+PE, strangle=SELL OTM CE+PE, STBT=sell today buy tomorrow
-
-FINAL_CONFIG JSON format:
-{"algo_name":"","underlying":"NIFTY","strategy_mode":"intraday","entry_type":"direct","entry_time":"09:35","exit_time":"15:15","lots":1,"legs":[{"direction":"sell","instrument":"ce","strike_type":"atm","expiry":"current_weekly","sl_enabled":false,"sl_type":null,"sl_value":null,"tsl_enabled":false,"tp_enabled":false,"wt_enabled":false}],"mtm_sl":null,"mtm_tp":null}`
-
-// ── Clean chain-of-thought from Gemma responses ──────────────────────────────
-function cleanResponse(text: string): string {
-  // APPROACH 1: Extract quoted response blocks (Gemma often puts actual response in quotes)
-  const quotedBlocks = text.match(/"([^"]{20,})"/g)
-  if (quotedBlocks && quotedBlocks.length > 0) {
-    // Get the last substantial quoted block (the actual response)
-    const lastQuote = quotedBlocks[quotedBlocks.length - 1]
-    const clean = lastQuote.slice(1, -1).trim()
-    // Make sure it looks like a real response, not reasoning
-    if (clean.length > 20 && !clean.includes('FLOW') && !clean.includes('Step ')) {
-      return clean
-    }
-  }
-
-  // APPROACH 2: Remove all lines starting with * or containing known reasoning patterns
-  const lines = text.split('\n')
-  const cleanLines = lines.filter(line => {
-    const t = line.trim()
-    if (!t) return false
-    if (t.startsWith('*')) return false  // ALL asterisk lines are reasoning
-    if (t.startsWith('Goal:')) return false
-    if (t.startsWith('Step ')) return false
-    if (t.match(/^[0-9]+\./)) return false  // Numbered steps like "1. Parse..."
-    if (t.includes('FLOW')) return false
-    if (t.includes('No internal reasoning')) return false
-    if (t.includes('Only help with algos')) return false
-    if (t.includes('Concise?')) return false
-    if (t.includes('No analysis')) return false
-    if (t.includes('RULES:')) return false
-    if (t.includes('PATTERNS:')) return false
-    if (t.includes('confirm in 2 lines')) return false
-    if (t.includes('Ask missing optionals')) return false
-    if (t.includes('suggest name like')) return false
-    if (t.includes('output FINAL_CONFIG')) return false
-    if (t.includes('Understood.')) return false
-    return true
+// ── Call backend AI (Claude Haiku) ───────────────────────────────────────────
+async function callClaude(history: { role: 'user' | 'assistant'; content: string }[]) {
+  const lastItem    = history[history.length - 1]
+  const prevHistory = history.slice(0, -1)
+  const res = await fetch('/api/v1/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: lastItem.content, history: prevHistory }),
   })
-
-  let cleaned = cleanLines.join('\n').trim()
-
-  // Remove surrounding quotes if the whole response is quoted
-  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-    cleaned = cleaned.slice(1, -1)
-  }
-
-  if (cleaned.length > 10) return cleaned
-
-  // APPROACH 3: Fallback — return everything but stripped of asterisks
-  return text.replace(/\*[^*]*\*/g, '').replace(/^\s*\*\s*/gm, '').trim()
+  if (!res.ok) throw new Error(`API ${res.status}`)
+  const d = await res.json()
+  return (d.response as string) || 'Could not process. Please try again.'
 }
 
 // ── Validate config has required fields ──────────────────────────────────────
@@ -147,7 +89,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
 
   const chatRef      = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
-  const historyRef   = useRef<{ role: string; parts: { text: string }[] }[]>([])
+  const historyRef   = useRef<{ role: 'user' | 'assistant'; content: string }[]>([])
   const isSendingRef = useRef(false)
   const lastSendRef  = useRef(0)  // timestamp to debounce
 
@@ -170,7 +112,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
     }
     const ts = _ts()
     setMessages([{ role: 'assistant', text, ts }])
-    historyRef.current = [{ role: 'model', parts: [{ text }] }]
+    historyRef.current = [{ role: 'assistant', content: text }]
     setTimeout(() => inputRef.current?.focus(), 100)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -250,19 +192,14 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
     setIsLoading(true)
 
     // Add to history ref
-    historyRef.current = [...historyRef.current, { role: 'user', parts: [{ text: userMsg }] }]
-    console.log('[AI] history after add:', historyRef.current.length)
+    historyRef.current = [...historyRef.current, { role: 'user', content: userMsg }]
 
     try {
-      const rawResponse = await callGemma(historyRef.current)
-      const response = cleanResponse(rawResponse)
+      const response = await callClaude(historyRef.current)
+      console.log('[AI] response:', response.substring(0, 300))
 
-      console.log('[AI] raw response:', rawResponse.substring(0, 300))
-      console.log('[AI] cleaned response:', response.substring(0, 300))
-
-      // Add model response to history
-      historyRef.current = [...historyRef.current, { role: 'model', parts: [{ text: rawResponse }] }]
-      console.log('[AI] history after response:', historyRef.current.length)
+      // Add assistant response to history
+      historyRef.current = [...historyRef.current, { role: 'assistant', content: response }]
 
       // Strict FINAL_CONFIG detection: must be followed by actual JSON
       const configIdx = response.lastIndexOf('FINAL_CONFIG:')
@@ -393,11 +330,11 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
         }}>
           <Sparkle size={15} weight="fill" color="var(--accent)" style={{ marginRight: 8, flexShrink: 0, animation: 'aiShimmer 3s ease-in-out infinite' }} />
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
-            {mode === 'create' ? 'AI Algo Builder' : 'Edit with AI'}
+            {mode === 'create' ? 'STAAX AI' : 'Edit with AI'}
           </span>
           <span style={{ marginLeft: 8, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', animation: 'aiDotBlink 2s ease-in-out infinite' }} />
-            GEMMA 4
+            HAIKU
           </span>
           <button
             onClick={onClose}
