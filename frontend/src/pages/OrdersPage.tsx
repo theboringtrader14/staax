@@ -1223,7 +1223,9 @@ export default function OrdersPage() {
   const localFilteredOrdersRaw = accountFilter === 'all' ? filteredOrders : filteredOrders.filter(g => g.account === accountFilter)
   // Past days: hide groups with no executed trades (only show algos with at least one filled open/closed leg)
   const localFilteredOrders  = isPastDay
-    ? localFilteredOrdersRaw.filter(g => g.legs.some(l => l.fillPrice != null && (l.status === 'open' || l.status === 'closed')))
+    ? localFilteredOrdersRaw.filter(g =>
+        g.legs.some(l => l.fillPrice != null && (l.status === 'open' || l.status === 'closed')) ||
+        g.legs.some(l => l.status === 'error'))
     : localFilteredOrdersRaw
   // Past days: never show the waiting/error section (nothing actionable about yesterday's errors)
   const localFilteredWaiting = isPastDay ? [] : (accountFilter === 'all' ? filteredWaiting : filteredWaiting.filter(w => w.account_name === accountFilter))
@@ -1887,10 +1889,17 @@ export default function OrdersPage() {
                                 : <span style={{ color: 'var(--text-dim)' }}>0 open</span>}
                             </span>
                             <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 65 }}>{closedCount} closed</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, minWidth: 85,
-                              color: realizedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              {realizedPnl >= 0 ? '+' : ''}₹{Math.abs(realizedPnl).toLocaleString('en-IN')}
-                            </span>
+                            {openCount === 0 && closedCount === 0
+                              ? <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
+                                  padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+                                  color: bar.color, whiteSpace: 'nowrap' as const }}>
+                                  {algoSt === 'error' ? 'ERROR' : algoSt === 'no_trade' ? 'MISSED' : algoSt.toUpperCase()}
+                                </span>
+                              : <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, minWidth: 85,
+                                  color: realizedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {realizedPnl >= 0 ? '+' : ''}₹{Math.abs(realizedPnl).toLocaleString('en-IN')}
+                                </span>
+                            }
                             {openCount > 0 && (
                               <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>
                                 ({unrealizedPnl >= 0 ? '+' : ''}₹{Math.abs(unrealizedPnl).toLocaleString('en-IN')} live)
