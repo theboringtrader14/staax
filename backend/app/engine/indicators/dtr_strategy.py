@@ -88,7 +88,7 @@ class DTRStrategy:
 
     # ── Signal generation ─────────────────────────────────────────────────────
 
-    def on_candle(self, candle: Candle) -> Optional[Signal]:
+    def on_candle(self, candle: Candle, channel_candles=None) -> Optional[Signal]:
         """
         Process a completed candle. Returns a Signal on crossover/crossunder,
         None otherwise.

@@ -101,7 +101,13 @@ async def _flush_all() -> None:
             ) for e in events])
             await db.commit()
     except Exception as e:
-        logger.warning(f"[EVENT] Batch flush failed ({len(events)} events): {e}")
+        _err = str(e).lower()
+        if "duplicate key" in _err or "uniqueviolation" in _err or "unique constraint" in _err:
+            logger.warning(f"[EVENT] Duplicate key in batch ({len(events)} events) — clearing without retry")
+        else:
+            logger.warning(f"[EVENT] Batch flush failed ({len(events)} events): {e} — re-queuing for retry")
+            async with _buffer_lock:
+                _buffer[:0] = events  # prepend so new events follow original order
 
 
 # ── Core log function ─────────────────────────────────────────────────────────

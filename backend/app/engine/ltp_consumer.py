@@ -476,6 +476,7 @@ class LTPConsumer:
         self._ltp_map: Dict[int, float]       = {}     # in-memory cache for sync get_ltp()
         self._ltp_timestamps: Dict[int, float] = {}    # monotonic time of last tick per token
         self._angel_broker                    = None   # injected via set_angel_broker()
+        self._once_callbacks: Dict[int, List[Callable]] = {}
 
     # ── Broker adapter injection ───────────────────────────────────────────────
 
@@ -550,6 +551,15 @@ class LTPConsumer:
             if self._angel_adapter:
                 self._angel_adapter.subscribe([str(t) for t in new])
             logger.info(f"Subscribed to {len(new)} new instruments")
+
+    def register_once(self, token: int, callback: Callable):
+        """Register a one-time callback fired on the next tick for this token.
+        Used by W&T arming to wait for first SmartStream price without polling.
+        """
+        _t = int(token)
+        if _t not in self._once_callbacks:
+            self._once_callbacks[_t] = []
+        self._once_callbacks[_t].append(callback)
 
     def unsubscribe(self, tokens: List[int]):
         self._subscribed_tokens = [t for t in self._subscribed_tokens if t not in tokens]
@@ -721,6 +731,17 @@ class LTPConsumer:
                         samples.pop(0)
                 if elapsed_ms > 50:
                     logger.warning(f"[TICK] {label} callback SLOW: {elapsed_ms:.1f}ms")
+
+        # Fire and deregister one-time per-token callbacks (used by W&T first-tick wait)
+        for tick in ticks:
+            _tok = int(tick["instrument_token"])
+            if _tok in self._once_callbacks:
+                _ltp = float(tick.get("last_price", 0))
+                for _cb in self._once_callbacks.pop(_tok):
+                    try:
+                        _cb(_ltp)
+                    except Exception as _e:
+                        logger.warning(f"[LTP] register_once callback error for token {_tok}: {_e}")
 
     def _on_close(self, ws, code, reason):
         logger.warning(f"⚠️ Zerodha WebSocket closed: {code} — {reason}")

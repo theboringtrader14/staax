@@ -1267,12 +1267,42 @@ class AlgoRunner:
         # Strike is already selected above — we monitor the option's own LTP, not the index.
         # force_direct=True (manual RETRY or W&T callback re-entry): skip W&T, place immediately.
         if leg.wt_enabled and leg.wt_value and not reentry and not force_direct:
-            # Use live LTP from LTP consumer if more current than strike-selection price
+            # Subscribe token FIRST — must happen before get_ltp() so SmartStream starts
+            # delivering ticks. BFO registration must precede subscribe for correct exchange routing.
+            if self._ltp_consumer and instrument_token:
+                if _instrument_exchange == "BFO":
+                    self._ltp_consumer.register_bfo_tokens([int(instrument_token)])
+                    logger.info(f"[W&T/BFO] Registered BFO token {instrument_token} for {symbol}")
+                self._ltp_consumer.subscribe([int(instrument_token)])
+
+            # Resolve reference LTP: REST fetch (ltp) → SmartStream cache → first-tick wait
             _wt_option_ltp = ltp
             if self._ltp_consumer and instrument_token:
                 _live = self._ltp_consumer.get_ltp(int(instrument_token))
                 if _live and _live > 0:
                     _wt_option_ltp = _live
+
+            if (not _wt_option_ltp or _wt_option_ltp <= 0) and self._ltp_consumer and instrument_token:
+                _first_tick_event = asyncio.Event()
+                _first_ltp_holder = [0.0]
+
+                def _on_first_tick(_tltp: float):
+                    if _tltp > 0:
+                        _first_ltp_holder[0] = _tltp
+                        _first_tick_event.set()
+
+                self._ltp_consumer.register_once(int(instrument_token), _on_first_tick)
+                logger.info(f"[W&T] Waiting for first tick on {symbol} (token={instrument_token}) ...")
+                try:
+                    await asyncio.wait_for(_first_tick_event.wait(), timeout=30.0)
+                    _wt_option_ltp = _first_ltp_holder[0]
+                    logger.info(f"[W&T] First tick received for {symbol}: LTP={_wt_option_ltp:.2f}")
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"[W&T] No tick received for {symbol} (token={instrument_token}) "
+                        f"within 30s — cannot arm W&T for {algo.name}"
+                    )
+                    raise ValueError(f"[W&T] Timeout waiting for first tick on {symbol}")
 
             if not _wt_option_ltp or _wt_option_ltp <= 0:
                 logger.error(
@@ -1311,13 +1341,7 @@ class AlgoRunner:
                     is_ref_set       = True,  # reference already captured — skip tick-based capture
                 )
                 self._wt_evaluator.register(window, on_entry=self._make_wt_callback(_ge_id_str))
-                if self._ltp_consumer:
-                    # For BFO options (SENSEX/BANKEX), register before subscribe so
-                    # SmartStream uses exchangeType=4, preventing index LTP contamination.
-                    if _instrument_exchange == "BFO":
-                        self._ltp_consumer.register_bfo_tokens([int(instrument_token)])
-                        logger.info(f"[W&T/BFO] Registered BFO token {instrument_token} for {symbol}")
-                    self._ltp_consumer.subscribe([int(instrument_token)])
+                # Token already subscribed above before LTP resolution
 
                 # Cache arming details so rearm_wt_monitors() can restore the window after reconnect
                 self._wt_arming_cache[_ge_id_str] = {
@@ -2003,6 +2027,27 @@ class AlgoRunner:
             grid_entry.status = GridStatus.ALGO_CLOSED
 
         await db.commit()
+
+        # Notify Telegram + WhatsApp on exit
+        if algo and orders:
+            try:
+                _total_pnl = sum(o.pnl or 0 for o in orders)
+                _algo_name = getattr(algo, "name", "Unknown")
+                asyncio.create_task(_wa_notify("exit_executed", {
+                    "algo_name":   _algo_name,
+                    "exit_reason": reason,
+                    "pnl":         _total_pnl,
+                    "legs_count":  len(orders),
+                }))
+                asyncio.create_task(_tg_notify("exit_executed", {
+                    "algo_name":   _algo_name,
+                    "exit_reason": reason,
+                    "pnl":         _total_pnl,
+                    "legs_count":  len(orders),
+                }))
+            except Exception as _n_err:
+                logger.warning(f"[EXIT] Notify failed: {_n_err}")
+
         logger.info(f"✅ exit_all complete: {grid_entry_id} | reason={reason}")
 
     # ── F9: Cancel broker SL orders ───────────────────────────────────────────

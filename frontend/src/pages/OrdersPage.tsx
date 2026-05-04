@@ -1702,23 +1702,24 @@ export default function OrdersPage() {
                                 <div style={{ fontSize: 10, color: leg.direction === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{leg.direction?.toUpperCase()}</div>
                               </td>
                               <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>{leg.lots}</td>
-                              {/* Fill/Ref: show W&T ref+trigger only for actively MONITORING legs */}
+                              {/* Fill/Ref: fill price + W&T reference (shown permanently once captured) */}
                               <td style={{ textAlign: 'center', fontSize: 11, verticalAlign: 'middle' }}>
-                                {(() => {
-                                  const showRefTrigger = w.display_status === 'MONITORING' && leg.wt_enabled && leg.wt_ref_price !== null && leg.wt_ref_price !== undefined
-                                  if (showRefTrigger) {
-                                    return (
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>Ref: {(leg.wt_ref_price as number).toLocaleString('en-IN')}</span>
-                                        <span style={{ color: '#06B6D4', fontWeight: 600 }}>→ {leg.wt_threshold !== null && leg.wt_threshold !== undefined ? leg.wt_threshold.toLocaleString('en-IN') : '—'}</span>
-                                      </div>
-                                    )
-                                  }
-                                  if (w.display_status === 'MONITORING' && leg.wt_enabled) {
-                                    return <span style={{ color: '#F59E0B', fontSize: 10 }}>W&amp;T waiting ref…</span>
-                                  }
-                                  return <span style={{ color: 'var(--text-dim)' }}>—</span>
-                                })()}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                    {leg.wt_ref_price != null
+                                      ? <><span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>Ref </span>₹{Number(leg.wt_ref_price).toLocaleString('en-IN')}</>
+                                      : <span style={{ color: 'var(--text-dim)' }}>—</span>
+                                    }
+                                  </div>
+                                  <div style={{ fontSize: 11 }}>
+                                    {leg.wt_threshold != null
+                                      ? <span style={{ color: '#06B6D4' }}>→ ₹{Number(leg.wt_threshold).toLocaleString('en-IN')}</span>
+                                      : w.display_status === 'MONITORING' && leg.wt_enabled
+                                        ? <span style={{ color: '#F59E0B', fontSize: 10 }}>W&amp;T waiting ref…</span>
+                                        : null
+                                    }
+                                  </div>
+                                </div>
                               </td>
                               {['LTP','SL','Target','Exit','Reason'].map(col => (
                                 <td key={col} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, verticalAlign: 'middle' }}>—</td>

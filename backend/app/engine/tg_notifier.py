@@ -32,6 +32,7 @@ class TGNotifier:
 
     _KEYBOARDS = {
         "entry_executed": {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
+        "exit_executed":  {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
         "sl_hit":         {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
         "tp_hit":         {"inline_keyboard": [[{"text": "📍 View Trades",  "callback_data": "cmd_positions"}]]},
         "feed_down":      {"inline_keyboard": [[{"text": "💚 Health Check", "callback_data": "cmd_health"}]]},
@@ -143,6 +144,30 @@ class TGNotifier:
                 f"Symbol: {payload.get('symbol', '-')}\n"
                 f"Fill: {payload.get('fill_price', 0):.2f}\n"
                 f"Lots: {payload.get('lots', '-')}\n"
+                f"<i>{ts}</i>"
+            )
+        if event_type == "exit_executed":
+            pnl    = payload.get("pnl", 0)
+            reason = payload.get("exit_reason", "exit_time")
+            reason_label = {
+                "sl":              "🔴 SL Hit",
+                "sl_hit":          "🔴 SL Hit",
+                "tp":              "🎯 TP Hit",
+                "tp_hit":          "🎯 TP Hit",
+                "auto_sq":         "🏁 Exit Time",
+                "btst_exit":       "🏁 BTST Exit",
+                "stbt_exit":       "🏁 STBT Exit",
+                "terminate":       "⛔ Manual SQ",
+                "sq":              "⛔ Manual SQ",
+                "global_sl":       "🔴 Global SL",
+                "mslc":            "🔄 MSLC",
+                "kill_switch":     "⛔ Kill Switch",
+                "stale_exit_recovery": "🔧 Recovery",
+            }.get(reason, f"🏁 {reason}")
+            pnl_str = f"+₹{pnl:,.0f}" if pnl >= 0 else f"-₹{abs(pnl):,.0f}"
+            return (
+                f"{reason_label} — <b>{payload.get('algo_name', '-')}</b>\n"
+                f"P&amp;L: {pnl_str}\n"
                 f"<i>{ts}</i>"
             )
         if event_type == "sl_hit":

@@ -831,10 +831,6 @@ export default function GridPage() {
                                   const pillColor  = isInRecurring ? 'var(--accent)' : 'var(--text-mute)'
                                   const pillWeight = isInRecurring ? 700 : 400
                                   const pillShadow = isInRecurring ? 'var(--neu-inset)' : 'var(--neu-raised-sm)'
-                                  const showDot    = false
-                                  const dotColor   = 'transparent'
-                                  const dotAnim    = false
-
                                   const isMonitoring = cell?.is_monitoring === true
 
                                   return (
@@ -864,18 +860,6 @@ export default function GridPage() {
                                           borderRadius:'50%',
                                           background: '#2dd4bf',
                                           animation: 'pillDotPulse 1.4s ease-in-out infinite',
-                                        }}/>
-                                      )}
-                                      {showDot && !isMonitoring && (
-                                        <span style={{
-                                          position:'absolute',
-                                          top:'4px',
-                                          right:'4px',
-                                          width:'4px',
-                                          height:'4px',
-                                          borderRadius:'50%',
-                                          background: dotColor,
-                                          animation: dotAnim ? 'pillDotPulse 1.4s ease-in-out infinite' : 'none',
                                         }}/>
                                       )}
                                     </button>
