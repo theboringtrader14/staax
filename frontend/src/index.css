@@ -802,88 +802,38 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
   .algo-stats-bar   { display: none !important; }
   .orders-stats-bar { display: none !important; }
 
-  /* ── SMART CARDS — horizontal swipe carousel ── */
+  /* ── SMART CARDS — web layout, horizontal scroll per card ── */
+  .algo-card-row {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 12px !important;
+    min-width: max-content;
+  }
+  .algo-card-row::-webkit-scrollbar { display: none; }
+
+  /* algo-cards-container: vertical stack (one card per row) */
   .algo-cards-container {
     display: flex !important;
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    overflow-y: visible !important;
-    -webkit-overflow-scrolling: touch !important;
-    scroll-snap-type: x mandatory !important;
-    gap: 12px !important;
-    padding: 0 16px 12px 16px !important;
-    scrollbar-width: none !important;
-  }
-
-  .algo-cards-container::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  /* Each algo card — fixed width card in carousel */
-  .algo-cards-container > div {
-    min-width: 300px !important;
-    max-width: 300px !important;
-    flex-shrink: 0 !important;
-    scroll-snap-align: start !important;
-  }
-
-  /* Inside each card — vertical stack */
-  .algo-cards-container .algo-card > div {
     flex-direction: column !important;
-    align-items: flex-start !important;
-    padding: 14px !important;
-    gap: 10px !important;
+    overflow-x: visible !important;
+    gap: 8px !important;
+    padding: 0 !important;
   }
 
-  /* Info block — full width inside card */
-  .algo-cards-container .algo-card [style*="width: 290px"],
-  .algo-cards-container .algo-card [style*="width:290px"] {
-    width: 100% !important;
+  /* Each card: full width, content scrolls horizontally inside */
+  .algo-card {
     min-width: unset !important;
-  }
-
-  /* Time + lot stepper row — side by side */
-  .algo-card-times-lots {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 16px !important;
-    align-items: center !important;
+    max-width: unset !important;
     width: 100% !important;
   }
 
-  .algo-card-times-lots > * {
-    width: auto !important;
-    min-width: unset !important;
-    flex-shrink: 1 !important;
-  }
-
-  /* Days row — scrollable */
-  .algo-cards-container .algo-card-days {
-    width: 100% !important;
-    min-width: unset !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    flex-shrink: 0 !important;
-  }
-
-  /* Actions row — wrap buttons */
-  .algo-cards-container .algo-card-actions {
-    width: 100% !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    align-self: auto !important;
-    border-left: none !important;
-    border-top: 1px solid rgba(255,107,0,0.15) !important;
-    padding-top: 8px !important;
-    gap: 6px !important;
-  }
-
-  .algo-cards-container .algo-card-actions button {
-    flex: 1 !important;
-    min-width: 44px !important;
-    min-height: 36px !important;
-    font-size: 9px !important;
-  }
+  /* Re-show day selector and action buttons on mobile */
+  .algo-card .algo-card-days { display: flex !important; }
+  .algo-card .algo-action-btns { display: flex !important; }
+  .algo-card .algo-lots-control { display: flex !important; }
 
   /* ── ORDERS TABLE — horizontal scroll, all columns visible ── */
   .orders-table-wrapper {

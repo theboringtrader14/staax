@@ -1,14 +1,7 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import TopNav from './TopNav'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import {
-  House,
-  GridFour,
-  ClipboardText,
-  ChartLine,
-  Robot,
-  User,
-} from '@phosphor-icons/react'
+import { GridFour, ClipboardText } from '@phosphor-icons/react'
 
 export default function Layout() {
   useWebSocket()
@@ -23,12 +16,8 @@ export default function Layout() {
       {/* Mobile bottom nav — ≤768px only, CSS class controls visibility */}
       <nav className="mobile-bottom-nav">
         {[
-          { to: '/dashboard',  label: 'Dashboard', Icon: House         },
-          { to: '/grid',       label: 'Algos',     Icon: GridFour      },
-          { to: '/orders',     label: 'Orders',    Icon: ClipboardText },
-          { to: '/reports',    label: 'Reports',   Icon: ChartLine     },
-          { to: '/indicators', label: 'Bots',      Icon: Robot         },
-          { to: '/accounts',   label: 'Accounts',  Icon: User          },
+          { to: '/grid',   label: 'Algos',  Icon: GridFour      },
+          { to: '/orders', label: 'Orders', Icon: ClipboardText },
         ].map(item => (
           <NavLink
             key={item.to}

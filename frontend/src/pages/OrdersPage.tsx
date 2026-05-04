@@ -1297,7 +1297,7 @@ export default function OrdersPage() {
               ><CaretRight size={13} /></button>
             </div>
             <button
-              onClick={() => setCompactMode(m => !m)}
+              onClick={() => { setCompactMode(m => !m); setExpandedAlgos(new Set()); localStorage.removeItem('orders_expanded_algos') }}
               title={compactMode ? 'Switch to expanded view' : 'Switch to compact view'}
               style={{ height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
                 background: 'var(--bg)', boxShadow: compactMode ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',

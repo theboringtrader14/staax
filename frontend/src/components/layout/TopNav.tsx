@@ -218,9 +218,9 @@ export default function TopNav() {
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1100,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.35)',
-          backdropFilter: 'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
+          background: 'rgba(0,0,0,0.06)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           animation: 'fadeIn 0.15s ease',
         }}>
           <div style={{
