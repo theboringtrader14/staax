@@ -729,30 +729,7 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 }
 
 /* ── Mobile / Tablet Responsive ─────────────────────────────────────── */
-@media (max-width: 768px) {
-  .sidebar { display: none !important; }
-  .main-content { margin-left: 0 !important; width: 100% !important; }
-  .topbar-welcome { display: none !important; }
-  .page-header { padding: 12px 16px !important; }
-  .page-header h1 { font-size: 18px !important; }
 
-  .algo-card { flex-direction: column !important; padding: 12px !important; }
-  .algo-card-days { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-  .algo-card-actions { flex-direction: row !important; width: 100% !important; flex-wrap: wrap; }
-
-  .stat-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-
-  .landing-module-grid { grid-template-columns: 1fr 1fr !important; }
-  .landing-hero { grid-template-columns: 1fr !important; padding: 40px 20px 30px !important; }
-  .landing-hero h1 { font-size: clamp(24px, 6vw, 36px) !important; }
-}
-
-@media (max-width: 480px) {
-  .page-header h1 { font-size: 16px !important; }
-  .stat-grid { grid-template-columns: 1fr !important; }
-  .landing-module-grid { grid-template-columns: 1fr !important; }
-  .landing-hero h1 { font-size: clamp(22px, 6vw, 28px) !important; }
-}
 
 /* ── AI Avatar orb animations ─────────────────────────────────────────────── */
 @keyframes orbPulse {
@@ -778,150 +755,12 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 .landing-mobile-menu a { padding: 14px 24px; color: #ccc; font-size: 14px; text-decoration: none; border-bottom: 0.5px solid rgba(255,255,255,0.06); }
 .landing-mobile-menu a:hover { color: #FF6B00; }
 
-@media (max-width: 768px) {
-  .landing-nav { padding: 12px 16px !important; }
-  .landing-nav-items { display: none !important; }
-  .landing-hamburger { display: flex !important; }
-  .landing-modules-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-  .landing-hero-title { font-size: clamp(1.8rem, 7vw, 3rem) !important; }
-  .landing-hero-subtitle { font-size: clamp(0.85rem, 3vw, 1.1rem) !important; }
-  .landing-terminal { width: 100% !important; max-width: 100% !important; font-size: 11px !important; }
-  .landing-section { padding: 40px 16px !important; }
-  .landing-module-btn { width: 100% !important; }
-  .landing-cta-row { flex-direction: column !important; width: 100% !important; }
-  .landing-cta { width: 100% !important; }
-}
 
 /* Mobile bottom nav — hidden by default on desktop */
 .mobile-bottom-nav { display: none; }
 
 /* ── Mobile Responsive (≤768px) ── */
-@media (max-width: 768px) {
 
-  /* Hide KPI stat chip bars on mobile */
-  .algo-stats-bar   { display: none !important; }
-  .orders-stats-bar { display: none !important; }
-
-  /* ── SMART CARDS — web layout, horizontal scroll per card ── */
-  .algo-card-row {
-    display: flex !important;
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    gap: 12px !important;
-    min-width: max-content;
-  }
-  .algo-card-row::-webkit-scrollbar { display: none; }
-
-  /* algo-cards-container: vertical stack (one card per row) */
-  .algo-cards-container {
-    display: flex !important;
-    flex-direction: column !important;
-    overflow-x: visible !important;
-    gap: 8px !important;
-    padding: 0 !important;
-  }
-
-  /* Each card: full width, content scrolls horizontally inside */
-  .algo-card {
-    min-width: unset !important;
-    max-width: unset !important;
-    width: 100% !important;
-  }
-
-  /* Re-show day selector and action buttons on mobile */
-  .algo-card .algo-card-days { display: flex !important; }
-  .algo-card .algo-action-btns { display: flex !important; }
-  .algo-card .algo-lots-control { display: flex !important; }
-
-  /* ── ORDERS TABLE — horizontal scroll, all columns visible ── */
-  .orders-table-wrapper {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    width: 100% !important;
-  }
-
-  table.staax-table {
-    min-width: 900px !important;
-  }
-
-  /* Orders page button row — wrap */
-  [class*="btn-row"], [class*="button-row"] {
-    flex-wrap: wrap !important;
-    gap: 6px !important;
-  }
-
-  /* ── TOPBAR — hide non-essential items ── */
-  .topbar-welcome {
-    display: none !important;
-  }
-
-  .topbar-clock {
-    display: none !important;
-  }
-
-  /* Page header — smaller */
-  .page-content h1, main h1 {
-    font-size: 18px !important;
-  }
-
-  /* Stat grid — 2 columns */
-  .stat-grid {
-    grid-template-columns: 1fr 1fr !important;
-  }
-
-  /* Add bottom padding so content isn't hidden behind bottom nav */
-  main {
-    padding-bottom: 72px !important;
-  }
-
-  /* ── MOBILE BOTTOM NAV ── */
-  .mobile-bottom-nav {
-    display: flex !important;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    background: #1A1C1E;
-    border-top: 1px solid rgba(255,107,0,0.2);
-    z-index: 1000;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .mobile-nav-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    color: rgba(255,255,255,0.4);
-    text-decoration: none;
-    font-size: 9px;
-    font-family: var(--font-display);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    transition: color 0.15s;
-  }
-
-  .mobile-nav-item.active {
-    color: #FF6B00;
-  }
-
-  .mobile-nav-item svg {
-    width: 20px;
-    height: 20px;
-  }
-}
-
-@media (max-width: 480px) {
-  /* Stat grid — 1 column on very small screens */
-  .stat-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
 
 [data-theme='light'] {
   --bg-void:     #e8e4df;
@@ -983,131 +822,53 @@ select:focus { outline: 1.5px solid rgba(255,107,0,0.55) !important; outline-off
 .algo-card { padding-left: 28px !important; }
 
 /* ── Mobile responsiveness ── */
+
+/* ── Mobile responsiveness ── */
 @media (max-width: 768px) {
-  /* TopNav */
-  .desktop-nav-links { display: none !important; }
-  .mobile-menu-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--bg);
-    box-shadow: var(--neu-raised-sm);
-    border: none;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 16px;
-  }
-  .mobile-nav-dropdown {
-    position: fixed;
-    top: 80px;
-    left: 20px;
-    right: 20px;
-    background: var(--bg);
-    box-shadow: var(--neu-raised);
-    border-radius: 20px;
-    padding: 12px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    z-index: 319;
-  }
-  .mobile-nav-dropdown a {
-    padding: 10px 20px;
-    border-radius: 12px;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    font-family: var(--font-body);
-    color: var(--text-dim);
-    transition: color 0.15s, background 0.15s;
-  }
-  .mobile-nav-dropdown a.active { color: var(--accent); }
-  .mobile-nav-dropdown a:hover { color: var(--text); }
 
-  /* OrdersPage stats bar */
-  .orders-stats-bar {
+  /* Hide KPI stat bars */
+  .algo-stats-bar { display: none !important; }
+  .orders-stats-bar { display: none !important; }
+
+  /* Full page horizontal scroll — body level */
+  body {
     overflow-x: auto !important;
-    flex-wrap: nowrap !important;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
+    min-width: 1024px !important;
   }
 
-  /* OrdersPage day tabs */
-  .week-day-bar {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
-  }
+  /* Topnav — keep visible, shrink PRACTIX badge text */
+  .topbar-practix-text { display: none; }
 
-  /* Orders table — hide header, show rows as cards */
-  .order-table-header { display: none !important; }
-  .order-row {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "sym   sym"
-      "stat  lots"
-      "fill  ltp"
-      "sl    tgt"
-      "exit  rsn"
-      "pnl   pnl";
-    border-bottom: 1px solid var(--gs-border);
-    padding: 10px 12px;
-    gap: 4px 12px;
-  }
-  .order-row td { display: block; border: none; padding: 2px 0 !important; }
-  .order-row td:nth-child(3) { grid-area: sym; }
-  .order-row td:nth-child(2) { grid-area: stat; }
-  .order-row td:nth-child(4) { grid-area: lots; }
-  .order-row td:nth-child(5) { grid-area: fill; }
-  .order-row td:nth-child(6) { grid-area: ltp; }
-  .order-row td:nth-child(7) { grid-area: sl; }
-  .order-row td:nth-child(8) { grid-area: tgt; }
-  .order-row td:nth-child(9) { grid-area: exit; }
-  .order-row td:nth-child(10) { grid-area: rsn; }
-  .order-row td:nth-child(11) { grid-area: pnl; text-align: left !important; }
-  .order-row td:nth-child(1) { display: none; }
-
-  /* Algo group header */
-  .algo-group-header {
-    flex-wrap: wrap !important;
-    gap: 8px !important;
-  }
-
-  /* GridPage algo card row — stack vertically */
+  /* Remove any stacking/column overrides — let web layout render as-is */
   .algo-card-row {
-    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+  }
+  .algo-cards-container {
     flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
+    overflow-x: visible !important;
   }
-  /* Hide day selector and action buttons on mobile — tap card to edit */
-  .algo-card-days    { display: none !important; }
-  .algo-card-actions { display: none !important; }
-
-  /* GridPage stats bar — horizontal scroll */
-  .algo-stats-bar {
-    display: grid !important;
-    grid-template-columns: repeat(4, minmax(90px, 1fr)) !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
-  }
-  .algo-stats-bar > * {
-    min-width: 90px !important;
-    flex-shrink: 0 !important;
+  .algo-card {
+    min-width: unset !important;
+    max-width: unset !important;
+    width: 100% !important;
   }
 
-  /* Page horizontal padding */
-  .page-container, main {
-    padding-left: 8px !important;
-    padding-right: 8px !important;
+  /* Orders table — full width, let page scroll handle it */
+  .orders-table-wrapper {
+    overflow-x: visible !important;
+  }
+  .orders-table-wrapper table {
+    min-width: unset !important;
   }
 
-  /* Orders table extra rules */
-  table { width: 100% !important; }
-  td    { padding: 4px 6px !important; }
+  /* Remove any padding reductions */
+  main, .page-container {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Same as 768px — no additional changes */
 }

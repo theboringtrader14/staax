@@ -1326,44 +1326,65 @@ class AlgoRunner:
                     else _wt_option_ltp - leg.wt_value
                 )
 
-            if self._wt_evaluator:
-                _ge_id_str = str(grid_entry.id)
-                window = WTWindow(
-                    grid_entry_id    = _ge_id_str,
-                    algo_id          = str(algo.id),
-                    direction        = _wt_dir,
-                    entry_time       = self._parse_time(algo.entry_time or "09:16"),
-                    instrument_token = int(instrument_token),
-                    wt_value         = leg.wt_value,
-                    wt_unit          = _wt_unit,
-                    reference_price  = _wt_option_ltp,
-                    threshold        = _wt_threshold,
-                    is_ref_set       = True,  # reference already captured — skip tick-based capture
-                )
-                self._wt_evaluator.register(window, on_entry=self._make_wt_callback(_ge_id_str))
-                # Token already subscribed above before LTP resolution
+            # W&T: place SL-Limit directly at broker — broker holds and triggers on threshold
+            _ge_id_str = str(grid_entry.id)
 
-                # Cache arming details so rearm_wt_monitors() can restore the window after reconnect
-                self._wt_arming_cache[_ge_id_str] = {
-                    "instrument_token": int(instrument_token),
-                    "symbol":           symbol,
-                    "exchange":         _instrument_exchange,   # needed for BFO re-arm token registration
-                    "reference_price":  _wt_option_ltp,
-                    "threshold":        _wt_threshold,
-                    "direction":        _wt_dir,
-                    "wt_value":         leg.wt_value,
-                    "wt_unit":          _wt_unit,
-                    "entry_time":       algo.entry_time or "09:16",
-                    "algo_id":          str(algo.id),
-                }
-                logger.info(
-                    f"[W&T] Armed on option {symbol} (token={instrument_token}) "
-                    f"ref={_wt_option_ltp:.2f} threshold={_wt_threshold:.2f} "
-                    f"({leg.wt_value}{_wt_unit} {_wt_dir}) for {algo.name}"
-                )
-            else:
-                logger.error(f"[W&T] WTEvaluator not available — W&T NOT registered for {algo.name}")
-            return None  # deferred — order placed when threshold fires via _make_wt_callback
+            # Quantity needed for broker call — calculate inline (mirrors later lot-size logic)
+            _wt_lot_size = await self._get_lot_size(symbol, _instrument_exchange)
+            _wt_quantity = leg.lots * _wt_lot_size * (algo.base_lot_multiplier or 1) * grid_entry.lot_multiplier
+
+            # SEBI algo_tag for broker order tracking
+            _wt_account_nick = account.nickname if account else "unknown"
+            _wt_algo_safe    = algo.name.replace(" ", "_").replace("/", "_")
+            _wt_ts_ms        = int(datetime.now(IST).timestamp() * 1000)
+            _wt_algo_tag     = f"STAAX_{_wt_account_nick}_{_wt_algo_safe}_{leg.leg_number}_{_wt_ts_ms}"
+
+            # Limit price slightly beyond trigger to guarantee fill on threshold breach
+            _wt_limit_price = (
+                round(_wt_threshold + 0.05, 2) if _wt_dir == "up"
+                else round(_wt_threshold - 0.05, 2)
+            )
+
+            if not account_broker:
+                raise ValueError(f"[W&T] No broker available for {algo.name} leg {leg.leg_number}")
+
+            logger.info(
+                f"[W&T] Placing SL-Limit at broker: {symbol} "
+                f"trigger={_wt_threshold:.2f} limit={_wt_limit_price:.2f} ref={_wt_option_ltp:.2f}"
+            )
+            _wt_broker_order_id = await account_broker.place_order(
+                symbol=symbol,
+                exchange=_instrument_exchange,
+                direction=leg.direction,
+                quantity=_wt_quantity,
+                order_type="SL",
+                price=_wt_limit_price,
+                trigger_price=_wt_threshold,
+                product="INTRADAY",
+                symbol_token=str(instrument_token),
+                tag=_wt_algo_tag,
+            )
+            logger.info(
+                f"[W&T] SL-Limit placed at broker: order_id={_wt_broker_order_id} "
+                f"trigger={_wt_threshold:.2f} for {algo.name}"
+            )
+
+            # Cache arm details — fill callback uses reference_price for entry_reference
+            self._wt_arming_cache[_ge_id_str] = {
+                "instrument_token": int(instrument_token),
+                "symbol":           symbol,
+                "exchange":         _instrument_exchange,
+                "reference_price":  _wt_option_ltp,
+                "threshold":        _wt_threshold,
+                "direction":        _wt_dir,
+                "wt_value":         leg.wt_value,
+                "wt_unit":          _wt_unit,
+                "entry_time":       algo.entry_time or "09:16",
+                "algo_id":          str(algo.id),
+                "entry_reference":  str(_wt_option_ltp),
+                "broker_order_id":  _wt_broker_order_id,
+            }
+            return None  # broker holds SL-Limit — fill recorded via order-status callback
 
         # ── Entry delay ────────────────────────────────────────────────────────
         delay_secs = getattr(algo, "entry_delay_seconds", 0) or 0

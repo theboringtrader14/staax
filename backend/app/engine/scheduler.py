@@ -618,6 +618,7 @@ class AlgoScheduler:
                             GridEntry.is_archived == False,
                             Algo.is_active == True,
                             Algo.is_enabled == True,
+                            Algo.deleted_at.is_(None),
                         )
                     )
                 )
@@ -726,6 +727,7 @@ class AlgoScheduler:
                             GridEntry.is_archived == False,
                             Algo.is_active == True,
                             Algo.is_enabled == True,
+                            Algo.deleted_at.is_(None),
                         )
                     )
                 )
@@ -1274,6 +1276,7 @@ class AlgoScheduler:
                             Algo.strategy_mode.in_([
                                 StrategyMode.INTRADAY,  # ONLY intraday — overnight modes handled by recover_multiday_jobs()
                             ]),
+                            Algo.deleted_at.is_(None),
                             AlgoState.status.in_([
                                 AlgoRunStatus.WAITING,
                                 AlgoRunStatus.ACTIVE,
@@ -1433,6 +1436,7 @@ class AlgoScheduler:
                         and_(
                             AlgoState.trading_date <= str(prev_trading_day),
                             Algo.strategy_mode.in_([StrategyMode.BTST, StrategyMode.STBT]),
+                            Algo.deleted_at.is_(None),
                             AlgoState.status == AlgoRunStatus.ACTIVE,
                         )
                     )
