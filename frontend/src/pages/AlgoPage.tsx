@@ -248,20 +248,20 @@ function ReentryConfig({ rv, uRe, inpSt }: {
   const iSep = <span style={{ width: '1px', height: '14px', background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
   return <>
     {(['re_entry', 're_execute'] as const).map(t => (
-      <button key={t} type="button" onClick={() => uRe('type', t)} style={bSt(rv.type === t)}>
+      <button key={t} type="button" onClick={() => { sounds.click(); uRe('type', t) }} style={bSt(rv.type === t)}>
         {t === 're_entry' ? 'RE' : 'RE-Ex'}
       </button>
     ))}
     {rv.type === 're_entry' && <>{iSep}{(['ltp', 'candle_close'] as const).map(m => (
-      <button key={m} type="button" onClick={() => uRe('ltpMode', m)} style={bSt(rv.ltpMode === m)}>
+      <button key={m} type="button" onClick={() => { sounds.click(); uRe('ltpMode', m) }} style={bSt(rv.ltpMode === m)}>
         {m === 'ltp' ? 'LTP' : 'Candle'}
       </button>
     ))}</>}
     {iSep}
-    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => uRe('onSl', !rv.onSl)}>
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => { if (rv.onSl) sounds.toggleOff(); else sounds.toggleOn(); uRe('onSl', !rv.onSl) }}>
       <Chk val={rv.onSl} toggle={() => uRe('onSl', !rv.onSl)} /> SL
     </span>
-    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => uRe('onTp', !rv.onTp)}>
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => { if (rv.onTp) sounds.toggleOff(); else sounds.toggleOn(); uRe('onTp', !rv.onTp) }}>
       <Chk val={rv.onTp} toggle={() => uRe('onTp', !rv.onTp)} /> TP
     </span>
     {(rv.onSl || rv.onTp) && iSep}
@@ -310,7 +310,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
     <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)', borderLeft: `3px solid ${depthColor}`, paddingLeft: '10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
         <span style={{ fontSize: '10px', fontWeight: 700, color: depthColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>L{depth} {depthLabel}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 'auto' }} onClick={() => u('enabled', !child.enabled)}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 'auto' }} onClick={() => { if (child.enabled) sounds.toggleOff(); else sounds.toggleOn(); u('enabled', !child.enabled) }}>
           <div style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--bg)', boxShadow: child.enabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {child.enabled && <div style={{ width: 8, height: 8, borderRadius: 1, background: depthColor }} />}
           </div>
@@ -320,14 +320,14 @@ function JourneyChildPanel({ child, depth, onChange }: {
       {child.enabled && (<>
         {/* Row 1 — instrument config + feature chips inline */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
-          <button onClick={() => u('instType', child.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}>{child.instType}</button>
+          <button onClick={() => { sounds.click(); u('instType', child.instType === 'OP' ? 'FU' : 'OP') }} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}>{child.instType}</button>
           <StaaxSelect value={child.instCode} onChange={code => {
             const patch: Partial<JourneyChild> = { instCode: code }
             if (MONTHLY_ONLY_CODES.has(code) && !child.expiry.includes('monthly')) patch.expiry = 'current_monthly'
             onChange({ ...child, ...patch })
           }} options={Object.entries(INST_CODES).map(([c]) => ({ value: c, label: c }))} width="68px" height="28px" borderRadius="6px" />
-          <button onClick={() => u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: child.direction === 'BUY' ? '#0ea66e' : 'var(--red)', border: 'none', cursor: 'pointer' }}>{child.direction}</button>
-          {child.instType === 'OP' && <button onClick={() => u('optType', child.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer' }}>{child.optType}</button>}
+          <button onClick={() => { sounds.click(); u('direction', child.direction === 'BUY' ? 'SELL' : 'BUY') }} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: child.direction === 'BUY' ? '#0ea66e' : 'var(--red)', border: 'none', cursor: 'pointer' }}>{child.direction}</button>
+          {child.instType === 'OP' && <button onClick={() => { sounds.click(); u('optType', child.optType === 'CE' ? 'PE' : 'CE') }} style={{ height: '28px', padding: '0 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer' }}>{child.optType}</button>}
           {child.instType === 'OP' && <>
             <StaaxSelect value={child.expiry} onChange={v => u('expiry', v)} options={childExpiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" height="28px" borderRadius="6px" />
             <StaaxSelect value={child.strikeMode} onChange={v => u('strikeMode', v)} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" height="28px" borderRadius="6px" />
@@ -346,6 +346,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
             <button key={f.key} onClick={() => {
               if (f.blocked) return
               const newVal = !(child[f.key as keyof JourneyChild])
+              if (newVal) sounds.toggleOn(); else sounds.toggleOff()
               const patch: Partial<JourneyChild> = { [f.key]: newVal }
               if (f.key === 'sl_enabled' && !newVal) patch.tsl_enabled = false
               if (f.key === 'tp_enabled' && !newVal) patch.ttp_enabled = false
@@ -359,7 +360,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
             { key: 'wt_enabled', label: 'W&T', color: '#9CA3AF' },
             { key: 're_enabled', label: 'RE',  color: '#F59E0B' },
           ].map(f => (
-            <button key={f.key} onClick={() => onChange({ ...child, [f.key]: !(child[f.key as keyof JourneyChild]) })}
+            <button key={f.key} onClick={() => { const cur = child[f.key as keyof JourneyChild]; if (cur) sounds.toggleOff(); else sounds.toggleOn(); onChange({ ...child, [f.key]: !cur }) }}
               style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '10px', fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.12s', background: 'var(--bg)', boxShadow: child[f.key as keyof JourneyChild] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: child[f.key as keyof JourneyChild] ? f.color : 'var(--text-dim)' }}>
               {f.label}
             </button>
@@ -453,7 +454,7 @@ function JourneyChildPanel({ child, depth, onChange }: {
                   return (
                     <button
                       key={opt.value}
-                      onClick={() => { if (!isDisabled) u('trigger', opt.value) }}
+                      onClick={() => { if (!isDisabled) { sounds.click(); u('trigger', opt.value) } }}
                       title={isDisabled ? `Enable ${opt.label} on this leg to use this trigger` : undefined}
                       style={{
                         height: '24px', padding: '0 8px', borderRadius: '5px', fontSize: '10px', fontWeight: 600,
@@ -512,7 +513,7 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
 
   return (
     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
-      <button onClick={() => setOpen((o: boolean) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
+      <button onClick={() => setOpen((o: boolean) => { const next = !o; if (next) sounds.toggleOn(); else sounds.toggleOff(); return next })} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
         <span style={{ fontSize: '10px', fontWeight: 700, color: hasJourney ? '#CC4400' : 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {open ? '▾' : '▸'} Journey {hasJourney ? '● Active' : ''}
         </span>
@@ -527,7 +528,7 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
               return (
                 <button
                   key={opt.value}
-                  onClick={() => { if (!isDisabled) onUpdate(leg.id, { journey_trigger: opt.value }) }}
+                  onClick={() => { if (!isDisabled) { sounds.click(); onUpdate(leg.id, { journey_trigger: opt.value }) } }}
                   title={isDisabled ? `Enable ${opt.label} on parent leg to use this trigger` : undefined}
                   style={{
                     height: '28px', padding: '0 10px', borderRadius: '6px', fontSize: '10px', fontWeight: 600,
@@ -570,14 +571,14 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
         <span {...dragHandleProps} title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-dim)', fontSize: '13px', flexShrink: 0, padding: '0 2px', userSelect: 'none' }}>⠿</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', minWidth: '20px', textAlign: 'center' }}>L{leg.no}</span>
-        <button onClick={() => u('instType', leg.instType === 'OP' ? 'FU' : 'OP')} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
+        <button onClick={() => { sounds.click(); u('instType', leg.instType === 'OP' ? 'FU' : 'OP') }} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.instType}</button>
         <StaaxSelect value={leg.instCode} onChange={code => {
           const patch: Partial<Leg> = { instCode: code }
           if (MONTHLY_ONLY_CODES.has(code) && !leg.expiry.includes('monthly')) patch.expiry = 'current_monthly'
           onUpdate(leg.id, patch)
         }} options={Object.entries(INST_CODES).map(([c, n]) => ({ value: c, label: c + (n ? '' : '') }))} width="68px" height="28px" borderRadius="6px" />
-        <button onClick={() => u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY')} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: leg.direction === 'BUY' ? '#0ea66e' : 'var(--sem-short)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
-        {leg.instType === 'OP' && <button onClick={() => u('optType', leg.optType === 'CE' ? 'PE' : 'CE')} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
+        <button onClick={() => { sounds.click(); u('direction', leg.direction === 'BUY' ? 'SELL' : 'BUY') }} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: leg.direction === 'BUY' ? '#0ea66e' : 'var(--sem-short)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.direction}</button>
+        {leg.instType === 'OP' && <button onClick={() => { sounds.click(); u('optType', leg.optType === 'CE' ? 'PE' : 'CE') }} style={{ height: '28px', padding: '0 9px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer', flexShrink: 0 }}>{leg.optType}</button>}
         {leg.instType === 'OP' && <>
           <StaaxSelect value={leg.expiry} onChange={v => u('expiry', v)} options={expiryOpts.map(o => ({ value: o.value, label: o.label }))} width="128px" height="28px" borderRadius="6px" />
           <StaaxSelect value={leg.strikeMode} onChange={v => { u('strikeMode', v); if (v === 'straddle' && !leg.premiumVal) u('premiumVal', '20') }} options={[{ value: 'leg', label: 'Strike' }, { value: 'premium', label: 'Premium' }, { value: 'straddle', label: 'Straddle' }]} width="88px" height="28px" borderRadius="6px" />
@@ -594,6 +595,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           return (
             <button key={f.key} onClick={() => {
               if (blocked) { onBlockedClick(f.key === 'tsl' ? 'Enable SL and set a value before ' + f.key.toUpperCase() : 'Enable TP and set a value before ' + f.key.toUpperCase()); return }
+              if (!leg.active[f.key]) sounds.toggleOn(); else sounds.toggleOff()
               const newActive = { ...leg.active, [f.key]: !leg.active[f.key] }
               if (f.key === 'sl' && leg.active['sl']) newActive['tsl'] = false
               if (f.key === 'tp' && leg.active['tp']) newActive['ttp'] = false
@@ -606,6 +608,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         <span style={{ color: 'var(--border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.filter(f => ['wt','reentry'].includes(f.key)).map(f => (
           <button key={f.key} onClick={() => {
+            if (leg.active[f.key]) sounds.toggleOff(); else sounds.toggleOn()
             const newActive = { ...leg.active, [f.key]: !leg.active[f.key] }
             onUpdate(leg.id, { active: newActive })
           }} style={{ height: '28px', padding: '0 11px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.12s', flexShrink: 0, background: 'var(--bg)', boxShadow: leg.active[f.key] ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.active[f.key] ? f.color : 'var(--text-dim)' }}>
@@ -613,7 +616,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           </button>
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexShrink: 0 }}>
-          <button onClick={() => onCopy(leg.id)} title="Copy leg"
+          <button onClick={() => { sounds.click(); onCopy(leg.id) }} title="Copy leg"
             style={{ height: '28px', width: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: 'var(--text-dim)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms ease', flexShrink: 0 }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)' }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)' }}>
@@ -622,7 +625,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
               <path d="M2.333 9.917H1.75A.583.583 0 011.167 9.333V1.75A.583.583 0 011.75 1.167h7.583a.583.583 0 01.584.583v.583" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
           </button>
-          <button onClick={() => onRemove(leg.id)} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: '#FF4444', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+          <button onClick={() => { sounds.click(); onRemove(leg.id) }} title="Remove leg" style={{ height: '28px', padding: '0 9px', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', border: 'none', color: '#FF4444', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
         </div>
       </div>
       {entryType === 'orb' && (
@@ -630,7 +633,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry At</span>
           {(['high','low'] as const).map(ea => (
             <button key={ea} type="button"
-              onClick={() => onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...leg.vals.orb, entryAt: ea } } })}
+              onClick={() => { sounds.click(); onUpdate(leg.id, { vals: { ...leg.vals, orb: { ...leg.vals.orb, entryAt: ea } } }) }}
               style={{ height: '28px', padding: '0 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: leg.vals.orb.entryAt === ea ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: leg.vals.orb.entryAt === ea ? 'var(--accent)' : 'var(--text-dim)' }}>
               {ea === 'high' ? 'ORB High (BUY)' : 'ORB Low (SELL)'}
             </button>
@@ -1305,7 +1308,7 @@ const [saveError, setSaveError]   = useState('')
                   <label style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Range Source</label>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     {(['underlying','instrument'] as const).map(s => (
-                      <button key={s} type="button" onClick={() => setOrbRangeSource(s)}
+                      <button key={s} type="button" onClick={() => { sounds.click(); setOrbRangeSource(s) }}
                         style={{ height: '28px', padding: '0 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: orbRangeSource === s ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: orbRangeSource === s ? 'var(--accent)' : 'var(--text-dim)' }}>
                         {s === 'underlying' ? 'Spot' : 'Options'}
                       </button>

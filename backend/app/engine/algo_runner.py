@@ -2650,6 +2650,10 @@ class AlgoRunner:
         _orb_range_source = _first_orb_src
         _tracking_token = underlying_token  # default: track underlying index
 
+        # OHLC symbol/exchange defaults — overridden below if instrument pre-selection succeeds
+        _ohlc_symbol   = underlying   # e.g. "NIFTY", "BANKNIFTY"
+        _ohlc_exchange = "NSE"        # NSE indices; overridden to NFO/BFO for options
+
         if _orb_range_source == "instrument" and self._strike_selector:
             try:
                 # Pre-select strike now so we can subscribe and track its LTP
@@ -2666,6 +2670,9 @@ class AlgoRunner:
                     _pre_symbol = _pre_instrument.get("tradingsymbol", "")
                     if _pre_token and _pre_token > 0:
                         _tracking_token = _pre_token
+                        # Override OHLC symbol/exchange with the pre-selected option
+                        _ohlc_symbol   = _pre_symbol
+                        _ohlc_exchange = _pre_instrument.get("exchange", "NFO")
                         if self._ltp_consumer:
                             self._ltp_consumer.subscribe([_pre_token])
                         logger.info(
@@ -2694,6 +2701,22 @@ class AlgoRunner:
                     f"(strike_selector not available). algo={algo_name}"
                 )
 
+        # ── Resolve symbol + exchange for OHLC candle fetch ────────────────────
+        # _ohlc_symbol / _ohlc_exchange are set above (defaults: underlying/NSE,
+        # overridden to option symbol/NFO if instrument pre-selection succeeded).
+        today_ist = datetime.now(IST).strftime("%Y-%m-%d")
+        _orb_start_str = f"{today_ist} {algo_orb_start_time or '09:15'}"
+        _orb_end_str   = f"{today_ist} {algo_orb_end_time or '11:16'}"
+
+        # Resolve broker for OHLC fetch: first available Angel One, else zerodha
+        _ohlc_broker = (
+            next(iter(self._angel_broker_map.values()), None)
+            or self._zerodha_broker
+        )
+
+        # entry_at drives candle-close confirmation direction
+        _entry_at = _first_orb_entry_at or ("high" if direction == "buy" else "low")
+
         window = ORBWindow(
             grid_entry_id=str(grid_entry_id),
             algo_id=str(algo_id),
@@ -2704,7 +2727,13 @@ class AlgoRunner:
             orb_range_source=_orb_range_source,
             wt_value=0.0,   # ORB uses range breakout, not W&T buffer
             wt_unit="pts",
+            symbol=_ohlc_symbol,
+            exchange=_ohlc_exchange,
+            orb_start_str=_orb_start_str,
+            orb_end_str=_orb_end_str,
+            entry_at=_entry_at,
         )
+        window._broker = _ohlc_broker
         self._orb_tracker.register(
             window,
             on_entry=self._make_orb_callback(str(grid_entry_id)),

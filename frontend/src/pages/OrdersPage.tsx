@@ -6,6 +6,7 @@ import { AlgoDetailModal } from '@/components/AlgoDetailModal'
 import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX, Broadcast } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 import { fmtPnl, getISTNow } from '@/utils/format'
+import { sounds } from '@/utils/sounds'
 
 const INSTRUMENT_ORDER = ['BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCAPNIFTY', 'FINNIFTY', 'OTHER']
 
@@ -385,7 +386,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit, orbHigh, orbLo
       <td style={{ width: COLS[8], fontSize: '11px', ...C }}>
         {leg.status === 'closed' ? (
           <div style={{ cursor: 'pointer' }} title="Click to correct exit price"
-            onClick={() => onEditExit && onEditExit(leg.id, leg.exitPriceRaw ?? leg.exitPrice ?? 0)}>
+            onClick={() => { sounds.click(); onEditExit && onEditExit(leg.id, leg.exitPriceRaw ?? leg.exitPrice ?? 0) }}>
             {leg.exitPriceManual != null ? (
               // Corrected price — amber + "(corrected)" label
               <div>
@@ -449,7 +450,7 @@ function LegRow({ leg, isChild, liveLtp, hasLivePoll, onEditExit, orbHigh, orbLo
               ⚠ {leg.slWarning}
             </span>
             <button
-              onClick={() => handleRetrySL(leg.id)}
+              onClick={() => { sounds.click(); handleRetrySL(leg.id) }}
               disabled={!isMarketHours}
               style={{
                 marginLeft: 'auto',
@@ -489,8 +490,8 @@ function ConfirmModal({ title, desc, confirmLabel, confirmColor, children, onCon
         <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 'var(--card-gap)', lineHeight: 1.5 }}>{desc}</div>
         {children}
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className={`btn ${btnVariant}`} onClick={onConfirm}>{confirmLabel}</button>
+          <button className="btn btn-ghost" onClick={() => { sounds.click(); onCancel() }}>Cancel</button>
+          <button className={`btn ${btnVariant}`} onClick={() => { sounds.click(); onConfirm() }}>{confirmLabel}</button>
         </div>
       </div>
     </div>
@@ -1276,7 +1277,7 @@ export default function OrdersPage() {
             {/* Week navigation */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: 8 }}>
               <button
-                onClick={() => setWeekOffset(o => o - 1)}
+                onClick={() => { sounds.click(); setWeekOffset(o => o - 1) }}
                 style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 title="Previous week"
                 onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
@@ -1287,7 +1288,7 @@ export default function OrdersPage() {
                 {weekLabel}
               </span>
               <button
-                onClick={() => setWeekOffset(o => Math.min(0, o + 1))}
+                onClick={() => { sounds.click(); setWeekOffset(o => Math.min(0, o + 1)) }}
                 disabled={weekOffset === 0}
                 style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: weekOffset === 0 ? 'default' : 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: weekOffset === 0 ? 'var(--text-mute)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: weekOffset === 0 ? 0.4 : 1, flexShrink: 0 }}
                 title="Next week"
@@ -1297,7 +1298,7 @@ export default function OrdersPage() {
               ><CaretRight size={13} /></button>
             </div>
             <button
-              onClick={() => { setCompactMode(m => !m); setExpandedAlgos(new Set()); localStorage.removeItem('orders_expanded_algos') }}
+              onClick={() => { if (compactMode) sounds.toggleOff(); else sounds.toggleOn(); setCompactMode(m => !m); setExpandedAlgos(new Set()); localStorage.removeItem('orders_expanded_algos') }}
               title={compactMode ? 'Switch to expanded view' : 'Switch to compact view'}
               style={{ height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
                 background: 'var(--bg)', boxShadow: compactMode ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
@@ -1310,7 +1311,7 @@ export default function OrdersPage() {
             {statusFilter !== null && (
               <button
                 style={{ height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)' }}
-                onClick={() => { setStatusFilter(null); try { sessionStorage.removeItem('staax_status_filter') } catch {} }}
+                onClick={() => { sounds.click(); setStatusFilter(null); try { sessionStorage.removeItem('staax_status_filter') } catch {} }}
                 onMouseDown={e => { e.currentTarget.style.boxShadow = 'var(--neu-inset)' }}
                 onMouseUp={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)' }}
@@ -1372,7 +1373,7 @@ export default function OrdersPage() {
                   { f: 'error',   label: 'Error',        val: errorCount,       color: errorCount       > 0 ? '#E03030' : 'var(--text-mute)' },
                   { f: 'waiting', label: 'Waiting',      val: waitingCount,     color: waitingCount     > 0 ? '#C8A000' : 'var(--text-mute)' },
                 ].map(({ f, label, val, color }) => (
-                  <div key={label} onClick={() => toggleFilter(f)}
+                  <div key={label} onClick={() => { sounds.click(); toggleFilter(f) }}
                     style={{
                       flex: 1, minWidth: 0, padding: '10px 16px', cursor: 'pointer', borderRadius: 12,
                       background: 'var(--bg)',
@@ -1420,7 +1421,7 @@ export default function OrdersPage() {
                   return (
                     <button
                       key={day}
-                      onClick={() => date && setSelectedDate(date)}
+                      onClick={() => { sounds.click(); date && setSelectedDate(date) }}
                       style={{
                         flex: 1, padding: '8px 4px', textAlign: 'center' as const,
                         border: 'none', borderRadius: 100, background: 'transparent',
@@ -1453,6 +1454,7 @@ export default function OrdersPage() {
                 onClick={() => setShowWeekends(prev => {
                   const next = !prev
                   localStorage.setItem('orders_show_weekends', String(next))
+                  if (next) sounds.toggleOn(); else sounds.toggleOff()
                   return next
                 })}
                 style={{
@@ -1595,7 +1597,7 @@ export default function OrdersPage() {
                       background: 'var(--bg)',
                       boxShadow: 'var(--neu-raised-sm)', borderRadius: '12px',
                       marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
-                    }} onClick={() => toggleExpand(w.grid_entry_id)}>
+                    }} onClick={() => { sounds.click(); toggleExpand(w.grid_entry_id) }}>
                       <div style={{ width: 4, alignSelf: 'stretch', background: stripBg, flexShrink: 0, boxShadow: `0 0 8px ${stripGlow}` }} />
                       <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--text)' }}>{w.algo_name}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{w.account_name || '—'}</span>
@@ -1607,7 +1609,7 @@ export default function OrdersPage() {
                       <div style={{ flex: 1 }} />
                       <div style={{ display: 'flex', gap: 6, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
                         {missedBtns.map((btn, bi) => (
-                          <button key={bi} disabled={btn.disabled} onClick={btn.action}
+                          <button key={bi} disabled={btn.disabled} onClick={() => { sounds.click(); btn.action?.() }}
                             style={{ height: 24, padding: '0 8px', borderRadius: 100, border: 'none',
                               background: 'var(--bg)', boxShadow: btn.disabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                               fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
@@ -1717,7 +1719,7 @@ export default function OrdersPage() {
                       {missedBtns.map((btn, bi) => (
                         <button key={bi}
                           disabled={btn.disabled}
-                          onClick={btn.action}
+                          onClick={() => { sounds.click(); btn.action?.() }}
                           style={{
                             height: 28, padding: '0 10px', borderRadius: 100, border: 'none',
                             background: 'var(--bg)',
@@ -1828,11 +1830,11 @@ export default function OrdersPage() {
 
               {/* Instrument header */}
               <div
-                onClick={() => setCollapsedGroups(prev => {
+                onClick={() => { sounds.click(); setCollapsedGroups(prev => {
                   const next = new Set(prev)
                   if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
                   return next
-                })}
+                }) }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
                   paddingBottom: '8px', marginBottom: '8px', marginTop: gIdx === 0 ? 0 : '20px',
@@ -1920,7 +1922,7 @@ export default function OrdersPage() {
                             background: 'var(--bg)',
                             boxShadow: 'var(--neu-raised-sm)', borderRadius: '12px',
                             marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
-                          }} onClick={() => toggleExpand(group.algoId)}>
+                          }} onClick={() => { sounds.click(); toggleExpand(group.algoId) }}>
                             <div style={{ width: 4, alignSelf: 'stretch', background: bar.color, flexShrink: 0, boxShadow: `0 0 8px ${bar.glow}` }} />
                             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--text)' }}>{group.algoName}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{group.account || '—'}</span>
@@ -1949,7 +1951,7 @@ export default function OrdersPage() {
                             <div style={{ flex: 1 }} />
                             <div style={{ display: 'flex', gap: 6, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
                               {BTNS.map((btn, bi) => (
-                                <button key={bi} disabled={btn.disabled} title={btn.title} onClick={btn.action}
+                                <button key={bi} disabled={btn.disabled} title={btn.title} onClick={() => { sounds.click(); btn.action?.() }}
                                   style={{ height: 24, padding: '0 8px', borderRadius: 100, border: 'none',
                                     background: 'var(--bg)', boxShadow: btn.disabled ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                                     fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)',
@@ -1984,7 +1986,7 @@ export default function OrdersPage() {
 
                             {/* Algo name */}
                             <span
-                              onClick={() => setSelectedAlgoName(group.algoName)}
+                              onClick={() => { sounds.click(); setSelectedAlgoName(group.algoName) }}
                               style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
                               {group.algoName}
                             </span>
@@ -2066,7 +2068,7 @@ export default function OrdersPage() {
                               <button key={bi}
                                 disabled={btn.disabled}
                                 title={btn.title}
-                                onClick={btn.action}
+                                onClick={() => { sounds.click(); btn.action?.() }}
                                 style={{
                                   height: 28, padding: '0 10px', borderRadius: 100, border: 'none',
                                   background: 'var(--bg)',
@@ -2218,8 +2220,8 @@ export default function OrdersPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button className="btn btn-ghost" onClick={() => setShowSync(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={syncLoading} onClick={() => doSync(showSync)}>
+              <button className="btn btn-ghost" onClick={() => { sounds.click(); setShowSync(null) }}>Cancel</button>
+              <button className="btn btn-primary" disabled={syncLoading} onClick={() => { sounds.click(); doSync(showSync) }}>
                 {syncLoading
                   ? <><ArrowsClockwise size={12} weight="regular" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Fetching from broker...</>
                   : <><Link size={12} weight="regular" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Sync Order</>
@@ -2244,8 +2246,8 @@ export default function OrdersPage() {
                 autoFocus />
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button className="btn btn-ghost" onClick={() => setEditExit(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={exitSaving} onClick={doCorrectExit}>
+              <button className="btn btn-ghost" onClick={() => { sounds.click(); setEditExit(null) }}>Cancel</button>
+              <button className="btn btn-primary" disabled={exitSaving} onClick={() => { sounds.click(); doCorrectExit() }}>
                 {exitSaving ? 'Saving...' : <><CheckCircle size={12} weight="fill" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Save</>}
               </button>
             </div>
@@ -2271,10 +2273,10 @@ export default function OrdersPage() {
               </label>
             ))}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button className="btn btn-ghost" onClick={() => setRetryModal(null)}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => { sounds.click(); setRetryModal(null) }}>Cancel</button>
               <button className="btn btn-primary"
                 disabled={!Object.values(retryChecked).some(Boolean) || !!loading[`re-${retryModal.algoIdx}`]}
-                onClick={() => doRetryLegs(retryModal.algoIdx)}>
+                onClick={() => { sounds.click(); doRetryLegs(retryModal.algoIdx) }}>
                 {loading[`re-${retryModal.algoIdx}`] ? '↻ Retrying...' : '↻ Retry Selected'}
               </button>
             </div>

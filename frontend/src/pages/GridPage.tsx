@@ -6,6 +6,7 @@ import { StaaxSelect } from '@/components/StaaxSelect'
 import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning, Sparkle } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 import { showSuccess, showError, showInfo } from '@/utils/toast'
+import { sounds } from '@/utils/sounds'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 const DAYS     = ['MON','TUE','WED','THU','FRI']
@@ -463,7 +464,7 @@ export default function GridPage() {
 
             {/* Archive toggle — inset when active, raised when inactive */}
             <button
-              onClick={() => setShowArch(v => { const next = !v; localStorage.setItem('showArch', String(next)); return next })}
+              onClick={() => setShowArch(v => { const next = !v; localStorage.setItem('showArch', String(next)); if (next) sounds.toggleOn(); else sounds.toggleOff(); return next })}
               style={{
                 position:'relative', height:32, padding:'0 14px', borderRadius:100,
                 background:'var(--bg)', border:'none',
@@ -491,7 +492,7 @@ export default function GridPage() {
 
             {/* AI Algo Builder */}
             <button
-              onClick={() => { setAiEditAlgo(null); setShowAI(true) }}
+              onClick={() => { sounds.click(); setAiEditAlgo(null); setShowAI(true) }}
               className="ai-btn-glow"
               style={{
                 height:32, padding:'0 14px', borderRadius:100,
@@ -514,7 +515,7 @@ export default function GridPage() {
 
             {/* New Algo */}
             <button
-              onClick={() => nav('/algo/new')}
+              onClick={() => { sounds.click(); nav('/algo/new') }}
               style={{
                 height:32, padding:'0 16px', borderRadius:100,
                 background:'var(--bg)', border:'none',
@@ -553,7 +554,7 @@ export default function GridPage() {
                       onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                       onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                       onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-                      onClick={() => unarch(a.id)}>Reactivate</button>
+                      onClick={() => { sounds.click(); unarch(a.id) }}>Reactivate</button>
                   </div>
                 ))}
               </div>}
@@ -594,7 +595,7 @@ export default function GridPage() {
                 const isActive = statFilter === key
                 return (
                   <div key={key}
-                    onClick={() => setStatFilter(isActive ? null : key)}
+                    onClick={() => { sounds.click(); setStatFilter(isActive ? null : key) }}
                     style={{
                       background:'var(--bg)',
                       boxShadow: isActive ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
@@ -658,11 +659,11 @@ export default function GridPage() {
               borderBottom:'0.5px solid rgba(0,0,0,0.05)',
             }}>
               <div
-                onClick={() => setCollapsedGroups(prev => {
+                onClick={() => { sounds.click(); setCollapsedGroups(prev => {
                   const next = new Set(prev)
                   if (next.has(stickyHeader)) next.delete(stickyHeader); else next.add(stickyHeader)
                   return next
-                })}
+                }) }}
                 style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
                   paddingBottom:'8px',
                   borderBottom:'0.5px solid rgba(255,107,0,0.15)', userSelect:'none',
@@ -704,11 +705,11 @@ export default function GridPage() {
                     marginBottom:'8px',
                   }}>
                 <div
-                  onClick={() => setCollapsedGroups(prev => {
+                  onClick={() => { sounds.click(); setCollapsedGroups(prev => {
                     const next = new Set(prev)
                     if (next.has(instrument)) next.delete(instrument); else next.add(instrument)
                     return next
-                  })}
+                  }) }}
                   style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
                     paddingBottom:'8px',
                     borderBottom:'0.5px solid rgba(255,107,0,0.15)', userSelect:'none',
@@ -750,7 +751,7 @@ export default function GridPage() {
                             {/* Enable/disable vertical strip */}
                             <div
                               className={`algo-enable-strip${algo.is_enabled ? ' enabled' : ' disabled'}`}
-                              onClick={e => { e.stopPropagation(); handleToggleAlgo(algo.id, algo.is_enabled) }}
+                              onClick={e => { e.stopPropagation(); if (algo.is_enabled) sounds.toggleOff(); else sounds.toggleOn(); handleToggleAlgo(algo.id, algo.is_enabled) }}
                               title={algo.is_enabled ? 'Click to disable algo' : 'Click to enable algo'}
                             >
                               <div className="algo-enable-strip-thumb" />
@@ -762,7 +763,7 @@ export default function GridPage() {
 
                               {/* ── Name + account ── */}
                               <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'120px', flexShrink:0 }}>
-                                <span onClick={e => { e.stopPropagation(); nav(`/algo/${algo.id}`) }}
+                                <span onClick={e => { e.stopPropagation(); sounds.click(); nav(`/algo/${algo.id}`) }}
                                   style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'var(--accent)',
                                     cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
                                     textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'var(--border-accent)' }}>
@@ -808,7 +809,7 @@ export default function GridPage() {
                               {/* ── Lot multiplier stepper ── */}
                               <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'30px' }}
                                 onClick={e => e.stopPropagation()}>
-                                  <button onClick={() => changeCardMult(algo.id, mult - 1)}
+                                  <button onClick={() => { sounds.click(); changeCardMult(algo.id, mult - 1) }}
                                     style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
                                     onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                     onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
@@ -816,7 +817,7 @@ export default function GridPage() {
                                   <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--text)', minWidth:28, textAlign:'center', fontWeight:700 }}>
                                     {mult}×
                                   </span>
-                                  <button onClick={() => changeCardMult(algo.id, mult + 1)}
+                                  <button onClick={() => { sounds.click(); changeCardMult(algo.id, mult + 1) }}
                                     style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
                                     onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                     onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
@@ -839,7 +840,7 @@ export default function GridPage() {
 
                                   return (
                                     <button key={day}
-                                      onClick={e => { e.stopPropagation(); void toggleDay(algo, day) }}
+                                      onClick={e => { e.stopPropagation(); sounds.click(); void toggleDay(algo, day) }}
                                       title={isMonitoring ? `${day} · W&T monitoring` : `${day} · ${isInRecurring ? 'click to remove' : 'click to deploy'}`}
                                       style={{
                                         width:'32px', height:'32px', borderRadius:'50%', cursor:'pointer',
@@ -899,7 +900,7 @@ export default function GridPage() {
                             }}>
                               {/* GO LIVE / DEMOTE */}
                               <button
-                                onClick={() => isPractixMode ? promLive(algo.id) : demoteLive(algo.id)}
+                                onClick={() => { if (isPractixMode) { sounds.strategyStart(); promLive(algo.id) } else { sounds.strategyStop(); demoteLive(algo.id) } }}
                                 title={isPractixMode ? 'Go Live' : 'Demote to Practix'}
                                 style={{
                                   display:'flex', alignItems:'center', justifyContent:'center',
@@ -918,7 +919,7 @@ export default function GridPage() {
 
                               {/* Archive */}
                               <button
-                                onClick={() => setArchConfirm(algo.id)}
+                                onClick={() => { sounds.click(); setArchConfirm(algo.id) }}
                                 title="Archive"
                                 style={{
                                   display:'flex', alignItems:'center', justifyContent:'center',
@@ -934,7 +935,7 @@ export default function GridPage() {
 
                               {/* Copy */}
                               <button
-                                onClick={() => duplicateAlgo(algo.id)}
+                                onClick={() => { sounds.click(); duplicateAlgo(algo.id) }}
                                 title="Duplicate algo"
                                 style={{
                                   display:'flex', alignItems:'center', justifyContent:'center',
@@ -950,7 +951,7 @@ export default function GridPage() {
 
                               {/* Remove */}
                               <button
-                                onClick={() => setDeleteConfirm(algo.id)}
+                                onClick={() => { sounds.click(); setDeleteConfirm(algo.id) }}
                                 title="Delete algo"
                                 style={{
                                   display:'flex', alignItems:'center', justifyContent:'center',
@@ -1007,14 +1008,14 @@ export default function GridPage() {
               <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>This will hide the algo from the grid. All historical trade data will be preserved.</div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button
-                  onClick={() => setArchConfirm(null)}
+                  onClick={() => { sounds.click(); setArchConfirm(null) }}
                   style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 >Cancel</button>
                 <button
-                  onClick={() => { archAlgo(archConfirm); setArchConfirm(null) }}
+                  onClick={() => { sounds.click(); archAlgo(archConfirm); setArchConfirm(null) }}
                   style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#F59E0B', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
@@ -1035,8 +1036,8 @@ export default function GridPage() {
               This {confirmCancel.day} entry will be marked NO_TRADE.
             </div>
             <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setConfirmCancel(null)}>Keep</button>
-              <button className="btn btn-warn" style={{ color:'#FF4444' }} onClick={handleCancelConfirmed}>Cancel Run</button>
+              <button className="btn btn-ghost" onClick={() => { sounds.click(); setConfirmCancel(null) }}>Keep</button>
+              <button className="btn btn-warn" style={{ color:'#FF4444' }} onClick={() => { sounds.click(); handleCancelConfirmed() }}>Cancel Run</button>
             </div>
           </div>
         </div>
@@ -1054,14 +1055,14 @@ export default function GridPage() {
               </div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button
-                  onClick={() => setDeleteConfirm(null)}
+                  onClick={() => { sounds.click(); setDeleteConfirm(null) }}
                   style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 >Cancel</button>
                 <button
-                  onClick={() => { deleteAlgo(deleteConfirm); setDeleteConfirm(null) }}
+                  onClick={() => { sounds.click(); deleteAlgo(deleteConfirm); setDeleteConfirm(null) }}
                   style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#FF4444', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
@@ -1087,7 +1088,7 @@ export default function GridPage() {
                 onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                 onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
-                onClick={() => { setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
+                onClick={() => { sounds.click(); setShowDeferModal(false); setDeferAlgo(null); setDeferDay('') }}
               >Cancel</button>
               <button
                 style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--accent)', cursor:'pointer', fontFamily:'var(--font-display)' }}
@@ -1095,6 +1096,7 @@ export default function GridPage() {
                 onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 onClick={async () => {
+                  sounds.click()
                   setShowDeferModal(false)
                   try {
                     await algosAPI.scheduleRemoval(deferAlgo.id, deferDay)
