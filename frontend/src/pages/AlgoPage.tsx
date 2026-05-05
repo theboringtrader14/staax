@@ -487,7 +487,7 @@ const JOURNEY_TRIGGER_OPTS: { value: string; label: string; color: string }[] = 
   { value: 'either', label: 'Either',  color: '#A78BFA' },
 ]
 
-function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void }) {
+function JourneyPanel({ leg, onUpdate, priorLeg, algoHasSL }: { leg: Leg; onUpdate: (id: string, u: Partial<Leg>) => void; priorLeg?: Leg; algoHasSL: boolean }) {
   const [open, setOpen] = useState(false)
   const j = leg.journey || mkJourneyChild()
   const hasJourney = j.enabled
@@ -495,6 +495,11 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   // Parent leg SL/TP availability
   const parentHasSL = !!(leg.active.sl && leg.vals.sl.type && parseFloat(leg.vals.sl.value) > 0)
   const parentHasTP = !!(leg.active.tp && leg.vals.tp.type && parseFloat(leg.vals.tp.value) > 0)
+
+  // Guard: Journey is only allowed when the prior leg (or algo-level SL) has SL or TP defined
+  const priorLegHasSL = !!(priorLeg && priorLeg.active.sl && parseFloat(priorLeg.vals.sl.value) > 0)
+  const priorLegHasTP = !!(priorLeg && priorLeg.active.tp && parseFloat(priorLeg.vals.tp.value) > 0)
+  const journeyAllowed = priorLeg ? (priorLegHasSL || priorLegHasTP || algoHasSL) : algoHasSL
 
   const currentTrigger = leg.journey_trigger || 'either'
 
@@ -513,7 +518,11 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
 
   return (
     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
-      <button onClick={() => setOpen((o: boolean) => { const next = !o; if (next) sounds.toggleOn(); else sounds.toggleOff(); return next })} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
+      <button
+        onClick={() => { if (!journeyAllowed) return; setOpen((o: boolean) => { const next = !o; if (next) sounds.toggleOn(); else sounds.toggleOff(); return next }) }}
+        title={!journeyAllowed ? 'Define SL or TP on the prior leg first' : undefined}
+        style={{ background: 'none', border: 'none', cursor: journeyAllowed ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0', opacity: journeyAllowed ? 1 : 0.4, pointerEvents: journeyAllowed ? 'auto' : 'none' }}
+      >
         <span style={{ fontSize: '10px', fontWeight: 700, color: hasJourney ? '#CC4400' : 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {open ? '▾' : '▸'} Journey {hasJourney ? '● Active' : ''}
         </span>
@@ -553,7 +562,7 @@ function JourneyPanel({ leg, onUpdate }: { leg: Leg; onUpdate: (id: string, u: P
   )
 }
 
-function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, onBlockedClick, entryType }: {
+function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, onBlockedClick, entryType, priorLeg, algoHasSL }: {
   leg: Leg; isDragging: boolean
   onUpdate: (id: string, u: Partial<Leg>) => void
   onRemove: (id: string) => void
@@ -561,6 +570,8 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
   dragHandleProps: Record<string, unknown>
   onBlockedClick: (msg: string) => void
   entryType: string
+  priorLeg?: Leg
+  algoHasSL: boolean
 }) {
   const u = <K extends keyof Leg>(k: K, v: Leg[K]) => onUpdate(leg.id, { [k]: v })
   const sInp = { height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: '6px', color: 'var(--text)', fontSize: '11px', padding: '0 8px', fontFamily: 'inherit', outline: 'none' as const }
@@ -641,7 +652,7 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
         </div>
       )}
       <FeatVals leg={leg} onUpdate={onUpdate} entryType={entryType} />
-      <JourneyPanel leg={leg} onUpdate={onUpdate} />
+      <JourneyPanel leg={leg} onUpdate={onUpdate} priorLeg={priorLeg} algoHasSL={algoHasSL} />
     </div>
   )
 }
@@ -1395,7 +1406,7 @@ const [saveError, setSaveError]   = useState('')
         <div key={leg.id}
           draggable onDragStart={() => setDragIdx(i)} onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }} onDragEnd={handleDragEnd}
           style={{ outline: dragOverIdx === i && dragIdx !== i ? '2px dashed var(--accent)' : 'none', borderRadius: '16px' }}>
-          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={(msg: string) => { sounds.error(); toast.warning(msg) }} entryType={entryType} />
+          <LegRow leg={leg} isDragging={dragIdx === i} onUpdate={updateLeg} onRemove={removeLeg} onCopy={copyLeg} dragHandleProps={{}} onBlockedClick={(msg: string) => { sounds.error(); toast.warning(msg) }} entryType={entryType} priorLeg={legs[i - 1]} algoHasSL={parseFloat(mtmSL) > 0} />
         </div>
       ))}
 
