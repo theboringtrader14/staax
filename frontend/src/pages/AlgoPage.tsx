@@ -1249,8 +1249,8 @@ const [saveError, setSaveError]   = useState('')
             This algo may be deployed in today's grid. Changes you save will NOT affect today's trades — they will apply from the next trading day onward.
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn btn-ghost" onClick={() => { sounds.click(); setShowTomorrowWarn(false) }}>Cancel</button>
-            <button className="btn btn-warn" onClick={() => { sounds.strategyStart(); handleSave() }}>Save Anyway</button>
+            <button onClick={() => { sounds.click(); setShowTomorrowWarn(false) }} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--text-dim)' }}>Cancel</button>
+            <button onClick={() => { sounds.strategyStart(); handleSave() }} style={{ height: '34px', padding: '0 18px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', color: '#0ea66e' }}>Save Anyway</button>
           </div>
         </div>
       )}
@@ -1307,7 +1307,7 @@ const [saveError, setSaveError]   = useState('')
                     {(['underlying','instrument'] as const).map(s => (
                       <button key={s} type="button" onClick={() => setOrbRangeSource(s)}
                         style={{ height: '28px', padding: '0 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: 600, border: 'none', background: 'var(--bg)', boxShadow: orbRangeSource === s ? 'var(--neu-inset)' : 'var(--neu-raised-sm)', color: orbRangeSource === s ? 'var(--accent)' : 'var(--text-dim)' }}>
-                        {s === 'underlying' ? 'Underlying' : 'Instrument'}
+                        {s === 'underlying' ? 'Spot' : 'Options'}
                       </button>
                     ))}
                   </div>
