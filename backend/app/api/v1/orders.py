@@ -153,11 +153,15 @@ async def list_orders(
     """
     target_date = _parse_date(trading_date) or datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
-    # Find all GridEntries strictly for this trading date
+    # Find all GridEntries strictly for this trading date — exclude soft-deleted algos
     grid_result = await db.execute(
-        select(GridEntry).where(
+        select(GridEntry)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .where(
             GridEntry.trading_date == target_date,
             GridEntry.status != GridStatus.NO_TRADE,
+            Algo.deleted_at.is_(None),
+            Algo.is_active == True,
         )
     )
     grid_entries = grid_result.scalars().all()

@@ -49,6 +49,7 @@ class LegCreate(BaseModel):
     sl_value:        Optional[float] = None
     tp_type:         Optional[str]  = None
     tp_value:        Optional[float] = None
+    tsl_enabled:     bool           = False
     tsl_x:           Optional[float] = None
     tsl_y:           Optional[float] = None
     tsl_unit:        Optional[str]  = None
@@ -165,6 +166,7 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "sl_value":        leg.sl_value,
         "tp_type":         leg.tp_type,
         "tp_value":        leg.tp_value,
+        "tsl_enabled":     leg.tsl_enabled or False,
         "tsl_x":           leg.tsl_x,
         "tsl_y":           leg.tsl_y,
         "tsl_unit":        leg.tsl_unit,
@@ -250,6 +252,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         sl_value=leg_data.sl_value,
         tp_type=leg_data.tp_type,
         tp_value=leg_data.tp_value,
+        tsl_enabled=leg_data.tsl_enabled,
         tsl_x=leg_data.tsl_x,
         tsl_y=leg_data.tsl_y,
         tsl_unit=leg_data.tsl_unit,
@@ -294,6 +297,7 @@ def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     leg.sl_value        = data.sl_value
     leg.tp_type         = data.tp_type
     leg.tp_value        = data.tp_value
+    leg.tsl_enabled     = data.tsl_enabled
     leg.tsl_x           = data.tsl_x
     leg.tsl_y           = data.tsl_y
     leg.tsl_unit        = data.tsl_unit
@@ -742,6 +746,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
             sl_value=leg.sl_value,
             tp_type=leg.tp_type,
             tp_value=leg.tp_value,
+            tsl_enabled=leg.tsl_enabled or False,
             tsl_x=leg.tsl_x,
             tsl_y=leg.tsl_y,
             tsl_unit=leg.tsl_unit,

@@ -157,7 +157,7 @@ class TGNotifier:
             algo_name = payload.get("algo_name", "Unknown")
             if algo_name not in self._pending_entries:
                 self._pending_entries[algo_name] = {"legs": []}
-                asyncio.ensure_future(self._flush_entry(algo_name))
+                asyncio.create_task(self._flush_entry(algo_name))
             self._pending_entries[algo_name]["legs"].append({
                 "symbol":     payload.get("symbol"),
                 "fill_price": payload.get("fill_price"),

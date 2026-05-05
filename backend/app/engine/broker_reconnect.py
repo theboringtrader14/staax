@@ -40,6 +40,7 @@ IST = ZoneInfo("Asia/Kolkata")
 STALE_THRESHOLD_SECONDS  = 30   # Fix 2: raised from 5→30 — 5s was too aggressive, caused false reconnects
 ZOMBIE_THRESHOLD_SECONDS = 60   # Connected but no tick for this long → force reconnect
 _reconnecting: bool = False      # Guard against concurrent reconnect attempts
+_last_ss_connected: bool | None = None  # tracks last logged connected state for change detection
 
 
 class CircuitBreaker:
@@ -325,7 +326,8 @@ class BrokerReconnectManager:
                 )
 
     def _log_status(self) -> None:
-        """5-minute periodic SmartStream health log."""
+        """5-minute periodic SmartStream health log — only emitted on state change or stale feed."""
+        global _last_ss_connected
         angel         = getattr(self._ltp_consumer, '_angel_adapter', None)
         is_connected  = getattr(angel, '_connected', None)
         ao_reconnects = getattr(angel, '_reconnect_count', 0)
@@ -334,13 +336,20 @@ class BrokerReconnectManager:
         last_zd_tick  = getattr(self._ltp_consumer, '_last_zd_tick', 0.0)
         ao_age        = round(now_mono - last_ao_tick, 1) if last_ao_tick > 0 else None
         zd_age        = round(now_mono - last_zd_tick, 1) if last_zd_tick > 0 else None
+
+        status_changed = is_connected != _last_ss_connected
+        feed_stale     = ao_age is not None and ao_age > 5.0
+        if not status_changed and not feed_stale:
+            return
+
+        _last_ss_connected = is_connected
         logger.info(
             f"[RECONNECT MGR] 5-min status — ao_connected={is_connected} "
             f"ao_tick_age={ao_age}s zd_tick_age={zd_age}s "
             f"mgr_reconnects={self._reconnect_count} "
             f"adapter_reconnects={ao_reconnects} consecutive_failures={self._consecutive_failures}"
         )
-        # ── Event log: 5-minute health snapshot ──────────────────────────────
+        # ── Event log: health snapshot (only on change/stale) ─────────────────
         try:
             from app.engine import event_logger as _ev
             import asyncio as _asyncio
