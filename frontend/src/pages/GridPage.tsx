@@ -452,7 +452,7 @@ export default function GridPage() {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ flexShrink:0, paddingLeft:'28px', paddingRight:'28px' }}>
-        <div className="page-header">
+        <div className="page-header" style={{ marginBottom: 0 }}>
           <div>
             <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--accent)' }}>Algos</h1>
             <div style={{ marginTop:'3px' }}>
@@ -682,7 +682,7 @@ export default function GridPage() {
               })}
 
               {/* By Index bar chart */}
-              <div style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', borderRadius:14, padding:'12px 16px', minHeight:90 }}>
+              <div style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', borderRadius:14, padding:'12px 16px', height:96, boxSizing:'border-box', overflow:'hidden' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
                   <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-mute)', fontFamily:'var(--font-display)' }}>
                     By Index

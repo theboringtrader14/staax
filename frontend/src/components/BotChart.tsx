@@ -86,7 +86,9 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
       {loading && (
         <div style={{ position: 'absolute', top: 16, right: 28, fontSize: 10, color: '#6b7280', fontFamily: 'monospace', zIndex: 1 }}>Loading…</div>
       )}
-      <div ref={containerRef} style={{ width: '100%', height: 320 }} />
+      <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--neu-inset)' }}>
+        <div ref={containerRef} style={{ width: '100%', height: 320 }} />
+      </div>
     </div>
   )
 }
