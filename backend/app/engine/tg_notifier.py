@@ -17,6 +17,8 @@ class TGNotifier:
         self._token   = os.getenv("TG_BOT_TOKEN", "")
         self._chat_id = os.getenv("TG_CHAT_ID", "")
         self._pending_entries: dict = {}  # algo_name → {"legs": []}
+        self._polling: bool = False
+        self._offset:  int  = 0
 
     async def send(self, text: str, reply_markup: dict = None) -> None:
         if not self._token or not self._chat_id:
@@ -233,6 +235,184 @@ class TGNotifier:
         if event_type == "feed_up":
             return f"🟢 <b>FEED UP</b>\nSmartStream reconnected.\n<i>{ts}</i>"
         return ""
+
+
+    # ── Polling loop ──────────────────────────────────────────────────────────
+
+    async def start_polling(self) -> None:
+        """Background polling loop — receives commands and button callbacks."""
+        if not self._token or not self._chat_id:
+            logger.warning("[TG] Polling not started — TG_BOT_TOKEN or TG_CHAT_ID missing")
+            return
+        self._polling = True
+        logger.info("[TG] Polling loop started")
+        while self._polling:
+            try:
+                updates = await self._get_updates()
+                for update in updates:
+                    self._offset = update["update_id"] + 1
+                    await self._handle_update(update)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"[TG] Polling error: {e}")
+            await asyncio.sleep(2)
+        logger.info("[TG] Polling loop stopped")
+
+    async def stop_polling(self) -> None:
+        self._polling = False
+
+    async def _get_updates(self) -> list:
+        url = f"https://api.telegram.org/bot{self._token}/getUpdates"
+        params = {
+            "offset":          self._offset,
+            "timeout":         10,
+            "allowed_updates": ["message", "callback_query"],
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, params=params)
+            return resp.json().get("result", [])
+
+    async def _handle_update(self, update: dict) -> None:
+        if "callback_query" in update:
+            query    = update["callback_query"]
+            data     = query.get("data", "")
+            query_id = query["id"]
+            chat_id  = query["message"]["chat"]["id"]
+            await self._answer_callback(query_id)
+            if data == "cmd_positions":
+                await self._send_positions(chat_id)
+            elif data == "cmd_health":
+                await self._send_health(chat_id)
+            elif data == "cmd_pnl":
+                await self._send_pnl(chat_id)
+            return
+
+        if "message" in update:
+            msg     = update["message"]
+            text    = msg.get("text", "")
+            chat_id = msg["chat"]["id"]
+            if text.startswith("/positions") or text.startswith("/pos"):
+                await self._send_positions(chat_id)
+            elif text.startswith("/pnl"):
+                await self._send_pnl(chat_id)
+            elif text.startswith("/status") or text.startswith("/health"):
+                await self._send_health(chat_id)
+            elif text.startswith("/help") or text.startswith("/start"):
+                await self._send_help(chat_id)
+
+    async def _answer_callback(self, query_id: str) -> None:
+        url = f"https://api.telegram.org/bot{self._token}/answerCallbackQuery"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(url, json={"callback_query_id": query_id})
+        except Exception as e:
+            logger.error(f"[TG] _answer_callback failed: {e}")
+
+    async def _send_to(self, chat_id, text: str, keyboard=None) -> None:
+        url     = f"https://api.telegram.org/bot{self._token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        if keyboard:
+            payload["reply_markup"] = {"inline_keyboard": keyboard}
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(url, json=payload)
+        except Exception as e:
+            logger.error(f"[TG] _send_to failed: {e}")
+
+    # ── Command handlers ──────────────────────────────────────────────────────
+
+    async def _send_help(self, chat_id) -> None:
+        msg = (
+            "🤖 <b>STAAX Bot</b>\n\n"
+            "/positions — Open positions + live P&amp;L\n"
+            "/pnl — Today's P&amp;L summary\n"
+            "/status — Engine + feed health\n"
+            "/help — This message"
+        )
+        await self._send_to(chat_id, msg)
+
+    async def _send_health(self, chat_id) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get("http://localhost:8000/api/v1/engine/health")
+                h    = resp.json()
+            ss       = h.get("smartstream", {})
+            eng      = h.get("engine", {})
+            mon      = h.get("monitors", {})
+            status   = ss.get("status", "unknown")
+            tick_ms  = ss.get("last_tick_ago_ms", 0)
+            open_pos = eng.get("open_positions", 0)
+            sl_mon   = mon.get("active_sl_monitors", 0)
+            ss_emoji = "🟢" if status == "active" else "🔴"
+            msg = (
+                f"{ss_emoji} <b>Engine Health</b>\n\n"
+                f"Feed: {status} ({tick_ms}ms ago)\n"
+                f"Open positions: {open_pos}\n"
+                f"Active SL monitors: {sl_mon}"
+            )
+        except Exception as e:
+            msg = f"⚠️ Health check failed: {e}"
+        await self._send_to(chat_id, msg)
+
+    async def _send_positions(self, chat_id) -> None:
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.models.order import Order, OrderStatus
+            from sqlalchemy import select
+            async with AsyncSessionLocal() as db:
+                r = await db.execute(
+                    select(Order)
+                    .where(Order.status == OrderStatus.OPEN)
+                    .order_by(Order.algo_tag)
+                )
+                orders = r.scalars().all()
+            if not orders:
+                await self._send_to(chat_id, "📭 No open positions")
+                return
+            lines = ["📍 <b>Open Positions</b>\n"]
+            for o in orders:
+                pnl       = o.pnl or 0
+                pnl_str   = f"+₹{pnl:,.0f}" if pnl >= 0 else f"-₹{abs(pnl):,.0f}"
+                pnl_emoji = "🟢" if pnl >= 0 else "🔴"
+                lines.append(
+                    f"{pnl_emoji} <b>{o.algo_tag or '-'}</b> — {o.symbol or '-'}\n"
+                    f"   Fill: ₹{o.fill_price or 0} | P&amp;L: {pnl_str}"
+                )
+            await self._send_to(chat_id, "\n".join(lines))
+        except Exception as e:
+            await self._send_to(chat_id, f"⚠️ Error fetching positions: {e}")
+
+    async def _send_pnl(self, chat_id) -> None:
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.models.order import Order, OrderStatus
+            from sqlalchemy import select, cast, func
+            from sqlalchemy.types import Date
+            today_ist = datetime.now(IST).date()
+            async with AsyncSessionLocal() as db:
+                r = await db.execute(
+                    select(Order).where(
+                        cast(func.timezone("Asia/Kolkata", Order.created_at), Date) == today_ist
+                    )
+                )
+                orders = r.scalars().all()
+            closed     = [o for o in orders if o.status == OrderStatus.CLOSED]
+            open_pos   = [o for o in orders if o.status == OrderStatus.OPEN]
+            realized   = sum(o.pnl or 0 for o in closed)
+            unrealized = sum(o.pnl or 0 for o in open_pos)
+            total      = realized + unrealized
+            emoji   = "🟢" if total >= 0 else "🔴"
+            fmt     = lambda v: f"+₹{v:,.0f}" if v >= 0 else f"-₹{abs(v):,.0f}"
+            msg = (
+                f"{emoji} <b>Today's P&amp;L</b>\n\n"
+                f"Realized:   {fmt(realized)} ({len(closed)} closed)\n"
+                f"Unrealized: {fmt(unrealized)} ({len(open_pos)} open)\n"
+                f"<b>Total: {fmt(total)}</b>"
+            )
+            await self._send_to(chat_id, msg)
+        except Exception as e:
+            await self._send_to(chat_id, f"⚠️ Error: {e}")
 
 
 tg_notifier = TGNotifier()

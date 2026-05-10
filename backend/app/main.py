@@ -196,7 +196,7 @@ async def lifespan(app: FastAPI):
     mtm_monitor    = MTMMonitor()
     sl_tp_monitor.set_mtm_monitor(mtm_monitor)   # route per-leg PNL → MTM breach checks
     wt_evaluator   = WTEvaluator()
-    orb_tracker    = ORBTracker()
+    orb_tracker    = ORBTracker(broker=angelone_mom)  # global fallback for OHLC fetch; per-window broker set in register_orb
     strike_sel     = StrikeSelector(zerodha)
 
     # ── 7. Wire AlgoRunner ────────────────────────────────────────────────────
@@ -358,12 +358,23 @@ async def lifespan(app: FastAPI):
     import asyncio as _aio
     _aio.create_task(_fix_today_order_quantities())
 
+    # ── 18. Start Telegram polling loop ──────────────────────────────────────
+    from app.engine.tg_notifier import tg_notifier as _tg_notifier
+    _tg_polling_task = asyncio.create_task(_tg_notifier.start_polling())
+    logger.info("✅ Telegram polling loop started")
+
     logger.info("✅ STAAX engine operational — AO broker login running in background")
 
     yield  # ── Application running ─────────────────────────────────────────
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("🛑 STAAX shutting down...")
+    await _tg_notifier.stop_polling()
+    _tg_polling_task.cancel()
+    try:
+        await _tg_polling_task
+    except asyncio.CancelledError:
+        pass
     _ao_bg_task.cancel()
     try:
         await _ao_bg_task
