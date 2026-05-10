@@ -307,8 +307,8 @@ async def lifespan(app: FastAPI):
     from app.engine.candle_db_writer import candle_db_writer, run_mcx_backfill
     from app.engine.candle_fetcher import candle_store
     candle_store.register_callback(candle_db_writer.on_candle_complete)
-    asyncio.create_task(candle_db_writer.start(angelone_karthik))
-    asyncio.create_task(run_mcx_backfill(angelone_karthik))
+    asyncio.create_task(candle_db_writer.start(angelone_mom))
+    asyncio.create_task(run_mcx_backfill(angelone_mom))
     logger.info("✅ CandleDBWriter started + MCX backfill scheduled")
 
     # ── 12c. Wire + start PositionReconciler (30 s, market hours only) ───────
