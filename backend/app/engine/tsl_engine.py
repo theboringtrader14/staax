@@ -20,11 +20,12 @@ DB persistence:
     orders.tsl_activated    — True once first trail fires
     orders.tsl_current_sl   — explicit TSL column (mirrors sl_actual)
 """
+import asyncio
 import logging
 import pytz as _pytz
 from datetime import datetime as _dt, time as _time
 from typing import Dict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ class TSLState:
     tsl_unit:           str        # "pts" or "pct"
     trail_count:        int   = 0
     last_trigger_price: float = 0.0
+    algo_name:          str   = ""
+    symbol:             str   = ""
 
     def __post_init__(self):
         self.last_trigger_price = self.entry_price
@@ -117,6 +120,18 @@ class TSLEngine:
         except Exception as e:
             logger.warning(f"[TSL] DB persist failed for {order_id}: {e}")
 
+    async def _log_trail(self, trail_count: int, symbol: str, algo_name: str, new_sl: float):
+        try:
+            from app.engine import event_logger as _ev
+            label = (
+                f"TSL activated — first trail → SL {new_sl:.2f}"
+                if trail_count == 1
+                else f"TSL trail #{trail_count} → SL {new_sl:.2f}"
+            )
+            await _ev.info(label, source="tsl_engine", symbol=symbol, algo_name=algo_name or symbol)
+        except Exception as _e:
+            logger.warning(f"[TSL] Event log failed: {_e}")
+
     async def on_tick(self, token: int, ltp: float, tick: dict):
         if not _is_sl_check_allowed():
             return
@@ -126,8 +141,21 @@ class TSLEngine:
                 continue
             if state.check_and_trail(ltp):
                 self.sl_monitor.update_sl(order_id, state.current_sl)
-                # Persist to DB so position rebuilder can restore state after restart
-                import asyncio
-                asyncio.ensure_future(
+                asyncio.create_task(
                     self._persist_trail(order_id, state.current_sl, state.trail_count)
                 )
+                _sym = state.symbol or pos.symbol or order_id
+                # Event log: first trail and every 5th
+                if state.trail_count == 1 or state.trail_count % 5 == 0:
+                    asyncio.create_task(self._log_trail(
+                        state.trail_count, _sym, state.algo_name, state.current_sl
+                    ))
+                # Telegram: first trail only
+                if state.trail_count == 1:
+                    from app.engine.tg_notifier import tg_notifier
+                    asyncio.create_task(tg_notifier.notify('tsl_activated', {
+                        'algo_name': state.algo_name or _sym,
+                        'symbol': _sym,
+                        'new_sl': state.current_sl,
+                        'fill_price': state.entry_price,
+                    }))

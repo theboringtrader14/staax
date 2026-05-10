@@ -238,6 +238,15 @@ class TGNotifier:
                 f"LTP age: {payload.get('age_s', '?')}s — order placed anyway\n"
                 f"<i>{ts}</i>"
             )
+        if event_type == "tsl_activated":
+            new_sl = payload.get('new_sl', 0)
+            fill   = payload.get('fill_price', 0)
+            return (
+                f"📈 <b>TSL Activated</b>\n"
+                f"{payload.get('algo_name', '-')} — {payload.get('symbol', '-')}\n"
+                f"Fill: ₹{fill:.2f} → SL moved to ₹{new_sl:.2f}\n"
+                f"<i>{ts}</i>"
+            )
         if event_type == "feed_down":
             return f"🔌 <b>FEED DOWN</b>\nSmartStream disconnected. Monitor manually.\n<i>{ts}</i>"
         if event_type == "feed_up":
