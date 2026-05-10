@@ -390,18 +390,114 @@ async def get_bot_chart_data(
 
 @router.get("/{bot_id}/chart")
 async def bot_chart(
-    bot_id: int,
-    timeframe: str = "5m",
-    symbol: str = "",
+    bot_id: str,
+    timeframe: int = Query(default=15, description="Timeframe in minutes: 15/30/45/60/120/180"),
+    days: int     = Query(default=30, description="Days of history to return"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return OHLCV + indicator data for bot chart. Returns empty arrays if no data."""
+    """Return OHLCV + indicator bands + signals for bot chart."""
+    import pytz
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    from types import SimpleNamespace
+    from sqlalchemy import func as _fn
+    from app.models.candle_1min import Candle1Min
+    from app.engine.indicators.registry import get_indicator
+    from app.engine.candle_db_writer import MCX_INSTRUMENTS
+
+    # 1. Load bot
+    try:
+        bot_uuid = uuid_lib.UUID(bot_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid bot_id")
+    result = await db.execute(select(Bot).where(Bot.id == bot_uuid))
+    bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    # 2. Resolve symbol_token from candle_db_writer MCX_INSTRUMENTS map
+    symbol_token = MCX_INSTRUMENTS.get(bot.instrument)
+    if not symbol_token:
+        return {"candles": [], "upper": [], "lower": [], "mid": [], "entries": []}
+
+    # 3. Fetch 1-min candles from DB
+    IST = pytz.timezone("Asia/Kolkata")
+    since = datetime.now(IST) - timedelta(days=days)
+    raw_result = await db.execute(
+        select(Candle1Min)
+        .where(Candle1Min.symbol_token == symbol_token)
+        .where(Candle1Min.ts >= since)
+        .order_by(Candle1Min.ts.asc())
+    )
+    raw_candles = raw_result.scalars().all()
+    if not raw_candles:
+        return {"candles": [], "upper": [], "lower": [], "mid": [], "entries": []}
+
+    # 4. Aggregate to requested timeframe (floor-bucketed, aligned to MCX open 09:00 IST)
+    MCX_OPEN_SECS = 32400  # 09:00 IST
+    tf_secs       = timeframe * 60
+    buckets: dict = defaultdict(list)
+    for c in raw_candles:
+        ts_ist = c.ts.astimezone(IST)
+        day_start = ts_ist.replace(hour=0, minute=0, second=0, microsecond=0)
+        s_from_midnight = (ts_ist - day_start).seconds
+        bucket_s = MCX_OPEN_SECS + ((s_from_midnight - MCX_OPEN_SECS) // tf_secs) * tf_secs
+        buckets[day_start + timedelta(seconds=bucket_s)].append(c)
+
+    agg_candles = []
+    for bucket_dt in sorted(buckets):
+        bars = buckets[bucket_dt]
+        agg_candles.append(SimpleNamespace(
+            ts=bucket_dt,
+            open=bars[0].open,
+            high=max(b.high for b in bars),
+            low=min(b.low  for b in bars),
+            close=bars[-1].close,
+            volume=sum(b.volume or 0 for b in bars),
+        ))
+
+    # 5. Replay indicator
+    indicator = get_indicator(bot.indicator or "channel")
+    indicator.reset()
+    candles_out: list = []
+    upper_out:   list = []
+    lower_out:   list = []
+    mid_out:     list = []
+
+    for c in agg_candles:
+        ts_epoch = int(c.ts.timestamp())
+        indicator.on_candle(c)
+        b = indicator.bands
+        candles_out.append({"time": ts_epoch, "open": c.open, "high": c.high, "low": c.low, "close": c.close})
+        if b:
+            upper_out.append({"time": ts_epoch, "value": b.upper})
+            lower_out.append({"time": ts_epoch, "value": b.lower})
+            if b.mid is not None:
+                mid_out.append({"time": ts_epoch, "value": b.mid})
+
+    # 6. Fetch signals
+    sig_result = await db.execute(
+        select(BotSignal)
+        .where(BotSignal.bot_id == bot_uuid)
+        .where(BotSignal.candle_timestamp >= since)
+        .order_by(BotSignal.candle_timestamp.asc())
+    )
+    entries_out = [
+        {
+            "time":      int(s.candle_timestamp.timestamp()),
+            "direction": s.direction,
+            "label":     s.reason or s.signal_type,
+        }
+        for s in sig_result.scalars().all()
+        if s.candle_timestamp
+    ]
+
     return {
-        "candles": [],
-        "upper": [],
-        "lower": [],
-        "mid": [],
-        "entries": [],
+        "candles": candles_out,
+        "upper":   upper_out,
+        "lower":   lower_out,
+        "mid":     mid_out,
+        "entries": entries_out,
     }
 
 

@@ -5,6 +5,7 @@ import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { Lightning, LightningSlash, Copy, Trash, Play, Stop, Warning, Sparkle } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
+import IndicatorsPage from './IndicatorsPage'
 import { showSuccess, showError, showInfo } from '@/utils/toast'
 import { sounds } from '@/utils/sounds'
 
@@ -137,9 +138,13 @@ export default function GridPage() {
   const [showAI,         setShowAI]         = useState(false)
   const [aiEditAlgo,     setAiEditAlgo]     = useState<Algo|null>(null)
   const [aiAccounts,     setAiAccounts]     = useState<{id:string,nickname:string,broker:string}[]>([])
-  const listScrollRef    = useRef<HTMLDivElement>(null)
+  const [activeTab,      setActiveTab]      = useState<'algos' | 'bots'>(() => (localStorage.getItem('activeGridTab') as 'algos'|'bots') || 'algos')
+    const listScrollRef    = useRef<HTMLDivElement>(null)
   const groupHeaderRefs  = useRef<Map<string, HTMLDivElement>>(new Map())
   const autoFillRan      = useRef(false)
+  const newBotTriggerRef    = useRef<(() => void) | null>(null)
+  const unarchiveBotRef     = useRef<((id: string) => void) | null>(null)
+  const [archivedBots, setArchivedBots] = useState<{id:string;name:string}[]>([])
 
 
   // ── Sync card multipliers when grid loads ────────────────────────────────────
@@ -450,7 +455,7 @@ export default function GridPage() {
         <div className="page-header">
           <div>
             <h1 style={{ fontFamily:'var(--font-display)', fontSize:'22px', fontWeight:800, color:'var(--accent)' }}>Algos</h1>
-            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'3px' }}>
+            <div style={{ marginTop:'3px' }}>
               <span style={{ fontSize:'12px', color:'var(--text-mute)' }}>
                 Week of {new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Kolkata' })}
               </span>
@@ -474,19 +479,20 @@ export default function GridPage() {
               }}
             >
               Archive
-              {archived.length > 0 && (
-                <span style={{
-                  position:'absolute', top:-5, right:-5,
-                  minWidth:16, height:16, borderRadius:8,
-                  background:'var(--accent)', color:'#fff',
-                  fontSize:9, fontWeight:700, fontFamily:'var(--font-body)',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  padding:'0 4px', lineHeight:1,
-                  boxShadow:'0 1px 4px rgba(0,0,0,0.2)',
-                }}>
-                  {archived.length}
-                </span>
-              )}
+              {(() => {
+                const cnt = activeTab === 'algos' ? archived.length : archivedBots.length
+                return cnt > 0 ? (
+                  <span style={{
+                    position:'absolute', top:-5, right:-5,
+                    minWidth:16, height:16, borderRadius:8,
+                    background:'var(--accent)', color:'#fff',
+                    fontSize:9, fontWeight:700, fontFamily:'var(--font-body)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    padding:'0 4px', lineHeight:1,
+                    boxShadow:'0 1px 4px rgba(0,0,0,0.2)',
+                  }}>{cnt}</span>
+                ) : null
+              })()}
             </button>
 
             {/* AI Algo Builder */}
@@ -512,57 +518,121 @@ export default function GridPage() {
               AI
             </button>
 
-            {/* New Algo */}
-            <button
-              onClick={() => { sounds.click(); nav('/algo/new') }}
-              style={{
-                height:32, padding:'0 16px', borderRadius:100,
-                background:'var(--bg)', border:'none',
-                color:'var(--accent)', fontSize:12, fontWeight:600,
-                fontFamily:'var(--font-body)', cursor:'pointer',
-                boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
-                flexShrink:0,
-              }}
-              onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
-              onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-            >
-              + New Algo
-            </button>
+            {/* New Algo — only on Algos tab */}
+            {activeTab === 'algos' && (
+              <button
+                onClick={() => { sounds.click(); nav('/algo/new') }}
+                style={{
+                  height:32, padding:'0 16px', borderRadius:100,
+                  background:'var(--bg)', border:'none',
+                  color:'var(--accent)', fontSize:12, fontWeight:600,
+                  fontFamily:'var(--font-display)', cursor:'pointer',
+                  boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
+                  flexShrink:0,
+                }}
+                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+              >
+                + New Algo
+              </button>
+            )}
+
+            {/* New Bot — only shown when Bots tab is active */}
+            {activeTab === 'bots' && (
+              <button
+                onClick={() => { sounds.click(); newBotTriggerRef.current?.() }}
+                style={{
+                  height:32, padding:'0 16px', borderRadius:100,
+                  background:'var(--bg)', border:'none',
+                  color:'var(--accent)', fontSize:12, fontWeight:600,
+                  fontFamily:'var(--font-display)', cursor:'pointer',
+                  boxShadow:'var(--neu-raised-sm)', transition:'box-shadow 0.15s',
+                  flexShrink:0,
+                }}
+                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+              >
+                + New Bot
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ── Archive panel ──────────────────────────────────────────────────── */}
-      {showArch && (
-        <div style={{ flexShrink:0, marginLeft:'28px', marginRight:'28px', marginBottom:'12px' }}>
-          <div style={{ background:'var(--bg)', borderRadius:16, boxShadow:'var(--neu-inset)', padding:'14px 16px' }}>
-            <div style={{ fontSize:'10px', fontWeight:700, color:'var(--text-mute)', marginBottom:'12px', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-body)' }}>Archived</div>
-          {loading
-            ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Loading…</span>
-            : archived.length === 0
-            ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>No archived algos.</span>
-            : <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
-                {archived.map(a => (
-                  <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'var(--bg)', borderRadius:12, padding:'8px 12px', boxShadow:'var(--neu-raised-sm)' }}>
-                    <div>
-                      <div style={{ fontSize:'12px', fontWeight:600, color:'var(--text)' }}>{a.name}</div>
-                      <div style={{ fontSize:'10px', color:'var(--text-mute)' }}>{a.account}</div>
-                    </div>
-                    <button style={{ fontSize:'11px', height:'26px', padding:'0 10px', borderRadius:100, background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--accent)', fontWeight:600, cursor:'pointer', transition:'box-shadow 0.12s' }}
-                      onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
-                      onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-                      onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-                      onClick={() => { sounds.click(); unarch(a.id) }}>Reactivate</button>
+      {/* ── Algos | Bots tab bar — full width, same pattern as AnalyticsPage ── */}
+      <div style={{
+        flexShrink:0, display:'flex', position:'relative',
+        margin:'13px 28px',
+        background:'var(--bg)', boxShadow:'var(--neu-inset)',
+        borderRadius:100, padding:'4px',
+      }}>
+        <div style={{
+          position:'absolute', top:4, bottom:4,
+          left: `calc(4px + ${['algos','bots'].indexOf(activeTab)} * (100% - 8px) / 2)`,
+          width:'calc((100% - 8px) / 2)',
+          background:'var(--bg)', boxShadow:'var(--neu-raised-sm)',
+          borderRadius:100, transition:'left 0.28s cubic-bezier(0.4,0,0.2,1)',
+          pointerEvents:'none',
+        }} />
+        {(['algos', 'bots'] as const).map(tab => (
+          <button key={tab} onClick={() => { sounds.click(); setActiveTab(tab); localStorage.setItem('activeGridTab', tab) }} style={{
+            flex:1, padding:'8px 0', textAlign:'center',
+            border:'none', borderRadius:100, cursor:'pointer',
+            position:'relative', zIndex:1, background:'transparent',
+            fontSize:11, fontWeight:600, fontFamily:'var(--font-mono)',
+            letterSpacing:'1px', textTransform:'uppercase',
+            color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
+            transition:'color 0.25s ease',
+          }}>{tab}</button>
+        ))}
+      </div>
+
+      {/* ── Archive panel — same pattern for both tabs ── */}
+      {showArch && (() => {
+        const isAlgos = activeTab === 'algos'
+        const items = isAlgos
+          ? archived.map(a => ({ id: a.id, name: a.name, sub: a.account }))
+          : archivedBots.map(b => ({ id: b.id, name: b.name, sub: undefined }))
+        const onReactivate = (id: string) => {
+          sounds.click()
+          if (isAlgos) unarch(id)
+          else unarchiveBotRef.current?.(id)
+        }
+        const empty = isAlgos ? 'No archived algos.' : 'No archived bots.'
+        const label = isAlgos ? 'Archived Algos' : 'Archived Bots'
+        return (
+          <div style={{ flexShrink:0, marginLeft:'28px', marginRight:'28px', marginBottom:'12px' }}>
+            <div style={{ background:'var(--bg)', borderRadius:16, boxShadow:'var(--neu-inset)', padding:'14px 16px' }}>
+              <div style={{ fontSize:'10px', fontWeight:700, color:'var(--text-mute)', textTransform:'uppercase', letterSpacing:'2px', fontFamily:'var(--font-body)', marginBottom:'12px' }}>{label}</div>
+              {(isAlgos && loading)
+                ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Loading…</span>
+                : items.length === 0
+                ? <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>{empty}</span>
+                : <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                    {items.map(a => (
+                      <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'var(--bg)', borderRadius:12, padding:'8px 12px', boxShadow:'var(--neu-raised-sm)' }}>
+                        <div>
+                          <div style={{ fontSize:'12px', fontWeight:600, color:'var(--text)' }}>{a.name}</div>
+                          {a.sub && <div style={{ fontSize:'10px', color:'var(--text-mute)' }}>{a.sub}</div>}
+                        </div>
+                        <button style={{ fontSize:'11px', height:'26px', padding:'0 10px', borderRadius:100, background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--accent)', fontWeight:600, cursor:'pointer', transition:'box-shadow 0.12s' }}
+                          onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                          onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                          onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
+                          onClick={() => onReactivate(a.id)}>Reactivate</button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>}
+              }
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Stats summary cards — fixed, not scrollable ────────────────────── */}
-      {visibleAlgos.length > 0 && (() => {
+      {activeTab === 'algos' && visibleAlgos.length > 0 && (() => {
         const buyOnly    = visibleAlgos.filter(a => a.legs.length > 0 && a.legs.every(l => l.d === 'B')).length
         const sellOnly   = visibleAlgos.filter(a => a.legs.length > 0 && a.legs.every(l => l.d === 'S')).length
         const bothDir    = visibleAlgos.filter(a => a.legs.some(l => l.d === 'B') && a.legs.some(l => l.d === 'S')).length
@@ -588,7 +658,7 @@ export default function GridPage() {
         ]
 
         return (
-          <div style={{ flexShrink:0, padding:'0 28px 14px' }}>
+          <div style={{ flexShrink:0, padding:'10px 28px 14px' }}>
             <div className="algo-stats-bar" style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr) 2fr', gap:10 }}>
               {kpiCards.map(({ key, label, count, color }) => {
                 const isActive = statFilter === key
@@ -598,7 +668,7 @@ export default function GridPage() {
                     style={{
                       background:'var(--bg)',
                       boxShadow: isActive ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-                      borderRadius:14, padding:'12px 14px', minHeight:90,
+                      borderRadius:14, padding:'12px 14px', height:96, boxSizing:'border-box' as const, overflow:'hidden',
                       cursor:'pointer', transition:'box-shadow 0.15s',
                     }}>
                     <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color: isActive ? color : 'var(--text-mute)', marginBottom:8, fontFamily:'var(--font-display)', transition:'color 0.15s' }}>
@@ -643,8 +713,19 @@ export default function GridPage() {
         )
       })()}
 
+      {/* ── Bots tab ───────────────────────────────────────────────────────── */}
+      {activeTab === 'bots' && (
+        <div style={{ flex:1, minHeight:0, overflowY:'auto' }}>
+          <IndicatorsPage hideHeader newBotTriggerRef={newBotTriggerRef}
+            onArchivedChange={(bots, unarchive) => {
+              setArchivedBots(bots)
+              unarchiveBotRef.current = unarchive
+            }} />
+        </div>
+      )}
+
       {/* ── Algo cards outer container ─────── */}
-      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', position:'relative' }}>
+      {activeTab === 'algos' && <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', position:'relative' }}>
 
         {/* ── Sticky group header overlay — rendered above scroll container, bypasses compositor z-index issues ── */}
         {stickyHeader && (() => {
@@ -765,6 +846,7 @@ export default function GridPage() {
                                 <span onClick={e => { e.stopPropagation(); sounds.click(); nav(`/algo/${algo.id}`) }}
                                   style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'14px', color:'var(--accent)',
                                     cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                                    fontVariantNumeric:'lining-nums tabular-nums',
                                     textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'var(--border-accent)' }}>
                                   {algo.name}
                                 </span>
@@ -960,7 +1042,7 @@ export default function GridPage() {
             )
           })}
         </div>
-      </div>
+      </div>}
 
 
       {/* ── AI Algo Assistant ────────────────────────────────────────────── */}

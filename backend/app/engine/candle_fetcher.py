@@ -112,6 +112,11 @@ class CandleStore:
 
     def __init__(self):
         self._aggregators: Dict[Tuple[int, int], CandleAggregator] = {}
+        self._callbacks: List = []
+
+    def register_callback(self, cb) -> None:
+        """Register a callable(token: int, candle: Candle) called on each completed bar."""
+        self._callbacks.append(cb)
 
     def get_or_create(self, token: int, timeframe_mins: int) -> CandleAggregator:
         key = (token, timeframe_mins)
@@ -123,7 +128,10 @@ class CandleStore:
         """Process tick for all aggregators watching this token."""
         for (t, tf), agg in self._aggregators.items():
             if t == token:
-                agg.on_tick(price, ts)
+                completed = agg.on_tick(price, ts)
+                if completed is not None:
+                    for cb in self._callbacks:
+                        cb(token, completed)
 
 
 candle_store = CandleStore()

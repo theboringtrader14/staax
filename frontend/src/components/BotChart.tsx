@@ -9,17 +9,14 @@ import { useEffect, useRef, useState } from 'react'
 
 interface BotChartProps {
   botId: string
-  symbol: string
-  timeframe?: string
-  indicators?: Record<string, any>
+  timeframeMins: number
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-export default function BotChart({ botId, symbol, timeframe: initTf = '5m' }: BotChartProps) {
+export default function BotChart({ botId, timeframeMins }: BotChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const [tf, setTf] = useState(initTf)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,7 +35,7 @@ export default function BotChart({ botId, symbol, timeframe: initTf = '5m' }: Bo
     })
     chartRef.current = chart
 
-    const candles = chart.addSeries(CandlestickSeries, {
+    const candles  = chart.addSeries(CandlestickSeries, {
       upColor: '#0EA66E', downColor: '#FF4444',
       borderUpColor: '#0EA66E', borderDownColor: '#FF4444',
       wickUpColor: '#0EA66E', wickDownColor: '#FF4444',
@@ -50,7 +47,7 @@ export default function BotChart({ botId, symbol, timeframe: initTf = '5m' }: Bo
     const fetchData = async () => {
       setLoading(true)
       try {
-        const r = await fetch(`${API_BASE}/api/v1/bots/${botId}/chart?timeframe=${tf}&symbol=${symbol}`)
+        const r = await fetch(`${API_BASE}/api/v1/bots/${botId}/chart?timeframe=${timeframeMins}&days=30`)
         if (!r.ok) throw new Error('no data')
         const d = await r.json()
         if (d.candles?.length) candles.setData(d.candles)
@@ -78,24 +75,13 @@ export default function BotChart({ botId, symbol, timeframe: initTf = '5m' }: Bo
     })
     ro.observe(containerRef.current)
     return () => { chart.remove(); ro.disconnect() }
-  }, [botId, tf, symbol])
+  }, [botId, timeframeMins])
 
-  const timeframes = ['1m', '3m', '5m', '15m', '1h']
   return (
-    <div style={{ background: '#0a0e14', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px 16px' }}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
-        <span style={{ fontSize: 10, color: '#6b7280', fontFamily: 'monospace', marginRight: 8 }}>TIMEFRAME</span>
-        {timeframes.map(t => (
-          <button key={t} onClick={() => setTf(t)} style={{
-            fontSize: 10, fontFamily: 'monospace', padding: '2px 10px', borderRadius: 4,
-            border: `1px solid ${tf === t ? 'rgba(45,212,191,0.4)' : 'rgba(255,255,255,0.1)'}`,
-            background: tf === t ? 'rgba(45,212,191,0.1)' : 'transparent',
-            color: tf === t ? '#2dd4bf' : '#6b7280', cursor: 'pointer',
-          }}>{t}</button>
-        ))}
-        {loading && <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 8 }}>Loading...</span>}
-        <span style={{ fontSize: 9, color: '#374151', marginLeft: 'auto', fontFamily: 'monospace' }}>Cross-ref with TradingView</span>
-      </div>
+    <div style={{ position: 'relative' }}>
+      {loading && (
+        <div style={{ position: 'absolute', top: 8, right: 16, fontSize: 10, color: '#6b7280', fontFamily: 'monospace', zIndex: 1 }}>Loading…</div>
+      )}
       <div ref={containerRef} style={{ width: '100%', height: 320 }} />
     </div>
   )

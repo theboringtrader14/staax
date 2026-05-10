@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, type CSSProperties } from 'react'
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts'
-import { ArrowsClockwise, Play, Stop, Gear, Trash, CaretDown, CaretUp } from '@phosphor-icons/react'
-import { accountsAPI, botsAPI } from '@/services/api'
+import { ArrowsClockwise, Gear, Trash } from '@phosphor-icons/react'
+import { accountsAPI } from '@/services/api'
 import BotChart from '../components/BotChart'
 import axios from 'axios'
 import { useStore } from '@/store'
@@ -44,25 +43,11 @@ const neuCard: CSSProperties = {
   background: 'var(--bg)',
   boxShadow: 'var(--neu-raised)',
   borderRadius: 20,
-  marginBottom: 12,
+  marginBottom: 16,
   overflow: 'hidden',
 }
 
-const iconBtn = (active = false): CSSProperties => ({
-  width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer',
-  background: 'var(--bg)',
-  boxShadow: active ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  color: 'var(--text-dim)', transition: 'box-shadow 0.12s',
-  flexShrink: 0,
-})
 
-const neuChip = (color: string): CSSProperties => ({
-  background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100,
-  padding: '2px 10px', fontSize: 10, fontWeight: 700,
-  fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
-  color, whiteSpace: 'nowrap',
-})
 
 // Neumorphic input style (replaces dark staax-input in modals)
 const neuInputStyle: CSSProperties = {
@@ -122,13 +107,6 @@ function NeuBtn({
   )
 }
 
-// Keep static ghostBtn for the Archived toggle (no ref needed there)
-const ghostBtn: CSSProperties = {
-  height: 30, padding: '0 16px', borderRadius: 100, border: 'none', cursor: 'pointer',
-  background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
-  fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
-  color: 'var(--text-dim)', transition: 'box-shadow 0.12s',
-}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type AccountOption = { id: string; nickname: string; broker: string }
@@ -141,36 +119,7 @@ type Bot = {
   status: string; is_archived: boolean; is_practix?: boolean
   pinescript_code?: string;
 }
-type BotOrder = {
-  id: string; bot_name: string; is_practix: boolean
-  instrument: string; direction: string; lots: number
-  entry_price?: number; exit_price?: number
-  entry_time?: string | null; exit_time?: string | null
-  pnl?: number; status: string; signal_type?: string; expiry: string
-  bot_id?: string
-}
 
-// ── ConfirmModal ───────────────────────────────────────────────────────────────
-function ConfirmModal({ title, desc, confirmLabel, confirmColor, onConfirm, onCancel }: {
-  title: string; desc: string; confirmLabel: string; confirmColor: string
-  onConfirm: () => void; onCancel: () => void
-}) {
-  const isDanger = confirmColor?.includes('red') || confirmColor?.includes('ef4444') || confirmColor?.includes('FF4444')
-  const isWarn   = confirmColor?.includes('amber') || confirmColor?.includes('f59e0b')
-  const confirmVariant: 'danger' | 'warn' | 'accent' = isDanger ? 'danger' : isWarn ? 'warn' : 'accent'
-  return (
-    <div className="modal-overlay">
-      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)', borderRadius: 20, padding: '28px 24px', maxWidth: 360, width: '90vw' }}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>{title}</div>
-        <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 24 }}>{desc}</div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <NeuBtn onClick={onCancel}>Cancel</NeuBtn>
-          <NeuBtn variant={confirmVariant} onClick={onConfirm}>{confirmLabel}</NeuBtn>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── EditBotModal ───────────────────────────────────────────────────────────────
 function EditBotModal({ bot, accounts, onSave, onClose }: {
@@ -430,22 +379,19 @@ function BotConfigurator({ accounts, onSave, onClose }: {
 }
 
 // ── BotCard ────────────────────────────────────────────────────────────────────
-function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, onWarmup }: {
+function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, onWarmup, isSelected, onSelect }: {
   bot: Bot; accounts: AccountOption[]
   onUpdate: (id: string, data: Partial<Bot>) => void
   onArchive: (id: string) => void
   onUnarchive: (id: string) => void
   onDelete: (id: string) => void
   onWarmup: (id: string) => Promise<void>
+  isSelected?: boolean
+  onSelect?: () => void
 }) {
-  const [editBot, setEditBot]     = useState(false)
-  const [showDel, setShowDel]     = useState(false)
-  const [showArch, setShowArch]   = useState(false)
-  const [warmingUp, setWarmingUp] = useState(false)
-
-  // Chart toggle
-  const [showChart, setShowChart] = useState(false)
-  const [chartData] = useState<{ candles: { time: number; open: number; high: number; low: number; close: number }[]; levels: Record<string, number>; signals: { time: number; price: number; direction?: string; label?: string }[]; ltp: number | null } | null>(null)
+  const [editBot, setEditBot]       = useState(false)
+  const [showRemove, setShowRemove] = useState(false)
+  const [warmingUp, setWarmingUp]   = useState(false)
 
   // Live levels + LTP (fetched from chart-data endpoint every 30s)
   const [cardLevels, setCardLevels] = useState<Record<string, number> | null>(null)
@@ -466,19 +412,9 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
     return () => clearInterval(t)
   }, [bot.id])
 
-  // Orders (lazy, per-card)
-  const [showOrders, setShowOrders] = useState(false)
-  const [orders, setOrders]         = useState<BotOrder[]>([])
-  const [, setOrdersLoaded] = useState(false)
-  const [ordersLoading, setOrdersLoading] = useState(false)
 
-  // LTP for expanded orders
-  const [ltpMap, setLtpMap] = useState<Record<string, number>>({})
-  const ltpTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isActive   = bot.status === 'live' || bot.status === 'active'
-  const canStop    = isActive
-  const canStart   = bot.status === 'inactive'
   const isArchived = bot.is_archived
 
   const statusColor = bot.status === 'live'     ? 'var(--green)'
@@ -490,63 +426,13 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
                        : bot.indicator === 'tt_bands' ? 'TT BANDS'
                        : 'DTR'
 
-  // Levels: prefer live-fetched cardLevels, fall back to chartData (if ever populated)
-  const levels = cardLevels ?? chartData?.levels ?? null
-
-  // LTP polling for expanded orders
-  useEffect(() => {
-    if (!showOrders) {
-      if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null }
-      return
-    }
-    const openSymbols = [...new Set(orders.filter(o => o.status === 'open').map(o => o.instrument))]
-    if (openSymbols.length === 0) return
-    const fetchLtps = () => {
-      openSymbols.forEach(sym => {
-        apiGet(`/bots/ltp?symbol=${sym}`)
-          .then(r => { if (r.data?.ltp != null) setLtpMap(prev => ({ ...prev, [sym]: r.data.ltp })) })
-          .catch(() => {})
-      })
-    }
-    fetchLtps()
-    ltpTimerRef.current = setInterval(fetchLtps, 5000)
-    return () => { if (ltpTimerRef.current) { clearInterval(ltpTimerRef.current); ltpTimerRef.current = null } }
-  }, [showOrders, orders])
-
-  const handleToggleOrders = async () => {
-    if (!showOrders) {
-      setOrdersLoading(true)
-      try {
-        const r = await botsAPI.botOrders(bot.id)
-        setOrders(r.data || [])
-        setOrdersLoaded(true)
-      } catch (e) {
-        console.warn('[IndicatorsPage] bot orders fetch failed', e)
-      }
-      setOrdersLoading(false)
-    }
-    setShowOrders(v => !v)
-  }
+  const levels = cardLevels
 
   const handleWarmup = async () => {
     setWarmingUp(true)
     try { await onWarmup(bot.id) } catch (e) { console.warn('[IndicatorsPage] warmup failed', e) }
     setWarmingUp(false)
   }
-
-  // Open order for live P&L
-  const openOrder = orders.find(o => o.status === 'open')
-  let livePnl: number | null = null
-  if (openOrder && openOrder.entry_price != null) {
-    const ltp = ltpMap[openOrder.instrument]
-    if (ltp != null) {
-      livePnl = openOrder.direction === 'BUY'
-        ? (ltp - openOrder.entry_price) * openOrder.lots
-        : (openOrder.entry_price - ltp) * openOrder.lots
-    }
-  }
-
-  const openOrderCount = orders.filter(o => o.status === 'open').length
 
   const metaParts = [
     bot.instrument, bot.exchange,
@@ -557,77 +443,45 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
 
   return (
     <>
-      <div style={{ ...neuCard, opacity: isArchived ? 0.6 : 1 }}>
+      <div onClick={onSelect} style={{ ...neuCard, opacity: isArchived ? 0.6 : 1, position: 'relative', paddingLeft: 28, outline: isSelected ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: -2, cursor: 'pointer' }}>
 
-        {/* ── ROW 1: Status dot + Name + Meta subtitle + Action buttons ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px 6px' }}>
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%', background: statusColor,
-            display: 'inline-block', flexShrink: 0, marginTop: 4,
-            animation: isActive ? 'pulse 1.5s infinite' : 'none',
-          }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--accent)', fontVariantNumeric: 'lining-nums tabular-nums', whiteSpace: 'nowrap' }}>
-                {bot.name}
-              </span>
-              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 6, padding: '2px 7px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-dim)', flexShrink: 0 }}>
-                {indicatorLabel}
-              </span>
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-              {metaParts}
-            </div>
+        {/* ── Enable/disable strip (same as algo card) ── */}
+        {!isArchived && (
+          <div
+            className={`algo-enable-strip${isActive ? ' enabled' : ' disabled'}`}
+            onClick={() => onUpdate(bot.id, { status: isActive ? 'inactive' : 'active' })}
+            title={isActive ? 'Click to stop bot' : 'Click to start bot'}
+          >
+            <div className="algo-enable-strip-thumb" />
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
-            <button
-              onClick={() => setShowChart(v => !v)}
-              style={{
-                fontSize: 10, color: '#2dd4bf', fontFamily: 'monospace', cursor: 'pointer',
-                background: 'none', border: '1px solid rgba(45,212,191,0.2)',
-                borderRadius: 4, padding: '2px 8px',
-              }}
-            >
-              {showChart ? '▲ Chart' : '▼ Chart'}
-            </button>
-            <button title="Warmup — reload historical candles" onClick={handleWarmup} disabled={warmingUp}
-              style={{ ...iconBtn(warmingUp), color: warmingUp ? 'var(--accent)' : 'var(--text-dim)' }}>
-              <ArrowsClockwise size={14} style={{ animation: warmingUp ? 'spin 0.8s linear infinite' : 'none' }} />
-            </button>
-            {canStop && (
-              <button title="Stop bot" onClick={() => onUpdate(bot.id, { status: 'inactive' })}
-                style={{ ...iconBtn(), color: '#FF4444' }}>
-                <Stop size={14} weight="fill" />
-              </button>
-            )}
-            {canStart && !isArchived && (
-              <button title="Start bot" onClick={() => onUpdate(bot.id, { status: 'active' })}
-                style={{ ...iconBtn(), color: 'var(--green)' }}>
-                <Play size={14} weight="fill" />
-              </button>
-            )}
-            <button title="Edit bot" onClick={() => setEditBot(true)} style={iconBtn()}>
-              <Gear size={14} />
-            </button>
-            {isArchived ? (
-              <button title="Unarchive" onClick={() => onUnarchive(bot.id)}
-                style={{ ...iconBtn(), color: 'var(--accent-amber)' }}>↩</button>
-            ) : (
-              <button title="Archive" onClick={() => setShowArch(true)} style={iconBtn()}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
-                </svg>
-              </button>
-            )}
-            <button title="Delete bot" onClick={() => setShowDel(true)}
-              style={{ ...iconBtn(), color: '#EF4444' }}>
-              <Trash size={14} />
-            </button>
-          </div>
-        </div>
+        )}
 
-        {/* ── ROW 2: Levels + LTP + Position chip + P&L ── */}
-        <div style={{ padding: '0 16px 8px 34px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
+        {/* ── Main content row: left info + right buttons, vertically centered ── */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px 10px', gap: 10 }}>
+
+          {/* Left: status dot + stacked name/meta/levels */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%', background: statusColor,
+              display: 'inline-block', flexShrink: 0, marginTop: 5,
+              animation: isActive ? 'pulse 1.5s infinite' : 'none',
+            }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Name + indicator chip */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--accent)', fontVariantNumeric: 'lining-nums tabular-nums', whiteSpace: 'nowrap' }}>
+                  {bot.name}
+                </span>
+                <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 6, padding: '2px 7px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-dim)', flexShrink: 0 }}>
+                  {indicatorLabel}
+                </span>
+              </div>
+              {/* Meta */}
+              <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
+                {metaParts}
+              </div>
+              {/* Levels + LTP row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
           {bot.indicator === 'dtr' && levels && <>
             <span><span style={{ color: 'var(--text-mute)' }}>UPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.upp1?.toLocaleString('en-IN') ?? '—'}</span></span>
             <span><span style={{ color: 'var(--text-mute)' }}>LPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.lpp1?.toLocaleString('en-IN') ?? '—'}</span></span>
@@ -641,8 +495,8 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
             <span><span style={{ color: 'var(--text-mute)' }}>Low </span><span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{levels.tt_low?.toLocaleString('en-IN') ?? '—'}</span></span>
           </>}
           {!levels && <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>warmup to see levels</span>}
-          {(cardLtp ?? chartData?.ltp) != null && (() => {
-            const ltp = (cardLtp ?? chartData?.ltp)!
+          {cardLtp != null && (() => {
+            const ltp = cardLtp!
             const fresh = cardLtpAt != null && (Date.now() - cardLtpAt) < 35000
             return (
               <span>
@@ -652,135 +506,51 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
               </span>
             )
           })()}
-          <span style={{ color: 'var(--border)', fontSize: 14, userSelect: 'none' }}>·</span>
-          {openOrder ? (
-            <span style={neuChip(openOrder.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>
-              {openOrder.direction === 'BUY' ? 'LONG' : 'SHORT'} @{openOrder.entry_price?.toLocaleString('en-IN') ?? '—'}
-            </span>
-          ) : (
-            <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>FLAT</span>
-          )}
-          {livePnl != null && (
-            <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: livePnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {livePnl >= 0 ? '+' : ''}₹{Math.round(livePnl).toLocaleString('en-IN')}
-            </span>
-          )}
-        </div>
+              <span style={{ color: 'var(--border)', fontSize: 14, userSelect: 'none' }}>·</span>
+              <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>FLAT</span>
+            </div>{/* end levels row */}
+          </div>{/* end left info column */}
+          </div>{/* end status dot + info */}
 
-        {/* ── ROW 4: Orders toggle ── */}
-        <button
-          onClick={handleToggleOrders}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px 8px 34px', background: 'transparent', border: 'none', borderTop: '0.5px solid var(--border)', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)' }}
-        >
-          <span>Orders</span>
-          {ordersLoading && <span style={{ fontSize: 10, color: 'var(--text-mute)' }}>Loading…</span>}
-          {!ordersLoading && openOrderCount > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--green)' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
-              {openOrderCount} open
-            </span>
-          )}
-          <span style={{ marginLeft: 'auto', color: 'var(--text-mute)' }}>
-            {showOrders ? <CaretUp size={12} /> : <CaretDown size={12} />}
-          </span>
-        </button>
-
-        {showOrders && (
-          <div style={{ padding: '0 16px 8px 34px' }}>
-            {orders.length === 0 ? (
-              <div style={{ padding: '8px 0', fontSize: 11, color: 'var(--text-mute)', fontStyle: 'italic' }}>No orders yet</div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, tableLayout: 'fixed' }}>
-                  <colgroup>
-                    <col style={{ width: '4%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '9%' }} />
-                    <col style={{ width: '9%' }} />
-                    <col style={{ width: '8%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '14%' }} />
-                    <col style={{ width: '11%' }} />
-                    <col style={{ width: '9%' }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      {['#', 'SYMBOL', 'SIDE', 'DATE', 'TIME', 'ENTRY ₹', 'EXIT ₹', 'P&L', 'STATUS'].map(h => (
-                        <th key={h} style={{ padding: '4px 6px', color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '0.5px solid var(--border)', textAlign: 'left', fontFamily: 'var(--font-display)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...orders].sort((a, b) => {
-                      const ta = a.entry_time ? new Date(a.entry_time).getTime() : 0
-                      const tb = b.entry_time ? new Date(b.entry_time).getTime() : 0
-                      return tb - ta
-                    }).map((o, i) => {
-                      const ltp = ltpMap[o.instrument]
-                      const livePnlRow = o.status === 'open' && ltp != null && o.entry_price != null
-                        ? (o.direction === 'BUY' ? (ltp - o.entry_price) * o.lots : (o.entry_price - ltp) * o.lots)
-                        : null
-                      const displayPnl = livePnlRow ?? o.pnl ?? null
-                      const statusColor3 = o.status === 'open' ? 'var(--green)' : o.status === 'error' ? '#FF4444' : 'var(--text-dim)'
-                      return (
-                        <tr key={o.id}>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>{i + 1}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[o.instrument, o.expiry].filter(Boolean).join('') || '—'}</td>
-                          <td style={{ padding: '5px 6px', borderBottom: '0.5px solid var(--border)' }}>
-                            <span style={neuChip(o.direction === 'BUY' ? 'var(--green)' : '#FF4444')}>{o.direction}</span>
-                          </td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)', whiteSpace: 'nowrap' }}>{o.entry_time ? new Date(o.entry_time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' }) : '—'}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-mute)', borderBottom: '0.5px solid var(--border)', whiteSpace: 'nowrap' }}>{o.entry_time ? new Date(o.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }) : '—'}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }}>{o.entry_price != null ? `₹${o.entry_price.toLocaleString('en-IN')}` : '—'}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', borderBottom: '0.5px solid var(--border)' }}>{o.exit_price != null ? `₹${o.exit_price.toLocaleString('en-IN')}` : '—'}</td>
-                          <td style={{ padding: '5px 6px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: displayPnl != null ? (displayPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-mute)', borderBottom: '0.5px solid var(--border)' }}>
-                            {displayPnl != null ? `${displayPnl >= 0 ? '+' : ''}₹${Math.round(displayPnl).toLocaleString('en-IN')}` : '—'}
-                            {livePnlRow != null && <span style={{ fontSize: 8, marginLeft: 3, opacity: 0.6 }}>●</span>}
-                          </td>
-                          <td style={{ padding: '5px 6px', borderBottom: '0.5px solid var(--border)' }}>
-                            <span style={{ ...neuChip(statusColor3), fontSize: 9 }}>{o.status.toUpperCase()}</span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          {/* Right: action buttons — centered to full card height */}
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+            {(() => {
+              const sq = (color = 'var(--text-dim)'): CSSProperties => ({
+                display:'flex', alignItems:'center', justifyContent:'center',
+                width:40, height:40, borderRadius:12,
+                background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
+                cursor:'pointer', color, transition:'box-shadow 0.12s', flexShrink:0,
+              })
+              const bind = (el: HTMLButtonElement | null) => {
+                if (!el) return
+                el.onmousedown = () => (el.style.boxShadow = 'var(--neu-inset)')
+                el.onmouseup = () => (el.style.boxShadow = 'var(--neu-raised-sm)')
+                el.onmouseleave = () => (el.style.boxShadow = 'var(--neu-raised-sm)')
+              }
+              return (
+                <>
+                  <button ref={bind} title="Warmup — reload historical candles"
+                    onClick={handleWarmup} disabled={warmingUp}
+                    style={{ ...sq('var(--accent)'), opacity: warmingUp ? 0.7 : 1 }}>
+                    <ArrowsClockwise size={18} style={{ animation: warmingUp ? 'spin 0.8s linear infinite' : 'none' }} />
+                  </button>
+                  <button ref={bind} title="Edit bot" onClick={() => setEditBot(true)} style={sq('var(--accent)')}>
+                    <Gear size={18} />
+                  </button>
+                  {isArchived ? (
+                    <button ref={bind} title="Unarchive bot" onClick={() => onUnarchive(bot.id)} style={sq('var(--accent-amber)')}>↩</button>
+                  ) : (
+                    <button ref={bind} title="Remove bot" onClick={() => setShowRemove(true)} style={sq('#EF4444')}>
+                      <Trash size={18} weight="regular" />
+                    </button>
+                  )}
+                </>
+              )
+            })()}
           </div>
-        )}
+        </div>{/* end main content row */}
 
-        {showChart && chartData && (
-          <div style={{ padding: '0 8px 12px', height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData.candles} margin={{ top: 4, right: 4, bottom: 4, left: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="time"
-                  tickFormatter={(t) => new Date(t * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                  tick={{ fontSize: 9, fill: 'var(--text-mute)' }} minTickGap={40} />
-                <YAxis tick={{ fontSize: 9, fill: 'var(--text-mute)' }} domain={['auto', 'auto']} />
-                <Line type="monotone" dataKey="value" stroke="var(--accent)" strokeWidth={1.5} dot={false} />
-                {chartData.levels?.upp1           && <ReferenceLine y={chartData.levels.upp1}           stroke="#2DD4BF" strokeDasharray="4 2" label={{ value: `UPP1 ${chartData.levels.upp1?.toLocaleString('en-IN')}`,           position: 'insideTopLeft', fontSize: 9, fill: '#2DD4BF' }} />}
-                {chartData.levels?.lpp1           && <ReferenceLine y={chartData.levels.lpp1}           stroke="#2DD4BF" strokeDasharray="4 2" label={{ value: `LPP1 ${chartData.levels.lpp1?.toLocaleString('en-IN')}`,           position: 'insideTopLeft', fontSize: 9, fill: '#2DD4BF' }} />}
-                {chartData.levels?.upper_channel  && <ReferenceLine y={chartData.levels.upper_channel}  stroke="#22DD88" strokeDasharray="4 2" />}
-                {chartData.levels?.lower_channel  && <ReferenceLine y={chartData.levels.lower_channel}  stroke="#FF4444" strokeDasharray="4 2" />}
-                {chartData.levels?.tt_high        && <ReferenceLine y={chartData.levels.tt_high}        stroke="#22DD88" strokeDasharray="4 2" />}
-                {chartData.levels?.tt_low         && <ReferenceLine y={chartData.levels.tt_low}         stroke="#FF4444" strokeDasharray="4 2" />}
-                {chartData.ltp && <ReferenceLine y={chartData.ltp} stroke="var(--accent)" strokeWidth={1}
-                  label={{ value: `LTP ${chartData.ltp?.toLocaleString('en-IN')}`, position: 'insideTopRight', fontSize: 9, fill: 'var(--accent)' }} />}
-                {chartData.signals.filter((s) => s.time > 0 && s.price).map((sig, i) => (
-                  <ReferenceDot key={i} x={sig.time} y={sig.price} r={4}
-                    fill={sig.direction === 'buy' ? '#2DD4BF' : '#FF4444'} stroke="none"
-                    label={{ value: sig.direction === 'buy' ? '▲' : '▼', position: sig.direction === 'buy' ? 'top' : 'bottom', fontSize: 10, fill: sig.direction === 'buy' ? '#2DD4BF' : '#FF4444' }} />
-                ))}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        )}
 
-        {showChart && (
-          <BotChart botId={bot.id} symbol={bot.instrument} timeframe="5m" />
-        )}
       </div>
 
       {editBot && (
@@ -788,30 +558,54 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
           onSave={async (id, data) => { await onUpdate(id, data); setEditBot(false) }}
           onClose={() => setEditBot(false)} />
       )}
-      {showDel && (
-        <ConfirmModal title="Delete Bot" desc={`Permanently delete "${bot.name}"? This cannot be undone.`}
-          confirmLabel="Delete" confirmColor="var(--red)"
-          onConfirm={() => { onDelete(bot.id); setShowDel(false) }}
-          onCancel={() => setShowDel(false)} />
-      )}
-      {showArch && (
-        <ConfirmModal title="Archive Bot" desc={`Archive "${bot.name}"? It can be restored later.`}
-          confirmLabel="Archive" confirmColor="var(--accent-amber)"
-          onConfirm={() => { onArchive(bot.id); setShowArch(false) }}
-          onCancel={() => setShowArch(false)} />
+      {showRemove && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 380 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:8 }}>Remove {bot.name}?</div>
+            <div style={{ fontSize:13, color:'var(--text-muted)', lineHeight:1.6, marginBottom:20 }}>
+              Archive hides it from the grid but keeps all history. Delete removes it permanently — trade data is preserved.
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+              {(['Cancel','Archive','Delete'] as const).map(action => (
+                <button key={action}
+                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font-display)',
+                    color: action === 'Archive' ? '#60A5FA' : action === 'Delete' ? '#FF4444' : 'var(--text-dim)',
+                    transition:'box-shadow 0.12s',
+                  }}
+                  onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
+                  onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                  onClick={() => {
+                    if (action === 'Cancel') { setShowRemove(false) }
+                    else if (action === 'Archive') { onArchive(bot.id); setShowRemove(false) }
+                    else { onDelete(bot.id); setShowRemove(false) }
+                  }}
+                >{action}</button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function IndicatorsPage() {
+export default function IndicatorsPage({ hideHeader, newBotTriggerRef, onArchivedChange }: {
+  hideHeader?: boolean
+  newBotTriggerRef?: React.MutableRefObject<(() => void) | null>
+  onArchivedChange?: (archived: Bot[], unarchive: (id: string) => void) => void
+} = {}) {
   const isPractixMode = useStore(s => s.isPractixMode)
-  const [bots, setBots]           = useState<Bot[]>([])
-  const [accounts, setAccounts]   = useState<any[]>([])
-  const [showCreate, setShowCreate] = useState(false)
-  const [showArchived, setShowArchived] = useState(false)
-  const [loading, setLoading]     = useState(true)
+  const [bots, setBots]               = useState<Bot[]>([])
+  const [accounts, setAccounts]       = useState<any[]>([])
+  const [showCreate, setShowCreate]   = useState(false)
+  const [loading, setLoading]         = useState(true)
+  const [selectedBotId, setSelectedBotId] = useState<string | null>(null)
+  useEffect(() => {
+    if (newBotTriggerRef) newBotTriggerRef.current = () => setShowCreate(true)
+    return () => { if (newBotTriggerRef) newBotTriggerRef.current = null }
+  }, [newBotTriggerRef])
   // Load bots + accounts on mount
   useEffect(() => {
     Promise.all([
@@ -819,6 +613,14 @@ export default function IndicatorsPage() {
       accountsAPI.list().then(r => setAccounts(r.data || [])),
     ]).finally(() => setLoading(false))
   }, [isPractixMode])
+
+  // Auto-select first active bot when list loads
+  useEffect(() => {
+    if (selectedBotId === null) {
+      const firstActive = bots.find(b => !b.is_archived)
+      if (firstActive) setSelectedBotId(firstActive.id)
+    }
+  }, [bots])
 
   // WebSocket — refresh bots list on notifications
   useEffect(() => {
@@ -868,6 +670,10 @@ export default function IndicatorsPage() {
   const archivedBots = bots.filter(b => b.is_archived)
   const runningCount = activeBots.filter(b => b.status === 'live' || b.status === 'active').length
 
+  useEffect(() => {
+    if (onArchivedChange) onArchivedChange(archivedBots, handleUnarchive)
+  }, [archivedBots.length])
+
   // Group active bots by exchange for section headers
   const exchanges = [...new Set(activeBots.map(b => b.exchange))].sort()
   const multiExchange = exchanges.length > 1
@@ -880,31 +686,52 @@ export default function IndicatorsPage() {
     onUnarchive: handleUnarchive,
     onDelete: handleDelete,
     onWarmup: handleWarmup,
+    isSelected: selectedBotId === bot.id,
+    onSelect: () => setSelectedBotId(bot.id),
   })
 
+  const selectedBot = activeBots.find(b => b.id === selectedBotId) ?? null
+  const tfLabel = selectedBot
+    ? (TIMEFRAMES.find(t => t.value === selectedBot.timeframe_mins)?.label ?? `${selectedBot.timeframe_mins}m`)
+    : ''
+  const indLabel = selectedBot
+    ? (selectedBot.indicator === 'channel' ? 'CHANNEL' : selectedBot.indicator === 'tt_bands' ? 'TT BANDS' : 'DTR')
+    : ''
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)', overflow: 'hidden' }}>
 
-      {/* Page header */}
-      <div className="page-header" style={{ flexShrink: 0, padding: '0 28px', marginBottom: 0 }}>
-        <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>Bots</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 3 }}>
-            {loading ? 'Loading...' : `${runningCount} running · ${activeBots.length} total`}
-          </p>
+      {/* Page header — hidden when embedded in GridPage tab */}
+      {!hideHeader && (
+        <div className="page-header" style={{ flexShrink: 0, padding: '0 28px', marginBottom: 0 }}>
+          <div>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>Bots</h1>
+            <p style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 3 }}>
+              {loading ? 'Loading...' : `${runningCount} running · ${activeBots.length} total`}
+            </p>
+          </div>
+          <div className="page-header-actions">
+            <NeuBtn variant="accent" height={32} onClick={() => setShowCreate(true)}>+ New Bot</NeuBtn>
+          </div>
         </div>
-        <div className="page-header-actions">
-          {archivedBots.length > 0 && (
-            <button style={{ ...ghostBtn, height: 30, fontSize: 11 }} onClick={() => setShowArchived(v => !v)}>
-              {showArchived ? 'Hide' : 'Show'} Archived ({archivedBots.length})
-            </button>
-          )}
-          <NeuBtn variant="accent" height={32} onClick={() => setShowCreate(true)}>+ New Bot</NeuBtn>
-        </div>
-      </div>
+      )}
 
-      {/* Scrollable body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 28px 32px' }}>
+      {/* Top chart panel — shows selected bot's chart */}
+      {!loading && selectedBot && (
+        <div style={{ flexShrink: 0, padding: hideHeader ? '10px 28px 0' : '14px 28px 0' }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 16, boxShadow: 'var(--neu-raised)', overflow: 'hidden', minHeight: 380 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px 0' }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: 'var(--accent)', fontVariantNumeric: 'lining-nums tabular-nums' }}>{selectedBot.name}</span>
+              <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 6, padding: '2px 7px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-dim)' }}>{indLabel}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{tfLabel}</span>
+            </div>
+            <BotChart botId={selectedBot.id} timeframeMins={selectedBot.timeframe_mins} />
+          </div>
+        </div>
+      )}
+
+      {/* Scrollable bot cards */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 28px 32px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : activeBots.length === 0 ? (
@@ -934,19 +761,6 @@ export default function IndicatorsPage() {
               })
             ) : (
               activeBots.map(bot => <BotCard {...botCardProps(bot)} />)
-            )}
-
-            {/* Archived section */}
-            {showArchived && archivedBots.length > 0 && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700, color: 'var(--accent-amber)', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                    Archived
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{archivedBots.length} bot{archivedBots.length !== 1 ? 's' : ''}</span>
-                </div>
-                {archivedBots.map(bot => <BotCard {...botCardProps(bot)} />)}
-              </div>
             )}
           </>
         )}

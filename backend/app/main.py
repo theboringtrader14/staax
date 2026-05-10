@@ -303,6 +303,14 @@ async def lifespan(app: FastAPI):
 
     logger.info("✅ BotRunner started + LTP callback registered")
 
+    # ── 12b2. CandleDBWriter — persist MCX 1-min candles to DB ───────────────
+    from app.engine.candle_db_writer import candle_db_writer, run_mcx_backfill
+    from app.engine.candle_fetcher import candle_store
+    candle_store.register_callback(candle_db_writer.on_candle_complete)
+    asyncio.create_task(candle_db_writer.start(angelone_karthik))
+    asyncio.create_task(run_mcx_backfill(angelone_karthik))
+    logger.info("✅ CandleDBWriter started + MCX backfill scheduled")
+
     # ── 12c. Wire + start PositionReconciler (30 s, market hours only) ───────
     position_reconciler.wire(
         zerodha       = zerodha,
@@ -369,6 +377,7 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("🛑 STAAX shutting down...")
+    await candle_db_writer.stop()
     await _tg_notifier.stop_polling()
     _tg_polling_task.cancel()
     try:
