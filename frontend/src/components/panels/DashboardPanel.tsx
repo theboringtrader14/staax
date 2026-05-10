@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Warning, Prohibit, ProhibitInset, CheckCircle, XCircle } from '@phosphor-icons/react'
+import { Warning, Prohibit, ProhibitInset, CheckCircle, XCircle, ClipboardText } from '@phosphor-icons/react'
 import { useStore } from '@/store'
 import { servicesAPI, accountsAPI, systemAPI, eventsAPI } from '@/services/api'
 import { getISTNow } from '@/utils/format'
@@ -691,8 +691,23 @@ export default function DashboardPanel() {
           <div style={{ padding: '14px 16px 16px' }}>
             {/* Label row with date nav */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const }}>
-                Engine Log
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase' as const }}>Engine Log</span>
+                <button
+                  title="Copy log to clipboard"
+                  onClick={() => navigator.clipboard.writeText(log.join('\n')).catch(() => {})}
+                  style={{
+                    width: 22, height: 22, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                    background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--text-mute)',
+                  }}
+                  onMouseDown={e => (e.currentTarget.style.boxShadow = 'var(--neu-inset)')}
+                  onMouseUp={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--neu-raised-sm)')}
+                >
+                  <ClipboardText size={10} weight="regular" />
+                </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {/* Prev day */}
@@ -734,7 +749,10 @@ export default function DashboardPanel() {
                   if (isSep) return (
                     <div key={i} style={{ color: 'rgba(255,107,0,0.3)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
                   )
-                  const formatMsg = (s: string) => s.replace(/^\[[A-Z_a-z]+\]\s*/i, '')
+                  const formatMsg = (s: string) => {
+                    const noSource = s.replace(/^\[[A-Z_a-z]+\]\s*/i, '')
+                    return noSource.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*[·•]\s*/i, '')
+                  }
                   // Parse structured format: [HH:MM:SS] [lvl] rest
                   const m = line.match(/^(\[\d{2}:\d{2}:\d{2}\])\s+\[(ok|err|wrn|inf)\]\s+(.*)$/)
                   if (m) {

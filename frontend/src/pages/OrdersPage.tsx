@@ -815,6 +815,29 @@ export default function OrdersPage() {
       .catch(() => { setWaitingByDate(prev => ({ ...prev, [date]: [] })) })
   }, [selectedDate, isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Live refresh — today's orders + waiting every 30s during market hours (09:15–15:35 IST)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date()
+      const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+      const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes()
+      if (mins < 9 * 60 + 15 || mins > 15 * 60 + 35) return
+      const todayIST = ist.toISOString().slice(0, 10)
+      if (selectedDateRef.current !== todayIST) return
+      ordersAPI.list(todayIST, isPractixMode)
+        .then(res => {
+          const data = res.data
+          const raw: RawGroup[] = Array.isArray(data) ? [] : (data?.groups || [])
+          setOrdersByDate(prev => ({ ...prev, [todayIST]: raw.map(mapGroup) }))
+        })
+        .catch(() => {})
+      ordersAPI.waiting(todayIST, isPractixMode)
+        .then(res => setWaitingByDate(prev => ({ ...prev, [todayIST]: res.data?.waiting || [] })))
+        .catch(() => {})
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Live LTP via WebSocket
   useEffect(() => {
     const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace('http', 'ws')
@@ -1140,7 +1163,7 @@ export default function OrdersPage() {
                   style={{ accentColor: 'var(--green)', width: '15px', height: '15px' }} />
                 <div>
                   <div style={{ fontSize: '12px', fontWeight: 600 }}>{leg.symbol}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{leg.dir} · {leg.lots} · Fill: {leg.fillPrice} · LTP: {leg.ltp}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{leg.dir} · {leg.lots} · Fill: {leg.fillPrice} · LTP: {leg.instrumentToken != null ? (ltpMap[Number(leg.instrumentToken)] ?? leg.ltp) : leg.ltp}</div>
                 </div>
               </label>
             ))

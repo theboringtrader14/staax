@@ -1313,7 +1313,17 @@ class AlgoScheduler:
                                 )
                                 continue
 
-                            # Entry time already passed — mark NO_TRADE immediately
+                            # I13: ERROR algos stay ERROR — entry time passed but it was a real
+                            # failure, not a missed window.  Leave it visible for manual retry.
+                            if algo_state.status == AlgoRunStatus.ERROR:
+                                logger.info(
+                                    f"[RECOVERY] Preserving ERROR for {algo.name} — "
+                                    f"not converting to NO_TRADE on restart"
+                                )
+                                recovered_errors += 1
+                                continue
+
+                            # Entry time already passed — mark WAITING → NO_TRADE immediately
                             algo_state.status    = AlgoRunStatus.NO_TRADE
                             algo_state.closed_at = now
                             grid_entry.status    = GridStatus.NO_TRADE

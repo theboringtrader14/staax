@@ -419,6 +419,46 @@ async def error_analytics(
             by_day[date_str] = by_day.get(date_str, 0) + 1
         by_type[prefix] = by_type.get(prefix, 0) + 1
 
+    # ── Source 3: algo states with no_trade (MISSED — activated but threshold not triggered) ──
+    from app.models.algo_state import AlgoState, AlgoRunStatus
+    fy_start_str = fy_start.strftime("%Y-%m-%d")
+    fy_end_str   = fy_end.strftime("%Y-%m-%d")
+    missed_conds = [
+        AlgoState.status == AlgoRunStatus.NO_TRADE,
+        AlgoState.activated_at.isnot(None),
+        AlgoState.error_message.is_(None),
+        AlgoState.trading_date >= fy_start_str,
+        AlgoState.trading_date <= fy_end_str,
+    ]
+    if is_practix is not None:
+        missed_conds.append(AlgoState.is_practix == is_practix)
+    missed_res = await db.execute(
+        select(AlgoState, Algo.name)
+        .join(Algo, AlgoState.algo_id == Algo.id, isouter=True)
+        .where(*missed_conds)
+        .order_by(AlgoState.trading_date.desc())
+    )
+    for state, algo_name in missed_res.all():
+        clean_name = _clean_algo_tag(algo_name or "unknown")
+        date_str   = state.trading_date
+        msg        = "Entry missed — algo activated but threshold not triggered"
+        rows.append({
+            "date":       date_str,
+            "algo_name":  clean_name,
+            "error_type": "[MISSED]",
+            "message":    msg,
+        })
+        recent.append({
+            "id":            str(state.id),
+            "algo":          clean_name,
+            "symbol":        "—",
+            "error_message": msg,
+            "created_at":    state.activated_at.isoformat() if state.activated_at else None,
+        })
+        if date_str:
+            by_day[date_str] = by_day.get(date_str, 0) + 1
+        by_type["[MISSED]"] = by_type.get("[MISSED]", 0) + 1
+
     # Sort combined rows by date descending
     rows.sort(key=lambda x: x["date"] or "", reverse=True)
     recent.sort(key=lambda x: x["created_at"] or "", reverse=True)
