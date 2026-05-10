@@ -16,11 +16,12 @@ from app.models.candle_1min import Candle1Min
 logger = logging.getLogger(__name__)
 
 # Symbol name → instrument token str — populated on startup
+# Keys must match the `name` field in Angel One's OpenAPI instrument master
 MCX_INSTRUMENTS: dict[str, Optional[str]] = {
     "GOLDM":      None,
     "SILVERMIC":  None,
-    "CRUDEMINI":  None,
-    "NATGASMINI": None,
+    "CRUDEOILM":  None,
+    "NATURALGAS": None,
 }
 
 # int token → str token (for DB storage)
@@ -38,19 +39,33 @@ class CandleDBWriter:
         self._running = True
         try:
             master = await broker.get_instrument_master()
+            from datetime import date as _dt
+            today = _dt.today()
             for name in MCX_INSTRUMENTS:
-                matched = [
+                # Find nearest active FUTCOM for this instrument (OpenAPI field names)
+                candidates = [
                     r for r in master
-                    if r.get("tradingsymbol", "").startswith(name)
+                    if r.get("name") == name
+                    and r.get("instrumenttype") == "FUTCOM"
                     and r.get("exch_seg") == "MCX"
                 ]
-                if matched:
-                    token_str = str(matched[0].get("symboltoken", ""))
+                try:
+                    from datetime import datetime as _dtt
+                    candidates = [
+                        r for r in candidates
+                        if _dtt.strptime(r["expiry"], "%d%b%Y").date() >= today
+                    ]
+                    candidates.sort(key=lambda r: _dtt.strptime(r["expiry"], "%d%b%Y"))
+                except Exception:
+                    pass
+                if candidates:
+                    r = candidates[0]
+                    token_str = str(r.get("token", ""))
                     MCX_INSTRUMENTS[name] = token_str
                     _token_to_str[int(token_str)] = token_str
                     logger.info(
                         f"[CANDLE] Resolved {name} → token {token_str} "
-                        f"({matched[0].get('tradingsymbol')})"
+                        f"({r.get('symbol')} exp {r.get('expiry')})"
                     )
                 else:
                     logger.warning(f"[CANDLE] Could not resolve token for {name}")
