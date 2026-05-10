@@ -295,6 +295,74 @@ class AngelOneBroker(BaseBroker):
             )
         return self._access_token
 
+    # ── Session refresh ───────────────────────────────────────────────────────
+
+    async def _refresh_session(self) -> None:
+        """
+        Attempt to silently refresh the Angel One session using the stored
+        refresh token (SDK generateToken flow — no PIN required).
+
+        Falls back gracefully: on any failure, logs the error and returns
+        without raising, so the caller can decide whether to propagate.
+
+        Called automatically by place_order pre-check and by the W&T retry
+        wrapper in algo_runner when placeOrder() returns None ("No response").
+        """
+        client = self._get_client()
+        loop = asyncio.get_running_loop()
+
+        if not self._refresh_token:
+            logger.warning(
+                f"[ANGEL ONE] _refresh_session: no refresh_token stored for "
+                f"account={self.account} — cannot refresh session"
+            )
+            return
+
+        logger.info(
+            f"[ANGEL ONE] _refresh_session: attempting token refresh for "
+            f"account={self.account} client_id={self.client_id}"
+        )
+        try:
+            data = await loop.run_in_executor(
+                None,
+                lambda: client.generateToken(self._refresh_token)
+            )
+
+            raw_status = data.get("status") if data else None
+            ok = raw_status is True or str(raw_status).lower() == "true"
+
+            if data and ok:
+                tokens = data.get("data", {})
+                new_jwt     = tokens.get("jwtToken")
+                new_refresh = tokens.get("refreshToken")
+                new_feed    = tokens.get("feedToken")
+
+                if new_jwt:
+                    self._access_token = new_jwt
+                    client.setAccessToken(new_jwt)
+                if new_refresh:
+                    self._refresh_token = new_refresh
+                    client.setRefreshToken(new_refresh)
+                if new_feed:
+                    self._feed_token = new_feed
+                    client.setFeedToken(new_feed)
+
+                logger.info(
+                    f"[ANGEL ONE] _refresh_session: session refreshed successfully "
+                    f"for account={self.account}"
+                )
+            else:
+                msg = data.get("message", "Unknown error") if data else "No response from SDK"
+                logger.error(
+                    f"[ANGEL ONE] _refresh_session: generateToken returned non-success "
+                    f"for account={self.account}: {msg}"
+                )
+        except Exception as exc:
+            logger.error(
+                f"[ANGEL ONE] _refresh_session: exception during token refresh "
+                f"for account={self.account}: {exc}"
+            )
+
     # ── Underlying LTP (for StrikeSelector) ──────────────────────────────────
 
     # Angel One NSE index tokens
@@ -658,6 +726,39 @@ class AngelOneBroker(BaseBroker):
             "quantity":         str(quantity),
             "ordertag":         tag,   # SEBI algo_tag — Angel One ordertag field
         }
+
+        # ── Session validity pre-check ─────────────────────────────────────────
+        # getProfile(refresh_token) is a lightweight call to verify the JWT is
+        # still accepted. If it fails (None / status False / exception), refresh
+        # the session before attempting the order to avoid a silent "No response".
+        try:
+            _profile_data = await loop.run_in_executor(
+                None,
+                lambda: client.getProfile(self._refresh_token)
+            )
+            _profile_ok = (
+                _profile_data is not None
+                and (
+                    _profile_data.get("status") is True
+                    or str(_profile_data.get("status", "")).lower() == "true"
+                )
+            )
+            if not _profile_ok:
+                logger.warning(
+                    f"[ANGEL ONE] place_order pre-check: getProfile returned "
+                    f"non-success for account={self.account} — refreshing session"
+                )
+                await self._refresh_session()
+            else:
+                logger.debug(
+                    f"[ANGEL ONE] place_order pre-check: session alive for account={self.account}"
+                )
+        except Exception as _pre_exc:
+            logger.warning(
+                f"[ANGEL ONE] place_order pre-check: getProfile raised for "
+                f"account={self.account}: {_pre_exc} — refreshing session"
+            )
+            await self._refresh_session()
 
         try:
             data = await loop.run_in_executor(

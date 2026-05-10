@@ -1352,18 +1352,34 @@ class AlgoRunner:
                 f"[W&T] Placing SL-Limit at broker: {symbol} "
                 f"trigger={_wt_threshold:.2f} limit={_wt_limit_price:.2f} ref={_wt_option_ltp:.2f}"
             )
-            _wt_broker_order_id = await account_broker.place_order(
-                symbol=symbol,
-                exchange=_instrument_exchange,
-                direction=leg.direction,
-                quantity=_wt_quantity,
-                order_type="SL",
-                price=_wt_limit_price,
-                trigger_price=_wt_threshold,
-                product="INTRADAY",
-                symbol_token=str(instrument_token),
-                tag=_wt_algo_tag,
-            )
+            # 2-attempt retry: if Angel One returns "No response" (expired
+            # session), refresh the session token and try once more.
+            _wt_broker_order_id = None
+            for _wt_attempt in range(2):
+                try:
+                    _wt_broker_order_id = await account_broker.place_order(
+                        symbol=symbol,
+                        exchange=_instrument_exchange,
+                        direction=leg.direction,
+                        quantity=_wt_quantity,
+                        order_type="SL",
+                        price=_wt_limit_price,
+                        trigger_price=_wt_threshold,
+                        product="INTRADAY",
+                        symbol_token=str(instrument_token),
+                        tag=_wt_algo_tag,
+                    )
+                    break  # success — exit retry loop
+                except RuntimeError as _wt_exc:
+                    if _wt_attempt == 0 and "No response" in str(_wt_exc):
+                        logger.warning(
+                            f"[W&T] place_order attempt {_wt_attempt + 1} failed with "
+                            f"'No response' — refreshing Angel One session and retrying "
+                            f"(algo={algo.name}): {_wt_exc}"
+                        )
+                        await account_broker._refresh_session()
+                    else:
+                        raise
             logger.info(
                 f"[W&T] SL-Limit placed at broker: order_id={_wt_broker_order_id} "
                 f"trigger={_wt_threshold:.2f} for {algo.name}"
@@ -2774,10 +2790,11 @@ class AlgoRunner:
                 ltp = 0.0
                 if self._ltp_consumer and order.instrument_token:
                     ltp = self._ltp_consumer.get_ltp(int(order.instrument_token))
-                if ltp <= 0:
-                    ltp = order.ltp or 0.0
-                if ltp <= 0:
-                    logger.warning(f"[OVERNIGHT-SL] No LTP for {order.symbol} — skipping SL check")
+                if not ltp or ltp <= 0:
+                    logger.warning(
+                        f"[OVERNIGHT-SL] No live LTP for {order.symbol} — "
+                        f"skipping (will retry next tick)"
+                    )
                     continue
                 sl_hit = (
                     ltp <= order.sl_actual if order.direction == "buy"

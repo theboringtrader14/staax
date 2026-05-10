@@ -9,11 +9,20 @@ W&T Evaluator — Wait and Trade engine.
 Example: ATM CE = 133 at 9:35. W&T Up 10% → entry at 146.3.
 """
 import logging
+import pytz as _pytz
 from datetime import datetime, time
 from typing import Dict, Callable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+_IST = _pytz.timezone('Asia/Kolkata')
+
+
+def _is_sl_check_allowed() -> bool:
+    """SL/TP checks only allowed from 09:18 IST to 15:30 IST"""
+    now = datetime.now(_IST).time()
+    return time(9, 18) <= now <= time(15, 30)
 
 
 @dataclass
@@ -81,7 +90,10 @@ class WTEvaluator:
                     logger.info(f"W&T ref captured: {w.algo_id} | ref={ltp} threshold={w.threshold:.2f}")
                 continue
 
-            # Monitor threshold
+            # Monitor threshold — gated to market hours only
+            if not _is_sl_check_allowed():
+                continue
+
             if w.direction == "up" and ltp >= w.threshold:
                 w.is_triggered = True
                 logger.info(f"🟢 W&T UP triggered: {w.algo_id} @ {ltp}")
