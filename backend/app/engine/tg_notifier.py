@@ -396,9 +396,9 @@ class TGNotifier:
             except Exception:
                 _ltp_feed = None
 
-            lines = ["📍 <b>Open Positions</b>\n"]
+            # Compute per-leg P&L and group by algo name
+            groups: dict = {}  # algo_name → {"pnl": float, "legs": [str]}
             for o in orders:
-                # Live P&L from SmartStream tick; fallback to DB value
                 live_ltp = None
                 if _ltp_feed and o.instrument_token:
                     _raw = _ltp_feed.get_ltp(int(o.instrument_token))
@@ -406,21 +406,30 @@ class TGNotifier:
                         live_ltp = _raw
                 if live_ltp and o.fill_price:
                     qty = o.quantity or 0
-                    if o.direction == "buy":
-                        pnl = (live_ltp - o.fill_price) * qty
-                    else:
-                        pnl = (o.fill_price - live_ltp) * qty
+                    pnl = (live_ltp - o.fill_price) * qty if o.direction == "buy" else (o.fill_price - live_ltp) * qty
                 else:
                     pnl = o.pnl or 0
 
-                pnl_str   = f"+₹{pnl:,.0f}" if pnl >= 0 else f"-₹{abs(pnl):,.0f}"
-                pnl_emoji = "🟢" if pnl >= 0 else "🔴"
-                ltp_note  = f" ltp={live_ltp:.1f}" if live_ltp else ""
-                lines.append(
-                    f"{pnl_emoji} <b>{self._parse_algo_name(o.algo_tag)}</b> — {o.symbol or '-'}\n"
-                    f"   Fill: ₹{o.fill_price or 0}{ltp_note} | P&amp;L: {pnl_str}"
+                name = self._parse_algo_name(o.algo_tag)
+                if name not in groups:
+                    groups[name] = {"pnl": 0.0, "legs": []}
+                groups[name]["pnl"] += pnl
+
+                ltp_str  = f" · LTP ₹{live_ltp:.1f}" if live_ltp else ""
+                pnl_sign = "+" if pnl >= 0 else ""
+                groups[name]["legs"].append(
+                    f"   • {o.symbol or '-'} · Fill ₹{o.fill_price or 0}{ltp_str} · {pnl_sign}₹{pnl:,.0f}"
                 )
-            await self._send_to(chat_id, "\n".join(lines))
+
+            lines = ["📍 <b>Open Positions</b>\n"]
+            for name, grp in groups.items():
+                total = grp["pnl"]
+                emoji = "🟢" if total >= 0 else "🔴"
+                sign  = "+" if total >= 0 else ""
+                lines.append(f"{emoji} <b>{name}</b> · Total P&amp;L: {sign}₹{total:,.0f}")
+                lines.extend(grp["legs"])
+                lines.append("")  # blank line between algos
+            await self._send_to(chat_id, "\n".join(lines).rstrip())
         except Exception as e:
             await self._send_to(chat_id, f"⚠️ Error fetching positions: {e}")
 

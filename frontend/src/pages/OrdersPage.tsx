@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
-import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, ArrowsClockwise, Link, CalendarX, Broadcast } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, XCircle, CheckCircle, Lightning, CalendarX, Broadcast } from '@phosphor-icons/react'
 import { ORDER_STATUS, formatExitReason } from '@/constants/statuses'
 import { fmtPnl, getISTNow } from '@/utils/format'
 import { sounds } from '@/utils/sounds'
@@ -685,9 +685,7 @@ export default function OrdersPage() {
   const [sqResults, setSqResults]       = useState<{ squared_off: {order_id: string; exit_price?: number}[]; failed: {order_id: string; error: string}[] } | null>(null)
   const [sqError, setSqError]           = useState<string | null>(null)
   const [loading, setLoading]           = useState<Record<string, boolean>>({})
-  const [showSync, setShowSync]         = useState<number | null>(null)
-  const [syncForm, setSyncForm]         = useState({ broker_order_id: '', account_id: '' })
-  const [syncLoading, setSyncLoading]   = useState(false)
+  const [autoSyncLoading, setAutoSyncLoading] = useState<Record<string, boolean>>({})
   const [editExit, setEditExit]         = useState<{ orderId: string; value: string } | null>(null)
   const [exitSaving, setExitSaving]     = useState(false)
   const [selectedAlgoName, setSelectedAlgoName] = useState<string | null>(null)
@@ -1175,22 +1173,20 @@ export default function OrdersPage() {
     return null
   }
 
-  const doSync = async (algoIdx: number) => {
-    const algoId = safeOrders[algoIdx].algoId
-    if (!syncForm.broker_order_id.trim()) { alert('Broker Order ID is required'); return }
-    if (!syncForm.account_id) { alert('Please select an account'); return }
-    const ids = syncForm.broker_order_id.split(',').map(s => s.trim()).filter(Boolean)
-    setSyncLoading(true)
-    let succeeded = 0, failed = 0
-    for (const id of ids) {
-      try { await ordersAPI.syncOrder(algoId, { broker_order_id: id, account_id: syncForm.account_id }); succeeded++ }
-      catch { failed++ }
+  const doAutoSync = async (algoIdx: number, gridEntryId?: string) => {
+    if (!gridEntryId) { alert('Grid entry ID not available — cannot auto-sync'); return }
+    setAutoSyncLoading(prev => ({ ...prev, [gridEntryId]: true }))
+    try {
+      const res = await ordersAPI.autoSync(gridEntryId)
+      const msg = (res.data as { message?: string })?.message ?? 'Synced'
+      setInlineStatus(setOrdersByDate, selectedDateRef.current, algoIdx, msg, 'var(--green)', 5000)
+    } catch (err) {
+      const _e = err as { response?: { data?: { detail?: string } }; message?: string }
+      const msg = _e?.response?.data?.detail || _e?.message || 'Auto-sync failed'
+      setInlineStatus(setOrdersByDate, selectedDateRef.current, algoIdx, msg, 'var(--red)', 6000)
+    } finally {
+      setAutoSyncLoading(prev => ({ ...prev, [gridEntryId]: false }))
     }
-    setSyncLoading(false)
-    setShowSync(null)
-    setSyncForm({ broker_order_id: '', account_id: '' })
-    const msg = failed === 0 ? `${succeeded} order${succeeded > 1 ? 's' : ''} synced` : `${succeeded} synced, ${failed} failed`
-    setInlineStatus(setOrdersByDate, selectedDateRef.current, algoIdx, msg, failed === 0 ? 'var(--green)' : 'var(--amber)', 5000)
   }
 
   const doCorrectExit = async () => {
@@ -1436,36 +1432,40 @@ export default function OrdersPage() {
                   pointerEvents: 'none',
                 }} />
                 {days.map(day => {
-                  const date       = weekDates[day]
-                  const isActive   = selectedDate === date
-                  const isHoliday  = date ? holidayDates.has(date) : false
-                  const dayPnl     = dayPnlByDay[day] ?? null
-                  const todayIST   = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 10)
-                  const isToday    = date === todayIST
+                  const date      = weekDates[day]
+                  const isActive  = selectedDate === date
+                  const isHoliday = date ? holidayDates.has(date) : false
+                  const dayPnl    = dayPnlByDay[day] ?? null
+                  const todayIST  = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 10)
+                  const isToday   = date === todayIST
+
+                  const dayTextColor  = isActive || isToday ? 'var(--accent)' : 'var(--text-dim)'
+                  const dayFontWeight = isActive || isToday ? 700 : 400
+
                   return (
                     <button
                       key={day}
                       onClick={() => { sounds.click(); date && setSelectedDate(date) }}
                       style={{
                         flex: 1, padding: '8px 4px', textAlign: 'center' as const,
-                        border: 'none', borderRadius: 100, background: 'transparent',
-                        color: isActive ? 'var(--accent)' : 'var(--text-dim)',
-                        fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
+                        border: 'none', outline: 'none', borderRadius: 100,
+                        background: 'transparent', boxShadow: 'none',
+                        color: dayTextColor,
+                        fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: dayFontWeight,
                         letterSpacing: '1px', textTransform: 'uppercase' as const,
-                        cursor: 'pointer', transition: 'color 0.25s ease',
+                        cursor: 'pointer', transition: 'color 0.2s ease',
                         position: 'relative', zIndex: 1,
                         display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '2px',
                       }}
                     >
-                      {isToday && (
-                        <span style={{
-                          position: 'absolute', top: 5, right: 7,
-                          width: 5, height: 5, borderRadius: '50%',
-                          background: 'var(--accent)',
-                          animation: 'pulse 1.5s ease-in-out infinite',
-                        }} />
-                      )}
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
+                        {isToday && (
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: 'var(--accent)', display: 'inline-block',
+                            animation: 'pulse 1.5s ease-in-out infinite', flexShrink: 0,
+                          }} />
+                        )}
                         {day}{isHoliday && <CalendarX size={10} style={{ marginLeft: 2, verticalAlign: 'middle', flexShrink: 0 }} />}
                       </span>
                       {isHoliday ? (
@@ -1945,7 +1945,7 @@ export default function OrdersPage() {
                     const canSQ    = isMarketHours && !isTerminated && !isClosed && hasOpenLegs
                     const canRetryFinal = canRetry && isMarketHours
                     const BTNS = [
-                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: !hasOpenLegs && !someLegsError,               title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: autoSyncLoading[group.gridEntryId ?? ''] ? '↻' : 'SYNC', col: '#CC4400', bg: 'rgba(204,68,0,0.05)', hBg: 'rgba(204,68,0,0.14)', border: undefined, disabled: (!hasOpenLegs && !someLegsError) || !!autoSyncLoading[group.gridEntryId ?? ''], title: 'Auto-sync unlinked orders from broker', action: () => doAutoSync(gi, group.gridEntryId) },
                       { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed || !isMarketHours,   title: !isTerminated && !isClosed && !isMarketHours ? 'Market is closed' : undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
                       { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
@@ -2200,76 +2200,6 @@ export default function OrdersPage() {
 
         <div style={{ height: '24px' }} />
       </div>{/* end scroll zone */}
-
-      {/* ── SYNC Modal ── */}
-      {showSync !== null && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: '380px' }}>
-            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}><Link size={15} weight="regular" />Sync Order — {safeOrders[showSync]?.algoName}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
-              Re-link an order that got delinked from STAAX.<br/>
-              Find the <b>Order ID</b> in your broker platform (Zerodha: Order Book → Order ID · Angel One: Order Book → Broker Order No.)
-            </div>
-
-            {/* ── Legs needing sync ── */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-mute)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>
-                Legs needing sync
-              </div>
-              {(safeOrders[showSync]?.legs ?? [])
-                .filter((l: Leg) => l.status === 'error' || l.status === 'pending')
-                .map((l: Leg) => (
-                  <div key={l.id} style={{
-                    display: 'flex', gap: 12, alignItems: 'center',
-                    padding: '6px 10px', marginBottom: 4,
-                    background: 'rgba(255,68,68,0.08)',
-                    border: '0.5px solid rgba(255,68,68,0.2)',
-                    borderRadius: 6, fontSize: 11
-                  }}>
-                    <span style={{ color: '#FF4444', fontWeight: 600 }}>{l.journeyLevel}</span>
-                    <span style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{l.symbol}</span>
-                    <span style={{ color: l.dir === 'BUY' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{l.dir}</span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{l.status.toUpperCase()}</span>
-                  </div>
-                ))
-              }
-              {(safeOrders[showSync]?.legs ?? []).filter((l: Leg) => l.status === 'error' || l.status === 'pending').length === 0 && (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No legs in error state</div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-mute)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Broker Order ID(s) * <span style={{ fontWeight: 400, textTransform: 'none' }}>(comma-separated for multiple)</span></div>
-                <textarea className="staax-input" style={{ width: '100%', fontSize: '13px', fontWeight: 600, resize: 'vertical', minHeight: '60px', fontFamily: 'monospace' }}
-                  placeholder="e.g. 1100000000123456, 1100000000123457"
-                  autoFocus
-                  value={syncForm.broker_order_id}
-                  onChange={e => setSyncForm(s => ({ ...s, broker_order_id: e.target.value }))} />
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>STAAX will fetch each order from broker and re-link automatically</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-mute)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase' }}>Account *</div>
-                <select className="staax-select" style={{ width: '100%', fontSize: '12px' }}
-                  value={syncForm.account_id}
-                  onChange={e => setSyncForm(s => ({ ...s, account_id: e.target.value }))}>
-                  <option value="">Select account...</option>
-                  {safeOrders[showSync]?.account && <option value={safeOrders[showSync].account}>{safeOrders[showSync].account}</option>}
-                </select>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button className="btn btn-ghost" onClick={() => { sounds.click(); setShowSync(null) }}>Cancel</button>
-              <button className="btn btn-primary" disabled={syncLoading} onClick={() => { sounds.click(); doSync(showSync) }}>
-                {syncLoading
-                  ? <><ArrowsClockwise size={12} weight="regular" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Fetching from broker...</>
-                  : <><Link size={12} weight="regular" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />Sync Order</>
-                }
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Exit Price Correction Modal ── */}
       {editExit && (

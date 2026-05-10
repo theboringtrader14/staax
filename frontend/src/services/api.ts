@@ -148,6 +148,8 @@ export const ordersAPI = {
     api.patch(`/orders/${orderId}/exit-price`, { exit_price: price }),
   syncOrder: (algoId: string, data: object) =>
     api.post(`/orders/${algoId}/sync`, data),
+  autoSync: (gridEntryId: string) =>
+    api.post(`/orders/${gridEntryId}/auto-sync`),
   retryEntry: (gridEntryId: string) =>
     api.post(`/orders/${gridEntryId}/retry`),
   retryLegs: (gridEntryId: string, legIds: string[]) =>

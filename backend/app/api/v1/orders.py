@@ -1918,6 +1918,144 @@ async def sync_order(
     }
 
 
+@router.post("/{grid_entry_id}/auto-sync")
+async def auto_sync_order(
+    grid_entry_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Auto-sync: fetch broker order book, match unlinked STAAX orders by symbol+direction,
+    and re-link them — no manual broker order ID needed.
+    """
+    from app.models.account import Account, BrokerType
+    from app.core.config import settings as _cfg
+
+    try:
+        ge_uuid = _uuid.UUID(grid_entry_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid grid_entry_id")
+
+    # 1. Load GridEntry → Algo → Account
+    res = await db.execute(
+        select(GridEntry, Algo, Account)
+        .join(Algo, GridEntry.algo_id == Algo.id)
+        .join(Account, Algo.account_id == Account.id)
+        .where(GridEntry.id == ge_uuid)
+    )
+    row = res.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Grid entry not found")
+    grid_entry, algo, account = row
+
+    # 2. Resolve broker
+    _KEY_MAP = {k: v for k, v in [
+        (_cfg.ANGELONE_MOM_CLIENT_ID,     "angelone_mom"),
+        (_cfg.ANGELONE_WIFE_CLIENT_ID,    "angelone_wife"),
+        (_cfg.ANGELONE_KARTHIK_CLIENT_ID, "angelone_karthik"),
+    ] if k}
+    broker = None
+    if account.broker == BrokerType.ZERODHA:
+        broker = getattr(request.app.state, "zerodha", None)
+    elif account.broker == BrokerType.ANGELONE:
+        bk = _KEY_MAP.get(account.client_id)
+        if bk:
+            broker = getattr(request.app.state, bk, None)
+    if not broker:
+        raise HTTPException(status_code=503, detail="Broker not connected — login first")
+
+    # 3. Fetch broker order book
+    try:
+        broker_orders = await broker.get_order_book()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Broker fetch failed: {e}")
+
+    filled = [
+        bo for bo in (broker_orders or [])
+        if bo.get("status", "").lower() == "complete"
+        and float(bo.get("averageprice", 0) or 0) > 0
+    ]
+    if not filled:
+        raise HTTPException(status_code=404, detail="No completed orders found in broker order book today")
+
+    # 4. Find unlinked DB orders for this grid entry
+    unlinked_res = await db.execute(
+        select(Order).where(
+            Order.grid_entry_id == ge_uuid,
+            Order.broker_order_id == None,  # noqa: E711
+            Order.status.in_([OrderStatus.PENDING, OrderStatus.ERROR]),
+        ).order_by(Order.created_at)
+    )
+    unlinked_orders = unlinked_res.scalars().all()
+    if not unlinked_orders:
+        raise HTTPException(status_code=404, detail="No unlinked orders found for this grid entry")
+
+    # 5. Match each unlinked order to a broker order by symbol + direction
+    synced = []
+    for uorder in unlinked_orders:
+        our_sym = (uorder.symbol or "").upper()
+        our_dir = (uorder.direction or "").upper()
+        match = next(
+            (bo for bo in filled
+             if bo.get("tradingsymbol", "").upper() == our_sym
+             and bo.get("transactiontype", "").upper() == our_dir),
+            None,
+        )
+        if not match:
+            continue
+        broker_oid = match.get("orderid") or match.get("uniqueorderid")
+        fill_price = float(match.get("averageprice", 0))
+        uorder.broker_order_id = broker_oid
+        uorder.fill_price      = fill_price
+        uorder.status          = OrderStatus.OPEN
+        uorder.is_synced       = True
+        synced.append({"symbol": uorder.symbol, "broker_order_id": broker_oid, "fill_price": fill_price})
+
+    if not synced:
+        raise HTTPException(
+            status_code=404,
+            detail="No broker orders matched by symbol+direction. Use manual SYNC if symbol format differs.",
+        )
+    await db.commit()
+
+    # 6. Subscribe LTP tokens + update AlgoState
+    try:
+        ltp_consumer = getattr(request.app.state, "ltp_consumer", None)
+        for uorder in unlinked_orders:
+            if ltp_consumer and uorder.instrument_token and uorder.broker_order_id:
+                ltp_consumer.subscribe([int(uorder.instrument_token)])
+    except Exception:
+        pass
+    try:
+        from datetime import date as _date
+        from app.engine import event_logger as _ev
+        from sqlalchemy import func as _fn
+        today = _date.today()
+        err_count = (await db.execute(
+            select(_fn.count(Order.id)).where(Order.algo_id == algo.id, Order.status == OrderStatus.ERROR)
+        )).scalar()
+        as_res = await db.execute(
+            select(AlgoState).where(AlgoState.algo_id == algo.id, AlgoState.trading_date == str(today))
+        )
+        algo_state = as_res.scalar_one_or_none()
+        if algo_state and err_count == 0:
+            algo_state.status = AlgoRunStatus.ACTIVE
+            algo_state.error_message = None
+            await db.commit()
+        await _ev.info(
+            f"[AUTO-SYNC] {algo.name} — {len(synced)} order(s) re-linked",
+            algo_name=algo.name, source="orders_api",
+        )
+    except Exception:
+        pass
+
+    return {
+        "status":  "ok",
+        "message": f"✅ {len(synced)} order(s) auto-synced for {algo.name}",
+        "synced":  synced,
+    }
+
+
 @router.post("/{algo_id}/square-off")
 async def square_off(
     algo_id: str,
