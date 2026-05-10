@@ -2234,6 +2234,9 @@ async def retry_entry(
         from datetime import timedelta
         from apscheduler.triggers.date import DateTrigger
         from app.engine.algo_runner import algo_runner as _algo_runner
+        # Clear stale W&T arming cache so retry re-arms with fresh reference price.
+        # Without this, rearm_wt_monitors() may restore the old threshold after reconnect.
+        _algo_runner._wt_arming_cache.pop(grid_entry_id, None)
         # Idempotency: if a retry job is already pending, don't schedule another.
         # Prevents double-placement when user clicks RETRY twice in quick succession.
         _retry_job_id = f"retry_{grid_entry_id}"

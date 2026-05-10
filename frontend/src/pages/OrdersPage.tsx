@@ -699,6 +699,7 @@ export default function OrdersPage() {
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [fetchedAccounts, setFetchedAccounts] = useState<{ id: number; nickname: string }[]>([])
   const [waitingRetryLoading, setWaitingRetryLoading] = useState<Record<string, boolean>>({})
+  const [waitingRetryError, setWaitingRetryError]     = useState<Record<string, string>>({})
   const [retryModal, setRetryModal] = useState<{ algoIdx: number; legs: Leg[] } | null>(null)
   const [retryChecked, setRetryChecked] = useState<Record<string, boolean>>({})
   const [retryingIds, setRetryingIds]   = useState<Set<string>>(new Set())
@@ -1589,7 +1590,12 @@ export default function OrdersPage() {
                       break
                     }
                   }
-                } catch { /* silent — entry may already be queued */ }
+                } catch (err) {
+                  const _e = err as { response?: { data?: { detail?: string } }; message?: string }
+                  const _msg = _e?.response?.data?.detail || _e?.message || 'Retry failed'
+                  setWaitingRetryError(prev => ({ ...prev, [_geid]: _msg }))
+                  setTimeout(() => setWaitingRetryError(prev => { const n = { ...prev }; delete n[_geid]; return n }), 5000)
+                }
                 finally { setWaitingRetryLoading(prev => ({ ...prev, [_geid]: false })) }
               }
 
@@ -1691,6 +1697,13 @@ export default function OrdersPage() {
                         {isRetrying && (
                           <span style={{ fontSize: '11px', color: '#06B6D4' }}>
                             Retrying…
+                          </span>
+                        )}
+
+                        {/* Retry error badge — shown for 5s on API failure */}
+                        {!isRetrying && waitingRetryError[w.grid_entry_id] && (
+                          <span style={{ fontSize: '11px', color: '#FF6666' }}>
+                            {waitingRetryError[w.grid_entry_id]}
                           </span>
                         )}
 

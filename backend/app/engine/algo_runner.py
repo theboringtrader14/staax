@@ -523,7 +523,7 @@ class AlgoRunner:
           - on_orb_entry callback (ORB algos)
           - on_wt_entry callback  (W&T algos)
           - ReentryEngine._trigger_reentry (re-entries)
-          - Manual RETRY endpoint (force_direct=True, force_immediate=True)
+          - Manual RETRY endpoint (force_direct=not has_wt_legs, force_immediate=True)
 
         force_direct=True:   Skip W&T deferral — place immediately at current LTP.
         force_immediate=True: Fire _enter_with_db now even if entry_time is in the future.
@@ -578,7 +578,7 @@ class AlgoRunner:
 
         async with AsyncSessionLocal() as db:
             try:
-                await self._enter_with_db(db, grid_entry_id, reentry, original_order, force_direct=force_direct)
+                await self._enter_with_db(db, grid_entry_id, reentry, original_order, force_direct=force_direct, force_immediate=force_immediate)
             except Exception as e:
                 import traceback
                 logger.error(
@@ -611,6 +611,7 @@ class AlgoRunner:
         reentry: bool,
         original_order: Optional[Order],
         force_direct: bool = False,
+        force_immediate: bool = False,
     ):
         # Outer safety net: catch any unexpected exception (e.g. MissingGreenlet from
         # a detached ORM object) that occurs outside the per-leg try/except blocks.
@@ -618,7 +619,7 @@ class AlgoRunner:
         # marks the algo ERROR, and never crashes the server.
         try:
             await self._enter_with_db_inner(
-                db, grid_entry_id, reentry, original_order, force_direct
+                db, grid_entry_id, reentry, original_order, force_direct, force_immediate
             )
         except Exception as _outer_exc:
             import traceback as _tb
@@ -653,6 +654,7 @@ class AlgoRunner:
         reentry: bool,
         original_order: Optional[Order],
         force_direct: bool = False,
+        force_immediate: bool = False,
     ):
         # ── 1. Load state ──────────────────────────────────────────────────────
         result = await db.execute(
@@ -664,6 +666,11 @@ class AlgoRunner:
         row = result.one_or_none()
         if not row:
             logger.error(f"No AlgoState for grid_entry_id={grid_entry_id}")
+            if force_immediate:
+                await _ev.error(
+                    f"RETRY failed: no state found for {grid_entry_id[:8]}",
+                    source="engine",
+                )
             return
 
         algo_state, grid_entry, algo = row
@@ -686,6 +693,12 @@ class AlgoRunner:
                 f"Skipping entry for {algo.name} — status={algo_state.status} "
                 f"(reentry={reentry})"
             )
+            if force_immediate:
+                await _ev.error(
+                    f"RETRY failed: {algo.name} is in state {algo_state.status} — expected WAITING",
+                    algo_name=algo.name,
+                    source="engine",
+                )
             return
 
         logger.info(
@@ -2106,11 +2119,16 @@ class AlgoRunner:
                 ) if getattr(order, "account_id", None) else None
                 account = acc_res.scalar_one_or_none() if acc_res else None
 
+            # W&T orders are placed as STOPLOSS variety — Angel One requires the same
+            # variety on cancel. Sending NORMAL for a STOPLOSS order returns an error
+            # and leaves a dangling SL-Limit at the broker.
+            _cancel_variety = "STOPLOSS" if getattr(order, "entry_type", "") == "wt" else "NORMAL"
+
             if account and account.broker == BrokerType.ANGELONE:
                 ao_broker = self._angel_broker_map.get(account.client_id)
                 if ao_broker:
-                    await ao_broker.cancel_order(broker_sl_order_id)
-                    logger.info(f"✅ F9: Angel One SL order cancelled: {broker_sl_order_id}")
+                    await ao_broker.cancel_order(broker_sl_order_id, variety=_cancel_variety)
+                    logger.info(f"✅ F9: Angel One SL order cancelled: {broker_sl_order_id} (variety={_cancel_variety})")
             else:
                 await self._order_placer.zerodha.cancel_order(broker_sl_order_id)
                 logger.info(f"✅ F9: Zerodha SL order cancelled: {broker_sl_order_id}")
