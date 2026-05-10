@@ -1394,7 +1394,7 @@ export default function OrdersPage() {
                   <div key={label} onClick={() => { sounds.click(); toggleFilter(f) }}
                     style={{
                       flex: 1, minWidth: 0, padding: '10px 16px', cursor: 'pointer', borderRadius: 12,
-                      background: 'var(--bg)',
+                      background: 'var(--bg)', height: 96, boxSizing: 'border-box' as const, overflow: 'hidden',
                       boxShadow: statusFilter === f ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
                       transition: 'box-shadow 0.15s',
                     }}>

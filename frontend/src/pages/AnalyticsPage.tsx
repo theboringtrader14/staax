@@ -84,7 +84,9 @@ const neuCardSm: CSSProperties = {
   boxShadow: 'var(--neu-raised-sm)',
   borderRadius: 12,
   padding: '14px 16px',
-  minHeight: 86,
+  height: 96,
+  boxSizing: 'border-box',
+  overflow: 'hidden',
 }
 
 const neuInset: CSSProperties = {
@@ -1203,7 +1205,7 @@ export default function AnalyticsPage() {
 
       {/* Tab bar — neumorphic sliding pill */}
       <div style={{
-        flexShrink: 0, display: 'flex', position: 'relative', margin: '13px 28px 20px',
+        flexShrink: 0, display: 'flex', position: 'relative', margin: '13px 28px',
         background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
         borderRadius: 100, padding: '4px',
       }}>
@@ -1238,7 +1240,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: activeTab === 'Reports' ? 0 : '20px 28px 24px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: activeTab === 'Reports' ? 0 : '10px 28px 24px' }}>
         {activeTab === 'Reports' ? <ReportsPage /> : loading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'var(--text-mute)', fontSize: 13 }}>Loading…</div>
         ) : (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type CSSProperties } from 'react'
-import { ArrowsClockwise, Gear, Trash } from '@phosphor-icons/react'
+import { ArrowsClockwise, Trash } from '@phosphor-icons/react'
 import { accountsAPI } from '@/services/api'
 import BotChart from '../components/BotChart'
 import axios from 'axios'
@@ -422,9 +422,11 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
                     : bot.status === 'inactive' ? '#FFAA00'
                     : '#FF4444'
 
-  const indicatorLabel = bot.indicator === 'channel' ? 'CHANNEL'
-                       : bot.indicator === 'tt_bands' ? 'TT BANDS'
-                       : 'DTR'
+  const indicatorText = bot.indicator === 'channel'  ? 'Channel'
+                     : bot.indicator === 'tt_bands' ? 'TT Bands'
+                     : 'DTR'
+  const acct = accounts.find(a => a.id === bot.account_id)
+  const accountName = acct ? `${acct.nickname} (${acct.broker})` : ''
 
   const levels = cardLevels
 
@@ -434,16 +436,49 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
     setWarmingUp(false)
   }
 
-  const metaParts = [
-    bot.instrument, bot.exchange,
-    `${bot.timeframe_mins}min`,
-    bot.indicator === 'channel' && bot.channel_tf ? `${bot.channel_tf}h channel` : null,
-    `${bot.lots} lot${bot.lots !== 1 ? 's' : ''}`,
-  ].filter(Boolean).join(' · ')
+  const metaText = `${indicatorText} · ${bot.timeframe_mins}min · ${bot.lots} lot${bot.lots !== 1 ? 's' : ''}`
+
+  const cell1Label = bot.indicator === 'tt_bands' ? 'HIGH' : 'UPPER'
+  const cell2Label = bot.indicator === 'tt_bands' ? 'LOW'  : 'LOWER'
+  const cell1Val   = levels ? (bot.indicator === 'dtr' ? levels.upp1 : bot.indicator === 'channel' ? levels.upper_channel : levels.tt_high) : null
+  const cell2Val   = levels ? (bot.indicator === 'dtr' ? levels.lpp1 : bot.indicator === 'channel' ? levels.lower_channel : levels.tt_low)  : null
+  const cell1Color = 'var(--green)'
+  const cell2Color = 'var(--red)'
+  const ltpFresh   = cardLtpAt != null && (Date.now() - cardLtpAt) < 35000
+
+  const cellSt: CSSProperties = {
+    background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 8,
+    padding: '8px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: 110, flexShrink: 0,
+  }
+  const cellPosSt: CSSProperties = { ...cellSt, width: 'auto', minWidth: 64 }
+  const cellLblSt: CSSProperties = {
+    fontSize: 8, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)',
+    fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+  }
+  const cellValSt: CSSProperties = {
+    fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600,
+    marginTop: 2, fontVariantNumeric: 'lining-nums tabular-nums',
+  }
 
   return (
     <>
-      <div onClick={onSelect} style={{ ...neuCard, opacity: isArchived ? 0.6 : 1, position: 'relative', paddingLeft: 28, outline: isSelected ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: -2, cursor: 'pointer' }}>
+      <style>{`
+        @keyframes botCardBreath {
+          0%, 100% { outline-color: rgba(229, 90, 0, 0.25); }
+          50%       { outline-color: rgba(229, 90, 0, 0.6);  }
+        }
+      `}</style>
+      <div onClick={onSelect} style={{
+        ...neuCard,
+        opacity: isArchived ? 0.6 : 1,
+        position: 'relative', paddingLeft: 28,
+        outlineWidth: 1, outlineStyle: 'solid',
+        outlineColor: isSelected ? 'rgba(229, 90, 0, 0.5)' : 'transparent',
+        outlineOffset: -1,
+        animation: isSelected ? 'botCardBreath 2.5s ease-in-out infinite' : 'none',
+        cursor: 'pointer', minHeight: 88,
+        display: 'flex', flexDirection: 'column',
+      }}>
 
         {/* ── Enable/disable strip (same as algo card) ── */}
         {!isArchived && (
@@ -456,63 +491,74 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
           </div>
         )}
 
-        {/* ── Main content row: left info + right buttons, vertically centered ── */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px 10px', gap: 10 }}>
+        {/* ── Card content: single flex row, cells vertically centered to full height ── */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px' }}>
 
-          {/* Left: status dot + stacked name/meta/levels */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%', background: statusColor,
-              display: 'inline-block', flexShrink: 0, marginTop: 5,
-              animation: isActive ? 'pulse 1.5s infinite' : 'none',
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Name + indicator chip */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--accent)', fontVariantNumeric: 'lining-nums tabular-nums', whiteSpace: 'nowrap' }}>
-                  {bot.name}
-                </span>
-                <span style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 6, padding: '2px 7px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-dim)', flexShrink: 0 }}>
-                  {indicatorLabel}
-                </span>
-              </div>
-              {/* Meta */}
-              <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
-                {metaParts}
-              </div>
-              {/* Levels + LTP row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
-          {bot.indicator === 'dtr' && levels && <>
-            <span><span style={{ color: 'var(--text-mute)' }}>UPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.upp1?.toLocaleString('en-IN') ?? '—'}</span></span>
-            <span><span style={{ color: 'var(--text-mute)' }}>LPP1 </span><span style={{ color: '#2DD4BF', fontFamily: 'var(--font-mono)' }}>{levels.lpp1?.toLocaleString('en-IN') ?? '—'}</span></span>
-          </>}
-          {bot.indicator === 'channel' && levels && <>
-            <span><span style={{ color: 'var(--text-mute)' }}>Upper </span><span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>{levels.upper_channel?.toLocaleString('en-IN') ?? '—'}</span></span>
-            <span><span style={{ color: 'var(--text-mute)' }}>Lower </span><span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{levels.lower_channel?.toLocaleString('en-IN') ?? '—'}</span></span>
-          </>}
-          {bot.indicator === 'tt_bands' && levels && <>
-            <span><span style={{ color: 'var(--text-mute)' }}>High </span><span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>{levels.tt_high?.toLocaleString('en-IN') ?? '—'}</span></span>
-            <span><span style={{ color: 'var(--text-mute)' }}>Low </span><span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>{levels.tt_low?.toLocaleString('en-IN') ?? '—'}</span></span>
-          </>}
-          {!levels && <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>warmup to see levels</span>}
-          {cardLtp != null && (() => {
-            const ltp = cardLtp!
-            const fresh = cardLtpAt != null && (Date.now() - cardLtpAt) < 35000
-            return (
-              <span>
-                <span style={{ color: 'var(--text-mute)' }}>LTP </span>
-                <span style={{ color: fresh ? 'var(--green)' : 'var(--text-mute)', fontSize: 8, marginRight: 2 }}>{fresh ? '●' : '○'}</span>
-                <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{ltp.toLocaleString('en-IN')}</span>
+          {/* Col 1: status dot + bot name + account below */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, width: 130 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', background: statusColor,
+                display: 'inline-block', flexShrink: 0,
+                animation: isActive ? 'pulse 1.5s infinite' : 'none',
+              }} />
+              <span
+                onClick={e => { e.stopPropagation(); setEditBot(true) }}
+                style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--accent)', fontVariantNumeric: 'lining-nums tabular-nums', whiteSpace: 'nowrap', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'var(--border-accent)', textUnderlineOffset: 3 }}>
+                {bot.name}
               </span>
-            )
-          })()}
-              <span style={{ color: 'var(--border)', fontSize: 14, userSelect: 'none' }}>·</span>
-              <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>FLAT</span>
-            </div>{/* end levels row */}
-          </div>{/* end left info column */}
-          </div>{/* end status dot + info */}
+            </div>
+            {accountName && (
+              <div style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-body)', paddingLeft: 16 }}>
+                {accountName}
+              </div>
+            )}
+          </div>
 
-          {/* Right: action buttons — centered to full card height */}
+          {/* Col 2: indicator plain text + instrument inset chip */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0, width: 140 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
+              {metaText}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 100, padding: '2px 9px', fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--text-dim)' }}>
+              {bot.instrument}
+            </span>
+          </div>
+
+          {/* Center: 4 equal-width inset level cells */}
+          <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Cell 1 */}
+            <div style={cellSt}>
+              <span style={cellLblSt}>{cell1Label}</span>
+              <span style={{ ...cellValSt, color: cell1Val != null ? cell1Color : 'var(--text-mute)' }}>
+                {cell1Val != null ? cell1Val.toLocaleString('en-IN') : '—'}
+              </span>
+            </div>
+            {/* Cell 2 */}
+            <div style={cellSt}>
+              <span style={cellLblSt}>{cell2Label}</span>
+              <span style={{ ...cellValSt, color: cell2Val != null ? cell2Color : 'var(--text-mute)' }}>
+                {cell2Val != null ? cell2Val.toLocaleString('en-IN') : '—'}
+              </span>
+            </div>
+            {/* LTP */}
+            <div style={cellSt}>
+              <span style={{ ...cellLblSt, display: 'flex', alignItems: 'center', gap: 2 }}>
+                LTP
+                {cardLtp != null && <span style={{ fontSize: 7, color: ltpFresh ? 'var(--green)' : 'var(--text-mute)' }}>{ltpFresh ? '●' : '○'}</span>}
+              </span>
+              <span style={{ ...cellValSt, color: cardLtp != null ? 'var(--accent)' : 'var(--text-mute)' }}>
+                {cardLtp != null ? cardLtp.toLocaleString('en-IN') : '—'}
+              </span>
+            </div>
+            {/* POS */}
+            <div style={cellPosSt}>
+              <span style={cellLblSt}>POS</span>
+              <span style={{ ...cellValSt, color: 'var(--text-mute)' }}>FLAT</span>
+            </div>
+          </div>
+
+          {/* Right: action buttons */}
           <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
             {(() => {
               const sq = (color = 'var(--text-dim)'): CSSProperties => ({
@@ -531,11 +577,8 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
                 <>
                   <button ref={bind} title="Warmup — reload historical candles"
                     onClick={handleWarmup} disabled={warmingUp}
-                    style={{ ...sq('var(--accent)'), opacity: warmingUp ? 0.7 : 1 }}>
+                    style={{ ...sq('#2dd4bf'), opacity: warmingUp ? 0.7 : 1 }}>
                     <ArrowsClockwise size={18} style={{ animation: warmingUp ? 'spin 0.8s linear infinite' : 'none' }} />
-                  </button>
-                  <button ref={bind} title="Edit bot" onClick={() => setEditBot(true)} style={sq('var(--accent)')}>
-                    <Gear size={18} />
                   </button>
                   {isArchived ? (
                     <button ref={bind} title="Unarchive bot" onClick={() => onUnarchive(bot.id)} style={sq('var(--accent-amber)')}>↩</button>
@@ -548,7 +591,8 @@ function BotCard({ bot, accounts, onUpdate, onArchive, onUnarchive, onDelete, on
               )
             })()}
           </div>
-        </div>{/* end main content row */}
+
+        </div>{/* end card content */}
 
 
       </div>

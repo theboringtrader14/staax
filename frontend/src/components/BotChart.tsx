@@ -78,9 +78,9 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
   }, [botId, timeframeMins])
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', padding: '12px 20px 16px' }}>
       {loading && (
-        <div style={{ position: 'absolute', top: 8, right: 16, fontSize: 10, color: '#6b7280', fontFamily: 'monospace', zIndex: 1 }}>Loading…</div>
+        <div style={{ position: 'absolute', top: 16, right: 28, fontSize: 10, color: '#6b7280', fontFamily: 'monospace', zIndex: 1 }}>Loading…</div>
       )}
       <div ref={containerRef} style={{ width: '100%', height: 320 }} />
     </div>

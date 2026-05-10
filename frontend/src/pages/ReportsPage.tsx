@@ -59,7 +59,9 @@ const kpiCardSt: React.CSSProperties = {
   boxShadow: 'var(--neu-raised-sm)',
   borderRadius: 12,
   padding: '14px 16px',
-  minHeight: 86,
+  height: 96,
+  boxSizing: 'border-box',
+  overflow: 'hidden',
 }
 
 const neuModal: React.CSSProperties = {
@@ -334,7 +336,7 @@ export default function ReportsPage() {
   const maxAbsDow = Math.max(...Object.values(dowPnl).map(Math.abs), 1)
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 28px 24px' }}>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 28px 24px' }}>
 
       {/* Top KPI cards — 4 columns */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr', gap: '10px', marginBottom: '12px' }}>
@@ -395,14 +397,14 @@ export default function ReportsPage() {
 
         {/* Day P&L bars */}
         <div style={{ ...kpiCardSt }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>P&L by Day</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '56px', gap: '6px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>P&L by Day</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '46px', gap: '6px' }}>
             {DAY_NAMES.map(day => {
               const pnl = dowPnl[day] || 0
-              const barH = pnl !== 0 ? Math.max(Math.abs(pnl) / maxAbsDow * 42, 4) : 0
+              const barH = pnl !== 0 ? Math.max(Math.abs(pnl) / maxAbsDow * 28, 4) : 0
               return (
                 <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', height: '42px', width: '100%', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', height: '32px', width: '100%', justifyContent: 'center' }}>
                     {pnl !== 0
                       ? <div style={{
                           width: '60%', height: `${barH}px`, borderRadius: '3px 3px 0 0',

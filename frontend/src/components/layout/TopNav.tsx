@@ -7,10 +7,9 @@ import { showSuccess, showWarning } from '@/utils/toast'
 declare global { interface Window { __staaxDirty?: boolean } }
 
 const NAV_TABS = [
-  { path: '/grid',       label: 'Algos'             },
-  { path: '/indicators', label: 'Bots'              },
-  { path: '/orders',     label: 'Orders'            },
-  { path: '/analytics',  label: 'Quant'             },
+  { path: '/grid',      label: 'Algos'  },
+  { path: '/orders',    label: 'Orders' },
+  { path: '/analytics', label: 'Quant'  },
 ]
 
 const iconBtnStyle: React.CSSProperties = {
