@@ -518,6 +518,21 @@ class BotRunner:
         # LIVE mode: place order via order_placer
         if not bot.is_practix and self._order_placer:
             try:
+                import time as _time
+                _tick_ref = getattr(self._ltp_consumer, '_last_ao_tick', None)
+                if _tick_ref is not None and _tick_ref > 0:
+                    _ao_age = _time.monotonic() - _tick_ref
+                    if _ao_age > 30:
+                        logger.warning(f"[BOT] Stale LTP {_ao_age:.0f}s — placing entry order anyway")
+                        try:
+                            from app.engine.tg_notifier import tg_notifier as _tg
+                            import asyncio as _aio
+                            _aio.create_task(_tg.notify("feed_stale_trade", {
+                                "bot_name": bot.name, "signal_type": "entry",
+                                "age_s": f"{_ao_age:.0f}",
+                            }))
+                        except Exception:
+                            pass
                 token = MCX_TOKENS.get(bot.instrument)
                 ikey = f"bot_{bot.id}_entry_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
                 broker_order_id = await self._order_placer.place(
@@ -582,6 +597,21 @@ class BotRunner:
         # LIVE mode: place closing order via order_placer
         if not bot.is_practix and self._order_placer:
             try:
+                import time as _time
+                _tick_ref = getattr(self._ltp_consumer, '_last_ao_tick', None)
+                if _tick_ref is not None and _tick_ref > 0:
+                    _ao_age = _time.monotonic() - _tick_ref
+                    if _ao_age > 30:
+                        logger.warning(f"[BOT] Stale LTP {_ao_age:.0f}s — placing exit order anyway")
+                        try:
+                            from app.engine.tg_notifier import tg_notifier as _tg
+                            import asyncio as _aio
+                            _aio.create_task(_tg.notify("feed_stale_trade", {
+                                "bot_name": bot.name, "signal_type": "exit",
+                                "age_s": f"{_ao_age:.0f}",
+                            }))
+                        except Exception:
+                            pass
                 token = MCX_TOKENS.get(bot.instrument)
                 ikey = f"bot_{bot.id}_exit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
                 exit_order_id = await self._order_placer.place(

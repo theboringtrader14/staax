@@ -11,10 +11,19 @@ IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 MARKET_HOLIDAYS_2026 = {
-    date(2026, 1, 26), date(2026, 3, 25), date(2026, 4, 2),
-    date(2026, 4, 6),  date(2026, 4, 14), date(2026, 5, 1),
-    date(2026, 8, 15), date(2026, 10, 2), date(2026, 10, 21),
-    date(2026, 10, 22), date(2026, 11, 5), date(2026, 12, 25),
+    date(2026, 1, 26),   # Republic Day
+    date(2026, 3, 10),   # Holi
+    date(2026, 3, 20),   # Id-Ul-Fitr (Ramadan Eid)
+    date(2026, 4, 3),    # Good Friday
+    date(2026, 4, 14),   # Dr. Ambedkar Jayanti
+    date(2026, 5, 1),    # Maharashtra Day
+    date(2026, 5, 28),   # Bakri Id (Eid ul-Adha)
+    date(2026, 6, 26),   # Muharram
+    date(2026, 8, 27),   # Ganesh Chaturthi
+    date(2026, 10, 2),   # Gandhi Jayanti
+    date(2026, 10, 21),  # Diwali Balipratipada
+    date(2026, 11, 5),   # Gurunanak Jayanti
+    date(2026, 12, 25),  # Christmas
 }
 
 def is_market_day(d: date) -> bool:

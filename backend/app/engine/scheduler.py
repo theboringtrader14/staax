@@ -1162,31 +1162,32 @@ class AlgoScheduler:
 
                 if not rows:
                     logger.info("EOD cleanup: nothing to close")
-                    return
+                else:
+                    active_ids = []
+                    for algo_state, grid_entry, algo in rows:
+                        if algo_state.status == AlgoRunStatus.ACTIVE and self._algo_runner:
+                            # Has open positions — hand off to exit_all
+                            active_ids.append(str(grid_entry.id))
+                        elif algo_state.status == AlgoRunStatus.WAITING:
+                            # Never entered — no order was placed, correct status is NO_TRADE
+                            algo_state.status    = AlgoRunStatus.NO_TRADE
+                            algo_state.closed_at = datetime.now(IST)
+                            grid_entry.status    = GridStatus.NO_TRADE
+                        else:
+                            # ERROR or other stale state — mark closed
+                            algo_state.status      = AlgoRunStatus.CLOSED
+                            algo_state.exit_reason = "eod_cleanup"
+                            algo_state.closed_at   = datetime.now(IST)
+                            grid_entry.status      = GridStatus.ALGO_CLOSED
 
-                active_ids = []
-                for algo_state, grid_entry, algo in rows:
-                    if algo_state.status == AlgoRunStatus.ACTIVE and self._algo_runner:
-                        # Has open positions — hand off to exit_all
-                        active_ids.append(str(grid_entry.id))
-                    elif algo_state.status == AlgoRunStatus.WAITING:
-                        # Never entered — no order was placed, correct status is NO_TRADE
-                        algo_state.status    = AlgoRunStatus.NO_TRADE
-                        algo_state.closed_at = datetime.now(IST)
-                        grid_entry.status    = GridStatus.NO_TRADE
-                    else:
-                        # ERROR or other stale state — mark closed
-                        algo_state.status      = AlgoRunStatus.CLOSED
-                        algo_state.exit_reason = "eod_cleanup"
-                        algo_state.closed_at   = datetime.now(IST)
-                        grid_entry.status      = GridStatus.ALGO_CLOSED
+                    await db.commit()
 
-                await db.commit()
+                    for geid in active_ids:
+                        await self._algo_runner.exit_all(geid, reason="auto_sq")
 
-                for geid in active_ids:
-                    await self._algo_runner.exit_all(geid, reason="auto_sq")
+                    logger.info(f"✅ EOD cleanup: {len(rows)} algos closed ({len(active_ids)} via exit_all)")
 
-                logger.info(f"✅ EOD cleanup: {len(rows)} algos closed ({len(active_ids)} via exit_all)")
+                # Always send EOD report — fires on clean days too, not just cleanup days
                 try:
                     import asyncio as _aio
                     from app.engine.wa_notifier import wa_notifier as _wa

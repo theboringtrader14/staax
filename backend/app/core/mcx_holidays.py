@@ -11,15 +11,10 @@ MCX sessions (IST):
 
 MCX_HOLIDAYS_2026 = [
     "2026-01-26",   # Republic Day
-    "2026-03-25",   # Holi
-    "2026-04-02",   # Ram Navami
     "2026-04-03",   # Good Friday
-    "2026-04-14",   # Dr. Ambedkar Jayanti
-    "2026-05-01",   # Maharashtra Day / May Day
-    "2026-08-15",   # Independence Day
-    "2026-10-02",   # Gandhi Jayanti / Dussehra
-    "2026-10-20",   # Diwali (Laxmi Puja) — verify exact date
-    "2026-11-03",   # Guru Nanak Jayanti — verify exact date
+    "2026-08-27",   # Ganesh Chaturthi
+    "2026-10-02",   # Gandhi Jayanti
+    "2026-11-08",   # Diwali Muhurat (special evening session — MCX closed)
     "2026-12-25",   # Christmas
 ]
 

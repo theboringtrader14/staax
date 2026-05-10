@@ -230,6 +230,14 @@ class TGNotifier:
                 f"P&amp;L: {sign}Rs{pnl:,.0f}\n"
                 f"<i>{ts}</i>"
             )
+        if event_type == "feed_stale_trade":
+            return (
+                f"⚠️ <b>STALE LTP ORDER</b>\n"
+                f"Bot: {payload.get('bot_name', '-')}\n"
+                f"Signal: {payload.get('signal_type', '-')}\n"
+                f"LTP age: {payload.get('age_s', '?')}s — order placed anyway\n"
+                f"<i>{ts}</i>"
+            )
         if event_type == "feed_down":
             return f"🔌 <b>FEED DOWN</b>\nSmartStream disconnected. Monitor manually.\n<i>{ts}</i>"
         if event_type == "feed_up":
