@@ -11,7 +11,12 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "dev-secret-key"
     APP_PORT: int = 8000
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://staax.lifexos.co.in",
+        "https://lifexos.co.in",
+    ]
 
     # Database
     DATABASE_URL: str = ""

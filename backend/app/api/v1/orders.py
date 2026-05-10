@@ -2234,6 +2234,21 @@ async def retry_entry(
         from datetime import timedelta
         from apscheduler.triggers.date import DateTrigger
         from app.engine.algo_runner import algo_runner as _algo_runner
+        # Cancel stale W&T SL-Limit at broker before clearing cache — prevents dangling
+        # STOPLOSS order at Angel One that would otherwise stay live until expiry/trigger.
+        _old_arm = _algo_runner._wt_arming_cache.get(grid_entry_id)
+        if _old_arm and _old_arm.get("broker_order_id"):
+            try:
+                from app.models.account import BrokerType
+                _acc_res = await db.execute(select(Account).where(Account.id == algo.account_id))
+                _acc = _acc_res.scalar_one_or_none()
+                if _acc and _acc.broker == BrokerType.ANGELONE:
+                    _broker = _algo_runner._angel_broker_map.get(_acc.client_id)
+                    if _broker:
+                        await _broker.cancel_order(_old_arm["broker_order_id"], variety="STOPLOSS")
+                        logger.info(f"[RETRY] Cancelled stale W&T SL-Limit {_old_arm['broker_order_id']}")
+            except Exception as _ce:
+                logger.warning(f"[RETRY] Could not cancel stale W&T order: {_ce}")
         # Clear stale W&T arming cache so retry re-arms with fresh reference price.
         # Without this, rearm_wt_monitors() may restore the old threshold after reconnect.
         _algo_runner._wt_arming_cache.pop(grid_entry_id, None)

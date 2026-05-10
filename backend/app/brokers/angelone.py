@@ -950,17 +950,18 @@ class AngelOneBroker(BaseBroker):
                 except (TypeError, ValueError):
                     return 0.0
 
-            # AO's availablecash = cash + collateral (pledged MF) already included.
-            # Subtract collateral to get the pure free liquid cash.
-            collateral       = _f("collateral")
-            cash             = round(max(0.0, _f("availablecash") - collateral), 2)
-            utilised         = _f("utilisedpayout")
-            # Use AO's own net field; fall back to computing if not present
-            raw_net = d.get("net")
-            net = round(float(raw_net), 2) if raw_net not in (None, "", "0") else round(cash + collateral - utilised, 2)
-            intraday_margin  = _f("availableintradaypayin")
-            delivery_margin  = _f("availabledeliverymargin")
-            t1_holdings      = _f("t1holdingsvalue")
+            available_cash  = _f("availablecash")
+            utilised_payout = _f("utilisedpayout")
+            utilised_debits = _f("utiliseddebits")
+
+            # collateral is derived — AO has no single raw 'collateral' field
+            collateral      = round(max(0.0, available_cash - utilised_payout), 2)
+            cash            = available_cash                              # raw liquid cash
+            utilised        = utilised_debits                             # raw debits used
+            net             = round(available_cash - utilised_debits, 2)  # derived
+            intraday_margin = _f("availableintradaypayin")
+            delivery_margin = _f("availabledeliverymargin")
+            t1_holdings     = _f("t1holdingsvalue")
 
             return {
                 "cash":             cash,
