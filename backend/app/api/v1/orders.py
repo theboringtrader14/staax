@@ -1976,6 +1976,14 @@ async def auto_sync_order(
         and float(bo.get("averageprice", 0) or 0) > 0
     ]
     if not filled:
+        try:
+            from app.engine import event_logger as _ev_as
+            await _ev_as.warn(
+                f"[AUTO-SYNC] No completed broker orders for {algo.name}",
+                algo_name=algo.name, source="orders_api",
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=404, detail="No completed orders found in broker order book today")
 
     # 4. Find unlinked DB orders for this grid entry
