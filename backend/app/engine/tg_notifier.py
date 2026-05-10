@@ -363,6 +363,16 @@ class TGNotifier:
             msg = f"⚠️ Health check failed: {e}"
         await self._send_to(chat_id, msg)
 
+    @staticmethod
+    def _parse_algo_name(algo_tag: str | None) -> str:
+        """Extract clean algo name from SEBI audit tag STAAX_{account}_{name}_{leg}_{ts}."""
+        if not algo_tag:
+            return "-"
+        parts = algo_tag.split("_")
+        if len(parts) >= 5:
+            return "_".join(parts[2:-2])
+        return algo_tag  # unexpected format — show as-is
+
     async def _send_positions(self, chat_id) -> None:
         try:
             from app.core.database import AsyncSessionLocal
@@ -378,14 +388,37 @@ class TGNotifier:
             if not orders:
                 await self._send_to(chat_id, "📭 No open positions")
                 return
+
+            # Grab LTP consumer from algo_runner singleton for live P&L
+            try:
+                from app.engine.algo_runner import algo_runner as _ar
+                _ltp_feed = getattr(_ar, "_ltp_consumer", None)
+            except Exception:
+                _ltp_feed = None
+
             lines = ["📍 <b>Open Positions</b>\n"]
             for o in orders:
-                pnl       = o.pnl or 0
+                # Live P&L from SmartStream tick; fallback to DB value
+                live_ltp = None
+                if _ltp_feed and o.instrument_token:
+                    _raw = _ltp_feed.get_ltp(int(o.instrument_token))
+                    if _raw and _raw > 0:
+                        live_ltp = _raw
+                if live_ltp and o.fill_price:
+                    qty = o.quantity or 0
+                    if o.direction == "buy":
+                        pnl = (live_ltp - o.fill_price) * qty
+                    else:
+                        pnl = (o.fill_price - live_ltp) * qty
+                else:
+                    pnl = o.pnl or 0
+
                 pnl_str   = f"+₹{pnl:,.0f}" if pnl >= 0 else f"-₹{abs(pnl):,.0f}"
                 pnl_emoji = "🟢" if pnl >= 0 else "🔴"
+                ltp_note  = f" ltp={live_ltp:.1f}" if live_ltp else ""
                 lines.append(
-                    f"{pnl_emoji} <b>{o.algo_tag or '-'}</b> — {o.symbol or '-'}\n"
-                    f"   Fill: ₹{o.fill_price or 0} | P&amp;L: {pnl_str}"
+                    f"{pnl_emoji} <b>{self._parse_algo_name(o.algo_tag)}</b> — {o.symbol or '-'}\n"
+                    f"   Fill: ₹{o.fill_price or 0}{ltp_note} | P&amp;L: {pnl_str}"
                 )
             await self._send_to(chat_id, "\n".join(lines))
         except Exception as e:

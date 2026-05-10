@@ -1440,6 +1440,8 @@ export default function OrdersPage() {
                   const isActive   = selectedDate === date
                   const isHoliday  = date ? holidayDates.has(date) : false
                   const dayPnl     = dayPnlByDay[day] ?? null
+                  const todayIST   = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 10)
+                  const isToday    = date === todayIST
                   return (
                     <button
                       key={day}
@@ -1455,6 +1457,14 @@ export default function OrdersPage() {
                         display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '2px',
                       }}
                     >
+                      {isToday && (
+                        <span style={{
+                          position: 'absolute', top: 5, right: 7,
+                          width: 5, height: 5, borderRadius: '50%',
+                          background: 'var(--accent)',
+                          animation: 'pulse 1.5s ease-in-out infinite',
+                        }} />
+                      )}
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         {day}{isHoliday && <CalendarX size={10} style={{ marginLeft: 2, verticalAlign: 'middle', flexShrink: 0 }} />}
                       </span>
