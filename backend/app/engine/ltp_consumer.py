@@ -76,6 +76,7 @@ class AngelOneTickerAdapter:
         self._on_reconnect_callbacks: List[Callable] = []  # fired on every _on_open
         self._force_stopped: bool           = False   # True when restart() closes intentionally
         self._reconnect_lock                = asyncio.Lock()  # prevents concurrent reconnects
+        self._keepalive_task: Optional[asyncio.Task] = None  # 10-min ping task
 
         # Debug: log credential presence at construction time
         ft_preview = (feed_token[:10] + "...") if feed_token and len(feed_token) > 10 else (feed_token or "EMPTY")
@@ -258,6 +259,10 @@ class AngelOneTickerAdapter:
                 except Exception as _cbe:
                     logger.warning(f"[AO] Reconnect callback {getattr(_cb, '__name__', '?')} failed: {_cbe}")
 
+        # Start keepalive ping task (prevents AngelOne server-side timeout)
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._start_keepalive(), self._loop)
+
     def _on_data(self, ws, message):
         """Hot path — normalise Angel One tick and dispatch to async loop."""
         logger.debug(f"[AO-DEBUG] _on_data — raw message type={type(message).__name__}, len={len(message) if hasattr(message, '__len__') else 'N/A'}")
@@ -292,6 +297,9 @@ class AngelOneTickerAdapter:
         logger.warning("[AO] SmartStream connection closed")
         self._running   = False
         self._connected = False
+        # Cancel keepalive — connection is gone
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._stop_keepalive(), self._loop)
         if self._force_stopped:
             logger.info("[AO] _on_close: intentional stop — no auto-reconnect")
             return
@@ -334,6 +342,7 @@ class AngelOneTickerAdapter:
         """
         async with self._reconnect_lock:
             logger.info("[AO] restart() — closing WebSocket for hard reconnect...")
+            await self._stop_keepalive()
             self._force_stopped = True
             self._running       = False
             self._connected     = False
@@ -356,6 +365,48 @@ class AngelOneTickerAdapter:
         if new_token and new_token != self.feed_token:
             self.feed_token = new_token
             logger.info("[AO] Feed token updated on live adapter")
+
+    async def _keepalive_loop(self) -> None:
+        """Send a WebSocket ping every 10 min to prevent AngelOne server-side timeout (~20–30 min)."""
+        try:
+            while self._connected:
+                await asyncio.sleep(600)  # 10 minutes
+                if not self._connected or not self._sws:
+                    break
+                try:
+                    wsapp = getattr(self._sws, 'wsapp', None)
+                    sock  = getattr(wsapp, 'sock', None) if wsapp else None
+                    if sock:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, sock.ping)
+                        logger.debug("[SMARTSTREAM] Keepalive ping sent")
+                    else:
+                        logger.debug("[SMARTSTREAM] Keepalive: wsapp.sock not ready — skipped")
+                except Exception as e:
+                    logger.warning(f"[SMARTSTREAM] Keepalive ping failed: {e}")
+        except asyncio.CancelledError:
+            pass
+
+    async def _start_keepalive(self) -> None:
+        """Create (or restart) the keepalive task. Must be called from the event loop."""
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
+        self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+        logger.debug("[SMARTSTREAM] Keepalive task started")
+
+    async def _stop_keepalive(self) -> None:
+        """Cancel the keepalive task. Must be called from the event loop."""
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
+            self._keepalive_task = None
 
     # Backoff schedule (seconds) — index = attempt number (0-based, capped at last)
     _RECONNECT_BACKOFF = [2, 4, 8, 16, 30, 30, 30, 60, 60, 60]
@@ -384,16 +435,20 @@ class AngelOneTickerAdapter:
                 logger.warning(f"[AO] event_logger call failed (max attempts): {_ev_err}")
             return
 
-        # ── Event log: reconnect attempt ─────────────────────────────────────
-        try:
-            from app.engine import event_logger as _ev
-            await _ev.log(
-                "info",
-                f"SmartStream reconnecting... attempt {self._reconnect_count + 1}",
-                algo_name=None, source="smartstream",
-            )
-        except Exception as _ev_err:
-            logger.warning(f"[AO] event_logger call failed (reconnect attempt): {_ev_err}")
+        _attempt_num = self._reconnect_count + 1
+        _log_this    = (_attempt_num == 1 or _attempt_num % 5 == 0)
+
+        # ── Event log: reconnect attempt — only attempt 1 and every 5th ─────
+        if _log_this:
+            try:
+                from app.engine import event_logger as _ev
+                await _ev.log(
+                    "info",
+                    f"SmartStream reconnecting... attempt {_attempt_num}",
+                    algo_name=None, source="smartstream",
+                )
+            except Exception as _ev_err:
+                logger.warning(f"[AO] event_logger call failed (reconnect attempt): {_ev_err}")
 
         import time as _time
         self._reconnect_started_at = _time.monotonic()
@@ -401,7 +456,8 @@ class AngelOneTickerAdapter:
         backoff = self._RECONNECT_BACKOFF[
             min(self._reconnect_count, len(self._RECONNECT_BACKOFF) - 1)
         ]
-        logger.info(f"[AO] 🔄 SmartStream reconnect backoff {backoff}s (attempt #{self._reconnect_count + 1})...")
+        if _log_this:
+            logger.info(f"[AO] 🔄 SmartStream reconnect backoff {backoff}s (attempt #{_attempt_num})...")
         await asyncio.sleep(backoff)
         if self._running:
             return   # already reconnected by another path
@@ -409,7 +465,8 @@ class AngelOneTickerAdapter:
         from datetime import datetime, timezone
         self._reconnect_count   += 1
         self._last_reconnect_at  = datetime.now(timezone.utc).isoformat()
-        logger.info(f"[AO] 🔄 SmartStream reconnect attempt #{self._reconnect_count}...")
+        if _log_this:
+            logger.info(f"[AO] 🔄 SmartStream reconnect attempt #{self._reconnect_count}...")
 
         # ── Refresh credentials from DB ───────────────────────────────────────
         try:
