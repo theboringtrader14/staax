@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { algosAPI, gridAPI, accountsAPI } from '@/services/api'
 import { useStore } from '@/store'
 import { StaaxSelect } from '@/components/StaaxSelect'
-import { Lightning, LightningSlash, Archive, Copy, Trash, Play, Stop, Warning, Sparkle } from '@phosphor-icons/react'
+import { Lightning, LightningSlash, Copy, Trash, Play, Stop, Warning, Sparkle } from '@phosphor-icons/react'
 import { AlgoAIAssistant } from '@/components/ai/AlgoAIAssistant'
 import { showSuccess, showError, showInfo } from '@/utils/toast'
 import { sounds } from '@/utils/sounds'
@@ -124,7 +124,6 @@ export default function GridPage() {
   const [grid,          setGrid]         = useState<Record<string,Record<string,Cell>>>({})
   const [loading,       setLoading]      = useState(true)
   const [showArch,      setShowArch]     = useState(() => localStorage.getItem('showArch') === 'true')
-  const [archConfirm,   setArchConfirm]  = useState<string|null>(null)
   const [cardMults,       setCardMults]       = useState<Record<string,number>>({})
   const [filterAccount,   setFilterAccount]   = useState('all')
   const [statFilter,      setStatFilter]      = useState<string|null>(null)
@@ -917,22 +916,6 @@ export default function GridPage() {
                                   : <LightningSlash size={18} weight="regular" />}
                               </button>
 
-                              {/* Archive */}
-                              <button
-                                onClick={() => { sounds.click(); setArchConfirm(algo.id) }}
-                                title="Archive"
-                                style={{
-                                  display:'flex', alignItems:'center', justifyContent:'center',
-                                  width:40, height:40, borderRadius:12,
-                                  background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)',
-                                  cursor:'pointer', color:'#60A5FA', transition:'box-shadow 0.12s',
-                                }}
-                                onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
-                                onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
-                                onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>
-                                <Archive size={18} weight="regular" />
-                              </button>
-
                               {/* Copy */}
                               <button
                                 onClick={() => { sounds.click(); duplicateAlgo(algo.id) }}
@@ -998,35 +981,6 @@ export default function GridPage() {
         />
       )}
 
-      {/* ── Archive confirm modal ─────────────────────────────────────────── */}
-      {archConfirm && (() => {
-        const a = algos.find(x => x.id===archConfirm)
-        return (
-          <div className="modal-overlay">
-            <div className="modal-box" style={{ maxWidth:'360px' }}>
-              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Archive {a?.name}?</div>
-              <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>This will hide the algo from the grid. All historical trade data will be preserved.</div>
-              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
-                <button
-                  onClick={() => { sounds.click(); setArchConfirm(null) }}
-                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'var(--text-dim)', cursor:'pointer', fontFamily:'var(--font-display)' }}
-                  onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
-                  onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
-                >Cancel</button>
-                <button
-                  onClick={() => { sounds.click(); archAlgo(archConfirm); setArchConfirm(null) }}
-                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#F59E0B', cursor:'pointer', fontFamily:'var(--font-display)' }}
-                  onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
-                  onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
-                >Archive</button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
       {/* ── Cancel run confirm modal ─────────────────────────────────────── */}
       {confirmCancel && (
         <div className="modal-overlay">
@@ -1043,15 +997,15 @@ export default function GridPage() {
         </div>
       )}
 
-      {/* ── Delete confirm modal ─────────────────────────────────────────── */}
+      {/* ── Remove Algo modal (Archive or Delete) ────────────────────────── */}
       {deleteConfirm && (() => {
         const a = algos.find(x => x.id === deleteConfirm)
         return (
           <div className="modal-overlay">
             <div className="modal-box" style={{ maxWidth:'380px' }}>
-              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Delete {a?.name}?</div>
+              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'8px' }}>Remove {a?.name}?</div>
               <div style={{ fontSize:'13px', color:'var(--text-muted)', lineHeight:1.6, marginBottom:'20px' }}>
-                This algo will be removed from your dashboard. All orders, P&L and trade history are permanently preserved.
+                Archive hides it from the grid but keeps all history. Delete removes it from the dashboard permanently — trade data is preserved.
               </div>
               <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button
@@ -1062,12 +1016,19 @@ export default function GridPage() {
                   onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                 >Cancel</button>
                 <button
+                  onClick={() => { sounds.click(); archAlgo(deleteConfirm); setDeleteConfirm(null) }}
+                  style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#60A5FA', cursor:'pointer', fontFamily:'var(--font-display)' }}
+                  onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
+                  onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
+                >Archive</button>
+                <button
                   onClick={() => { sounds.click(); deleteAlgo(deleteConfirm); setDeleteConfirm(null) }}
                   style={{ background:'var(--bg)', boxShadow:'var(--neu-raised-sm)', border:'none', borderRadius:100, padding:'7px 20px', fontSize:13, fontWeight:600, color:'#FF4444', cursor:'pointer', fontFamily:'var(--font-display)' }}
                   onMouseDown={e => (e.currentTarget.style.boxShadow='var(--neu-inset)')}
                   onMouseUp={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow='var(--neu-raised-sm)')}
-                >Delete Algo</button>
+                >Delete</button>
               </div>
             </div>
           </div>

@@ -112,7 +112,7 @@ const ALGO_STATUS_BAR: Record<AlgoStatus, { color: string; glow: string }> = {
   error:    { color: '#FF2244',               glow: 'rgba(255,34,68,0.70)'   },
   pending:  { color: '#FF8C00',               glow: 'rgba(255,140,0,0.65)'   },
   waiting:  { color: '#D97706',               glow: 'rgba(217,119,6,0.65)'   },
-  no_trade: { color: 'var(--border)',          glow: 'transparent'            },
+  no_trade: { color: '#F59E0B',                glow: 'rgba(245,158,11,0.30)'  },
   skipped:  { color: 'rgba(156,163,175,0.5)', glow: 'transparent'            },
 }
 
@@ -668,11 +668,9 @@ export default function OrdersPage() {
 
   const LS_DAY_KEY = 'staax_orders_day'
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    try {
-      const stored = localStorage.getItem('staax_orders_day')
-      if (stored && Object.values(weekDates).includes(stored)) return stored
-    } catch {}
-    return todayDate
+    const now = new Date()
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    return ist.toISOString().slice(0, 10)
   })
   // Ref kept in sync with selectedDate so action handlers (doRetry, doSQ, etc.)
   // always read the current date even if the closure was captured before a tab change.
@@ -1529,7 +1527,7 @@ export default function OrdersPage() {
                 displayStatus === 'MISSED'     ? '#F59E0B' :
                 displayStatus === 'SKIPPED'    ? 'rgba(156,163,175,0.5)' :
                 isError ? '#FF4444' :
-                isMissed ? 'rgba(255,215,0,0.35)' :
+                isMissed ? '#F59E0B' :
                 '#FFE600'  // WAITING default
               const stripGlow =
                 displayStatus === 'MONITORING' ? 'rgba(45,212,191,0.5)' :
@@ -1581,7 +1579,7 @@ export default function OrdersPage() {
               const retryBg    = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.05)'
               const retryHBg   = isOrbRetryBlocked ? 'transparent' : 'rgba(245,158,11,0.14)'
               const missedBtns = [
-                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: false, action: undefined },
+                { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',   border: undefined, disabled: true, action: undefined },
                 { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)', border: undefined, disabled: true,  action: undefined },
                 { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',  hBg: 'rgba(255,68,68,0.14)',  border: undefined, disabled: true,  action: undefined },
                 { label: retryLabel, col: retryCol, bg: retryBg, hBg: retryHBg, border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
@@ -1901,7 +1899,7 @@ export default function OrdersPage() {
                     const canSQ    = isMarketHours && !isTerminated && !isClosed && hasOpenLegs
                     const canRetryFinal = canRetry && isMarketHours
                     const BTNS = [
-                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: false,                                        title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
+                      { label: 'SYNC',   col: '#CC4400', bg: 'rgba(204,68,0,0.05)',    hBg: 'rgba(204,68,0,0.14)',    border: undefined, disabled: !hasOpenLegs && !someLegsError,               title: undefined, action: () => { setSyncForm({ broker_order_id: '', account_id: group.account }); setShowSync(gi) } },
                       { label: 'SQ',     col: '#0ea66e', bg: 'rgba(34,221,136,0.05)', hBg: 'rgba(34,221,136,0.14)',  border: undefined, disabled: !canSQ, title: !canSQ && hasOpenLegs && !isTerminated && !isClosed ? 'Market is closed' : undefined, action: () => { setSqChecked({}); setModal({ type: 'sq', algoIdx: gi }) } },
                       { label: 'T',      col: '#FF4444', bg: 'rgba(255,68,68,0.05)',   hBg: 'rgba(255,68,68,0.14)',   border: undefined, disabled: isTerminated || isClosed || !isMarketHours,   title: !isTerminated && !isClosed && !isMarketHours ? 'Market is closed' : undefined, action: () => setModal({ type: 't', algoIdx: gi }) },
                       { label: retryBtnLabel, col: retryBtnCol, bg: retryBtnBg, hBg: 'rgba(245,158,11,0.14)', border: undefined, disabled: !canRetryFinal || !!loading[`retry-${gi}`] || isRetrying, title: isOrbMissed ? 'ORB window closed' : (isRetrying ? 'Retrying...' : (!isMarketHours && canRetry ? 'Market is closed' : (!canRetry ? 'Available when algo is in error or missed state' : undefined))), action: doSmartRetry },
@@ -1939,15 +1937,10 @@ export default function OrdersPage() {
                                   {algoSt === 'error' ? 'ERROR' : algoSt === 'no_trade' ? 'MISSED' : algoSt.toUpperCase()}
                                 </span>
                               : <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, minWidth: 85,
-                                  color: realizedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  {realizedPnl >= 0 ? '+' : ''}₹{Math.abs(realizedPnl).toLocaleString('en-IN')}
+                                  color: (realizedPnl + unrealizedPnl) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {(realizedPnl + unrealizedPnl) >= 0 ? '+' : ''}₹{Math.abs(realizedPnl + unrealizedPnl).toLocaleString('en-IN')}
                                 </span>
                             }
-                            {openCount > 0 && (
-                              <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>
-                                ({unrealizedPnl >= 0 ? '+' : ''}₹{Math.abs(unrealizedPnl).toLocaleString('en-IN')} live)
-                              </span>
-                            )}
                             <div style={{ flex: 1 }} />
                             <div style={{ display: 'flex', gap: 6, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
                               {BTNS.map((btn, bi) => (
