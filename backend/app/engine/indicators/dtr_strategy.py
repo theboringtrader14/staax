@@ -4,12 +4,14 @@ DTR Strategy — Daily Trading Range.
 Translated from Pinescript to Python.
 
 Logic:
-  prev_range = prev_day_high - prev_day_low
-  UPP1 = day_open + (prev_range * 0.5589)   ← upper pivot
-  LPP1 = day_open - (prev_range * 0.5589)   ← lower pivot
+  PR   = prev_day_high - prev_day_low
+  UPP  = day_open + (PR × 0.28657)   ← inner upper  (visual only)
+  LPP  = day_open - (PR × 0.28657)   ← inner lower  (visual only)
+  UPP1 = day_open + (PR × 0.55890)   ← outer upper  (signal line)
+  LPP1 = day_open - (PR × 0.55890)   ← outer lower  (signal line)
 
-  LONG  entry: close crossover  UPP1  (prev < UPP1 <= curr)
-  SHORT entry: close crossunder LPP1  (prev > LPP1 >= curr)
+  LONG  entry: ta.crossover(close, UPP1)  → prev_close <= UPP1 AND close > UPP1
+  SHORT entry: ta.crossunder(close, LPP1) → prev_close >= LPP1 AND close < LPP1
 
 set_daily_data() must be called once per day before market open
 with previous day's OHLC data.
@@ -34,6 +36,12 @@ class DTRStrategy:
         self._prev_high: Optional[float] = None
         self._prev_low:  Optional[float] = None
 
+        # Pre-computed pivots (updated in set_daily_data)
+        self._upp:  Optional[float] = None   # inner upper  (0.28657)
+        self._lpp:  Optional[float] = None   # inner lower  (0.28657)
+        self._upp1: Optional[float] = None   # outer upper  (0.55890) — signal line
+        self._lpp1: Optional[float] = None   # outer lower  (0.55890) — signal line
+
         # Tracks previous candle close for crossover detection
         self._prev_close: Optional[float] = None
 
@@ -54,6 +62,12 @@ class DTRStrategy:
         self._prev_low  = prev_low
         self._prev_close = None   # reset; first candle of the day seeds it
 
+        pr = prev_high - prev_low
+        self._upp  = day_open + pr * 0.28657
+        self._lpp  = day_open - pr * 0.28657
+        self._upp1 = day_open + pr * 0.55890
+        self._lpp1 = day_open - pr * 0.55890
+
         # Clear failure flag on successful data load
         self._data_load_failed = False
         self._last_warn_ts = None
@@ -61,7 +75,8 @@ class DTRStrategy:
         logger.info(
             f"[DTR] Daily data set — open={day_open:.2f} "
             f"prev_H={prev_high:.2f} prev_L={prev_low:.2f} "
-            f"UPP1={self.upper_pivot:.2f} LPP1={self.lower_pivot:.2f}"
+            f"UPP1={self._upp1:.2f} LPP1={self._lpp1:.2f} "
+            f"UPP={self._upp:.2f} LPP={self._lpp:.2f}"
         )
 
     def mark_data_failed(self, bot_id: str) -> None:
@@ -75,16 +90,24 @@ class DTRStrategy:
     # ── Pivots ────────────────────────────────────────────────────────────────
 
     @property
+    def upper(self) -> Optional[float]:
+        """Inner upper band (PR × 0.28657) — visual only."""
+        return self._upp
+
+    @property
+    def lower(self) -> Optional[float]:
+        """Inner lower band (PR × 0.28657) — visual only."""
+        return self._lpp
+
+    @property
     def upper_pivot(self) -> Optional[float]:
-        if self._day_open is None or self._prev_high is None or self._prev_low is None:
-            return None
-        return self._day_open + (self._prev_high - self._prev_low) * 0.5589
+        """Outer upper band (PR × 0.55890) — signal line."""
+        return self._upp1
 
     @property
     def lower_pivot(self) -> Optional[float]:
-        if self._day_open is None or self._prev_high is None or self._prev_low is None:
-            return None
-        return self._day_open - (self._prev_high - self._prev_low) * 0.5589
+        """Outer lower band (PR × 0.55890) — signal line."""
+        return self._lpp1
 
     # ── Signal generation ─────────────────────────────────────────────────────
 
@@ -92,6 +115,10 @@ class DTRStrategy:
         """
         Process a completed candle. Returns a Signal on crossover/crossunder,
         None otherwise.
+
+        Pine Script crossover semantics:
+          ta.crossover(close, UPP1)  → prev_close <= UPP1 AND close > UPP1
+          ta.crossunder(close, LPP1) → prev_close >= LPP1 AND close < LPP1
         """
         curr = candle.close
 
@@ -100,10 +127,7 @@ class DTRStrategy:
             self._prev_close = curr
             return None
 
-        upp1 = self.upper_pivot
-        lpp1 = self.lower_pivot
-
-        if upp1 is None:
+        if self._upp1 is None:
             # Rate-limit warning to once per minute
             now = datetime.now(timezone.utc)
             if self._data_load_failed:
@@ -116,18 +140,18 @@ class DTRStrategy:
         prev = self._prev_close
         self._prev_close = curr
 
-        # LONG: close crosses above UPP1
-        if self._longs and prev < upp1 <= curr:
+        # LONG: ta.crossover — prev <= UPP1 AND curr > UPP1
+        if self._longs and prev <= self._upp1 and curr > self._upp1:
             logger.info(
-                f"[DTR] LONG signal — close {curr:.2f} crossed above UPP1 {upp1:.2f}"
+                f"[DTR] LONG signal — close {curr:.2f} crossed above UPP1 {self._upp1:.2f}"
             )
-            return Signal(type="entry", direction="buy", price=curr, reason="L1")
+            return Signal(type="entry", direction="buy", price=curr, reason="DTR_LONG")
 
-        # SHORT: close crosses below LPP1
-        if self._shorts and prev > lpp1 >= curr:
+        # SHORT: ta.crossunder — prev >= LPP1 AND curr < LPP1
+        if self._shorts and prev >= self._lpp1 and curr < self._lpp1:
             logger.info(
-                f"[DTR] SHORT signal — close {curr:.2f} crossed below LPP1 {lpp1:.2f}"
+                f"[DTR] SHORT signal — close {curr:.2f} crossed below LPP1 {self._lpp1:.2f}"
             )
-            return Signal(type="entry", direction="sell", price=curr, reason="S1")
+            return Signal(type="entry", direction="sell", price=curr, reason="DTR_SHORT")
 
         return None

@@ -463,6 +463,8 @@ async def bot_chart(
     upper_out:   list = []
     lower_out:   list = []
     mid_out:     list = []
+    upper2_out:  list = []
+    lower2_out:  list = []
 
     for c in agg_candles:
         ts_epoch = int(c.ts.timestamp())
@@ -474,6 +476,10 @@ async def bot_chart(
             lower_out.append({"time": ts_epoch, "value": b.lower})
             if b.mid is not None:
                 mid_out.append({"time": ts_epoch, "value": b.mid})
+            if b.inner_upper is not None:
+                upper2_out.append({"time": ts_epoch, "value": b.inner_upper})
+            if b.inner_lower is not None:
+                lower2_out.append({"time": ts_epoch, "value": b.inner_lower})
 
     # 6. Fetch signals
     sig_result = await db.execute(
@@ -497,6 +503,8 @@ async def bot_chart(
         "upper":   upper_out,
         "lower":   lower_out,
         "mid":     mid_out,
+        "upper2":  upper2_out,
+        "lower2":  lower2_out,
         "entries": entries_out,
     }
 

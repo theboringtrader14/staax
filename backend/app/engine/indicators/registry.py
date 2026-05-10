@@ -13,9 +13,11 @@ from dataclasses import dataclass
 
 @dataclass
 class IndicatorBands:
-    upper: Optional[float]
-    lower: Optional[float]
-    mid:   Optional[float] = None
+    upper:       Optional[float]
+    lower:       Optional[float]
+    mid:         Optional[float] = None
+    inner_upper: Optional[float] = None   # DTR UPP  (0.28657) — visual only
+    inner_lower: Optional[float] = None   # DTR LPP  (0.28657) — visual only
 
 
 class BaseIndicatorAdapter(ABC):
@@ -76,12 +78,6 @@ class DTRAdapter(BaseIndicatorAdapter):
 
     def _reset_state(self) -> None:
         self._prev_date = None
-        # Previous day accumulated OHLC (fed to set_daily_data on day change)
-        self._pd_open  = None
-        self._pd_high  = None
-        self._pd_low   = None
-        self._pd_close = None
-        # Current day accumulation
         self._cd_open  = None
         self._cd_high  = None
         self._cd_low   = None
@@ -96,16 +92,14 @@ class DTRAdapter(BaseIndicatorAdapter):
         candle_date = candle.ts.date() if hasattr(candle.ts, "date") else candle.ts
 
         if self._prev_date != candle_date:
-            # Day boundary: feed previous day's OHLC into strategy if available
-            if self._pd_open is not None:
+            # Day boundary: feed yesterday's accumulated H/L/C + today's first open
+            if self._cd_open is not None:
                 self._s.set_daily_data(
-                    self._pd_open, self._pd_high, self._pd_low, self._pd_close
+                    candle.open,       # today's open (first bar of new day)
+                    self._cd_high,     # yesterday's accumulated high
+                    self._cd_low,      # yesterday's accumulated low
+                    self._cd_close,    # yesterday's accumulated close
                 )
-            # Save current day's accumulated values as previous for next crossing
-            self._pd_open  = self._cd_open
-            self._pd_high  = self._cd_high
-            self._pd_low   = self._cd_low
-            self._pd_close = self._cd_close
             # Start fresh current-day tracking
             self._cd_open  = candle.open
             self._cd_high  = candle.high
@@ -124,11 +118,15 @@ class DTRAdapter(BaseIndicatorAdapter):
 
     @property
     def bands(self) -> Optional[IndicatorBands]:
-        u = self._s.upper_pivot
-        l = self._s.lower_pivot
+        u  = self._s.upper_pivot   # outer upper (signal line)
+        l  = self._s.lower_pivot   # outer lower (signal line)
         if u is None or l is None:
             return None
-        return IndicatorBands(upper=u, lower=l)
+        return IndicatorBands(
+            upper=u, lower=l,
+            inner_upper=self._s.upper,   # inner upper (0.28657)
+            inner_lower=self._s.lower,   # inner lower (0.28657)
+        )
 
 
 class TTBandsAdapter(BaseIndicatorAdapter):
