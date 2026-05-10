@@ -35,8 +35,8 @@ _MCX_ROLL_DAYS_BEFORE = 2
 # Fallback values here are the last known-good tokens; they are overwritten
 # immediately on first startup if the instrument master is present.
 MCX_TOKENS = {
-    "GOLDM":     487819,   # GOLDM05MAY26FUT — updated 2026-04-01 (Apr expired 03APR)
-    "SILVERMIC": 466029,   # SILVERMIC30APR26FUT — current until 30APR, then auto-rotates
+    "GOLDM":     491727,   # GOLDM05JUN26FUT — updated 2026-05-10
+    "SILVERMIC": 477177,   # SILVERMIC30JUN26FUT — updated 2026-05-10
 }
 
 # MCX exchange type for Angel One SmartStream subscription

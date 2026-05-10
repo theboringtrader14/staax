@@ -495,8 +495,10 @@ class AngelOneBroker(BaseBroker):
 
         # Check disk cache — avoids 40MB re-download on every backend restart
         import os, json as _json
-        _cache_file = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache.json")
-        _cache_meta = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache_date.txt")
+        from pathlib import Path as _Path
+        _cache_dir  = _Path(__file__).parent.parent.parent  # → backend/
+        _cache_file = str(_cache_dir / "instrument_master_cache.json")
+        _cache_meta = str(_cache_dir / "instrument_master_cache_date.txt")
         try:
             if os.path.exists(_cache_file) and os.path.exists(_cache_meta):
                 with open(_cache_meta) as _f:
@@ -521,8 +523,6 @@ class AngelOneBroker(BaseBroker):
             # Write to disk cache for fast reload on restart
             try:
                 import os, json as _json
-                _cache_file = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache.json")
-                _cache_meta = os.path.expanduser("~/STAXX/staax/backend/instrument_master_cache_date.txt")
                 with open(_cache_file, 'w') as _f:
                     _json.dump(data, _f)
                 with open(_cache_meta, 'w') as _f:
