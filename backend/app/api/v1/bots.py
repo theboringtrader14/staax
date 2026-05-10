@@ -463,12 +463,11 @@ async def bot_chart(
     upper_out:   list = []
     lower_out:   list = []
     mid_out:     list = []
-    upper2_out:  list = []
-    lower2_out:  list = []
+    entries_out: list = []
 
     for c in agg_candles:
         ts_epoch = int(c.ts.timestamp())
-        indicator.on_candle(c)
+        sig = indicator.on_candle(c)
         b = indicator.bands
         candles_out.append({"time": ts_epoch, "open": c.open, "high": c.high, "low": c.low, "close": c.close})
         if b:
@@ -476,35 +475,18 @@ async def bot_chart(
             lower_out.append({"time": ts_epoch, "value": b.lower})
             if b.mid is not None:
                 mid_out.append({"time": ts_epoch, "value": b.mid})
-            if b.inner_upper is not None:
-                upper2_out.append({"time": ts_epoch, "value": b.inner_upper})
-            if b.inner_lower is not None:
-                lower2_out.append({"time": ts_epoch, "value": b.inner_lower})
-
-    # 6. Fetch signals
-    sig_result = await db.execute(
-        select(BotSignal)
-        .where(BotSignal.bot_id == bot_uuid)
-        .where(BotSignal.candle_timestamp >= since)
-        .order_by(BotSignal.candle_timestamp.asc())
-    )
-    entries_out = [
-        {
-            "time":      int(s.candle_timestamp.timestamp()),
-            "direction": s.direction,
-            "label":     s.reason or s.signal_type,
-        }
-        for s in sig_result.scalars().all()
-        if s.candle_timestamp
-    ]
+        if sig is not None:
+            entries_out.append({
+                "time":      ts_epoch,
+                "direction": sig.direction,
+                "label":     "BUY" if sig.direction == "buy" else "SELL",
+            })
 
     return {
         "candles": candles_out,
         "upper":   upper_out,
         "lower":   lower_out,
         "mid":     mid_out,
-        "upper2":  upper2_out,
-        "lower2":  lower2_out,
         "entries": entries_out,
     }
 

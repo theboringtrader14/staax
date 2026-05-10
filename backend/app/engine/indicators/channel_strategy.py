@@ -95,15 +95,16 @@ class ChannelStrategy:
         if prev is None or upper is None or lower is None:
             return None
 
-        # LONG entry: close crosses above upper channel
-        if prev < upper <= curr:
+        # LONG entry: ta.crossover — prev_close <= upper AND curr_close > upper
+        if prev <= upper and curr > upper:
             logger.info(
                 f"[CHANNEL] LONG entry — close {curr:.2f} crossed above upper {upper:.2f}"
             )
             return Signal(type="entry", direction="buy", price=curr, reason="CHANNEL_LONG")
 
         # Lower channel cross — exit long (or short entry if not long_only)
-        if prev > lower >= curr:
+        # ta.crossunder — prev_close >= lower AND curr_close < lower
+        if prev >= lower and curr < lower:
             if self._long_only:
                 logger.info(
                     f"[CHANNEL] LONG exit — close {curr:.2f} crossed below lower {lower:.2f}"

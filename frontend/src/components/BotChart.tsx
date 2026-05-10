@@ -40,11 +40,9 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
       borderUpColor: '#0EA66E', borderDownColor: '#FF4444',
       wickUpColor: '#0EA66E', wickDownColor: '#FF4444',
     })
-    const upperBand  = chart.addSeries(LineSeries, { color: '#38bdf8', lineWidth: 1, title: 'Upper' })
-    const lowerBand  = chart.addSeries(LineSeries, { color: '#f87171', lineWidth: 1, title: 'Lower' })
-    const midLine    = chart.addSeries(LineSeries, { color: 'rgba(255,255,255,0.3)', lineWidth: 1, lineStyle: 2, title: 'Mid' })
-    const upperBand2 = chart.addSeries(LineSeries, { color: 'rgba(56,189,248,0.45)', lineWidth: 1, lineStyle: 2, title: 'UPP' })
-    const lowerBand2 = chart.addSeries(LineSeries, { color: 'rgba(248,113,113,0.45)', lineWidth: 1, lineStyle: 2, title: 'LPP' })
+    const upperBand = chart.addSeries(LineSeries, { color: '#38bdf8', lineWidth: 1, title: 'Upper' })
+    const lowerBand = chart.addSeries(LineSeries, { color: '#f87171', lineWidth: 1, title: 'Lower' })
+    const midLine   = chart.addSeries(LineSeries, { color: 'rgba(255,255,255,0.3)', lineWidth: 1, lineStyle: 2, title: 'Mid' })
 
     const fetchData = async () => {
       setLoading(true)
@@ -56,15 +54,13 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
         if (d.upper?.length)   upperBand.setData(d.upper)
         if (d.lower?.length)   lowerBand.setData(d.lower)
         if (d.mid?.length)     midLine.setData(d.mid)
-        if (d.upper2?.length)  upperBand2.setData(d.upper2)
-        if (d.lower2?.length)  lowerBand2.setData(d.lower2)
         if (d.entries?.length) {
           createSeriesMarkers(candles, (d.entries as any[]).map((e) => ({
             time: e.time,
             position: e.direction === 'sell' ? 'aboveBar' : 'belowBar',
-            color: e.direction === 'sell' ? '#FF4444' : '#0EA66E',
-            shape: 'arrowDown',
-            text: e.label || (e.direction === 'sell' ? 'S' : 'B'),
+            color: e.direction === 'sell' ? '#ef4444' : '#22c55e',
+            shape: e.direction === 'sell' ? 'arrowDown' : 'arrowUp',
+            text: e.direction === 'sell' ? 'SELL' : 'BUY',
           })))
         }
       } catch (e) {

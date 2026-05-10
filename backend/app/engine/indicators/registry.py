@@ -9,6 +9,7 @@ Done.
 from abc import ABC, abstractmethod
 from typing import Optional
 from dataclasses import dataclass
+from app.engine.indicators import Signal
 
 
 @dataclass
@@ -29,8 +30,8 @@ class BaseIndicatorAdapter(ABC):
         pass
 
     @abstractmethod
-    def on_candle(self, candle) -> None:
-        """Feed one candle. Returns nothing — use bands property."""
+    def on_candle(self, candle) -> Optional[Signal]:
+        """Feed one candle. Returns Signal on crossover, None otherwise."""
         pass
 
     @property
@@ -53,8 +54,8 @@ class ChannelAdapter(BaseIndicatorAdapter):
         from app.engine.indicators.channel_strategy import ChannelStrategy
         self._s = ChannelStrategy()
 
-    def on_candle(self, candle) -> None:
-        self._s.on_candle(candle)
+    def on_candle(self, candle) -> Optional[Signal]:
+        return self._s.on_candle(candle)
 
     @property
     def bands(self) -> Optional[IndicatorBands]:
@@ -114,7 +115,7 @@ class DTRAdapter(BaseIndicatorAdapter):
             self._cd_low   = min(self._cd_low,  candle.low)  if self._cd_low  is not None else candle.low
             self._cd_close = candle.close
 
-        self._s.on_candle(candle)
+        return self._s.on_candle(candle)
 
     @property
     def bands(self) -> Optional[IndicatorBands]:
@@ -140,8 +141,8 @@ class TTBandsAdapter(BaseIndicatorAdapter):
         from app.engine.indicators.tt_bands_strategy import TTBandsStrategy
         self._s = TTBandsStrategy()
 
-    def on_candle(self, candle) -> None:
-        self._s.on_candle(candle)
+    def on_candle(self, candle) -> Optional[Signal]:
+        return self._s.on_candle(candle)
 
     @property
     def bands(self) -> Optional[IndicatorBands]:
