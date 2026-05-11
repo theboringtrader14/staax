@@ -2525,6 +2525,30 @@ class AlgoRunner:
             except Exception as e:
                 logger.error(f"[RESTORE-SL] failed: {e}")
 
+    async def rebuild_orb_levels(self) -> None:
+        """Rebuild _orb_levels from AlgoState DB on startup — restores ORB SL/TP after restart."""
+        try:
+            async with AsyncSessionLocal() as db:
+                r = await db.execute(
+                    select(AlgoState)
+                    .where(AlgoState.orb_high.isnot(None))
+                    .where(AlgoState.orb_low.isnot(None))
+                    .where(AlgoState.status == AlgoRunStatus.ACTIVE)
+                )
+                states = r.scalars().all()
+                for s in states:
+                    self._orb_levels[str(s.grid_entry_id)] = (
+                        float(s.orb_high or 0),
+                        float(s.orb_low or 0),
+                    )
+                    logger.info(
+                        f"[ORB] Restored levels for {str(s.grid_entry_id)[:8]}: "
+                        f"high={s.orb_high} low={s.orb_low}"
+                    )
+            logger.info(f"[ORB] rebuild_orb_levels complete — {len(self._orb_levels)} entry(s)")
+        except Exception as e:
+            logger.error(f"[ORB] rebuild_orb_levels failed: {e}")
+
     # ── MTM callback ─────────────────────────────────────────────────────────
 
     def _make_mtm_callback(self, grid_entry_id: str):
@@ -2594,6 +2618,24 @@ class AlgoRunner:
                         await _db.commit()
             except Exception as _orb_persist_err:
                 logger.warning(f"[ORB] Failed to persist orb_high/orb_low to AlgoState: {_orb_persist_err}")
+            # Mark ORBRangeState as TRIGGERED
+            async def _mark_orb_triggered_task():
+                try:
+                    from app.models.orb_range_state import ORBRangeState
+                    from sqlalchemy import update as _upd
+                    import uuid as _uuid_t, pytz as _pytz_t
+                    _IST_t = _pytz_t.timezone('Asia/Kolkata')
+                    async with AsyncSessionLocal() as _tdb:
+                        await _tdb.execute(
+                            _upd(ORBRangeState)
+                            .where(ORBRangeState.grid_entry_id == _uuid_t.UUID(eid))
+                            .where(ORBRangeState.status == 'ARMED')
+                            .values(status='TRIGGERED', triggered_at=datetime.now(_IST_t))
+                        )
+                        await _tdb.commit()
+                except Exception as _te:
+                    logger.warning(f"[ORB] Failed to mark triggered: {_te}")
+            asyncio.create_task(_mark_orb_triggered_task())
             await self.enter(eid, reentry=False)
 
         return on_orb_entry
@@ -2652,6 +2694,7 @@ class AlgoRunner:
         algo_name: str,
         algo_orb_start_time: Optional[str],
         algo_orb_end_time: Optional[str],
+        algo_account_id: Optional[str] = None,
         algo_dte: Optional[int] = None,
     ):
         """
@@ -2690,6 +2733,9 @@ class AlgoRunner:
                 _first_orb_entry_at  = getattr(_legs[0], 'orb_entry_at', None)
                 _first_direction     = _legs[0].direction or "buy"
                 _first_orb_src       = getattr(_legs[0], 'orb_range_source', None) or "underlying"
+                _first_wt_enabled    = getattr(_legs[0], 'wt_enabled', False) or False
+                _first_wt_value      = float(_legs[0].wt_value or 0.0) if _first_wt_enabled else 0.0
+                _first_wt_unit       = (_legs[0].wt_unit or "pts") if _first_wt_enabled else "pts"
             else:
                 _first_underlying = None
 
@@ -2808,8 +2854,8 @@ class AlgoRunner:
             end_time=self._parse_time(algo_orb_end_time or "11:16"),
             instrument_token=_tracking_token,
             orb_range_source=_orb_range_source,
-            wt_value=0.0,   # ORB uses range breakout, not W&T buffer
-            wt_unit="pts",
+            wt_value=_first_wt_value,
+            wt_unit=_first_wt_unit,
             symbol=_ohlc_symbol,
             exchange=_ohlc_exchange,
             orb_start_str=_orb_start_str,
@@ -2817,6 +2863,34 @@ class AlgoRunner:
             entry_at=_entry_at,
         )
         window._broker = _ohlc_broker
+
+        # Persist CAPTURING state to DB — enables restart recovery
+        try:
+            from app.models.orb_range_state import ORBRangeState
+            import uuid as _uuid_orb, pytz as _pytz_orb
+            _IST_orb = _pytz_orb.timezone('Asia/Kolkata')
+            _orb_state = ORBRangeState(
+                grid_entry_id = _uuid_orb.UUID(str(grid_entry_id)),
+                algo_id       = _uuid_orb.UUID(str(algo_id)),
+                account_id    = _uuid_orb.UUID(str(algo_account_id)) if algo_account_id else None,
+                symbol        = _ohlc_symbol,
+                symbol_token  = str(_tracking_token),
+                exchange      = _ohlc_exchange,
+                orb_start_time = algo_orb_start_time or '09:15',
+                orb_end_time  = algo_orb_end_time or '11:16',
+                entry_at      = _entry_at,
+                wt_buffer     = _first_wt_value,
+                wt_unit       = _first_wt_unit,
+                status        = 'CAPTURING',
+                created_at    = datetime.now(IST),
+            )
+            async with AsyncSessionLocal() as _orb_db:
+                _orb_db.add(_orb_state)
+                await _orb_db.commit()
+            logger.info(f"[ORB] CAPTURING state persisted: {_ohlc_symbol} ge={str(grid_entry_id)[:8]}")
+        except Exception as _orb_persist_err:
+            logger.warning(f"[ORB] CAPTURING DB persist failed (non-fatal): {_orb_persist_err}")
+
         self._orb_tracker.register(
             window,
             on_entry=self._make_orb_callback(str(grid_entry_id)),

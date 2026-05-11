@@ -24,6 +24,53 @@ IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 
+async def _persist_orb_range(grid_entry_id: str, high: float, low: float) -> None:
+    """Persist ORB range to DB after OHLC fetch succeeds. Status: CAPTURING → ARMED."""
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.models.orb_range_state import ORBRangeState
+        from sqlalchemy import update
+        import uuid, pytz
+        from datetime import datetime as _dt
+        _IST = pytz.timezone('Asia/Kolkata')
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(ORBRangeState)
+                .where(ORBRangeState.grid_entry_id == uuid.UUID(grid_entry_id))
+                .where(ORBRangeState.status == 'CAPTURING')
+                .values(
+                    range_high=high,
+                    range_low=low,
+                    status='ARMED',
+                    frozen_at=_dt.now(_IST),
+                )
+            )
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"[ORB] Failed to persist range state: {e}")
+
+
+async def _persist_orb_no_trade(grid_entry_id: str) -> None:
+    """Mark ORB state as NO_TRADE when OHLC fetch fails or returns no data."""
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.models.orb_range_state import ORBRangeState
+        from sqlalchemy import update
+        import uuid, pytz
+        from datetime import datetime as _dt
+        _IST = pytz.timezone('Asia/Kolkata')
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(ORBRangeState)
+                .where(ORBRangeState.grid_entry_id == uuid.UUID(grid_entry_id))
+                .where(ORBRangeState.status == 'CAPTURING')
+                .values(status='NO_TRADE', expired_at=_dt.now(_IST))
+            )
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"[ORB] Failed to persist no_trade state: {e}")
+
+
 @dataclass
 class ORBWindow:
     grid_entry_id:    str
@@ -133,6 +180,7 @@ class ORBTracker:
                     f"[ORB] No broker set — cannot fetch OHLC for {window.algo_id}"
                 )
                 window.is_no_trade = True
+                asyncio.create_task(_persist_orb_no_trade(window.grid_entry_id))
                 return
 
             candles = await broker.get_candle_data(
@@ -149,12 +197,14 @@ class ORBTracker:
                     f"{window.orb_start_str}→{window.orb_end_str}"
                 )
                 window.is_no_trade = True
+                asyncio.create_task(_persist_orb_no_trade(window.grid_entry_id))
                 return
 
             # Angel One returns [timestamp, open, high, low, close, volume]
             window.range_high = max(c[2] for c in candles)
             window.range_low  = min(c[3] for c in candles)
             window.is_range_set = True
+            asyncio.create_task(_persist_orb_range(window.grid_entry_id, window.range_high, window.range_low))
             logger.info(
                 f"[ORB] Range set via OHLC for {window.symbol}: "
                 f"high={window.range_high:.2f} low={window.range_low:.2f} "
@@ -166,6 +216,7 @@ class ORBTracker:
                 f"[ORB] Range fetch failed for {window.algo_id}: {e}"
             )
             window.is_no_trade = True
+            asyncio.create_task(_persist_orb_no_trade(window.grid_entry_id))
 
     async def on_candle_close(self, token: int, candle_close: float) -> None:
         """

@@ -820,6 +820,7 @@ class AlgoScheduler:
                         _orb_start_time      = algo.orb_start_time
                         _orb_end_time        = algo.orb_end_time
                         _orb_dte             = algo.dte
+                        _orb_account_id      = str(algo.account_id)
                         _orb_grid_entry_id   = str(grid_entry.id)
                         import asyncio
                         asyncio.ensure_future(
@@ -830,6 +831,7 @@ class AlgoScheduler:
                                     algo_name=_orb_algo_name,
                                     algo_orb_start_time=_orb_start_time,
                                     algo_orb_end_time=_orb_end_time,
+                                    algo_account_id=_orb_account_id,
                                     algo_dte=_orb_dte,
                                 ),
                                 algo_id=_orb_algo_id,
@@ -1213,6 +1215,23 @@ class AlgoScheduler:
                     logger.info("[EOD] W&T armed states expired")
                 except Exception as _wt_exp_err:
                     logger.warning(f"[EOD] W&T expiry failed (non-fatal): {_wt_exp_err}")
+
+                # Mark remaining CAPTURING/ARMED ORB states as EXPIRED
+                try:
+                    from app.models.orb_range_state import ORBRangeState
+                    from sqlalchemy import update as _orb_update
+                    _orb_today_start = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+                    async with AsyncSessionLocal() as _orb_db:
+                        await _orb_db.execute(
+                            _orb_update(ORBRangeState)
+                            .where(ORBRangeState.status.in_(['CAPTURING', 'ARMED']))
+                            .where(ORBRangeState.created_at >= _orb_today_start)
+                            .values(status='EXPIRED', expired_at=datetime.now(IST))
+                        )
+                        await _orb_db.commit()
+                    logger.info("[EOD] ORB range states expired")
+                except Exception as _orb_exp_err:
+                    logger.warning(f"[EOD] ORB expiry failed (non-fatal): {_orb_exp_err}")
 
             except Exception as e:
                 await db.rollback()
