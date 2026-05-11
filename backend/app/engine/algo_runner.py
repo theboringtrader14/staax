@@ -1173,14 +1173,22 @@ class AlgoRunner:
         # ── Resolve broker for this account ────────────────────────────────────
         # Must be resolved before W&T check so the broker is available for strike selection
         broker_type  = "zerodha"
-        account_broker = self._zerodha_broker   # default
+        account_broker = self._zerodha_broker
         if account and account.broker == BrokerType.ANGELONE:
             broker_type    = "angelone"
             account_broker = self._angel_broker_map.get(account.client_id)
             if not account_broker:
-                logger.warning(
-                    f"[BROKER] No Angel One broker found for client_id={account.client_id} — "
-                    "falling back to order_placer default"
+                logger.error(
+                    f"[BROKER] No Angel One broker for client_id={account.client_id} "
+                    f"— aborting entry for {algo.name}"
+                )
+                asyncio.create_task(_ev.error(
+                    "engine",
+                    f"No broker found for account {account.client_id} — {algo.name} aborted",
+                ))
+                raise RuntimeError(
+                    f"No broker configured for Angel One account {account.client_id} "
+                    f"({account.nickname})"
                 )
 
         # ── Execution guard: broker session check ─────────────────────────────
@@ -1416,17 +1424,14 @@ class AlgoRunner:
             return None  # broker holds SL-Limit — fill recorded via order-status callback
 
         # ── Entry delay ────────────────────────────────────────────────────────
-        delay_secs = getattr(algo, "entry_delay_seconds", 0) or 0
-        delay_scope = getattr(algo, "entry_delay_scope", "all") or "all"
+        delay_secs = (
+            getattr(algo, "entry_delay_buy_secs", 0) or 0
+            if direction == "buy"
+            else getattr(algo, "entry_delay_sell_secs", 0) or 0
+        )
         if delay_secs > 0:
-            apply_delay = (
-                delay_scope == "all"
-                or (delay_scope == "buy"  and direction == "buy")
-                or (delay_scope == "sell" and direction == "sell")
-            )
-            if apply_delay:
-                logger.info(f"Entry delay: {delay_secs}s for {symbol}")
-                await asyncio.sleep(delay_secs)
+            logger.info(f"Entry delay: {delay_secs}s for {symbol}")
+            await asyncio.sleep(delay_secs)
 
         # ── Lot size ───────────────────────────────────────────────────────────
         # Prefer master-contract lookup (accurate for current SEBI lot sizes).
@@ -1861,8 +1866,8 @@ class AlgoRunner:
         row = state_result.one_or_none()
         algo_state, grid_entry, algo = row if row else (None, None, None)
 
-        exit_delay_secs  = getattr(algo, "exit_delay_seconds",  0) or 0
-        exit_delay_scope = getattr(algo, "exit_delay_scope",  "all") or "all"
+        exit_delay_buy_secs  = getattr(algo, "exit_delay_buy_secs",  0) or 0
+        exit_delay_sell_secs = getattr(algo, "exit_delay_sell_secs", 0) or 0
 
         # Load account for exit broker routing
         exit_account = None
@@ -1918,16 +1923,11 @@ class AlgoRunner:
                             except Exception as _e:
                                 logger.warning(f"[EXIT] LTP REST fetch failed for {order.symbol}: {_e}")
 
-                # Apply exit delay (scoped to BUY/SELL)
+                # Apply exit delay (direction-scoped)
+                exit_delay_secs = exit_delay_buy_secs if order.direction == "buy" else exit_delay_sell_secs
                 if exit_delay_secs > 0:
-                    apply = (
-                        exit_delay_scope == "all"
-                        or (exit_delay_scope == "buy"  and order.direction == "buy")
-                        or (exit_delay_scope == "sell" and order.direction == "sell")
-                    )
-                    if apply:
-                        logger.info(f"Exit delay: {exit_delay_secs}s for {order.symbol}")
-                        await asyncio.sleep(exit_delay_secs)
+                    logger.info(f"Exit delay: {exit_delay_secs}s for {order.symbol}")
+                    await asyncio.sleep(exit_delay_secs)
 
                 # Place closing order via ExecutionManager (single control point)
                 if self._execution_manager:

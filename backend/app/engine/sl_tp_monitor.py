@@ -119,6 +119,7 @@ class SLTPMonitor:
         self._tp_callbacks: Dict[str, Callable]     = {}
         self._underlying_ltps: Dict[int, float]     = {}
         self._mtm_monitor = None   # set via set_mtm_monitor() after both are created
+        self._unprotected_positions: set             = set()
 
     def set_mtm_monitor(self, mtm_monitor) -> None:
         """Wire MTMMonitor so on_tick() can push per-leg PNL for algo-level breach checks."""
@@ -135,6 +136,7 @@ class SLTPMonitor:
         self._positions.pop(order_id, None)
         self._sl_callbacks.pop(order_id, None)
         self._tp_callbacks.pop(order_id, None)
+        self._unprotected_positions.discard(order_id)
 
     def update_sl(self, order_id: str, new_sl: float):
         """Called by TSLEngine when trailing."""
@@ -194,6 +196,20 @@ class SLTPMonitor:
                 continue
             ul = self._underlying_ltps.get(m.underlying_token)
             logger.debug(f"[SLTPMON] tick {m.symbol or order_id}: ltp={ltp}, sl={m.sl_actual:.2f}, tp={m.tp_level:.2f}")
+
+            _ul_sl = m.sl_type in ("pts_underlying", "pct_underlying")
+            if _ul_sl and not ul:
+                if order_id not in self._unprotected_positions:
+                    self._unprotected_positions.add(order_id)
+                    logger.warning(f"[SL] No underlying LTP for {m.symbol} — position UNPROTECTED")
+                    try:
+                        from app.engine import event_logger as _evlog
+                        await _evlog.warn("engine", f"No underlying LTP for {m.symbol} ({order_id[:8]}) — SL unprotected")
+                    except Exception:
+                        pass
+            elif _ul_sl and order_id in self._unprotected_positions:
+                self._unprotected_positions.discard(order_id)
+                logger.info(f"[SL] Underlying LTP restored for {m.symbol} — position now protected")
 
             # Push unrealised PNL to MTMMonitor for algo-level SL/TP breach checks.
             # Per-token LTP is only matched to positions here, so PNL forwarding belongs here.
