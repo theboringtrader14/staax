@@ -35,6 +35,10 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
     })
     chartRef.current = chart
 
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (range) localStorage.setItem('botChart_range', JSON.stringify(range))
+    })
+
     const candles  = chart.addSeries(CandlestickSeries, {
       upColor: '#0EA66E', downColor: '#FF4444',
       borderUpColor: '#0EA66E', borderDownColor: '#FF4444',
@@ -55,13 +59,22 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
         if (d.lower?.length)   lowerBand.setData(d.lower)
         if (d.mid?.length)     midLine.setData(d.mid)
         if (d.entries?.length) {
-          createSeriesMarkers(candles, (d.entries as any[]).map((e) => ({
-            time: e.time,
-            position: e.direction === 'sell' ? 'aboveBar' : 'belowBar',
-            color: e.direction === 'sell' ? '#ef4444' : '#22c55e',
-            shape: e.direction === 'sell' ? 'arrowDown' : 'arrowUp',
-            text: e.direction === 'sell' ? 'SELL' : 'BUY',
-          })))
+          createSeriesMarkers(candles, (d.entries as any[]).map((e) => {
+            const dir = e.direction?.toLowerCase()
+            return {
+              time: e.time,
+              position: dir === 'sell' ? 'aboveBar' : 'belowBar',
+              color: dir === 'sell' ? '#ef4444' : '#22c55e',
+              shape: dir === 'sell' ? 'arrowDown' : 'arrowUp',
+              text: dir === 'sell' ? 'SELL' : 'BUY',
+            }
+          }))
+        }
+        const savedRange = localStorage.getItem('botChart_range')
+        if (savedRange) {
+          chart.timeScale().setVisibleLogicalRange(JSON.parse(savedRange))
+        } else {
+          chart.timeScale().fitContent()
         }
       } catch (e) {
         console.warn('[BotChart] chart data fetch failed', e)
@@ -82,8 +95,22 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
       {loading && (
         <div style={{ position: 'absolute', top: 16, right: 28, fontSize: 10, color: '#6b7280', fontFamily: 'monospace', zIndex: 1 }}>Loading…</div>
       )}
-      <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--neu-inset)' }}>
+      <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--neu-inset)', position: 'relative' }}>
         <div ref={containerRef} style={{ width: '100%', height: 320 }} />
+        <button
+          onClick={() => {
+            chartRef.current?.timeScale().fitContent()
+            localStorage.removeItem('botChart_range')
+          }}
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            background: 'var(--bg)', border: 'none',
+            boxShadow: 'var(--neu-raised-sm)',
+            borderRadius: 8, padding: '4px 10px',
+            color: 'var(--text-dim)', fontSize: 11,
+            cursor: 'pointer', zIndex: 10,
+          }}
+        >⊡ Reset</button>
       </div>
     </div>
   )

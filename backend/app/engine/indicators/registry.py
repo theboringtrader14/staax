@@ -48,11 +48,12 @@ class ChannelAdapter(BaseIndicatorAdapter):
 
     def __init__(self, **kwargs):
         from app.engine.indicators.channel_strategy import ChannelStrategy
+        self._kwargs = kwargs
         self._s = ChannelStrategy(**kwargs)
 
     def reset(self) -> None:
         from app.engine.indicators.channel_strategy import ChannelStrategy
-        self._s = ChannelStrategy()
+        self._s = ChannelStrategy(**self._kwargs)
 
     def on_candle(self, candle) -> Optional[Signal]:
         return self._s.on_candle(candle)
