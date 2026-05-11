@@ -891,8 +891,9 @@ export default function GridPage() {
                               <div style={{ display:'flex', alignItems:'center', gap:6, width:'90px', flexShrink:0, justifyContent:'center', marginLeft:'30px' }}
                                 onClick={e => e.stopPropagation()}>
                                   <button onClick={() => { sounds.click(); changeCardMult(algo.id, mult - 1) }}
-                                    style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'box-shadow 0.12s' }}
-                                    onMouseDown={e => { e.currentTarget.style.boxShadow='var(--neu-inset)' }}
+                                    disabled={mult === 1}
+                                    style={{ width:26, height:26, borderRadius:'50%', background:'var(--bg)', border:'none', boxShadow:'var(--neu-raised-sm)', color:'var(--text-dim)', fontSize:14, lineHeight:'1', fontWeight:400, display:'flex', alignItems:'center', justifyContent:'center', cursor: mult === 1 ? 'not-allowed' : 'pointer', flexShrink:0, transition:'box-shadow 0.12s', opacity: mult === 1 ? 0.4 : 1 }}
+                                    onMouseDown={e => { if (mult > 1) e.currentTarget.style.boxShadow='var(--neu-inset)' }}
                                     onMouseUp={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}
                                     onMouseLeave={e => { e.currentTarget.style.boxShadow='var(--neu-raised-sm)' }}>−</button>
                                   <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--text)', minWidth:28, textAlign:'center', fontWeight:700 }}>

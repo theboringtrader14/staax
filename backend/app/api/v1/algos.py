@@ -235,7 +235,20 @@ def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -
     return d
 
 
+def _validate_leg_data(leg_data: LegCreate) -> None:
+    if leg_data.tsl_enabled:
+        if not leg_data.tsl_x or leg_data.tsl_x <= 0:
+            raise HTTPException(status_code=400, detail="TSL activation step (X) must be > 0 when TSL is enabled")
+        if not leg_data.tsl_y or leg_data.tsl_y <= 0:
+            raise HTTPException(status_code=400, detail="TSL trail amount (Y) must be > 0 when TSL is enabled")
+    if leg_data.ttp_x and leg_data.ttp_y:
+        has_tp = (leg_data.tp_value and leg_data.tp_value > 0) or leg_data.tp_type
+        if not has_tp:
+            raise HTTPException(status_code=400, detail="TP must be configured before enabling TTP")
+
+
 def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
+    _validate_leg_data(leg_data)
     return AlgoLeg(
         id=uuid_lib.uuid4(),
         algo_id=algo_id,
@@ -284,6 +297,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
 
 def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     """Update an existing AlgoLeg row in-place from LegCreate data."""
+    _validate_leg_data(data)
     leg.leg_number      = data.leg_number
     leg.direction       = data.direction
     leg.instrument      = data.instrument
@@ -381,6 +395,8 @@ async def create_algo(body: AlgoCreateRequest, db: AsyncSession = Depends(get_db
     existing = await db.execute(select(Algo).where(Algo.name == body.name))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail=f"Algo name '{body.name}' already exists")
+    if body.base_lot_multiplier < 1:
+        raise HTTPException(status_code=400, detail="Lot multiplier must be at least 1")
 
     algo = Algo(
         id=uuid_lib.uuid4(),
@@ -508,7 +524,10 @@ async def update_algo(algo_id: str, body: AlgoUpdateRequest, db: AsyncSession = 
         if body.exit_delay_sell_secs  is not None: algo.exit_delay_sell_secs  = body.exit_delay_sell_secs
         if body.exit_on_margin_error  is not None: algo.exit_on_margin_error  = body.exit_on_margin_error
         if body.exit_on_entry_failure is not None: algo.exit_on_entry_failure = body.exit_on_entry_failure
-        if body.base_lot_multiplier   is not None: algo.base_lot_multiplier   = body.base_lot_multiplier
+        if body.base_lot_multiplier   is not None:
+            if body.base_lot_multiplier < 1:
+                raise HTTPException(status_code=400, detail="Lot multiplier must be at least 1")
+            algo.base_lot_multiplier = body.base_lot_multiplier
         if body.notes                 is not None: algo.notes                 = body.notes
         if body.is_live               is not None: algo.is_live               = body.is_live
         if body.recurring_days        is not None: algo.recurring_days        = body.recurring_days
