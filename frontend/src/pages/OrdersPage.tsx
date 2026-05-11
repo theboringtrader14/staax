@@ -649,20 +649,41 @@ function BotOrdersView() {
       .then(d => { setOrders(d.orders ?? d ?? []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
-  if (loading) return <div style={{ padding:32, color:'var(--text-dim)' }}>Loading bot orders...</div>;
-  if (!orders.length) return <div style={{ padding:32, color:'var(--text-dim)' }}>No bot orders found.</div>;
+  if (loading) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading bot orders…</div>;
+  if (!orders.length) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>No bot orders found.</div>;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:8, padding:8 }}>
-      {orders.map((o: any, i: number) => (
-        <div key={i} style={{ background:'var(--neu-raised-sm)', borderRadius:8, padding:'10px 16px', display:'flex', gap:16, alignItems:'center' }}>
-          <span style={{ fontWeight:700, color:'var(--text)' }}>{o.bot_name ?? 'Bot'}</span>
-          <span style={{ color:'var(--text-dim)' }}>{o.tradingsymbol ?? o.symbol ?? ''}</span>
-          <span style={{ color: o.transaction_type === 'BUY' ? 'var(--accent)' : '#e74c3c' }}>{o.transaction_type ?? ''}</span>
-          <span style={{ color:'var(--text-dim)' }}>Qty: {o.quantity ?? ''}</span>
-          <span style={{ color:'var(--text-dim)' }}>Status: {o.status ?? ''}</span>
-          <span style={{ marginLeft:'auto', color:'var(--text-dim)', fontSize:12 }}>{o.order_id ?? ''}</span>
-        </div>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {orders.map((o: any, i: number) => {
+        const isBuy = (o.transaction_type ?? o.transactiontype ?? '').toUpperCase() === 'BUY';
+        const sideColor = isBuy ? 'var(--green)' : 'var(--red)';
+        const statusUp = (o.status ?? '').toUpperCase();
+        const isActive = statusUp === 'OPEN' || statusUp === 'COMPLETE';
+        return (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+            borderRadius: 12, overflow: 'hidden', minHeight: 52,
+          }}>
+            <div style={{ width: 4, alignSelf: 'stretch', background: sideColor, flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, color: 'var(--accent)', whiteSpace: 'nowrap' as const, minWidth: 80 }}>
+              {o.bot_name ?? 'Bot'}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap' as const }}>
+              {o.tradingsymbol ?? o.symbol ?? ''}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: sideColor, whiteSpace: 'nowrap' as const }}>
+              {(o.transaction_type ?? o.transactiontype ?? '').toUpperCase()}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Qty: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{o.quantity ?? '—'}</span></span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>₹{o.averageprice ?? o.price ?? '—'}</span>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: isActive ? '#0ea66e' : 'var(--text-dim)', whiteSpace: 'nowrap' as const }}>
+              {statusUp}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 12 }}>{o.order_id ?? ''}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -690,18 +711,13 @@ function OrderBookView() {
         return { ...o, _boid: boid, _badge: badge };
       });
       setRows(reconciled);
-      // Fire-and-forget backend notify for disconnected orders
       reconciled.filter(o => o._badge === 'DISCONNECTED').forEach(o => {
         fetch('/api/v1/engine/notify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
           body: JSON.stringify({
             event_type: 'order_disconnected',
-            data: {
-              algo_name: o.algo_name ?? '',
-              symbol: o.tradingsymbol ?? o.symbol ?? '',
-              broker_order_id: o._boid,
-            },
+            data: { algo_name: o.algo_name ?? '', symbol: o.tradingsymbol ?? o.symbol ?? '', broker_order_id: o._boid },
           }),
         }).catch(() => {});
       });
@@ -709,61 +725,61 @@ function OrderBookView() {
     }).catch(() => setLoading(false));
   }, []);
 
-  const BADGE_COLOR: Record<string, string> = {
-    MATCHED: '#27ae60', DISCONNECTED: '#e67e22', FAILED: '#e74c3c', MANUAL: '#7f8c8d', UNKNOWN: '#95a5a6',
+  const BADGE: Record<string, { color: string }> = {
+    MATCHED:      { color: '#0ea66e' },
+    DISCONNECTED: { color: '#e67e22' },
+    FAILED:       { color: '#e74c3c' },
+    MANUAL:       { color: 'var(--text-dim)' },
+    UNKNOWN:      { color: 'var(--text-mute)' },
   };
 
-  if (loading) return <div style={{ padding:32, color:'var(--text-dim)' }}>Loading order book...</div>;
-  if (!rows.length) return <div style={{ padding:32, color:'var(--text-dim)' }}>No broker orders found.</div>;
+  if (loading) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading order book…</div>;
+  if (!rows.length) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>No broker orders found.</div>;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:8, padding:8 }}>
-      {rows.map((o: any, i: number) => (
-        <div key={i} style={{ background:'var(--neu-raised-sm)', borderRadius:8, padding:'10px 16px', display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
-          <span style={{ fontWeight:700, minWidth:80, borderRadius:4, padding:'2px 8px', fontSize:11, background: BADGE_COLOR[o._badge] ?? '#7f8c8d', color:'#fff' }}>
-            {o._badge}
-          </span>
-          <span style={{ color:'var(--text)' }}>{o.tradingsymbol ?? o.symbol ?? ''}</span>
-          <span style={{ color: o.transactiontype === 'BUY' ? 'var(--accent)' : '#e74c3c' }}>{o.transactiontype ?? ''}</span>
-          <span style={{ color:'var(--text-dim)' }}>Qty: {o.quantity ?? ''}</span>
-          <span style={{ color:'var(--text-dim)' }}>Price: {o.price ?? o.averageprice ?? ''}</span>
-          <span style={{ color:'var(--text-dim)' }}>Status: {o.status ?? ''}</span>
-          <span style={{ color:'var(--text-dim)', fontSize:11 }}>{o.account_id ?? ''}</span>
-          <span style={{ color:'var(--text-dim)', fontSize:11 }}>{o._boid}</span>
-          {/* Action button */}
-          {o._badge === 'DISCONNECTED' && (
-            <button
-              onClick={() => fetch('/api/v1/orders/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ broker_order_id: o._boid }),
-              }).catch(() => {})}
-              style={{
-                marginLeft: 'auto', padding: '3px 10px', fontSize: 11, borderRadius: 5,
-                border: 'none', cursor: 'pointer',
-                background: 'var(--accent)', color: '#fff',
-              }}
-            >
-              SYNC
-            </button>
-          )}
-          {o._badge === 'FAILED' && (
-            <button
-              onClick={() => fetch('/api/v1/orders/retry', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ broker_order_id: o._boid }),
-              }).catch(() => {})}
-              style={{
-                marginLeft: 'auto', padding: '3px 10px', fontSize: 11, borderRadius: 5,
-                border: 'none', cursor: 'pointer',
-                background: '#e74c3c', color: '#fff',
-              }}
-            >
-              RETRY
-            </button>
-          )}
-        </div>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {rows.map((o: any, i: number) => {
+        const badge = BADGE[o._badge] ?? BADGE.UNKNOWN;
+        const isBuy = (o.transactiontype ?? '').toUpperCase() === 'BUY';
+        const sideColor = isBuy ? 'var(--green)' : 'var(--red)';
+        return (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const,
+            background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+            borderRadius: 12, overflow: 'hidden', minHeight: 52,
+          }}>
+            <div style={{ width: 4, alignSelf: 'stretch', background: badge.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: badge.color, whiteSpace: 'nowrap' as const, minWidth: 84, textAlign: 'center' as const }}>
+              {o._badge}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap' as const, minWidth: 100 }}>
+              {o.tradingsymbol ?? o.symbol ?? '—'}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: sideColor, whiteSpace: 'nowrap' as const }}>
+              {(o.transactiontype ?? '').toUpperCase()}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Qty: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{o.quantity ?? '—'}</span></span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>₹{o.averageprice ?? o.price ?? '—'}</span>
+            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>{o.account_id ?? ''}</span>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: 'var(--text-dim)', whiteSpace: 'nowrap' as const }}>
+              {(o.status ?? '').toUpperCase()}
+            </span>
+            {o._badge === 'DISCONNECTED' && (
+              <button onClick={() => fetch('/api/v1/orders/sync', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ broker_order_id: o._boid }) }).catch(() => {})}
+                style={{ height: 24, padding: '0 10px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--accent)', letterSpacing: '0.5px' }}>
+                SYNC
+              </button>
+            )}
+            {o._badge === 'FAILED' && (
+              <button onClick={() => fetch('/api/v1/orders/retry', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ broker_order_id: o._boid }) }).catch(() => {})}
+                style={{ height: 24, padding: '0 10px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', color: '#e74c3c', letterSpacing: '0.5px' }}>
+                RETRY
+              </button>
+            )}
+            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 12 }}>{o._boid}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1420,25 +1436,6 @@ export default function OrdersPage() {
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>Orders</h1>
             <p style={{ fontSize: '12px', color: 'var(--text-mute)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
-            <div style={{ display:'flex', gap:8, marginTop:12, marginBottom:4 }}>
-              {(['algos','bots','orderbook'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setPageTab(t)}
-                  style={{
-                    padding:'6px 18px',
-                    borderRadius:8,
-                    border:'none',
-                    cursor:'pointer',
-                    fontWeight: pageTab === t ? 700 : 400,
-                    background: pageTab === t ? 'var(--accent)' : 'var(--neu-raised-sm)',
-                    color: pageTab === t ? '#fff' : 'var(--text)',
-                  }}
-                >
-                  {t === 'algos' ? 'Algos' : t === 'bots' ? 'Bots' : 'Order Book'}
-                </button>
-              ))}
-            </div>
           </div>
           <div className="page-header-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             {/* Week navigation */}
@@ -1498,6 +1495,41 @@ export default function OrdersPage() {
           </div>
         </div>
 
+        {/* Tab bar — neumorphic sliding pill */}
+        {(() => {
+          const _tabs = ['algos', 'bots', 'orderbook'] as const
+          const _labels: Record<string, string> = { algos: 'Algos', bots: 'Bots', orderbook: 'Order Book' }
+          const _idx = (_tabs as readonly string[]).indexOf(pageTab)
+          return (
+            <div style={{
+              flexShrink: 0, display: 'flex', position: 'relative', margin: '8px 0',
+              background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+              borderRadius: 100, padding: '4px',
+            }}>
+              <div style={{
+                position: 'absolute', top: 4, bottom: 4,
+                left: `calc(4px + ${_idx} * (100% - 8px) / ${_tabs.length})`,
+                width: `calc((100% - 8px) / ${_tabs.length})`,
+                background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 100,
+                transition: 'left 0.28s cubic-bezier(0.4, 0, 0.2, 1)', pointerEvents: 'none',
+              }} />
+              {_tabs.map(t => (
+                <button key={t} onClick={() => setPageTab(t)} style={{
+                  flex: 1, padding: '8px 0', textAlign: 'center' as const, border: 'none', borderRadius: 100,
+                  cursor: 'pointer', position: 'relative', zIndex: 1,
+                  fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                  letterSpacing: '1px', textTransform: 'uppercase' as const, background: 'transparent',
+                  color: pageTab === t ? 'var(--accent)' : 'var(--text-dim)',
+                  transition: 'color 0.25s ease',
+                }}>
+                  {_labels[t]}
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+
+        {pageTab === 'algos' && (<>
         {/* ── Filter Stat Cards — above day tabs ── */}
         {(() => {
           // ── Row counts ──
@@ -1653,6 +1685,7 @@ export default function OrdersPage() {
             </div>
           )
         })()}
+        </>)}
 
       </div>{/* end fixed zone */}
 
@@ -1791,7 +1824,7 @@ export default function OrdersPage() {
                       marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
                     }} onClick={() => { sounds.click(); toggleExpand(w.grid_entry_id) }}>
                       <div style={{ width: 4, alignSelf: 'stretch', background: stripBg, flexShrink: 0, boxShadow: `0 0 8px ${stripGlow}` }} />
-                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--text)' }}>{w.algo_name}</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--accent)', fontVariantNumeric: 'lining-nums' }}>{w.algo_name}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{w.account_name || '—'}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
                           padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
@@ -1839,7 +1872,7 @@ export default function OrdersPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap' as const, minWidth: 0 }}>
 
                         {/* Algo name */}
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--text)', whiteSpace: 'nowrap' as const }}>
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--accent)', whiteSpace: 'nowrap' as const, fontVariantNumeric: 'lining-nums' }}>
                           {w.algo_name}
                         </span>
 
@@ -2123,7 +2156,7 @@ export default function OrdersPage() {
                             marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
                           }} onClick={() => { sounds.click(); toggleExpand(group.algoId) }}>
                             <div style={{ width: 4, alignSelf: 'stretch', background: bar.color, flexShrink: 0, boxShadow: `0 0 8px ${bar.glow}` }} />
-                            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--text)' }}>{group.algoName}</span>
+                            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--accent)', fontVariantNumeric: 'lining-nums' }}>{group.algoName}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{group.account || '—'}</span>
                             <span style={{ fontSize: 12, minWidth: 55 }}>
                               {openCount > 0
@@ -2181,7 +2214,7 @@ export default function OrdersPage() {
                             {/* Algo name */}
                             <span
                               onClick={() => { sounds.click(); setSelectedAlgoName(group.algoName) }}
-                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.35)' }}>
+                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.5)', fontVariantNumeric: 'lining-nums' }}>
                               {group.algoName}
                             </span>
 
