@@ -1197,6 +1197,23 @@ class AlgoScheduler:
                 except Exception as _wa_err:
                     logger.error(f"EOD notify failed: {_wa_err}")
 
+                # Mark any remaining ARMED W&T states as EXPIRED
+                try:
+                    from app.models.wt_armed_state import WTArmedState
+                    from sqlalchemy import update as _update
+                    _today_start = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+                    async with AsyncSessionLocal() as _wt_db:
+                        await _wt_db.execute(
+                            _update(WTArmedState)
+                            .where(WTArmedState.status == 'ARMED')
+                            .where(WTArmedState.armed_at >= _today_start)
+                            .values(status='EXPIRED', expired_at=datetime.now(IST))
+                        )
+                        await _wt_db.commit()
+                    logger.info("[EOD] W&T armed states expired")
+                except Exception as _wt_exp_err:
+                    logger.warning(f"[EOD] W&T expiry failed (non-fatal): {_wt_exp_err}")
+
             except Exception as e:
                 await db.rollback()
                 logger.error(f"EOD cleanup job failed: {e}")

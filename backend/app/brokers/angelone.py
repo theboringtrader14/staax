@@ -55,6 +55,7 @@ class AngelOneBroker(BaseBroker):
     # Class-level cache shared across all instances (mom / wife / karthik use same file)
     _master_cache: Optional[List[dict]] = None
     _master_date:  Optional[_date]      = None
+    _tick_size_cache: dict = {}          # token → tick_size; populated alongside _master_cache
 
     # Per-call option chain cache — avoids double 209k-record scan for CE+PE legs
     # in a straddle entry. Key: (underlying, expiry_ao). TTL: 60 seconds.
@@ -508,6 +509,11 @@ class AngelOneBroker(BaseBroker):
                     with open(_cache_file) as _f:
                         AngelOneBroker._master_cache = _json.load(_f)
                     AngelOneBroker._master_date = _date.today()
+                    AngelOneBroker._tick_size_cache = {
+                        str(item.get('token', '')): float(item.get('tick_size') or 0.05)
+                        for item in AngelOneBroker._master_cache
+                        if item.get('token')
+                    }
                     return AngelOneBroker._master_cache
         except Exception as _ce:
             logger.warning(f"[AO master] Disk cache read failed: {_ce}")
@@ -530,11 +536,21 @@ class AngelOneBroker(BaseBroker):
                 logger.info("[AO master] Disk cache written for tomorrow's fast load")
             except Exception as _we:
                 logger.warning(f"[AO master] Disk cache write failed (non-fatal): {_we}")
+            # Populate tick_size cache from master data
+            AngelOneBroker._tick_size_cache = {
+                str(item.get('token', '')): float(item.get('tick_size') or 0.05)
+                for item in data
+                if item.get('token')
+            }
             logger.info(f"[AO master] ✅ Cached {len(data):,} instruments")
             return data
         except Exception as e:
             logger.error(f"[AO master] Download failed: {e}")
             return AngelOneBroker._master_cache or []
+
+    def get_tick_size(self, symbol_token: str) -> float:
+        """Return tick size for an instrument token. Falls back to 0.05 if not in cache."""
+        return AngelOneBroker._tick_size_cache.get(str(symbol_token), 0.05)
 
     async def get_option_chain(self, underlying: str, expiry: str) -> dict:
         """

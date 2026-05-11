@@ -384,22 +384,8 @@ class AlgoRunner:
                 # Cache is set in _place_leg() when W&T is first armed this session.
                 _cached = self._wt_arming_cache.get(ge_id)
                 if _cached:
-                    window = WTWindow(
-                        grid_entry_id    = ge_id,
-                        algo_id          = algo_id_str,
-                        direction        = _cached["direction"],
-                        entry_time       = self._parse_time(algo_entry_time),
-                        instrument_token = _cached["instrument_token"],
-                        wt_value         = _cached["wt_value"],
-                        wt_unit          = _cached["wt_unit"],
-                        reference_price  = _cached["reference_price"],
-                        threshold        = _cached["threshold"],
-                        is_ref_set       = True,
-                    )
-                    self._wt_evaluator.register(window, on_entry=self._make_wt_callback(ge_id))
+                    # W&T is broker-side only — WTEvaluator not used for W&T arming
                     if self._ltp_consumer:
-                        # For BFO options (SENSEX/BANKEX), register_bfo_tokens MUST be
-                        # called before subscribe() so exchangeType=4 is used, not NFO.
                         _cached_exch = _cached.get("exchange", "NFO")
                         if _cached_exch == "BFO":
                             self._ltp_consumer.register_bfo_tokens([_cached["instrument_token"]])
@@ -417,13 +403,47 @@ class AlgoRunner:
                     rearmed += 1
                     already_registered.add(ge_id)
                 else:
-                    # No cache (e.g. process restarted) — log warning; W&T will be re-armed
-                    # on next manual RETRY or if scheduler re-triggers enter() at startup.
-                    logger.warning(
-                        f"[REARM] No arming cache for {algo_name} (grid={ge_id[:8]}) "
-                        f"— W&T window cannot be restored without original option details. "
-                        f"Use RETRY to re-arm."
-                    )
+                    # Cache miss (process restarted) — try to restore from DB
+                    try:
+                        from app.models.wt_armed_state import WTArmedState
+                        from sqlalchemy import select as _sel
+                        from zoneinfo import ZoneInfo as _ZI
+                        _today_start = datetime.now(_ZI("Asia/Kolkata")).replace(hour=0, minute=0, second=0, microsecond=0)
+                        async with AsyncSessionLocal() as _rdb:
+                            _rr = await _rdb.execute(
+                                _sel(WTArmedState)
+                                .where(WTArmedState.grid_entry_id == ge.id)
+                                .where(WTArmedState.status == 'ARMED')
+                                .where(WTArmedState.armed_at >= _today_start)
+                            )
+                            _db_state = _rr.scalar_one_or_none()
+                        if _db_state:
+                            _cached = {
+                                "instrument_token": int(_db_state.symbol_token),
+                                "symbol":           _db_state.symbol,
+                                "exchange":         _db_state.exchange,
+                                "reference_price":  _db_state.ref_price,
+                                "threshold":        _db_state.threshold,
+                                "direction":        _db_state.direction,
+                                "wt_value":         wt_legs[0]["wt_value"] if wt_legs else 0,
+                                "wt_unit":          wt_legs[0]["wt_unit"] if wt_legs else "pts",
+                                "entry_time":       algo_entry_time,
+                                "algo_id":          algo_id_str,
+                                "entry_reference":  str(_db_state.ref_price),
+                                "broker_order_id":  _db_state.broker_sl_id,
+                            }
+                            self._wt_arming_cache[ge_id] = _cached
+                            logger.info(
+                                f"[REARM] Restored from DB: {_db_state.symbol} "
+                                f"threshold={_db_state.threshold:.2f}"
+                            )
+                    except Exception as _rearm_db_err:
+                        logger.warning(f"[REARM] DB restore failed for {algo_name}: {_rearm_db_err}")
+                    if not self._wt_arming_cache.get(ge_id):
+                        logger.warning(
+                            f"[REARM] No arming cache for {algo_name} (grid={ge_id[:8]}) "
+                            f"— W&T cannot be restored. Use RETRY to re-arm."
+                        )
 
             logger.info(f"[REARM] Done — {rearmed} W&T window(s) re-armed after SmartStream reconnect")
 
@@ -1360,10 +1380,13 @@ class AlgoRunner:
             _wt_ts_ms        = int(datetime.now(IST).timestamp() * 1000)
             _wt_algo_tag     = f"STAAX_{_wt_account_nick}_{_wt_algo_safe}_{leg.leg_number}_{_wt_ts_ms}"
 
-            # Limit price slightly beyond trigger to guarantee fill on threshold breach
+            # Tick-size based buffer — replaces hardcoded 0.05 (B5 fix)
+            _wt_tick = 0.05
+            if hasattr(account_broker, 'get_tick_size'):
+                _wt_tick = account_broker.get_tick_size(str(instrument_token))
             _wt_limit_price = (
-                round(_wt_threshold + 0.05, 2) if _wt_dir == "up"
-                else round(_wt_threshold - 0.05, 2)
+                round(_wt_threshold + _wt_tick, 2) if _wt_dir == "up"
+                else round(_wt_threshold - _wt_tick, 2)
             )
 
             if not account_broker:
@@ -1421,6 +1444,30 @@ class AlgoRunner:
                 "entry_reference":  str(_wt_option_ltp),
                 "broker_order_id":  _wt_broker_order_id,
             }
+            try:
+                from app.models.wt_armed_state import WTArmedState
+                _wt_state = WTArmedState(
+                    grid_entry_id = grid_entry.id,
+                    algo_id       = algo.id,
+                    account_id    = algo.account_id,
+                    leg_number    = leg.leg_number,
+                    symbol        = symbol,
+                    symbol_token  = str(instrument_token),
+                    exchange      = _instrument_exchange,
+                    direction     = _wt_dir,
+                    ref_price     = _wt_option_ltp,
+                    threshold     = _wt_threshold,
+                    limit_price   = _wt_limit_price,
+                    broker_sl_id  = _wt_broker_order_id,
+                    status        = 'ARMED',
+                    armed_at      = datetime.now(IST),
+                )
+                async with AsyncSessionLocal() as _wt_db:
+                    _wt_db.add(_wt_state)
+                    await _wt_db.commit()
+                logger.info(f"[W&T] Armed state persisted: {symbol} threshold={_wt_threshold:.2f} broker_sl_id={_wt_broker_order_id}")
+            except Exception as _wt_db_err:
+                logger.warning(f"[W&T] DB persist failed (non-fatal): {_wt_db_err}")
             return None  # broker holds SL-Limit — fill recorded via order-status callback
 
         # ── Entry delay ────────────────────────────────────────────────────────
