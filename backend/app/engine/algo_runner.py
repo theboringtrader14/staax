@@ -2144,18 +2144,21 @@ class AlgoRunner:
             try:
                 _total_pnl = sum(o.pnl or 0 for o in orders)
                 _algo_name = getattr(algo, "name", "Unknown")
-                asyncio.create_task(_wa_notify("exit_executed", {
-                    "algo_name":   _algo_name,
-                    "exit_reason": reason,
-                    "pnl":         _total_pnl,
-                    "legs_count":  len(orders),
-                }))
-                asyncio.create_task(_tg_notify("exit_executed", {
-                    "algo_name":   _algo_name,
-                    "exit_reason": reason,
-                    "pnl":         _total_pnl,
-                    "legs_count":  len(orders),
-                }))
+                if reason == "overnight_sl":
+                    pass  # skip Telegram/WA — expected overnight exit, not actionable
+                else:
+                    asyncio.create_task(_wa_notify("exit_executed", {
+                        "algo_name":   _algo_name,
+                        "exit_reason": reason,
+                        "pnl":         _total_pnl,
+                        "legs_count":  len(orders),
+                    }))
+                    asyncio.create_task(_tg_notify("exit_executed", {
+                        "algo_name":   _algo_name,
+                        "exit_reason": reason,
+                        "pnl":         _total_pnl,
+                        "legs_count":  len(orders),
+                    }))
             except Exception as _n_err:
                 logger.warning(f"[EXIT] Notify failed: {_n_err}")
 

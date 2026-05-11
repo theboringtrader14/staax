@@ -124,8 +124,8 @@ class TGNotifier:
             "error_count":    len(errors),
             "error_lines":    error_lines,
             "open_positions": len(open_orders),
-            "best_algo":      f"{best} (+₹{algo_pnl[best]:,.0f})" if best else "—",
-            "worst_algo":     f"{worst} (-₹{abs(algo_pnl[worst]):,.0f})" if worst and algo_pnl[worst] < 0 else "—",
+            "best_algo":      f"{self._parse_algo_name(best)} (+₹{algo_pnl[best]:,.0f})" if best else "—",
+            "worst_algo":     f"{self._parse_algo_name(worst)} (-₹{abs(algo_pnl[worst]):,.0f})" if worst and algo_pnl[worst] < 0 else "—",
         }
 
     async def notify(self, event_type: str, payload: dict) -> None:
@@ -245,6 +245,17 @@ class TGNotifier:
                 f"📈 <b>TSL Activated</b>\n"
                 f"{payload.get('algo_name', '-')} — {payload.get('symbol', '-')}\n"
                 f"Fill: ₹{fill:.2f} → SL moved to ₹{new_sl:.2f}\n"
+                f"<i>{ts}</i>"
+            )
+        if event_type == "order_disconnected":
+            algo      = payload.get('algo_name', '')
+            symbol    = payload.get('symbol', '')
+            broker_id = payload.get('broker_order_id', '')
+            return (
+                f"⚠️ <b>Order Disconnected</b>\n"
+                f"{algo} — {symbol}\n"
+                f"Broker order {broker_id} not found\n"
+                f"Check Order Book → SYNC\n"
                 f"<i>{ts}</i>"
             )
         if event_type == "feed_down":

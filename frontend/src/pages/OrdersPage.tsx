@@ -1,5 +1,5 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '@/store'
-import { useState, useEffect, useMemo, useRef } from 'react'
 import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
 import { AlgoDetailModal } from '@/components/AlgoDetailModal'
@@ -639,6 +639,135 @@ function SmoothedSparkline({ algoId, legs, totalPnl }: { algoId: string; legs: L
   )
 }
 
+// ── BotOrdersView ────────────────────────────────────────────────────────────
+function BotOrdersView() {
+  const [orders, setOrders] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    fetch('/api/v1/bots/orders', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }})
+      .then(r => r.json())
+      .then(d => { setOrders(d.orders ?? d ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+  if (loading) return <div style={{ padding:32, color:'var(--text-dim)' }}>Loading bot orders...</div>;
+  if (!orders.length) return <div style={{ padding:32, color:'var(--text-dim)' }}>No bot orders found.</div>;
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8, padding:8 }}>
+      {orders.map((o: any, i: number) => (
+        <div key={i} style={{ background:'var(--neu-raised-sm)', borderRadius:8, padding:'10px 16px', display:'flex', gap:16, alignItems:'center' }}>
+          <span style={{ fontWeight:700, color:'var(--text)' }}>{o.bot_name ?? 'Bot'}</span>
+          <span style={{ color:'var(--text-dim)' }}>{o.tradingsymbol ?? o.symbol ?? ''}</span>
+          <span style={{ color: o.transaction_type === 'BUY' ? 'var(--accent)' : '#e74c3c' }}>{o.transaction_type ?? ''}</span>
+          <span style={{ color:'var(--text-dim)' }}>Qty: {o.quantity ?? ''}</span>
+          <span style={{ color:'var(--text-dim)' }}>Status: {o.status ?? ''}</span>
+          <span style={{ marginLeft:'auto', color:'var(--text-dim)', fontSize:12 }}>{o.order_id ?? ''}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── OrderBookView ────────────────────────────────────────────────────────────
+function OrderBookView() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+    Promise.all([
+      fetch('/api/v1/broker/orders', { headers }).then(r => r.json()),
+      fetch('/api/v1/orders?limit=500', { headers }).then(r => r.json()),
+    ]).then(([brokerData, staxxData]) => {
+      const brokerOrders: any[] = brokerData.orders ?? [];
+      const staxxOrders: any[] = staxxData.orders ?? staxxData ?? [];
+      const staxxByBrokerIdSet = new Set(staxxOrders.map((o: any) => o.broker_order_id).filter(Boolean));
+      const reconciled = brokerOrders.map((o: any) => {
+        const boid = o.orderid ?? o.order_id ?? '';
+        let badge = 'MANUAL';
+        if (!boid) badge = 'UNKNOWN';
+        else if (o.status === 'REJECTED' || o.status === 'CANCELLED') badge = 'FAILED';
+        else if (staxxByBrokerIdSet.has(boid)) badge = 'MATCHED';
+        else badge = 'DISCONNECTED';
+        return { ...o, _boid: boid, _badge: badge };
+      });
+      setRows(reconciled);
+      // Fire-and-forget backend notify for disconnected orders
+      reconciled.filter(o => o._badge === 'DISCONNECTED').forEach(o => {
+        fetch('/api/v1/engine/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+          body: JSON.stringify({
+            event_type: 'order_disconnected',
+            data: {
+              algo_name: o.algo_name ?? '',
+              symbol: o.tradingsymbol ?? o.symbol ?? '',
+              broker_order_id: o._boid,
+            },
+          }),
+        }).catch(() => {});
+      });
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const BADGE_COLOR: Record<string, string> = {
+    MATCHED: '#27ae60', DISCONNECTED: '#e67e22', FAILED: '#e74c3c', MANUAL: '#7f8c8d', UNKNOWN: '#95a5a6',
+  };
+
+  if (loading) return <div style={{ padding:32, color:'var(--text-dim)' }}>Loading order book...</div>;
+  if (!rows.length) return <div style={{ padding:32, color:'var(--text-dim)' }}>No broker orders found.</div>;
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8, padding:8 }}>
+      {rows.map((o: any, i: number) => (
+        <div key={i} style={{ background:'var(--neu-raised-sm)', borderRadius:8, padding:'10px 16px', display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
+          <span style={{ fontWeight:700, minWidth:80, borderRadius:4, padding:'2px 8px', fontSize:11, background: BADGE_COLOR[o._badge] ?? '#7f8c8d', color:'#fff' }}>
+            {o._badge}
+          </span>
+          <span style={{ color:'var(--text)' }}>{o.tradingsymbol ?? o.symbol ?? ''}</span>
+          <span style={{ color: o.transactiontype === 'BUY' ? 'var(--accent)' : '#e74c3c' }}>{o.transactiontype ?? ''}</span>
+          <span style={{ color:'var(--text-dim)' }}>Qty: {o.quantity ?? ''}</span>
+          <span style={{ color:'var(--text-dim)' }}>Price: {o.price ?? o.averageprice ?? ''}</span>
+          <span style={{ color:'var(--text-dim)' }}>Status: {o.status ?? ''}</span>
+          <span style={{ color:'var(--text-dim)', fontSize:11 }}>{o.account_id ?? ''}</span>
+          <span style={{ color:'var(--text-dim)', fontSize:11 }}>{o._boid}</span>
+          {/* Action button */}
+          {o._badge === 'DISCONNECTED' && (
+            <button
+              onClick={() => fetch('/api/v1/orders/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ broker_order_id: o._boid }),
+              }).catch(() => {})}
+              style={{
+                marginLeft: 'auto', padding: '3px 10px', fontSize: 11, borderRadius: 5,
+                border: 'none', cursor: 'pointer',
+                background: 'var(--accent)', color: '#fff',
+              }}
+            >
+              SYNC
+            </button>
+          )}
+          {o._badge === 'FAILED' && (
+            <button
+              onClick={() => fetch('/api/v1/orders/retry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ broker_order_id: o._boid }),
+              }).catch(() => {})}
+              style={{
+                marginLeft: 'auto', padding: '3px 10px', fontSize: 11, borderRadius: 5,
+                border: 'none', cursor: 'pointer',
+                background: '#e74c3c', color: '#fff',
+              }}
+            >
+              RETRY
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
@@ -712,6 +841,7 @@ export default function OrdersPage() {
     try { return new Set(JSON.parse(localStorage.getItem('orders_expanded_algos') || '[]')) }
     catch { return new Set() }
   })
+  const [pageTab, setPageTab] = useState<'algos' | 'bots' | 'orderbook'>('algos')
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
     if (!monDate) return ''
@@ -1290,6 +1420,25 @@ export default function OrdersPage() {
           <div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--accent)' }}>Orders</h1>
             <p style={{ fontSize: '12px', color: 'var(--text-mute)', marginTop: '4px' }}>Trade history · P&amp;L by week</p>
+            <div style={{ display:'flex', gap:8, marginTop:12, marginBottom:4 }}>
+              {(['algos','bots','orderbook'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setPageTab(t)}
+                  style={{
+                    padding:'6px 18px',
+                    borderRadius:8,
+                    border:'none',
+                    cursor:'pointer',
+                    fontWeight: pageTab === t ? 700 : 400,
+                    background: pageTab === t ? 'var(--accent)' : 'var(--neu-raised-sm)',
+                    color: pageTab === t ? '#fff' : 'var(--text)',
+                  }}
+                >
+                  {t === 'algos' ? 'Algos' : t === 'bots' ? 'Bots' : 'Order Book'}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="page-header-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             {/* Week navigation */}
@@ -1511,6 +1660,12 @@ export default function OrdersPage() {
       <div className="no-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '16px 28px 24px' }}>
 
         {/* Live MTM wired to header — strip removed */}
+
+        {pageTab === 'bots' && <BotOrdersView />}
+        {pageTab === 'orderbook' && <OrderBookView />}
+
+        {pageTab === 'algos' && (
+        <div>
 
         {/* Holiday banner */}
         {isHolidayToday && (
@@ -2199,6 +2354,9 @@ export default function OrdersPage() {
         })}
 
         <div style={{ height: '24px' }} />
+        </div>
+        )}{/* end pageTab algos */}
+
       </div>{/* end scroll zone */}
 
       {/* ── Exit Price Correction Modal ── */}
