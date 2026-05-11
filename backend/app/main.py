@@ -289,6 +289,9 @@ async def lifespan(app: FastAPI):
     await algo_runner.restore_sl_monitoring()
     # ── 12c. Rebuild ORB levels for active positions (restores SL/TP after restart) ───
     await algo_runner.rebuild_orb_levels()
+    # ── 12d. Rebuild re-entry watchers from DB (B6 fix) ─────────────────────────────
+    from app.engine.reentry_engine import reentry_engine as _reentry_eng
+    await _reentry_eng.rebuild_watchers()
     # ── Bot runner ──────────────────────────────────────────────────────────
     from app.core.database import AsyncSessionLocal as _ASL
     bot_runner.wire(

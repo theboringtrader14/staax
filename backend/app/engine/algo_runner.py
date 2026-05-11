@@ -1020,6 +1020,20 @@ class AlgoRunner:
                 self._mtm_monitor._algos[str(algo.id)].order_ids = [
                     str(o.id) for o in placed_orders
                 ]
+                # B11: warn when % MTM configured but all fills returned 0 premium
+                if cp == 0.0 and self._mtm_monitor._algos[str(algo.id)].mtm_unit == "pct":
+                    if getattr(algo, 'mtm_sl', None) or getattr(algo, 'mtm_tp', None):
+                        logger.warning(
+                            "[MTM] WARNING: combined_premium=0 for %s — "
+                            "%% MTM SL/TP check disabled until premium is non-zero",
+                            _algo_name_str,
+                        )
+                        asyncio.create_task(
+                            _ev.warn(
+                                "engine",
+                                f"MTM % mode: combined_premium=0 for {_algo_name_str} — SL/TP check disabled",
+                            )
+                        )
 
         # ── 8. Finalise grid entry status ─────────────────────────────────────
         if placed_orders:

@@ -66,6 +66,57 @@ async def _get_ltp(token: int) -> Optional[float]:
         return None
 
 
+async def _persist_reentry_watcher(
+    *,
+    grid_entry_id: str,
+    algo_id: str,
+    order_id: str,
+    leg_id: str,
+    algo_state_id: str,
+    direction: str,
+    trigger_price: float,
+    exit_reason: str,
+    reentry_count: int,
+    ltp_mode: str,
+    tsl_two_step: bool,
+    sl_original,
+    instrument_token: int,
+    exit_time,
+) -> None:
+    """Persist re-entry watcher state to DB — enables rebuild after restart."""
+    try:
+        from app.models.reentry_watcher_state import ReentryWatcherState
+        import uuid as _uuid_rw, pytz as _pytz_rw
+        from datetime import datetime as _dt_rw
+        _IST_rw = _pytz_rw.timezone('Asia/Kolkata')
+        async with AsyncSessionLocal() as _db_rw:
+            _state = ReentryWatcherState(
+                grid_entry_id    = _uuid_rw.UUID(grid_entry_id),
+                algo_id          = _uuid_rw.UUID(algo_id),
+                order_id         = _uuid_rw.UUID(order_id),
+                leg_id           = _uuid_rw.UUID(leg_id),
+                algo_state_id    = _uuid_rw.UUID(algo_state_id),
+                direction        = direction,
+                trigger_price    = trigger_price,
+                exit_reason      = exit_reason,
+                reentry_count    = reentry_count,
+                ltp_mode         = ltp_mode or 'ltp',
+                tsl_two_step     = bool(tsl_two_step),
+                sl_original      = float(sl_original) if sl_original is not None else None,
+                instrument_token = int(instrument_token or 0),
+                exit_time        = str(exit_time) if exit_time else None,
+                status           = 'WATCHING',
+                created_at       = _dt_rw.now(_IST_rw),
+            )
+            _db_rw.add(_state)
+            await _db_rw.commit()
+        logger.info(
+            f"[REENTRY] Watcher persisted: order={order_id[:8]} trigger={trigger_price:.2f}"
+        )
+    except Exception as _e:
+        logger.warning(f"[REENTRY] Failed to persist watcher state: {_e}")
+
+
 class ReentryEngine:
     """
     Listens for healthy exits and triggers re-entry based on per-leg config.
@@ -225,6 +276,23 @@ class ReentryEngine:
             )
             key = str(order.grid_entry_id)
             self._watcher_tasks.setdefault(key, []).append(task)
+            # Persist watcher state to DB for restart recovery
+            asyncio.ensure_future(_persist_reentry_watcher(
+                grid_entry_id = str(order.grid_entry_id),
+                algo_id       = str(leg.algo_id),
+                order_id      = str(order.id),
+                leg_id        = str(leg.id),
+                algo_state_id = str(algo_state.id),
+                direction     = leg.direction or 'buy',
+                trigger_price = trigger_price,
+                exit_reason   = exit_reason,
+                reentry_count = new_count,
+                ltp_mode      = ltp_mode,
+                tsl_two_step  = tsl_two_step,
+                sl_original   = sl_original,
+                instrument_token = int(order.instrument_token or 0),
+                exit_time     = algo.exit_time,
+            ))
             return
 
     # ── RE-EXECUTE: immediate fresh-strike entry ───────────────────────────────
@@ -440,6 +508,23 @@ class ReentryEngine:
                             "reentry_engine: RE-ENTRY enter() failed (order %s): %s",
                             order_id, exc,
                         )
+                    # Mark watcher as TRIGGERED in DB
+                    try:
+                        from app.models.reentry_watcher_state import ReentryWatcherState
+                        from sqlalchemy import update as _upd_rw
+                        import uuid as _uuid_rw2, pytz as _pytz_rw2
+                        from datetime import datetime as _dt_rw2
+                        _IST_rw2 = _pytz_rw2.timezone('Asia/Kolkata')
+                        async with AsyncSessionLocal() as _tdb:
+                            await _tdb.execute(
+                                _upd_rw(ReentryWatcherState)
+                                .where(ReentryWatcherState.order_id == _uuid_rw2.UUID(order_id))
+                                .where(ReentryWatcherState.status == 'WATCHING')
+                                .values(status='TRIGGERED', triggered_at=_dt_rw2.now(_IST_rw2))
+                            )
+                            await _tdb.commit()
+                    except Exception as _rw_e:
+                        logger.warning(f"[REENTRY] Failed to mark watcher triggered: {_rw_e}")
                     return
 
                 await asyncio.sleep(1)
@@ -452,6 +537,49 @@ class ReentryEngine:
         for task in tasks:
             if not task.done():
                 task.cancel()
+
+    async def rebuild_watchers(self) -> None:
+        """Restart WATCHING re-entry watcher tasks from DB on startup."""
+        try:
+            from app.models.reentry_watcher_state import ReentryWatcherState
+            from datetime import date as _date, timezone as _tz, datetime as _dt_rb
+            from zoneinfo import ZoneInfo as _ZI
+            _today_start = _dt_rb.now(_ZI("Asia/Kolkata")).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            async with AsyncSessionLocal() as _rb_db:
+                _r = await _rb_db.execute(
+                    select(ReentryWatcherState)
+                    .where(ReentryWatcherState.status == 'WATCHING')
+                    .where(ReentryWatcherState.created_at >= _today_start)
+                )
+                watchers = _r.scalars().all()
+                restored = 0
+                for w in watchers:
+                    task = asyncio.create_task(
+                        self._watch_and_re_enter(
+                            order_id      = str(w.order_id),
+                            leg_id        = str(w.leg_id),
+                            algo_state_id = str(w.algo_state_id),
+                            grid_entry_id = str(w.grid_entry_id),
+                            trigger_price = w.trigger_price,
+                            ltp_mode      = w.ltp_mode or 'ltp',
+                            new_count     = w.reentry_count,
+                            tsl_two_step  = bool(w.tsl_two_step),
+                            sl_original   = w.sl_original,
+                            exit_reason   = w.exit_reason or '',
+                        )
+                    )
+                    key = str(w.grid_entry_id)
+                    self._watcher_tasks.setdefault(key, []).append(task)
+                    restored += 1
+                    logger.info(
+                        f"[REENTRY] Restored watcher: grid={str(w.grid_entry_id)[:8]} "
+                        f"trigger={w.trigger_price:.2f}"
+                    )
+            logger.info(f"[REENTRY] rebuild_watchers complete — {restored} watcher(s) restored")
+        except Exception as e:
+            logger.error(f"[REENTRY] rebuild_watchers failed: {e}")
 
     def get_watcher_count(self, grid_entry_id: str) -> int:
         return len([t for t in self._watcher_tasks.get(grid_entry_id, []) if not t.done()])

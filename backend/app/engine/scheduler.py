@@ -1233,6 +1233,23 @@ class AlgoScheduler:
                 except Exception as _orb_exp_err:
                     logger.warning(f"[EOD] ORB expiry failed (non-fatal): {_orb_exp_err}")
 
+                # Mark remaining WATCHING re-entry watchers as EXPIRED
+                try:
+                    from app.models.reentry_watcher_state import ReentryWatcherState
+                    from sqlalchemy import update as _rw_update
+                    _rw_today_start = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+                    async with AsyncSessionLocal() as _rw_db:
+                        await _rw_db.execute(
+                            _rw_update(ReentryWatcherState)
+                            .where(ReentryWatcherState.status == 'WATCHING')
+                            .where(ReentryWatcherState.created_at >= _rw_today_start)
+                            .values(status='EXPIRED', triggered_at=datetime.now(IST))
+                        )
+                        await _rw_db.commit()
+                    logger.info("[EOD] Re-entry watchers expired")
+                except Exception as _rw_exp_err:
+                    logger.warning(f"[EOD] Reentry watcher expiry failed (non-fatal): {_rw_exp_err}")
+
             except Exception as e:
                 await db.rollback()
                 logger.error(f"EOD cleanup job failed: {e}")
