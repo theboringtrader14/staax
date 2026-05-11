@@ -750,8 +750,8 @@ export default function DashboardPanel() {
                     <div key={i} style={{ color: 'rgba(255,107,0,0.3)', textAlign: 'center', fontSize: 9, padding: '3px 0', margin: '2px 0' }}>{line}</div>
                   )
                   const formatMsg = (s: string) => {
-                    const noSource = s.replace(/^\[[A-Z_a-z]+\]\s*/i, '')
-                    return noSource.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*[·•]\s*/i, '')
+                    const noSource = s.replace(/^(\[[^\]]+\]\s*)+/, '')
+                    return noSource.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*·\s*/i, '')
                   }
                   // Parse structured format: [HH:MM:SS] [lvl] rest
                   const m = line.match(/^(\[\d{2}:\d{2}:\d{2}\])\s+\[(ok|err|wrn|inf)\]\s+(.*)$/)

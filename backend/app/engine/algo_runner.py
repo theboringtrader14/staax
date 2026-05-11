@@ -2163,6 +2163,8 @@ class AlgoRunner:
                     # Resolve algo name — Order has no algo_name column, load from Algo
                     _algo_name_res = await db.execute(select(Algo.name).where(Algo.id == order.algo_id))
                     _algo_name = _algo_name_res.scalar_one_or_none() or ""
+                    _acct_res = await db.execute(select(Account.nickname).where(Account.id == order.account_id))
+                    _acct_name = _acct_res.scalar_one_or_none() or str(order.account_id)
 
                     tsl_trailed = (
                         self._tsl_engine.has_trailed(order_id)
@@ -2265,13 +2267,13 @@ class AlgoRunner:
                     ))
                     asyncio.create_task(_wa_notify("sl_hit", {
                         "algo_name":  _algo_name,
-                        "account":    str(order.account_id),
+                        "account":    _acct_name,
                         "exit_price": exit_price,
                         "pnl":        order.pnl or 0.0,
                     }))
                     asyncio.create_task(_tg_notify("sl_hit", {
                         "algo_name":  _algo_name,
-                        "account":    str(order.account_id),
+                        "account":    _acct_name,
                         "exit_price": exit_price,
                         "pnl":        order.pnl or 0.0,
                     }))

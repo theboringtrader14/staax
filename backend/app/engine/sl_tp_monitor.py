@@ -24,7 +24,7 @@ _IST = _pytz.timezone('Asia/Kolkata')
 def _is_sl_check_allowed() -> bool:
     """SL/TP checks only allowed from 09:18 IST to 15:30 IST"""
     now = _dt.now(_IST).time()
-    return _time(9, 18) <= now <= _time(15, 30)
+    return now > _time(9, 18) and now <= _time(15, 30)
 
 
 @dataclass
