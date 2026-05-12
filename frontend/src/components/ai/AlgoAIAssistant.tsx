@@ -124,7 +124,6 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
     // Triple guard: ref flag + timestamp debounce + isLoading state
     const now = Date.now()
     if (isSendingRef.current || isLoading || now - lastSendRef.current < 500) {
-      console.log('[AI] blocked by guard:', { isSending: isSendingRef.current, isLoading, timeDiff: now - lastSendRef.current })
       return
     }
     isSendingRef.current = true
@@ -132,12 +131,9 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
 
     const userMsg = input.trim()
     if (!userMsg || chatDone) {
-      console.log('[AI] blocked:', { userMsg: !!userMsg, chatDone })
       isSendingRef.current = false
       return
     }
-
-    console.log('[AI] sending:', userMsg, 'history length:', historyRef.current.length)
 
     // Clear input and show user message immediately
     setInput('')
@@ -150,7 +146,6 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
 
     try {
       const response = await callClaude(historyRef.current)
-      console.log('[AI] response:', response.substring(0, 300))
 
       // Add assistant response to history
       historyRef.current = [...historyRef.current, { role: 'assistant', content: response }]
@@ -188,7 +183,7 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
               }
             }
           } catch (e) {
-            console.log('[AI] JSON parse error:', e)
+            // JSON parse failed — treat as plain text response
           }
         }
       }
@@ -197,7 +192,6 @@ export function AlgoAIAssistant({ mode, existingAlgo, accounts, onComplete, onCl
         setMessages(prev => [...prev, { role: 'assistant', text: response, ts: _ts() }])
       }
     } catch (e) {
-      console.error('[AI] error:', e)
       setMessages(prev => [...prev, { role: 'assistant', text: 'Network error. Please try again.', ts: _ts() }])
     } finally {
       setIsLoading(false)
