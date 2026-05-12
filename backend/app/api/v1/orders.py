@@ -2335,7 +2335,7 @@ async def retry_entry(
     # Mark existing error orders as superseded — prevents duplicate rows in SX-WIDE after RETRY
     await db.execute(
         update(Order)
-        .where(Order.grid_entry_id == ge.id, Order.status == OrderStatus.ERROR)
+        .where(Order.grid_entry_id == grid_entry.id, Order.status == OrderStatus.ERROR)
         .values(status=OrderStatus.CANCELLED, exit_reason=ExitReason.SUPERSEDED_BY_RETRY)
     )
     await db.commit()

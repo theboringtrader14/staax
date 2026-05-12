@@ -701,6 +701,11 @@ function OrderBookView() {
       const brokerOrders: any[] = brokerData.orders ?? [];
       const staxxOrders: any[] = staxxData.orders ?? staxxData ?? [];
       const staxxByBrokerIdSet = new Set(staxxOrders.map((o: any) => o.broker_order_id).filter(Boolean));
+      const staxxGeidByBrokerId: Record<string, string> = Object.fromEntries(
+        staxxOrders
+          .filter((o: any) => o.broker_order_id && o.grid_entry_id)
+          .map((o: any) => [o.broker_order_id, o.grid_entry_id])
+      );
       const reconciled = brokerOrders.map((o: any) => {
         const boid = o.orderid ?? o.order_id ?? '';
         let badge = 'MANUAL';
@@ -708,7 +713,7 @@ function OrderBookView() {
         else if (o.status === 'REJECTED' || o.status === 'CANCELLED') badge = 'FAILED';
         else if (staxxByBrokerIdSet.has(boid)) badge = 'MATCHED';
         else badge = 'DISCONNECTED';
-        return { ...o, _boid: boid, _badge: badge };
+        return { ...o, _boid: boid, _badge: badge, _geId: staxxGeidByBrokerId[boid] || '' };
       });
       setRows(reconciled);
       reconciled.filter(o => o._badge === 'DISCONNECTED').forEach(o => {
@@ -771,8 +776,9 @@ function OrderBookView() {
               </button>
             )}
             {o._badge === 'FAILED' && (
-              <button onClick={() => fetch('/api/v1/orders/retry', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ broker_order_id: o._boid }) }).catch(() => {})}
-                style={{ height: 24, padding: '0 10px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', color: '#e74c3c', letterSpacing: '0.5px' }}>
+              <button onClick={() => { if (o._geId) ordersAPI.retryEntry(o._geId).catch(() => {}); }}
+                disabled={!o._geId}
+                style={{ height: 24, padding: '0 10px', borderRadius: 100, border: 'none', cursor: 'pointer', background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-display)', color: '#e74c3c', letterSpacing: '0.5px', opacity: o._geId ? 1 : 0.4 }}>
                 RETRY
               </button>
             )}
@@ -1035,6 +1041,13 @@ export default function OrdersPage() {
 
   useEffect(() => { localStorage.setItem('orders_compact_mode', String(compactMode)) }, [compactMode])
   useEffect(() => { localStorage.setItem('orders_expanded_algos', JSON.stringify([...expandedAlgos])) }, [expandedAlgos])
+
+  // Reset to 'algos' tab when entering PRACTIX mode while Order Book is active (I-NEW7)
+  useEffect(() => {
+    if (isPractixMode && pageTab === 'orderbook') {
+      setPageTab('algos')
+    }
+  }, [isPractixMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleExpand = (algoId: string) => {
     setExpandedAlgos(prev => {
@@ -1497,9 +1510,10 @@ export default function OrdersPage() {
 
         {/* Tab bar — neumorphic sliding pill */}
         {(() => {
-          const _tabs = ['algos', 'bots', 'orderbook'] as const
+          const _allTabs = ['algos', 'bots', 'orderbook'] as const
+          const _tabs = isPractixMode ? (['algos', 'bots'] as const) : _allTabs
           const _labels: Record<string, string> = { algos: 'Algos', bots: 'Bots', orderbook: 'Order Book' }
-          const _idx = (_tabs as readonly string[]).indexOf(pageTab)
+          const _idx = Math.max(0, (_tabs as readonly string[]).indexOf(pageTab))
           return (
             <div style={{
               flexShrink: 0, display: 'flex', position: 'relative', margin: '8px 0',
@@ -1568,7 +1582,7 @@ export default function OrdersPage() {
                   { f: 'closed',  label: 'Closed Algos', val: closedAlgosCount, color: closedAlgosCount > 0 ? '#0ea66e' : 'var(--text-mute)' },
                   { f: 'open',    label: 'Open Pos',     val: openLegsCount,    color: openLegsCount    > 0 ? '#0ea66e' : 'var(--text-mute)' },
                   { f: 'closed',  label: 'Closed Pos',   val: closedLegsCount,  color: closedLegsCount  > 0 ? '#0ea66e' : 'var(--text-mute)' },
-                  { f: 'missed',  label: 'Missed',       val: missedCount,      color: missedCount      > 0 ? '#E08000' : 'var(--text-mute)' },
+                  { f: 'missed',  label: 'Missed & Skipped', val: missedCount,   color: missedCount      > 0 ? '#E08000' : 'var(--text-mute)' },
                   { f: 'error',   label: 'Error',        val: errorCount,       color: errorCount       > 0 ? '#E03030' : 'var(--text-mute)' },
                   { f: 'waiting', label: 'Waiting',      val: waitingCount,     color: waitingCount     > 0 ? '#C8A000' : 'var(--text-mute)' },
                 ].map(({ f, label, val, color }) => (
@@ -1743,15 +1757,16 @@ export default function OrdersPage() {
                 : 'waiting'
               const displayStatus = w.display_status  // 'MONITORING' | 'SCHEDULED' | 'WAITING' | 'MISSED' | 'ERROR'
               const stripBg =
+                isMissed                       ? '#F59E0B' :  // amber — MISSED takes priority over display_status
                 displayStatus === 'MONITORING' ? '#2dd4bf' :
                 displayStatus === 'SCHEDULED'  ? '#4488FF' :
                 displayStatus === 'ERROR'      ? '#FF4444' :
                 displayStatus === 'MISSED'     ? '#F59E0B' :
                 displayStatus === 'SKIPPED'    ? 'rgba(156,163,175,0.5)' :
                 isError ? '#FF4444' :
-                isMissed ? '#F59E0B' :
                 '#FFE600'  // WAITING default
               const stripGlow =
+                isMissed                       ? 'rgba(245,158,11,0.5)' :  // amber glow — matches isMissed priority
                 displayStatus === 'MONITORING' ? 'rgba(45,212,191,0.5)' :
                 displayStatus === 'SCHEDULED'  ? 'rgba(68,136,255,0.5)' :
                 displayStatus === 'ERROR'      ? 'rgba(255,34,68,0.5)'  :
