@@ -248,7 +248,17 @@ class AlgoScheduler:
             replace_existing=True,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler")
+        # 15s interval — ARCH-14: order-level reconciler (DB OPEN orders vs broker orderbook)
+        self._scheduler.add_job(
+            self._job_reconcile_orders,
+            "interval",
+            seconds=15,
+            id="reconcile_orders",
+            replace_existing=True,
+            misfire_grace_time=10,
+        )
+
+        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler, reconcile_orders")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -518,6 +528,173 @@ class AlgoScheduler:
             await self._algo_runner._reconcile_state()
         except Exception as e:
             logger.error(f"[SCHEDULER] state_reconciler job error: {e}")
+
+    async def _job_reconcile_orders(self):
+        """
+        ARCH-14: Every 15s during market hours.
+        Checks all DB OPEN orders (with a broker_order_id) against the Angel One
+        orderbook.  Logs and notifies on discrepancies — NO auto-correction.
+
+        Cases flagged:
+          UNLINKED  — OPEN order has no broker_order_id (possible missed fill)
+          MISSING   — broker_order_id not found in Angel One orderbook
+          REJECTED  — broker shows the order as REJECTED/CANCELLED
+        """
+        if not self._algo_runner:
+            return
+
+        now_ist = datetime.now(IST)
+        _hf = now_ist.hour + now_ist.minute / 60.0
+        if not (9.15 <= _hf <= 15.584):  # 09:15–15:35 inclusive
+            return
+
+        try:
+            from app.models.order import Order, OrderStatus
+            from app.models.account import Account, BrokerType
+            from app.engine.tg_notifier import tg_notifier
+
+            # ── 1. Fetch all live (non-practix) OPEN orders ───────────────────
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Order).where(
+                        Order.status == OrderStatus.OPEN,
+                        Order.is_practix == False,  # noqa: E712
+                    )
+                )
+                open_orders = result.scalars().all()
+
+            if not open_orders:
+                return
+
+            # ── 2. Group orders by Angel One account ──────────────────────────
+            # Fetch accounts in one query to avoid N+1 DB round-trips
+            account_ids = {o.account_id for o in open_orders if o.account_id}
+            accounts_by_id: dict = {}
+            if account_ids:
+                async with AsyncSessionLocal() as db:
+                    acc_result = await db.execute(
+                        select(Account).where(Account.id.in_(account_ids))
+                    )
+                    for acc in acc_result.scalars().all():
+                        accounts_by_id[acc.id] = acc
+
+            # ── 3. Fetch orderbook per Angel One account (once per account) ───
+            # Map: client_id → set of orderids in broker orderbook
+            ao_book_cache: dict[str, set] = {}  # client_id → {orderid, ...}
+            ao_rejected_cache: dict[str, set] = {}  # client_id → {orderid, ...}
+
+            for acc in accounts_by_id.values():
+                if acc.broker != BrokerType.ANGELONE:
+                    continue
+                broker = self._algo_runner._angel_broker_map.get(acc.client_id)
+                if not broker:
+                    continue
+                # Skip accounts with no live token
+                if not bool(
+                    getattr(broker, "_access_token", None) or
+                    getattr(broker, "access_token", None)
+                ):
+                    continue
+                try:
+                    book = await broker.get_order_book()  # returns list of dicts
+                    live_ids: set = set()
+                    rejected_ids: set = set()
+                    for entry in (book or []):
+                        oid = str(entry.get("orderid") or entry.get("orderId") or "")
+                        if not oid:
+                            continue
+                        status = str(entry.get("orderstatus") or entry.get("orderStatus") or "").upper()
+                        if status in ("REJECTED", "CANCELLED"):
+                            rejected_ids.add(oid)
+                        else:
+                            live_ids.add(oid)
+                    ao_book_cache[acc.client_id] = live_ids
+                    ao_rejected_cache[acc.client_id] = rejected_ids
+                    logger.debug(
+                        "[RECONCILE] AO(%s) orderbook: %d live, %d rejected",
+                        acc.client_id, len(live_ids), len(rejected_ids),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[RECONCILE] get_order_book failed for %s: %s",
+                        acc.client_id, exc,
+                    )
+
+            # ── 4. Check each OPEN order against the cached orderbook ─────────
+            for order in open_orders:
+                broker_oid = order.broker_order_id
+
+                # Case A: no broker_order_id — order was never linked to broker
+                if not broker_oid:
+                    logger.warning(
+                        "[RECONCILE] UNLINKED — Order id=%s algo=%s has no broker_order_id "
+                        "(possible missed fill or unlinked entry)",
+                        order.id, order.algo_id,
+                    )
+                    await _ev.warn(
+                        f"[RECONCILE] UNLINKED — Order {order.id} has no broker_order_id "
+                        f"(possible missed fill)",
+                        source="reconciler",
+                    )
+                    continue
+
+                # Determine which account/client this order belongs to
+                acc = accounts_by_id.get(order.account_id)
+                if not acc or acc.broker != BrokerType.ANGELONE:
+                    # Not an Angel One order (Zerodha or unmapped) — skip for now
+                    continue
+
+                client_id = acc.client_id
+
+                # Account not in cache means no live token — skip to avoid false positives
+                if client_id not in ao_book_cache:
+                    continue
+
+                live_ids     = ao_book_cache[client_id]
+                rejected_ids = ao_rejected_cache.get(client_id, set())
+
+                # Case B: broker_order_id is in rejected set
+                if broker_oid in rejected_ids:
+                    msg = (
+                        f"[RECONCILE] REJECTED — Order {order.id} sym={order.symbol} "
+                        f"broker_order_id={broker_oid} is REJECTED/CANCELLED at broker "
+                        f"but DB status=OPEN"
+                    )
+                    logger.warning(msg)
+                    await _ev.warn(
+                        f"[RECONCILE] REJECTED — {order.symbol} broker_order_id={broker_oid} "
+                        f"is REJECTED at broker but DB=OPEN",
+                        source="reconciler",
+                    )
+                    import asyncio as _aio
+                    _aio.create_task(tg_notifier.notify("order_disconnected", {
+                        "algo_name":       str(order.algo_id),
+                        "symbol":          order.symbol or "",
+                        "broker_order_id": broker_oid,
+                    }))
+                    continue
+
+                # Case C: broker_order_id not found at all in orderbook
+                if broker_oid not in live_ids:
+                    msg = (
+                        f"[RECONCILE] MISSING — Order {order.id} sym={order.symbol} "
+                        f"broker_order_id={broker_oid} not found in AO orderbook "
+                        f"(account={client_id})"
+                    )
+                    logger.warning(msg)
+                    await _ev.warn(
+                        f"[RECONCILE] MISSING — {order.symbol} broker_order_id={broker_oid} "
+                        f"absent from AO orderbook (account={client_id})",
+                        source="reconciler",
+                    )
+                    _aio.create_task(tg_notifier.notify("order_disconnected", {
+                        "algo_name":       str(order.algo_id),
+                        "symbol":          order.symbol or "",
+                        "broker_order_id": broker_oid,
+                    }))
+
+        except Exception as e:
+            logger.error(f"[SCHEDULER] reconcile_orders job error: {e}", exc_info=True)
 
     async def _job_missed_entry_recovery(self):
         """

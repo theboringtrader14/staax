@@ -77,6 +77,28 @@ async def _tg_notify(event: str, payload: dict) -> None:
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
+
+async def _trigger_orb_freeze(grid_entry_id: str) -> None:
+    """
+    Scheduler-driven ORB range freeze — fires at exact orb_end_time via DateTrigger.
+
+    This is the primary freeze path.  The tick-driven path in ORBTracker.on_tick()
+    remains as a fallback (guards with is_fetching so both paths are safe to race).
+    """
+    from app.engine.algo_runner import algo_runner as _runner  # module-level singleton
+    tracker = _runner._orb_tracker
+    if tracker is None:
+        return
+    window = tracker._windows.get(grid_entry_id)
+    if window is None:
+        return  # already deregistered (triggered or no_trade)
+    if window.is_range_set or window.is_fetching:
+        return  # tick path already handled it
+    window.is_fetching = True
+    logger.info(f"[ORB] Scheduler-driven freeze triggered for {grid_entry_id[:8]}")
+    await tracker._fetch_and_set_range(window)
+
+
 # Explicit margin-error keywords — avoids false-positives from bare "margin" substring.
 MARGIN_ERROR_KEYWORDS = [
     "insufficient margin",
@@ -2933,6 +2955,43 @@ class AlgoRunner:
             window,
             on_entry=self._make_orb_callback(str(grid_entry_id)),
         )
+
+        # ── Schedule scheduler-driven range freeze at exact orb_end_time ──────
+        # Primary freeze path: fires once at the precise end of the ORB window.
+        # The tick-driven path in on_tick() is the fallback (is_fetching guard
+        # prevents both paths from racing to call _fetch_and_set_range twice).
+        try:
+            from apscheduler.triggers.date import DateTrigger as _DateTrigger
+            from app.engine.scheduler import get_scheduler as _get_sched_orb
+            _sched_orb = _get_sched_orb()
+            if _sched_orb:
+                _end_str   = algo_orb_end_time or "11:16"
+                _h, _m     = map(int, _end_str.split(":")[:2])
+                _orb_end_dt = datetime.now(IST).replace(
+                    hour=_h, minute=_m, second=0, microsecond=0
+                )
+                _sched_orb._scheduler.add_job(
+                    _trigger_orb_freeze,
+                    trigger=_DateTrigger(run_date=_orb_end_dt, timezone=IST),
+                    args=[str(grid_entry_id)],
+                    id=f"orb_freeze_{grid_entry_id}",
+                    replace_existing=True,
+                    misfire_grace_time=120,
+                )
+                logger.info(
+                    f"[ORB] Freeze job scheduled at {_end_str} IST for {str(grid_entry_id)[:8]}"
+                )
+            else:
+                logger.warning(
+                    f"[ORB] Scheduler not available — freeze job not scheduled for "
+                    f"{str(grid_entry_id)[:8]}; tick-path fallback active"
+                )
+        except Exception as _orb_sched_err:
+            logger.warning(
+                f"[ORB] Failed to schedule freeze job for {str(grid_entry_id)[:8]}: "
+                f"{_orb_sched_err} — tick-path fallback active"
+            )
+
         if self._ltp_consumer:
             self._ltp_consumer.subscribe([_tracking_token])
         logger.info(
