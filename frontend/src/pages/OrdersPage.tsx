@@ -2114,10 +2114,12 @@ export default function OrdersPage() {
                     const algoSt   = getAlgoStatus(group)
                     const bar      = ALGO_STATUS_BAR[algoSt]
                     const algoNameColor =
-                      algoSt === 'open'     ? 'var(--green)'    :
                       algoSt === 'error'    ? 'var(--red)'      :
+                      algoSt === 'open'     ? 'var(--green)'    :
                       algoSt === 'no_trade' ? '#F59E0B'         :
+                      algoSt === 'skipped'  ? '#F59E0B'         :
                       algoSt === 'closed'   ? 'var(--text-dim)' :
+                      algoSt === 'pending'  ? 'var(--text-dim)' :
                       algoSt === 'waiting'  ? 'var(--accent)'   :
                       'var(--text)'
                     const isFullyClosed = group.legs.length > 0 && group.legs.every(
