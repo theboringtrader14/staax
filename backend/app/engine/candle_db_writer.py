@@ -34,7 +34,7 @@ class CandleDBWriter:
         self._flush_task: Optional[asyncio.Task] = None
         self._running = False
 
-    async def start(self, broker) -> None:
+    async def start(self, broker, ltp_consumer=None) -> None:
         """Resolve MCX tokens from instrument master + start flush loop."""
         self._running = True
         try:
@@ -71,6 +71,18 @@ class CandleDBWriter:
                     logger.warning(f"[CANDLE] Could not resolve token for {name}")
         except Exception as e:
             logger.warning(f"[CANDLE] Token resolution failed: {e}")
+
+        # Subscribe resolved MCX tokens to SmartStream via ltp_consumer
+        if ltp_consumer is not None:
+            mcx_token_strs = [t for t in MCX_INSTRUMENTS.values() if t]
+            # Register with AO adapter for exchangeType=5 routing
+            if mcx_token_strs and getattr(ltp_consumer, "_angel_adapter", None):
+                ltp_consumer._angel_adapter.register_mcx_tokens(mcx_token_strs)
+            # Subscribe via ltp_consumer (takes int tokens)
+            for name, token_str in MCX_INSTRUMENTS.items():
+                if token_str:
+                    ltp_consumer.subscribe([int(token_str)])
+                    logger.info(f"[CANDLE] Subscribed {name} (token={token_str}) to SmartStream")
 
         self._flush_task = asyncio.create_task(self._flush_loop())
         logger.info("[CANDLE] CandleDBWriter started")
@@ -132,6 +144,20 @@ async def run_mcx_backfill(broker) -> None:
     import pytz
     from datetime import datetime, timedelta
     IST = pytz.timezone("Asia/Kolkata")
+
+    # Guard: verify broker session is active before attempting backfill
+    try:
+        profile = await asyncio.get_event_loop().run_in_executor(
+            None, broker._smart_api.getProfile, broker._refresh_token
+        )
+        if not profile or profile.get("status") is False:
+            logger.warning(
+                "[CANDLE] Broker session not active — skipping backfill until session refreshes"
+            )
+            return
+    except Exception as e:
+        logger.warning(f"[CANDLE] Session check failed: {e} — skipping backfill")
+        return
 
     for name, token_str in MCX_INSTRUMENTS.items():
         if not token_str:

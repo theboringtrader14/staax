@@ -740,7 +740,7 @@ class AngelOneBroker(BaseBroker):
             "squareoff":        "0",
             "stoploss":         "0",
             "quantity":         str(quantity),
-            "ordertag":         tag,   # SEBI algo_tag — Angel One ordertag field
+            "ordertag":         str(tag or "")[:20],   # SEBI algo_tag — Angel One ordertag field (max 20 chars)
         }
 
         # ── Session validity pre-check ─────────────────────────────────────────
@@ -782,9 +782,11 @@ class AngelOneBroker(BaseBroker):
                 lambda: client.placeOrder(order_params)
             )
 
-            if not data or data.get("status") is False:
-                msg = data.get("message", "Unknown error") if data else "No response"
-                raise RuntimeError(f"Angel One order placement failed: {msg}")
+            if not data:
+                raise RuntimeError("Angel One order placement failed: No response from broker")
+            if data.get("status") is False:
+                broker_msg = data.get("message") or data.get("errormessage") or data.get("errorcode") or "Unknown error"
+                raise RuntimeError(f"Angel One order placement failed: {broker_msg}")
 
             order_id = data.get("data", {}).get("orderid", "")
             if not order_id:

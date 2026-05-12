@@ -650,8 +650,21 @@ class AlgoRunner:
             )
             # Write full traceback to event log so it surfaces in frontend System Log
             try:
+                _outer_algo_name = grid_entry_id  # fallback if lookup fails
+                try:
+                    async with AsyncSessionLocal() as _name_db:
+                        _name_res = await _name_db.execute(
+                            select(Algo)
+                            .join(GridEntry, GridEntry.algo_id == Algo.id)
+                            .where(GridEntry.id == grid_entry_id)
+                        )
+                        _name_algo = _name_res.scalar_one_or_none()
+                        if _name_algo and _name_algo.name:
+                            _outer_algo_name = _name_algo.name
+                except Exception:
+                    pass
                 await _ev.error(
-                    f"{grid_entry_id} · {type(_outer_exc).__name__}: {str(_outer_exc)[:300]}\n"
+                    f"{_outer_algo_name} · {type(_outer_exc).__name__}: {str(_outer_exc)[:300]}\n"
                     f"(Full traceback in server log)",
                     source="engine",
                 )
