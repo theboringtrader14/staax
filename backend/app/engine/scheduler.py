@@ -693,6 +693,69 @@ class AlgoScheduler:
                         "broker_order_id": broker_oid,
                     }))
 
+            # ── Zerodha reconciliation ────────────────────────────────────────
+            _zerodha = self._algo_runner._zerodha_broker
+            if _zerodha is not None and _zerodha.is_token_set():
+                try:
+                    _z_orders = await _zerodha.get_orders()
+                    _z_cache = {
+                        str(o.get("order_id", "")): o
+                        for o in (_z_orders or [])
+                        if o.get("order_id")
+                    }
+                except Exception as _ze:
+                    logger.warning("[RECONCILE] Zerodha orderbook fetch failed: %s", _ze)
+                    _z_cache = {}
+
+                for _order in open_orders:
+                    _acc = accounts_by_id.get(_order.account_id)
+                    if not _acc or _acc.broker == BrokerType.ANGELONE:
+                        continue
+                    _bid = _order.broker_order_id
+                    if not _bid:
+                        await _ev.warn(
+                            f"[RECONCILE] Zerodha order {_order.id} has no "
+                            f"broker_order_id — UNLINKED",
+                            source="reconciler",
+                        )
+                        continue
+                    _z_entry = _z_cache.get(str(_bid))
+                    if _z_entry is None:
+                        logger.warning(
+                            "[RECONCILE] MISSING — Zerodha order %s sym=%s "
+                            "not found in orderbook",
+                            _bid, _order.symbol,
+                        )
+                        await _ev.warn(
+                            f"[RECONCILE] MISSING — Zerodha order {_bid} "
+                            f"sym={_order.symbol} NOT in orderbook",
+                            source="reconciler",
+                        )
+                        import asyncio as _aio2
+                        _aio2.create_task(tg_notifier.notify("order_disconnected", {
+                            "algo_name":       str(_order.algo_id),
+                            "symbol":          _order.symbol or "",
+                            "broker_order_id": _bid,
+                        }))
+                    elif str(_z_entry.get("status", "")).upper() in ("REJECTED", "CANCELLED"):
+                        _st = _z_entry.get("status", "")
+                        logger.warning(
+                            "[RECONCILE] REJECTED — Zerodha order %s sym=%s status=%s "
+                            "but DB=OPEN",
+                            _bid, _order.symbol, _st,
+                        )
+                        await _ev.warn(
+                            f"[RECONCILE] REJECTED — Zerodha order {_bid} "
+                            f"sym={_order.symbol} status={_st} but DB=OPEN",
+                            source="reconciler",
+                        )
+                        import asyncio as _aio2
+                        _aio2.create_task(tg_notifier.notify("order_disconnected", {
+                            "algo_name":       str(_order.algo_id),
+                            "symbol":          _order.symbol or "",
+                            "broker_order_id": _bid,
+                        }))
+
         except Exception as e:
             logger.error(f"[SCHEDULER] reconcile_orders job error: {e}", exc_info=True)
 
@@ -1426,6 +1489,23 @@ class AlgoScheduler:
                     logger.info("[EOD] Re-entry watchers expired")
                 except Exception as _rw_exp_err:
                     logger.warning(f"[EOD] Reentry watcher expiry failed (non-fatal): {_rw_exp_err}")
+
+                # Mark remaining WATCHING journey states as EXPIRED
+                try:
+                    from app.models.journey_state import JourneyState, JourneyStatus
+                    from sqlalchemy import update as _js_update
+                    _js_today_start = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+                    async with AsyncSessionLocal() as _js_db:
+                        await _js_db.execute(
+                            _js_update(JourneyState)
+                            .where(JourneyState.status == JourneyStatus.WATCHING)
+                            .where(JourneyState.created_at >= _js_today_start)
+                            .values(status=JourneyStatus.EXPIRED)
+                        )
+                        await _js_db.commit()
+                    logger.info("[EOD] Journey states expired")
+                except Exception as _js_exp_err:
+                    logger.warning(f"[EOD] Journey state expiry failed (non-fatal): {_js_exp_err}")
 
             except Exception as e:
                 await db.rollback()

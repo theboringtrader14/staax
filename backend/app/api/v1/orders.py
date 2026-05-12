@@ -309,6 +309,7 @@ async def list_orders(
                 "entry_type":     meta.get("entry_type", ""),
                 "orb_end_time":   meta.get("orb_end_time", None),
                 "algo_exit_time": _algo_exit_time,  # algo-configured exit time for display
+                "is_practix":     bool(group_orders[0].get("is_practix")) if group_orders else False,
             })
 
     return {

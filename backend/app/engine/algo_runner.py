@@ -59,6 +59,7 @@ from app.engine import push_sender as _push
 from app.engine import order_audit as _audit
 import app.engine.wa_notifier as _wa_mod
 import app.engine.tg_notifier as _tg_mod
+from app.engine.event_bus import event_bus as _event_bus, Events as _Events
 
 
 async def _wa_notify(event: str, payload: dict) -> None:
@@ -110,15 +111,6 @@ MARGIN_ERROR_KEYWORDS = [
     "margin blocked",
     "not enough margin",
 ]
-
-
-def _split_into_freeze_chunks(total_qty: int, freeze_qty: int) -> list[int]:
-    """Split total quantity into broker-acceptable freeze-size chunks."""
-    chunks, remaining = [], total_qty
-    while remaining > 0:
-        chunks.append(min(remaining, freeze_qty))
-        remaining -= chunks[-1]
-    return chunks
 
 
 class TokenBucketRateLimiter:
@@ -298,6 +290,12 @@ class AlgoRunner:
         # Execution layer
         self._execution_manager = execution_manager
 
+        # Event bus — proof-of-concept subscriber (ARCH-16)
+        async def _on_sl_hit_event(event_type: str, data: dict) -> None:
+            pass  # Future: Telegram, WebSocket, analytics subscribe here
+
+        _event_bus.subscribe(_Events.SL_HIT, _on_sl_hit_event)
+
         logger.info("✅ AlgoRunner engines wired")
 
     # ── Decision Trace ────────────────────────────────────────────────────────
@@ -308,34 +306,14 @@ class AlgoRunner:
         ltp=None, metadata: dict | None = None
     ):
         """Record WHY an exit/entry decision was made. Non-fatal — never raises."""
-        try:
-            from sqlalchemy import text as _text
-            import json as _json
-            await db.execute(_text('''
-                INSERT INTO decision_log
-                (user_id, algo_id, order_id, event_type, reason,
-                 trigger_value, threshold_value, ltp, sl_price, target_price,
-                 metadata, is_practix)
-                VALUES
-                (:uid, :aid, :oid, :et, :reason,
-                 :tv, :thv, :ltp, :sl, :target,
-                 :meta, :ip)
-            '''), {
-                "uid":    str(order.user_id)  if order and order.user_id  else None,
-                "aid":    str(order.algo_id)  if order and order.algo_id  else None,
-                "oid":    str(order.id)       if order                    else None,
-                "et":     event_type,
-                "reason": reason,
-                "tv":     trigger_value,
-                "thv":    threshold_value,
-                "ltp":    ltp,
-                "sl":     getattr(order, 'sl_actual', None) if order else None,
-                "target": getattr(order, 'target',    None) if order else None,
-                "meta":   _json.dumps(metadata) if metadata else None,
-                "ip":     order.is_practix if order else True,
-            })
-        except Exception as e:
-            logger.warning(f"decision_log write failed (non-fatal): {e}")
+        from app.engine.lifecycle_manager import log_decision
+        await log_decision(
+            db, order, event_type, reason,
+            trigger_value=trigger_value,
+            threshold_value=threshold_value,
+            ltp=ltp,
+            metadata=metadata,
+        )
 
     # ── SmartStream reconnect — re-arm W&T monitors ───────────────────────────
 
@@ -1572,7 +1550,7 @@ class AlgoRunner:
 
         # SEBI mandates SL-Limit for all algo orders — compute trigger + limit prices
         _order_type = "SL"  # always SL-Limit regardless of DB value
-        _buffer = max(1.0, float(ltp) * 0.001)  # ₹1 or 0.1%, whichever larger
+        _buffer = max(0.50, round(float(ltp) * 0.005, 2))  # 0.5% or ₹0.50, whichever larger
         if direction.lower() in ("buy",):
             _trigger_price = float(ltp)
             _limit_price   = float(ltp) + _buffer
@@ -1652,25 +1630,26 @@ class AlgoRunner:
             symbol=symbol, direction=direction, is_practix=grid_entry.is_practix,
         ))
 
-        # ── B3: Freeze-quantity split (Angel One broker order limits) ────────────
-        from app.engine.constants import FREEZE_QTY_MAP, DEFAULT_FREEZE_QTY
-        _underlying  = getattr(leg, 'underlying', '') or ''
-        _freeze_qty  = FREEZE_QTY_MAP.get(_underlying.upper(), DEFAULT_FREEZE_QTY)
-
         # ── Broker call ─────────────────────────────────────────────────────────
         _placed_at = datetime.now(IST)
         try:
+            # B3: Freeze-quantity split using broker instrument master
+            _sym_tok = str(instrument_token)
+            _freeze_qty = account_broker.get_freeze_qty(_sym_tok) if (
+                account_broker and hasattr(account_broker, 'get_freeze_qty')
+            ) else 1800
+
             if quantity > _freeze_qty:
-                # Split into freeze-size chunks; each chunk placed as a separate order
-                _chunks = _split_into_freeze_chunks(quantity, _freeze_qty)
-                logger.info(
-                    f"[SPLIT] {algo.name} qty={quantity} underlying={_underlying or 'unknown'} "
-                    f"freeze_qty={_freeze_qty} → {len(_chunks)} chunks: {_chunks}"
-                )
+                _chunks, _rem = [], quantity
+                while _rem > 0:
+                    _c = min(_rem, _freeze_qty)
+                    _chunks.append(_c)
+                    _rem -= _c
+                logger.info(f"[SPLIT] {algo.name} qty={quantity} freeze={_freeze_qty} → {len(_chunks)} chunks: {_chunks}")
                 _broker_order_ids: list[str] = []
                 for _i, _chunk_qty in enumerate(_chunks):
                     if _i > 0:
-                        await asyncio.sleep(0.2)  # 200ms between chunks
+                        await asyncio.sleep(0.2)
                     _chunk_idem_key = f"{idempotency_key}:chunk{_i}"
                     if self._execution_manager:
                         _chunk_result = await self._execution_manager.place(
@@ -1714,10 +1693,9 @@ class AlgoRunner:
                         )
                     if _chunk_result:
                         _broker_order_ids.append(str(_chunk_result))
-                # Use first chunk's order ID as the primary broker_order_id
                 order_id_str = _broker_order_ids[0] if _broker_order_ids else None
                 if len(_broker_order_ids) > 1:
-                    logger.info(f"[SPLIT] {algo.name} broker_order_ids: {_broker_order_ids}")
+                    logger.info(f"[SPLIT] {algo.name} additional broker_order_ids: {_broker_order_ids[1:]}")
             else:
                 if self._execution_manager:
                     order_id_str = await self._execution_manager.place(
@@ -2477,6 +2455,14 @@ class AlgoRunner:
                             )
                         except Exception as _ws_err:
                             logger.warning(f"[SL] ws broadcast_sl_hit failed: {_ws_err}")
+                    # ARCH-16: publish SL_HIT to internal event bus
+                    asyncio.create_task(_event_bus.publish(_Events.SL_HIT, {
+                        'algo_name': _algo_name,
+                        'symbol':    order.symbol,
+                        'price':     exit_price,
+                        'pnl':       order.pnl or 0.0,
+                    }))
+
                     # Re-entry check
                     if self._reentry_engine:
                         await self._reentry_engine.on_exit(
@@ -3165,221 +3151,45 @@ class AlgoRunner:
         After a leg closes, check if all legs are done.
         If yes, close the AlgoState.
         """
-        async with AsyncSessionLocal() as db:
-            open_count_result = await db.execute(
-                select(Order).where(
-                    and_(
-                        Order.grid_entry_id == grid_entry_id,
-                        Order.status == OrderStatus.OPEN,
-                    )
-                )
-            )
-            open_orders = open_count_result.scalars().all()
-
-            if not open_orders:
-                state_result = await db.execute(
-                    select(AlgoState, GridEntry)
-                    .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
-                    .where(AlgoState.grid_entry_id == grid_entry_id)
-                )
-                row = state_result.one_or_none()
-                if row:
-                    algo_state, grid_entry = row
-                    if algo_state.status == AlgoRunStatus.ACTIVE:
-                        algo_state.status      = AlgoRunStatus.CLOSED
-                        algo_state.closed_at   = datetime.now(IST)
-                        algo_state.exit_reason = "all_legs_closed"
-                        grid_entry.status      = GridStatus.ALGO_CLOSED
-                        await db.commit()
-                        logger.info(f"✅ All legs closed — AlgoState closed: {grid_entry_id}")
-
-                        # System Log: algo fully closed with total P&L
-                        try:
-                            closed_result = await db.execute(
-                                select(Order).where(
-                                    Order.grid_entry_id == grid_entry_id,
-                                    Order.status == OrderStatus.CLOSED,
-                                )
-                            )
-                            closed_orders = closed_result.scalars().all()
-                            _total_pnl = sum(float(o.pnl or 0) for o in closed_orders)
-                            _algo_result = await db.execute(
-                                select(Algo).where(Algo.id == algo_state.algo_id)
-                            )
-                            _algo = _algo_result.scalar_one_or_none()
-                            _algo_name = getattr(_algo, "name", str(algo_state.algo_id))
-                            _sign = "+" if _total_pnl >= 0 else ""
-                            await _ev.success(
-                                f"{_algo_name} · ALL LEGS CLOSED | Total P&L {_sign}₹{_total_pnl:,.2f}",
-                                algo_name=_algo_name, source="engine",
-                            )
-                        except Exception as _log_err:
-                            logger.warning(f"[ev] all-legs-closed log failed: {_log_err}")
-
-                        # Clean up MTM tracking to prevent memory leak over long uptime
-                        if self._mtm_monitor:
-                            self._mtm_monitor.deregister_algo(str(algo_state.algo_id))
+        from app.engine.lifecycle_manager import check_algo_complete
+        await check_algo_complete(grid_entry_id, mtm_monitor=self._mtm_monitor)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
-
-    # Maps raw reason strings → ExitReason enum.
-    # Reasons NOT in ExitReason (e.g. "terminate", "overnight_sl") must be
-    # mapped here or SQLAlchemy will fail the commit.
-    _REASON_TO_EXIT: dict = {}   # populated lazily on first use
 
     @classmethod
     def _resolve_exit_reason(cls, reason: str):
         """Return the ExitReason enum member for a raw reason string."""
-        if not cls._REASON_TO_EXIT:
-            from app.models.order import ExitReason as _ER
-            cls._REASON_TO_EXIT = {
-                "sl":              _ER.SL,
-                "tp":              _ER.TP,
-                "tsl":             _ER.TSL,
-                "mtm_sl":          _ER.MTM_SL,
-                "mtm_tp":          _ER.MTM_TP,
-                "global_sl":       _ER.GLOBAL_SL,
-                "sq":              _ER.SQ,
-                "auto_sq":         _ER.AUTO_SQ,
-                "terminate":       _ER.SQ,        # T button — treat as manual SQ
-                "overnight_sl":    _ER.SL,
-                "entry_fail":      _ER.ERROR,
-                "error":           _ER.ERROR,
-                "all_legs_closed": _ER.AUTO_SQ,
-                "btst_exit":       _ER.BTST_EXIT,
-                "stbt_exit":       _ER.STBT_EXIT,
-            }
-        mapped = cls._REASON_TO_EXIT.get(reason)
-        if mapped is not None:
-            return mapped
-        # Direct enum lookup for any enum value string not in the map
-        from app.models.order import ExitReason as _ER
-        try:
-            return _ER(reason)
-        except ValueError:
-            logger.warning(f"[_close_order] Unknown exit reason {reason!r} — storing as AUTO_SQ")
-            return _ER.AUTO_SQ
+        from app.engine.lifecycle_manager import resolve_exit_reason
+        return resolve_exit_reason(reason)
 
     async def _close_order(
         self, db: AsyncSession, order: Order, exit_price: float, reason: str
     ):
         """Update Order to CLOSED in DB and compute P&L."""
-        # ── Sanity guard: detect index LTP contamination ──────────────────────
-        # For option orders (BFO/NFO), the exit_price must be an option premium
-        # (small), not an underlying index value (large).  If exit_price is more
-        # than 50× the entry fill_price the value is almost certainly the index
-        # spot price leaking into the option's LTP slot — abort rather than
-        # corrupt the DB with a phantom -₹15L P&L.
-        _fill = float(order.fill_price or 0)
-        if _fill > 0 and exit_price > _fill * 50:
-            logger.error(
-                f"[ENGINE] ABORTED _close_order — suspicious exit_price {exit_price} "
-                f"for {order.symbol} (fill={_fill}, ratio={exit_price/_fill:.1f}x). "
-                f"Likely index LTP contamination (BFO option subscribed with wrong "
-                f"exchangeType). Reason={reason}. Order NOT closed."
-            )
-            return
-        order.status      = OrderStatus.CLOSED
-        order.ltp         = exit_price   # snapshot LTP at close
-        order.exit_price  = exit_price
-        order.exit_time   = datetime.now(IST)        # datetime, not isoformat() string
-        order.exit_reason = self._resolve_exit_reason(reason)
-        order.pnl         = self._compute_pnl(order, exit_price)
-        # Mark SL order as placed when a SL/TSL exit fires (broker square-off dispatched
-        # by exit_all/on_sl_hit path). broker_order_id is set at entry, not exit.
-        # sl_order_id is filled by the broker square-off caller when it has a response.
-        if reason in ("sl", "tsl", "overnight_sl") and not getattr(order, "sl_order_status", None):
-            order.sl_order_status = "placed"
+        from app.engine.lifecycle_manager import close_order
+        await close_order(db, order, exit_price, reason)
 
     def _compute_pnl(self, order: Order, exit_price: float) -> Optional[float]:
-        if order.fill_price is None or order.fill_price == 0:
-            logger.warning(
-                f"[ENGINE] Auto-square P&L unknown — fill_price missing for order {order.id} "
-                f"({order.symbol}). Setting pnl=None."
-            )
-            return None
-        qty = order.quantity or 0
-        if order.direction == "buy":
-            return (exit_price - order.fill_price) * qty
-        else:
-            return (order.fill_price - exit_price) * qty
+        from app.engine.lifecycle_manager import compute_pnl
+        return compute_pnl(order, exit_price)
 
     async def _set_no_trade(self, db, algo_state, grid_entry, reason, algo_name: str = ""):
-        algo_state.status  = AlgoRunStatus.NO_TRADE
-        algo_state.exit_reason = reason
-        grid_entry.status  = GridStatus.NO_TRADE
-        await db.commit()
-        try:
-            name = algo_name or str(getattr(algo_state, 'algo_id', 'Algo'))
-            asyncio.create_task(_push.send_push(
-                "⏰ Missed",
-                f"{name} — Entry window passed",
-            ))
-        except Exception:
-            pass
+        from app.engine.lifecycle_manager import set_no_trade
+        await set_no_trade(db, algo_state, grid_entry, reason, algo_name=algo_name)
 
     async def _set_error(self, db, algo_state, grid_entry, msg, algo_name: str = ""):
-        algo_state.status        = AlgoRunStatus.ERROR
-        algo_state.error_message = msg
-        grid_entry.status        = GridStatus.ERROR
-        await db.commit()
-        await _ev.error(
-            f"{getattr(algo_state, 'algo_id', '')} · {msg}",
-            algo_name=str(getattr(algo_state, "algo_id", "")), source="engine",
-        )
-        try:
-            name = algo_name or str(getattr(algo_state, 'algo_id', 'Algo'))
-            asyncio.create_task(_push.send_push(
-                "❌ Error",
-                f"{name} — {str(msg)[:80]}",
-            ))
-        except Exception:
-            pass
+        from app.engine.lifecycle_manager import set_error
+        await set_error(db, algo_state, grid_entry, msg, algo_name=algo_name)
 
     async def _set_waiting(self, db, algo_state, grid_entry, msg):
         """Mark algo as WAITING (not ERROR) — used when SmartStream is down for W&T/ORB.
         Algo stays in WAITING state; ticks will fire W&T/ORB once stream connects."""
-        algo_state.status  = AlgoRunStatus.WAITING
-        grid_entry.status  = GridStatus.ALGO_ACTIVE
-        await db.commit()
-        logger.warning(
-            f"⚠️ [W&T/ORB] {getattr(algo_state, 'algo_id', '')} set to WAITING: {msg}"
-        )
-        is_feed_error = (msg == ExecutionErrorCode.FEED_INACTIVE or str(msg) == "FEED_INACTIVE")
-        _wait_suffix = " (feed inactive)" if is_feed_error else ""
-        await _ev.warn(
-            f"{getattr(algo_state, 'algo_id', '')} · WAITING: {msg}{_wait_suffix}",
-            algo_name=str(getattr(algo_state, "algo_id", "")),
-            source="engine",
-        )
-        # Defensive: deregister any SL/TP monitors that may be armed for this algo.
-        # In the normal W&T/ORB flow this runs before orders are placed (empty loop),
-        # but guards edge-cases where WAITING is triggered after partial fills.
-        if self._sl_tp_monitor:
-            try:
-                open_res = await db.execute(
-                    select(Order).where(
-                        and_(
-                            Order.grid_entry_id == grid_entry.id,
-                            Order.status == OrderStatus.OPEN,
-                        )
-                    )
-                )
-                for _ord in open_res.scalars().all():
-                    self._sl_tp_monitor.remove_position(str(_ord.id))
-            except Exception as _e:
-                logger.warning(f"[W&T] SL/TP deregister on _set_waiting failed (non-fatal): {_e}")
+        from app.engine.lifecycle_manager import set_waiting
+        await set_waiting(db, algo_state, grid_entry, msg, sl_tp_monitor=self._sl_tp_monitor)
 
     async def _mark_error(self, grid_entry_id: str, msg: str):
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(AlgoState, GridEntry)
-                .join(GridEntry, AlgoState.grid_entry_id == GridEntry.id)
-                .where(AlgoState.grid_entry_id == grid_entry_id)
-            )
-            row = result.one_or_none()
-            if row:
-                await self._set_error(db, row[0], row[1], msg)
+        from app.engine.lifecycle_manager import mark_error
+        await mark_error(grid_entry_id, msg)
 
     @staticmethod
     def _parse_time(time_str: str):

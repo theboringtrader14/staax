@@ -42,6 +42,7 @@ interface AlgoGroup {
   algoId: string; algoName: string; account: string; mtm: number; mtmSL: number; mtmTP: number
   legs: Leg[]; inlineStatus?: string; inlineColor?: string; terminated?: boolean
   isLive?: boolean
+  isPractix?: boolean
   latest_error?: { reason: string; event_type: string; timestamp: string } | null
   gridEntryId?: string; entryType?: string; orbEndTime?: string | null
   orbHigh?: number | null
@@ -529,6 +530,7 @@ function mapGroup(g: RawGroup): AlgoGroup {
     mtmSL:        num(g['mtm_sl']),
     mtmTP:        num(g['mtm_tp']),
     latest_error: (g['latest_error'] as AlgoGroup['latest_error']) ?? null,
+    isPractix:    (g['is_practix'] as boolean | undefined) ?? false,
     gridEntryId:  str(g['grid_entry_id']) || undefined,
     entryType:    str(g['entry_type'])    || undefined,
     orbEndTime:   (g['orb_end_time'] as string | null) ?? null,
@@ -1386,7 +1388,8 @@ export default function OrdersPage() {
       if (groups === undefined) {
         result[day] = null  // not yet loaded
       } else {
-        const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
+        const filtered = (accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter))
+          .filter(g => !g.isPractix) // Exclude PRACTIX orders from day pill P&L
         if (!filtered.some(g => g.legs.length > 0)) {
           result[day] = null  // loaded but empty
         } else {
