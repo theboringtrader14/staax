@@ -740,7 +740,7 @@ class AngelOneBroker(BaseBroker):
             "squareoff":        "0",
             "stoploss":         "0",
             "quantity":         str(quantity),
-            "ordertag":         str(tag or "")[:20],   # SEBI algo_tag — Angel One ordertag field (max 20 chars)
+            "ordertag":         str(tag or ""),          # SEBI algo_tag — Angel One ordertag field
         }
 
         # ── Session validity pre-check ─────────────────────────────────────────

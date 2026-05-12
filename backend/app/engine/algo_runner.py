@@ -1405,7 +1405,7 @@ class AlgoRunner:
             _wt_account_nick = account.nickname if account else "unknown"
             _wt_algo_safe    = algo.name.replace(" ", "_").replace("/", "_")
             _wt_ts_ms        = int(datetime.now(IST).timestamp() * 1000)
-            _wt_algo_tag     = f"STAAX_{_wt_account_nick}_{_wt_algo_safe}_{leg.leg_number}_{_wt_ts_ms}"
+            _wt_algo_tag     = _ge_id_str[:8]
 
             # Tick-size based buffer — replaces hardcoded 0.05 (B5 fix)
             _wt_tick = 0.05
@@ -1521,7 +1521,7 @@ class AlgoRunner:
         account_nickname = account.nickname if account else "unknown"
         algo_name_safe   = algo.name.replace(" ", "_").replace("/", "_")
         ts_ms            = int(datetime.now(IST).timestamp() * 1000)
-        algo_tag         = f"STAAX_{account_nickname}_{algo_name_safe}_{leg.leg_number}_{ts_ms}"
+        algo_tag         = str(grid_entry.id)[:8]
 
         if not grid_entry.is_practix and not algo_tag:
             logger.error(
