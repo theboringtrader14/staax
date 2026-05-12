@@ -15,16 +15,11 @@ import pytz as _pytz
 from datetime import datetime as _dt, time as _time
 from typing import Dict, Callable, Optional
 from dataclasses import dataclass, field
+from app.engine.market_session import is_sl_check_allowed
 
 logger = logging.getLogger(__name__)
 
 _IST = _pytz.timezone('Asia/Kolkata')
-
-
-def _is_sl_check_allowed() -> bool:
-    """SL/TP checks only allowed from 09:18 IST to 15:30 IST"""
-    now = _dt.now(_IST).time()
-    return now > _time(9, 18) and now <= _time(15, 30)
 
 
 @dataclass
@@ -157,7 +152,7 @@ class SLTPMonitor:
         Call right after add_position() to catch fast moves during W&T gap.
         Returns True if SL or TP was triggered.
         """
-        if not _is_sl_check_allowed():
+        if not is_sl_check_allowed():
             return False
         m = self._positions.get(order_id)
         if not m or not m.is_active:
@@ -189,7 +184,7 @@ class SLTPMonitor:
         return False
 
     async def on_tick(self, token: int, ltp: float, tick: dict):
-        if not _is_sl_check_allowed():
+        if not is_sl_check_allowed():
             return
         for order_id, m in list(self._positions.items()):
             if not m.is_active or m.instrument_token != token:

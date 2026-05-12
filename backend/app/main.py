@@ -294,6 +294,8 @@ async def lifespan(app: FastAPI):
     # ── 12d. Rebuild re-entry watchers from DB (B6 fix) ─────────────────────────────
     from app.engine.reentry_engine import reentry_engine as _reentry_eng
     await _reentry_eng.rebuild_watchers()
+    # ── 12e. Rebuild journey watches from DB (F-NEW5) ────────────────────────────────
+    await algo_runner.rebuild_journeys()
     # ── Bot runner ──────────────────────────────────────────────────────────
     from app.core.database import AsyncSessionLocal as _ASL
     bot_runner.wire(

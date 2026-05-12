@@ -33,6 +33,7 @@ Journey config schema (stored as JSON on AlgoLeg.journey_config):
 
 Max depth: 3 (parent → child → grandchild). journey_config on grandchild is ignored.
 """
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -47,6 +48,46 @@ from app.models.order import Order
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
+
+
+async def _persist_journey_state(
+    parent_grid_entry_id: str,
+    child_grid_entry_id: str,
+    parent_leg_id: Optional[str],
+    child_leg_id: Optional[str],
+    trigger_on: str,
+) -> None:
+    """
+    Fire-and-forget: persist a new WATCHING JourneyState row to DB.
+    trigger_on maps from journey_trigger values: 'sl' → 'sl_hit', 'tp' → 'tp_hit', 'either'/'any' → 'exit'.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.journey_state import JourneyState, JourneyStatus, JourneyTriggerOn
+
+    _trigger_map = {
+        "sl":     JourneyTriggerOn.SL_HIT,
+        "tp":     JourneyTriggerOn.TP_HIT,
+        "either": JourneyTriggerOn.EXIT,
+        "any":    JourneyTriggerOn.EXIT,
+        "fill":   JourneyTriggerOn.FILL,
+    }
+    trigger_enum = _trigger_map.get(trigger_on, JourneyTriggerOn.EXIT)
+
+    try:
+        async with AsyncSessionLocal() as db:
+            row = JourneyState(
+                parent_grid_entry_id=uuid.UUID(parent_grid_entry_id),
+                child_grid_entry_id=uuid.UUID(child_grid_entry_id),
+                parent_leg_id=uuid.UUID(parent_leg_id) if parent_leg_id else None,
+                child_leg_id=uuid.UUID(child_leg_id) if child_leg_id else None,
+                trigger_on=trigger_enum,
+                status=JourneyStatus.WATCHING,
+            )
+            db.add(row)
+            await db.commit()
+            logger.debug(f"[JOURNEY] Persisted WATCHING state: parent_leg={parent_leg_id}")
+    except Exception as e:
+        logger.warning(f"[JOURNEY] DB persist failed (non-fatal): {e}")
 
 MAX_JOURNEY_DEPTH = 3
 
@@ -179,6 +220,14 @@ class JourneyEngine:
                         depth=depth + 1,
                         journey_trigger=nested_trigger,
                     )
+                    # Persist nested level to DB for restart recovery
+                    asyncio.create_task(_persist_journey_state(
+                        parent_grid_entry_id=str(order.grid_entry_id),
+                        child_grid_entry_id=str(child_order.grid_entry_id),
+                        parent_leg_id=str(child_order.id),
+                        child_leg_id=None,
+                        trigger_on=nested_trigger,
+                    ))
                 await db.commit()
                 logger.info(f"✅ Journey child placed: {child_order.symbol} depth={depth}")
                 return True

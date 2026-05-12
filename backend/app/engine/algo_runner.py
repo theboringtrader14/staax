@@ -112,6 +112,15 @@ MARGIN_ERROR_KEYWORDS = [
 ]
 
 
+def _split_into_freeze_chunks(total_qty: int, freeze_qty: int) -> list[int]:
+    """Split total quantity into broker-acceptable freeze-size chunks."""
+    chunks, remaining = [], total_qty
+    while remaining > 0:
+        chunks.append(min(remaining, freeze_qty))
+        remaining -= chunks[-1]
+    return chunks
+
+
 class TokenBucketRateLimiter:
     """
     Asyncio token bucket rate limiter.
@@ -1643,50 +1652,114 @@ class AlgoRunner:
             symbol=symbol, direction=direction, is_practix=grid_entry.is_practix,
         ))
 
+        # ── B3: Freeze-quantity split (Angel One broker order limits) ────────────
+        from app.engine.constants import FREEZE_QTY_MAP, DEFAULT_FREEZE_QTY
+        _underlying  = getattr(leg, 'underlying', '') or ''
+        _freeze_qty  = FREEZE_QTY_MAP.get(_underlying.upper(), DEFAULT_FREEZE_QTY)
+
         # ── Broker call ─────────────────────────────────────────────────────────
         _placed_at = datetime.now(IST)
         try:
-            if self._execution_manager:
-                order_id_str = await self._execution_manager.place(
-                    db              = db,
-                    idempotency_key = idempotency_key,
-                    algo_id         = str(algo.id),
-                    account_id      = str(algo.account_id),
-                    symbol          = symbol,
-                    exchange        = _instrument_exchange,
-                    direction       = direction,
-                    quantity        = quantity,
-                    order_type      = _order_type,
-                    ltp             = ltp,
-                    limit_price     = _limit_price,
-                    trigger_price   = _trigger_price,
-                    algo_tag        = algo_tag,
-                    is_practix      = grid_entry.is_practix,
-                    is_overnight    = is_overnight,
-                    broker_type     = broker_type,
-                    symbol_token    = str(instrument_token),
+            if quantity > _freeze_qty:
+                # Split into freeze-size chunks; each chunk placed as a separate order
+                _chunks = _split_into_freeze_chunks(quantity, _freeze_qty)
+                logger.info(
+                    f"[SPLIT] {algo.name} qty={quantity} underlying={_underlying or 'unknown'} "
+                    f"freeze_qty={_freeze_qty} → {len(_chunks)} chunks: {_chunks}"
                 )
+                _broker_order_ids: list[str] = []
+                for _i, _chunk_qty in enumerate(_chunks):
+                    if _i > 0:
+                        await asyncio.sleep(0.2)  # 200ms between chunks
+                    _chunk_idem_key = f"{idempotency_key}:chunk{_i}"
+                    if self._execution_manager:
+                        _chunk_result = await self._execution_manager.place(
+                            db              = db,
+                            idempotency_key = _chunk_idem_key,
+                            algo_id         = str(algo.id),
+                            account_id      = str(algo.account_id),
+                            symbol          = symbol,
+                            exchange        = _instrument_exchange,
+                            direction       = direction,
+                            quantity        = _chunk_qty,
+                            order_type      = _order_type,
+                            ltp             = ltp,
+                            limit_price     = _limit_price,
+                            trigger_price   = _trigger_price,
+                            algo_tag        = algo_tag,
+                            is_practix      = grid_entry.is_practix,
+                            is_overnight    = is_overnight,
+                            broker_type     = broker_type,
+                            symbol_token    = str(instrument_token),
+                        )
+                    else:
+                        logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer (split chunk)")
+                        _chunk_result = await self._order_placer.place(
+                            idempotency_key = _chunk_idem_key,
+                            algo_id         = str(algo.id),
+                            symbol          = symbol,
+                            exchange        = _instrument_exchange,
+                            direction       = direction,
+                            quantity        = _chunk_qty,
+                            order_type      = _order_type,
+                            ltp             = ltp,
+                            limit_price     = _limit_price,
+                            trigger_price   = _trigger_price,
+                            is_practix      = grid_entry.is_practix,
+                            is_overnight    = is_overnight,
+                            broker_type     = broker_type,
+                            symbol_token    = str(instrument_token),
+                            algo_tag        = algo_tag,
+                            account_id      = str(algo.account_id),
+                        )
+                    if _chunk_result:
+                        _broker_order_ids.append(str(_chunk_result))
+                # Use first chunk's order ID as the primary broker_order_id
+                order_id_str = _broker_order_ids[0] if _broker_order_ids else None
+                if len(_broker_order_ids) > 1:
+                    logger.info(f"[SPLIT] {algo.name} broker_order_ids: {_broker_order_ids}")
             else:
-                # Fallback: direct OrderPlacer (execution_manager not wired)
-                logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer")
-                order_id_str = await self._order_placer.place(
-                    idempotency_key = idempotency_key,
-                    algo_id         = str(algo.id),
-                    symbol          = symbol,
-                    exchange        = _instrument_exchange,
-                    direction       = direction,
-                    quantity        = quantity,
-                    order_type      = _order_type,
-                    ltp             = ltp,
-                    limit_price     = _limit_price,
-                    trigger_price   = _trigger_price,
-                    is_practix      = grid_entry.is_practix,
-                    is_overnight    = is_overnight,
-                    broker_type     = broker_type,
-                    symbol_token    = str(instrument_token),
-                    algo_tag        = algo_tag,
-                    account_id      = str(algo.account_id),
-                )
+                if self._execution_manager:
+                    order_id_str = await self._execution_manager.place(
+                        db              = db,
+                        idempotency_key = idempotency_key,
+                        algo_id         = str(algo.id),
+                        account_id      = str(algo.account_id),
+                        symbol          = symbol,
+                        exchange        = _instrument_exchange,
+                        direction       = direction,
+                        quantity        = quantity,
+                        order_type      = _order_type,
+                        ltp             = ltp,
+                        limit_price     = _limit_price,
+                        trigger_price   = _trigger_price,
+                        algo_tag        = algo_tag,
+                        is_practix      = grid_entry.is_practix,
+                        is_overnight    = is_overnight,
+                        broker_type     = broker_type,
+                        symbol_token    = str(instrument_token),
+                    )
+                else:
+                    # Fallback: direct OrderPlacer (execution_manager not wired)
+                    logger.warning("[ALGO RUNNER] ExecutionManager not wired — falling back to OrderPlacer")
+                    order_id_str = await self._order_placer.place(
+                        idempotency_key = idempotency_key,
+                        algo_id         = str(algo.id),
+                        symbol          = symbol,
+                        exchange        = _instrument_exchange,
+                        direction       = direction,
+                        quantity        = quantity,
+                        order_type      = _order_type,
+                        ltp             = ltp,
+                        limit_price     = _limit_price,
+                        trigger_price   = _trigger_price,
+                        is_practix      = grid_entry.is_practix,
+                        is_overnight    = is_overnight,
+                        broker_type     = broker_type,
+                        symbol_token    = str(instrument_token),
+                        algo_tag        = algo_tag,
+                        account_id      = str(algo.account_id),
+                    )
         except Exception as _broker_exc:
             # Broker call failed — mark the PENDING record as ERROR (visible in Orders page)
             order.status = OrderStatus.ERROR
@@ -1908,6 +1981,15 @@ class AlgoRunner:
         if self._journey_engine and journey_cfg:
             journey_trigger = getattr(leg, "journey_trigger", None) or 'either'
             self._journey_engine.register(str(order.id), journey_cfg, depth=1, journey_trigger=journey_trigger)
+            # Persist to DB for restart recovery
+            from app.engine.journey_engine import _persist_journey_state
+            asyncio.create_task(_persist_journey_state(
+                parent_grid_entry_id=str(grid_entry.id),
+                child_grid_entry_id=str(grid_entry.id),
+                parent_leg_id=str(order.id),
+                child_leg_id=None,
+                trigger_on=journey_trigger,
+            ))
 
         return order
 
@@ -2608,6 +2690,34 @@ class AlgoRunner:
             logger.info(f"[ORB] rebuild_orb_levels complete — {len(self._orb_levels)} entry(s)")
         except Exception as e:
             logger.error(f"[ORB] rebuild_orb_levels failed: {e}")
+
+    async def rebuild_journeys(self) -> None:
+        """Re-register WATCHING journey states from DB on restart."""
+        try:
+            from app.models.journey_state import JourneyState, JourneyStatus
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(JourneyState).where(JourneyState.status == JourneyStatus.WATCHING)
+                )
+                rows = result.scalars().all()
+            _trigger_map = {
+                "sl_hit": "sl",
+                "tp_hit": "tp",
+                "exit":   "either",
+                "fill":   "either",
+            }
+            for row in rows:
+                journey_trigger = _trigger_map.get(row.trigger_on.value if hasattr(row.trigger_on, 'value') else str(row.trigger_on), "either")
+                self._journey_engine.register(
+                    order_id=str(row.parent_leg_id) if row.parent_leg_id else str(row.id),
+                    journey_config={},  # config not persisted — re-register watch key only
+                    depth=1,
+                    journey_trigger=journey_trigger,
+                )
+            if rows:
+                logger.info(f"[JOURNEY] Rebuilt {len(rows)} watching journeys from DB")
+        except Exception as e:
+            logger.error(f"[JOURNEY] rebuild_journeys failed: {e}")
 
     # ── MTM callback ─────────────────────────────────────────────────────────
 

@@ -15,16 +15,11 @@ import pytz as _pytz
 from datetime import datetime as _dt, time as _time
 from typing import Dict, Callable, List, Optional
 from dataclasses import dataclass, field
+from app.engine.market_session import is_sl_check_allowed
 
 logger = logging.getLogger(__name__)
 
 _IST = _pytz.timezone('Asia/Kolkata')
-
-
-def _is_sl_check_allowed() -> bool:
-    """SL/TP checks only allowed from 09:18 IST to 15:30 IST"""
-    now = _dt.now(_IST).time()
-    return now > _time(9, 18) and now <= _time(15, 30)
 
 
 @dataclass
@@ -67,7 +62,7 @@ class MTMMonitor:
 
     async def update_pnl(self, algo_id: str, order_id: str, pnl: float):
         """Called on every tick with updated unrealised P&L for one leg."""
-        if not _is_sl_check_allowed():
+        if not is_sl_check_allowed():
             return
         if algo_id not in self._live_pnls:
             return

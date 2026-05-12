@@ -20,6 +20,7 @@ import asyncio
 import logging
 from typing import Dict, Callable, List, Optional, Set
 import redis.asyncio as aioredis
+from app.engine.market_state import market_state as _market_state
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,7 @@ class AngelOneTickerAdapter:
         self._connected = True
         self._running   = True   # connect() blocks forever so the line after it is dead code; set here instead
         self._reconnect_count = 0  # Reset on every successful connect so _MAX_RECONNECT_ATTEMPTS resets per-session
+        _market_state.set_feed_connected(True)
         logger.info("[AO-DEBUG] _on_open fired — SmartStream connected ✅")
         _n_subscribed = len(self._subscribed)
         if self._subscribed and self._sws:
@@ -291,12 +293,14 @@ class AngelOneTickerAdapter:
             logger.error(f"[AO] Tick normalisation error: {e}")
 
     def _on_error(self, ws, error):
+        _market_state.set_feed_connected(False)
         logger.error(f"[AO] ❌ SmartStream error: {error}")
 
     def _on_close(self, ws):
         logger.warning("[AO] SmartStream connection closed")
         self._running   = False
         self._connected = False
+        _market_state.set_feed_connected(False)
         # Cancel keepalive — connection is gone
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._stop_keepalive(), self._loop)
@@ -749,6 +753,7 @@ class LTPConsumer:
             _tok = int(tick['instrument_token'])
             self._ltp_map[_tok]        = float(tick.get('last_price', 0))
             self._ltp_timestamps[_tok] = self.last_tick_time  # monotonic
+            _market_state.update_ltp(_tok, self._ltp_map[_tok])
         await pipe.execute()
 
         # Broadcast batches — split index tickers from position LTPs

@@ -13,16 +13,11 @@ import pytz as _pytz
 from datetime import datetime, time
 from typing import Dict, Callable
 from dataclasses import dataclass, field
+from app.engine.market_session import is_sl_check_allowed
 
 logger = logging.getLogger(__name__)
 
 _IST = _pytz.timezone('Asia/Kolkata')
-
-
-def _is_sl_check_allowed() -> bool:
-    """SL/TP checks only allowed from 09:18 IST to 15:30 IST"""
-    now = datetime.now(_IST).time()
-    return now > time(9, 18) and now <= time(15, 30)
 
 
 @dataclass
@@ -91,7 +86,7 @@ class WTEvaluator:
                 continue
 
             # Monitor threshold — gated to market hours only
-            if not _is_sl_check_allowed():
+            if not is_sl_check_allowed():
                 continue
 
             if w.direction == "up" and ltp >= w.threshold:

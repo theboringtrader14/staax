@@ -26,16 +26,11 @@ import pytz as _pytz
 from datetime import datetime as _dt, time as _time
 from typing import Dict
 from dataclasses import dataclass, field
+from app.engine.market_session import is_sl_check_allowed
 
 logger = logging.getLogger(__name__)
 
 _IST = _pytz.timezone('Asia/Kolkata')
-
-
-def _is_sl_check_allowed() -> bool:
-    """SL/TP checks only allowed from 09:18 IST to 15:30 IST"""
-    now = _dt.now(_IST).time()
-    return now > _time(9, 18) and now <= _time(15, 30)
 
 
 @dataclass
@@ -133,7 +128,7 @@ class TSLEngine:
             logger.warning(f"[TSL] Event log failed: {_e}")
 
     async def on_tick(self, token: int, ltp: float, tick: dict):
-        if not _is_sl_check_allowed():
+        if not is_sl_check_allowed():
             return
         for order_id, state in list(self._states.items()):
             pos = self.sl_monitor._positions.get(order_id)
