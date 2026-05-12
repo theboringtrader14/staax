@@ -247,6 +247,16 @@ class TGNotifier:
                 f"Fill: ₹{fill:.2f} → SL moved to ₹{new_sl:.2f}\n"
                 f"<i>{ts}</i>"
             )
+        if event_type == "ttp_activated":
+            algo  = payload.get('algo_name', '')
+            sym   = payload.get('symbol', '')
+            new_tp = payload.get('new_tp', 0)
+            return (
+                f"📈 <b>TTP Activated</b>\n"
+                f"{algo} — {sym}\n"
+                f"TP moved to ₹{new_tp:.2f}\n"
+                f"<i>{ts}</i>"
+            )
         if event_type == "order_disconnected":
             algo      = payload.get('algo_name', '')
             symbol    = payload.get('symbol', '')

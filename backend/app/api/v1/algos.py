@@ -53,6 +53,7 @@ class LegCreate(BaseModel):
     tsl_x:           Optional[float] = None
     tsl_y:           Optional[float] = None
     tsl_unit:        Optional[str]  = None
+    ttp_enabled:     bool           = False
     ttp_x:           Optional[float] = None
     ttp_y:           Optional[float] = None
     ttp_unit:        Optional[str]  = None
@@ -245,6 +246,9 @@ def _validate_leg_data(leg_data: LegCreate) -> None:
         has_tp = (leg_data.tp_value and leg_data.tp_value > 0) or leg_data.tp_type
         if not has_tp:
             raise HTTPException(status_code=400, detail="TP must be configured before enabling TTP")
+    if leg_data.ttp_enabled:
+        if not (leg_data.tp_value and leg_data.tp_value > 0):
+            raise HTTPException(status_code=400, detail="TTP requires TP to be configured")
 
 
 def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
@@ -269,6 +273,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         tsl_x=leg_data.tsl_x,
         tsl_y=leg_data.tsl_y,
         tsl_unit=leg_data.tsl_unit,
+        ttp_enabled=leg_data.ttp_enabled,
         ttp_x=leg_data.ttp_x,
         ttp_y=leg_data.ttp_y,
         ttp_unit=leg_data.ttp_unit,
@@ -315,6 +320,7 @@ def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     leg.tsl_x           = data.tsl_x
     leg.tsl_y           = data.tsl_y
     leg.tsl_unit        = data.tsl_unit
+    leg.ttp_enabled     = data.ttp_enabled
     leg.ttp_x           = data.ttp_x
     leg.ttp_y           = data.ttp_y
     leg.ttp_unit        = data.ttp_unit

@@ -32,7 +32,7 @@ from typing import Optional, List, Dict
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, update
 
 from app.core.database import AsyncSessionLocal
 from app.models.grid import GridEntry, GridStatus
@@ -154,6 +154,12 @@ async def _handle_mslc_after_sl_hit(grid_entry_id: str, sl_monitor) -> None:
             for o in open_orders:
                 if o.fill_price and o.fill_price > 0 and sl_monitor:
                     sl_monitor.update_sl(str(o.id), o.fill_price)
+                    # Persist sl_actual so a restart doesn't revert to original SL
+                    await db.execute(
+                        update(Order)
+                        .where(Order.id == o.id)
+                        .values(sl_actual=o.fill_price)
+                    )
 
             ge.mslc_triggered = True
             await db.commit()
@@ -1867,6 +1873,8 @@ class AlgoRunner:
                 ttp_x=leg.ttp_x,
                 ttp_y=leg.ttp_y,
                 ttp_unit=leg.ttp_unit or "pts",
+                algo_name=algo.name or "",
+                symbol=symbol,
             )
             self._ttp_engine.register(ttp_state)
             # Record activation price so position rebuilder and UI can show it

@@ -47,6 +47,8 @@ class TTPState:
     ttp_unit:           str        # "pts" or "pct"
     trail_count:        int   = 0
     last_trigger_price: float = 0.0
+    algo_name:          str   = ""
+    symbol:             str   = ""
 
     def __post_init__(self):
         self.last_trigger_price = self.entry_price
@@ -125,3 +127,30 @@ class TTPEngine:
                 asyncio.ensure_future(
                     self._persist_trail(order_id, state.current_tp, state.trail_count)
                 )
+                _sym = state.symbol or pos.symbol or order_id
+                _algo = state.algo_name or _sym
+                # Event log: first trail and every 5th
+                if state.trail_count == 1:
+                    try:
+                        from app.engine import event_logger as _ev
+                        asyncio.create_task(_ev.info(
+                            f"[TTP] Activated for {_algo} — TP moved to {state.current_tp:.2f}",
+                            source="ttp_engine", symbol=_sym, algo_name=_algo,
+                        ))
+                    except Exception as _e:
+                        logger.warning(f"[TTP] Event log failed: {_e}")
+                    from app.engine.tg_notifier import tg_notifier
+                    asyncio.create_task(tg_notifier.notify('ttp_activated', {
+                        'algo_name': _algo,
+                        'symbol': _sym,
+                        'new_tp': state.current_tp,
+                    }))
+                elif state.trail_count % 5 == 0:
+                    try:
+                        from app.engine import event_logger as _ev
+                        asyncio.create_task(_ev.info(
+                            f"[TTP] Trail #{state.trail_count} → TP {state.current_tp:.2f}",
+                            source="ttp_engine", symbol=_sym, algo_name=_algo,
+                        ))
+                    except Exception as _e:
+                        logger.warning(f"[TTP] Event log failed: {_e}")
