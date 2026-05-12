@@ -1425,8 +1425,15 @@ export default function OrdersPage() {
     if (!groupedByInstrument[inst]) groupedByInstrument[inst] = []
     groupedByInstrument[inst].push(group)
   }
+  const STATUS_ORDER: Record<string, number> = {
+    'error': 0, 'open': 1, 'waiting': 2, 'no_trade': 3, 'closed': 4,
+  }
   for (const inst of INSTRUMENT_ORDER) {
-    groupedByInstrument[inst]?.sort((a, b) => a.algoName.localeCompare(b.algoName))
+    groupedByInstrument[inst]?.sort((a, b) => {
+      const sa = STATUS_ORDER[getAlgoStatus(a)] ?? 5
+      const sb = STATUS_ORDER[getAlgoStatus(b)] ?? 5
+      return sa !== sb ? sa - sb : a.algoName.localeCompare(b.algoName)
+    })
   }
   const instrumentKeys = INSTRUMENT_ORDER.filter(k => groupedByInstrument[k]?.length > 0)
 
@@ -2106,6 +2113,13 @@ export default function OrdersPage() {
                     const gi       = safeOrders.findIndex(g => g.algoId === group.algoId)
                     const algoSt   = getAlgoStatus(group)
                     const bar      = ALGO_STATUS_BAR[algoSt]
+                    const algoNameColor =
+                      algoSt === 'open'     ? 'var(--green)'    :
+                      algoSt === 'error'    ? 'var(--red)'      :
+                      algoSt === 'no_trade' ? '#F59E0B'         :
+                      algoSt === 'closed'   ? 'var(--text-dim)' :
+                      algoSt === 'waiting'  ? 'var(--accent)'   :
+                      'var(--text)'
                     const isFullyClosed = group.legs.length > 0 && group.legs.every(
                       l => l.status === 'closed' || l.status === 'error' || l.status === 'skipped'
                     )
@@ -2171,7 +2185,7 @@ export default function OrdersPage() {
                             marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
                           }} onClick={() => { sounds.click(); toggleExpand(group.algoId) }}>
                             <div style={{ width: 4, alignSelf: 'stretch', background: bar.color, flexShrink: 0, boxShadow: `0 0 8px ${bar.glow}` }} />
-                            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--accent)', fontVariantNumeric: 'lining-nums' }}>{group.algoName}</span>
+                            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: algoNameColor, fontVariantNumeric: 'lining-nums' }}>{group.algoName}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{group.account || '—'}</span>
                             <span style={{ fontSize: 12, minWidth: 55 }}>
                               {openCount > 0
@@ -2229,7 +2243,7 @@ export default function OrdersPage() {
                             {/* Algo name */}
                             <span
                               onClick={() => { sounds.click(); setSelectedAlgoName(group.algoName) }}
-                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,107,0,0.5)', fontVariantNumeric: 'lining-nums' }}>
+                              style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: algoNameColor, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'currentColor', fontVariantNumeric: 'lining-nums' }}>
                               {group.algoName}
                             </span>
 
