@@ -28,8 +28,11 @@ Order types:
   MARKET, LIMIT, STOPLOSS_LIMIT, STOPLOSS_MARKET
 """
 import asyncio
+import json as _json
 import logging
 import time
+import traceback as _tb
+import uuid as _uuid
 from datetime import date as _date, datetime as _dt
 from typing import Optional, Dict, List
 
@@ -791,14 +794,91 @@ class AngelOneBroker(BaseBroker):
             )
             await self._refresh_session()
 
+        # ── FORENSIC: full payload snapshot before hitting Angel API ─────────────
+        _fid = _uuid.uuid4().hex[:8]
+        _context = {
+            "fid": _fid,
+            "tag": order_params.get("ordertag", ""),
+            "variety": order_params.get("variety", ""),
+            "ordertype": order_params.get("ordertype", ""),
+            "transactiontype": order_params.get("transactiontype", ""),
+            "producttype": order_params.get("producttype", ""),
+            "exchange": order_params.get("exchange", ""),
+            "symbol": order_params.get("tradingsymbol", ""),
+            "token": order_params.get("symboltoken", ""),
+            "quantity": order_params.get("quantity", ""),
+        }
+        logger.info(f"[ANGEL_CTX][{_fid}] {_json.dumps(_context, default=str)}")
+
+        if order_params.get("ordertype") == "STOPLOSS_LIMIT":
+            try:
+                _trigger = float(order_params.get("triggerprice") or 0)
+                _price = float(order_params.get("price") or 0)
+                _diff = abs(_price - _trigger)
+                _pct = (_diff / _trigger * 100) if _trigger > 0 else 0
+                _tick_mod = round(_price * 100) % 5
+                logger.info(
+                    f"[ANGEL_VALIDATION][{_fid}] "
+                    f"trigger={_trigger} price={_price} diff={_diff:.2f} "
+                    f"pct_diff={_pct:.2f}% tick_aligned={_tick_mod == 0}"
+                )
+            except Exception as _ve:
+                logger.warning(f"[ANGEL_VALIDATION][{_fid}] validation log failed: {_ve}")
+
+        _payload_log = {k: v for k, v in order_params.items() if k != 'password'}
+        logger.info(f"[ANGEL_REQ][{_fid}] place_order payload: {_json.dumps(_payload_log, default=str)}")
+
         try:
-            data = await loop.run_in_executor(
-                None,
-                lambda: client.placeOrder(order_params)
-            )
+            # ── Inner try: capture raw SDK response + any SDK-level exception ─────
+            try:
+                _raw_response = await loop.run_in_executor(
+                    None,
+                    lambda: client.placeOrder(order_params)
+                )
+                logger.info(
+                    f"[ANGEL_RESP][{_fid}] raw type={type(_raw_response).__name__} "
+                    f"value={_json.dumps(_raw_response, default=str) if _raw_response else 'EMPTY/None'}"
+                )
+            except Exception as _angel_exc:
+                logger.error(
+                    f"[ANGEL_EXC][{_fid}] place_order exception: {type(_angel_exc).__name__}: {_angel_exc}"
+                )
+                logger.error(f"[ANGEL_EXC][{_fid}] traceback: {_tb.format_exc()}")
+                raise
+
+            data = _raw_response
+
+            try:
+                _http_info = {}
+                for _attr in ['response', '_last_response', '_response', 'last_response']:
+                    if hasattr(client, _attr):
+                        _val = getattr(client, _attr, None)
+                        if _val:
+                            if hasattr(_val, 'status_code'):
+                                _http_info['status_code'] = _val.status_code
+                            if hasattr(_val, 'text'):
+                                _http_info['text'] = _val.text[:500]
+                            if hasattr(_val, 'headers'):
+                                _http_info['headers'] = dict(_val.headers)
+                            if hasattr(_val, 'url'):
+                                _http_info['url'] = str(_val.url)
+                            break
+                if _http_info:
+                    logger.info(f"[ANGEL_HTTP][{_fid}] {_json.dumps(_http_info, default=str)}")
+            except Exception as _he:
+                logger.debug(f"[ANGEL_HTTP][{_fid}] http capture failed: {_he}")
 
             if not data:
+                logger.error(
+                    f"[ANGEL_EMPTY][{_fid}] place_order returned empty/None. "
+                    f"Payload: {_json.dumps(_payload_log, default=str)}"
+                )
+                if hasattr(client, 'response'):
+                    logger.error(f"[ANGEL_EMPTY][{_fid}] SDK .response: {client.response}")
+                if hasattr(client, '_last_response'):
+                    logger.error(f"[ANGEL_EMPTY][{_fid}] SDK ._last_response: {client._last_response}")
                 raise RuntimeError("Angel One order placement failed: No response from broker")
+
             if data.get("status") is False:
                 broker_msg = data.get("message") or data.get("errormessage") or data.get("errorcode") or "Unknown error"
                 raise RuntimeError(f"Angel One order placement failed: {broker_msg}")

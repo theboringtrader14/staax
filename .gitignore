@@ -208,6 +208,7 @@ __marimo__/
 .DS_Store
 *.sh
 !infra/*.sh
+!scripts/*.sh
 backend/instrument_master_cache.json
 backend/instrument_master_cache_date.txt
 .env.save
