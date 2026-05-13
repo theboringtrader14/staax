@@ -79,6 +79,11 @@ IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 
+def _snap_to_005(price: float) -> float:
+    """Snap price to nearest 0.05 grid (Angel One options tick)."""
+    return round(round(price / 0.05) * 0.05, 2)
+
+
 async def _trigger_orb_freeze(grid_entry_id: str) -> None:
     """
     Scheduler-driven ORB range freeze — fires at exact orb_end_time via DateTrigger.
@@ -1408,6 +1413,7 @@ class AlgoRunner:
                     _wt_option_ltp + leg.wt_value if _wt_dir == "up"
                     else _wt_option_ltp - leg.wt_value
                 )
+            _wt_threshold = _snap_to_005(_wt_threshold)
 
             # W&T: place SL-Limit directly at broker — broker holds and triggers on threshold
             _ge_id_str = str(grid_entry.id)
@@ -1427,8 +1433,14 @@ class AlgoRunner:
             if hasattr(account_broker, 'get_tick_size'):
                 _wt_tick = account_broker.get_tick_size(str(instrument_token))
             _wt_limit_price = (
-                round(_wt_threshold + _wt_tick, 2) if _wt_dir == "up"
-                else round(_wt_threshold - _wt_tick, 2)
+                _snap_to_005(_wt_threshold + _wt_tick) if _wt_dir == "up"
+                else _snap_to_005(_wt_threshold - _wt_tick)
+            )
+
+            logger.info(
+                f"[WT_SNAP] {algo.name} leg {leg.leg_number}: "
+                f"ltp={_wt_option_ltp} wt_value={leg.wt_value} wt_unit={_wt_unit} wt_direction={_wt_dir} "
+                f"threshold={_wt_threshold} limit_price={_wt_limit_price} tick={_wt_tick}"
             )
 
             if not account_broker:
@@ -1550,7 +1562,8 @@ class AlgoRunner:
 
         # SEBI mandates SL-Limit for all algo orders — compute trigger + limit prices
         _order_type = "SL"  # always SL-Limit regardless of DB value
-        _buffer = max(0.50, round(float(ltp) * 0.005, 2))  # 0.5% or ₹0.50, whichever larger
+        _buffer_pct = float(getattr(leg, 'sl_buffer_pct', 2.0)) / 100.0
+        _buffer = max(0.50, round(float(ltp) * _buffer_pct, 2))  # per-leg SL buffer % or ₹0.50, whichever larger
         if direction.lower() in ("buy",):
             _trigger_price = float(ltp)
             _limit_price   = float(ltp) + _buffer

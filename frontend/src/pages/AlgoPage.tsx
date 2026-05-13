@@ -132,6 +132,7 @@ const fromJourneyConfig = (jc: Record<string, unknown> | null): JourneyChild => 
 interface Leg {
   id: string; no: number; instType: string; instCode: string; direction: string; optType: string
   strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
+  slBufferPct: string  // SL buffer % for SL-Limit placement (default "2.0")
   active: Record<FeatureKey, boolean>; vals: LegVals; journey?: JourneyChild
   journey_trigger?: string  // 'sl' | 'tp' | 'either' — gates which exit fires child
   backendId?: string  // backend UUID — sent back on PUT to enable in-place update
@@ -141,6 +142,7 @@ const mkLeg = (n: number): Leg => ({
   id: `leg-${Date.now()}-${n}`, no: n,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
+  slBufferPct: '2.0',
   active: { wt: false, sl: false, re: false, reentry: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(), journey_trigger: 'either',
   vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
     reentry: { type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, maxSl: '1', maxTp: '1' },
@@ -598,6 +600,8 @@ function LegRow({ leg, isDragging, onUpdate, onRemove, onCopy, dragHandleProps, 
           {leg.strikeMode === 'straddle' && <StaaxSelect value={leg.premiumVal || '20'} onChange={v => u('premiumVal', v)} options={[5,10,15,20,25,30,35,40,45,50,55,60].map(v => ({ value: String(v), label: `${v}%` }))} width="72px" height="28px" borderRadius="6px" />}
         </>}
         <input value={leg.lots} onChange={e => u('lots', e.target.value)} type="number" min={1} placeholder="Lots" style={{ ...sInp, width: '56px', textAlign: 'center', color: 'var(--text)' }} />
+        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, flexShrink: 0 }}>SL Buf%</span>
+        <input value={leg.slBufferPct} onChange={e => u('slBufferPct', e.target.value)} type="number" min={0.1} max={10} step={0.1} placeholder="2.0" title="SL Buffer %" style={{ ...sInp, width: '50px', textAlign: 'center', color: 'var(--text)' }} />
         <span style={{ color: 'var(--border)', fontSize: '14px', flexShrink: 0 }}>|</span>
         {FEATURES.filter(f => ['sl','tsl','tp','ttp'].includes(f.key)).map(f => {
           const slHasValue = !!leg.vals.sl?.value
@@ -853,6 +857,7 @@ const [saveError, setSaveError]   = useState('')
             premiumVal: l.strike_value != null ? String(l.strike_value) : '',
             lots:       String(l.lots || 1),
             expiry:     l.expiry || 'current_weekly',
+            slBufferPct: l.sl_buffer_pct != null ? String(l.sl_buffer_pct) : '2.0',
             active: {
               wt:      !!l.wt_enabled,
               sl:      !!(l.sl_type  && l.sl_value != null),
@@ -1077,6 +1082,7 @@ const [saveError, setSaveError]   = useState('')
       wt_unit:      l.active.wt ? l.vals.wt.unit : null,
       sl_type:      l.active.sl && entryType !== 'orb' ? l.vals.sl.type  : null,
       sl_value:     l.active.sl && entryType !== 'orb' ? parseFloat(l.vals.sl.value) || null : null,
+      sl_buffer_pct: parseFloat(l.slBufferPct) || 2.0,
       tp_type:      l.active.tp && entryType !== 'orb' ? l.vals.tp.type  : null,
       tp_value:     l.active.tp && entryType !== 'orb' ? parseFloat(l.vals.tp.value) || null : null,
       tsl_x:        l.active.tsl ? parseFloat(l.vals.tsl.x) || null : null,

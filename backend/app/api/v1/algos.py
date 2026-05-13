@@ -76,6 +76,7 @@ class LegCreate(BaseModel):
     # Re-entry max split (reentry_max is deprecated but preserved)
     reentry_max_sl:    Optional[int]   = 0
     reentry_max_tp:    Optional[int]   = 0
+    sl_buffer_pct:     float           = 2.0
     journey_config:  Optional[dict] = None
     journey_trigger: Optional[str]  = 'either'   # 'sl' | 'tp' | 'either'
 
@@ -165,6 +166,7 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "lots":            leg.lots,
         "sl_type":         leg.sl_type,
         "sl_value":        leg.sl_value,
+        "sl_buffer_pct":   getattr(leg, 'sl_buffer_pct', 2.0),
         "tp_type":         leg.tp_type,
         "tp_value":        leg.tp_value,
         "tsl_enabled":     leg.tsl_enabled or False,
@@ -267,6 +269,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         lots=leg_data.lots,
         sl_type=leg_data.sl_type,
         sl_value=leg_data.sl_value,
+        sl_buffer_pct=leg_data.sl_buffer_pct,
         tp_type=leg_data.tp_type,
         tp_value=leg_data.tp_value,
         tsl_enabled=leg_data.tsl_enabled,
@@ -314,6 +317,7 @@ def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     leg.lots            = data.lots
     leg.sl_type         = data.sl_type
     leg.sl_value        = data.sl_value
+    leg.sl_buffer_pct   = data.sl_buffer_pct
     leg.tp_type         = data.tp_type
     leg.tp_value        = data.tp_value
     leg.tsl_enabled     = data.tsl_enabled
@@ -769,6 +773,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
             lots=leg.lots,
             sl_type=leg.sl_type,
             sl_value=leg.sl_value,
+            sl_buffer_pct=getattr(leg, 'sl_buffer_pct', 2.0),
             tp_type=leg.tp_type,
             tp_value=leg.tp_value,
             tsl_enabled=leg.tsl_enabled or False,

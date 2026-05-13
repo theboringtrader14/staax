@@ -36,6 +36,10 @@ import uuid as _uuid
 from datetime import date as _date, datetime as _dt
 from typing import Optional, Dict, List
 
+# AG8004 "Invalid API Key" suppression — log once as WARNING per account per day,
+# then demote to DEBUG to avoid log spam from background position polling.
+_ag8004_warned: set = set()
+
 from app.brokers.base import BaseBroker
 from app.core.config import settings
 
@@ -487,14 +491,17 @@ class AngelOneBroker(BaseBroker):
 
     # ── Option chain ──────────────────────────────────────────────────────────
 
-    async def get_instrument_master(self) -> List[dict]:
+    async def get_instrument_master(self, force_refresh: bool = False) -> List[dict]:
         """
         Download and cache the Angel One instrument master JSON.
 
         Public URL — no authentication required. ~40MB, 209k instruments.
         Cached as a class variable so all broker instances share one copy per day.
+
+        force_refresh=True skips both in-memory and disk cache and re-downloads.
+        The fresh data is still written to disk cache for fast reloads.
         """
-        if AngelOneBroker._master_cache and AngelOneBroker._master_date == _date.today():
+        if not force_refresh and AngelOneBroker._master_cache and AngelOneBroker._master_date == _date.today():
             logger.debug("[AO master] Using cached instrument master")
             return AngelOneBroker._master_cache
 
@@ -505,7 +512,7 @@ class AngelOneBroker(BaseBroker):
         _cache_file = str(_cache_dir / "instrument_master_cache.json")
         _cache_meta = str(_cache_dir / "instrument_master_cache_date.txt")
         try:
-            if os.path.exists(_cache_file) and os.path.exists(_cache_meta):
+            if not force_refresh and os.path.exists(_cache_file) and os.path.exists(_cache_meta):
                 with open(_cache_meta) as _f:
                     _cached_date = _f.read().strip()
                 if _cached_date == str(_date.today()):
@@ -557,6 +564,7 @@ class AngelOneBroker(BaseBroker):
                 if item.get('token') and int(item.get('freeze_qty') or item.get('freezeQty') or 0) > 0
             }
             logger.info(f"[AO master] ✅ Cached {len(data):,} instruments")
+            logger.info(f"[SCRIP] Instrument master refreshed — {len(self._tick_size_cache)} symbols loaded")
             return data
         except Exception as e:
             logger.error(f"[AO master] Download failed: {e}")
@@ -955,6 +963,10 @@ class AngelOneBroker(BaseBroker):
         Returns list of dicts with standardised keys:
           { symbol, exchange, quantity, average_price, ltp, pnl, product }
         """
+        from app.engine.market_session import is_market_open
+        if not is_market_open():
+            return []
+
         client = self._get_client()
         loop = asyncio.get_running_loop()
 
@@ -962,6 +974,22 @@ class AngelOneBroker(BaseBroker):
             data = await loop.run_in_executor(None, client.position)
 
             if not data or not data.get("status"):
+                # Suppress AG8004 "Invalid API Key" spam — warn once per account per day
+                _err_code = (data or {}).get("errorcode", "")
+                if _err_code == "AG8004":
+                    _key = f"{self.client_id}:{_date.today()}"
+                    if _key not in _ag8004_warned:
+                        _ag8004_warned.add(_key)
+                        logger.warning(
+                            "[AUTH] AG8004 Invalid API Key for account=%s — "
+                            "getPosition suppressed until session refresh",
+                            self.client_id,
+                        )
+                    else:
+                        logger.debug(
+                            "[AUTH] AG8004 suppressed (already warned today) for account=%s",
+                            self.client_id,
+                        )
                 return []
 
             positions = []

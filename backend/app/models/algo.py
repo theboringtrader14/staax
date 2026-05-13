@@ -147,6 +147,7 @@ class AlgoLeg(Base):
     # sl_type / tp_type values: "pts_instrument" | "pct_instrument" | "pts_underlying" | "pct_underlying"
     sl_type  = Column(String(20), nullable=True)
     sl_value = Column(Float, nullable=True)
+    sl_buffer_pct = Column(Float, nullable=False, server_default='2.0')
     tp_type  = Column(String(20), nullable=True)
     tp_value = Column(Float, nullable=True)
 

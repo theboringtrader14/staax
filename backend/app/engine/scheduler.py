@@ -87,6 +87,22 @@ def get_scheduler() -> Optional["AlgoScheduler"]:
     return _scheduler_instance
 
 
+async def _job_refresh_scrip_master():
+    """08:30 IST — re-download Angel One instrument master (force_refresh=True)."""
+    from app.engine.algo_runner import algo_runner as _runner  # module-level singleton
+    logger.info("[SCRIP] Daily scrip master refresh starting (08:30 IST)")
+    broker_map = _runner._angel_broker_map if _runner else {}
+    if not broker_map:
+        logger.warning("[SCRIP] No Angel brokers registered — skipping refresh")
+        return
+    for broker_id, broker in broker_map.items():
+        try:
+            await broker.get_instrument_master(force_refresh=True)
+            logger.info(f"[SCRIP] Refreshed for broker_id={broker_id}")
+        except Exception as e:
+            logger.error(f"[SCRIP] Refresh failed for broker_id={broker_id}: {e}")
+
+
 async def _job_mcx_eod_report():
     """MCX EOD report — fires at 23:59 IST midnight."""
     logger.info("MCX EOD report triggered")
@@ -158,6 +174,14 @@ class AlgoScheduler:
             self._job_token_refresh,
             CronTrigger(hour=8, minute=30, timezone=IST),
             id="token_refresh",
+            replace_existing=True,
+        )
+
+        # 08:30 — daily scrip master refresh (Angel One instrument master)
+        self._scheduler.add_job(
+            _job_refresh_scrip_master,
+            CronTrigger(hour=8, minute=30, timezone=IST),
+            id="refresh_scrip_master",
             replace_existing=True,
         )
 
@@ -258,7 +282,7 @@ class AlgoScheduler:
             misfire_grace_time=10,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler, reconcile_orders")
+        logger.info("Fixed daily jobs registered: token_refresh, refresh_scrip_master, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler, reconcile_orders")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 

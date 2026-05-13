@@ -36,10 +36,11 @@ export interface AlgoLeg {
   lots:          number
 
   // SL / TP
-  sl_type?:  SLTPType
-  sl_value?: number
-  tp_type?:  SLTPType
-  tp_value?: number
+  sl_type?:       SLTPType
+  sl_value?:      number
+  sl_buffer_pct?: number
+  tp_type?:       SLTPType
+  tp_value?:      number
 
   // TSL
   tsl_x?:    number
