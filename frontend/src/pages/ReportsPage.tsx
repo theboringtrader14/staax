@@ -265,8 +265,10 @@ export default function ReportsPage() {
   const [algoMetrics, setAlgoMetrics] = useState<MetricsRow[]>([])
   const [fyMetrics, setFyMetrics]     = useState<MetricsRow[]>([])
   const [calendarData, setCalendarData] = useState<Record<string, number>>({})
-  const [equityCurve, setEquityCurve] = useState<{ date: string; cumulative: number }[]>([])
+  const [equityCurve, setEquityCurve] = useState<{ date: string; cumulative: number; bot_pnl?: number }[]>([])
   const [fyTotal, setFyTotal]         = useState(0)
+  const [botPnlTotal, setBotPnlTotal]       = useState(0)
+  const [botTradesCount, setBotTradesCount] = useState(0)
   const [chartModal, setChartModal]   = useState(false)
 
   useEffect(() => {
@@ -295,6 +297,8 @@ export default function ReportsPage() {
     reportsAPI.equityCurve({ fy, is_practix: isPractixMode, ...acctParam }).then(r => {
       setEquityCurve(r.data?.data || [])
       setFyTotal(r.data?.total || 0)
+      setBotPnlTotal(r.data?.bot_pnl_total || 0)
+      setBotTradesCount(r.data?.bot_trades_count || 0)
     }).catch(() => {})
   }, [fy, isPractixMode, activeAccount, metricFilter, metricFy, metricMonth, metricDate, metricFrom, metricTo])
 
@@ -338,8 +342,8 @@ export default function ReportsPage() {
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 28px 24px' }}>
 
-      {/* Top KPI cards — 4 columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr', gap: '10px', marginBottom: '12px' }}>
+      {/* Top KPI cards — 5 columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr', gap: '10px', marginBottom: '12px' }}>
 
         {/* FY P&L */}
         <div style={{ ...kpiCardSt, cursor: 'pointer', minHeight: 96 }} onClick={() => setChartModal(true)}>
@@ -395,6 +399,22 @@ export default function ReportsPage() {
           <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '5px' }}>{fyWins}W · {fyLosses}L</div>
         </div>
 
+        {/* Bots P&L */}
+        <div style={{ ...kpiCardSt }}>
+          <div style={{ fontSize: '10px', color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>Bots P&L</div>
+          <div style={{
+            fontSize: '22px', fontWeight: 700, lineHeight: 1, fontFamily: 'var(--font-mono)',
+            color: botPnlTotal > 0 ? 'var(--green)' : botPnlTotal < 0 ? '#FF4444' : 'var(--text-dim)',
+          }}>
+            {botPnlTotal !== 0
+              ? (Math.abs(botPnlTotal) >= 100000
+                  ? (botPnlTotal > 0 ? '+' : '-') + '₹' + (Math.abs(botPnlTotal) / 100000).toFixed(2) + 'L'
+                  : (botPnlTotal > 0 ? '+' : '') + '₹' + botPnlTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 }))
+              : '—'}
+          </div>
+          <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '5px' }}>{botTradesCount} closed trades</div>
+        </div>
+
         {/* Day P&L bars */}
         <div style={{ ...kpiCardSt }}>
           <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>P&L by Day</div>
@@ -434,24 +454,57 @@ export default function ReportsPage() {
                 <IconX size={14} weight="bold" />
               </button>
             </div>
-            <div style={{ height: '320px' }}>
+            {/* Legend */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: 20, height: 2.5, borderRadius: 2, background: fyTotal >= 0 ? '#0ea66e' : '#FF4444' }} />
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Algos</span>
+              </div>
+              {botTradesCount > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: 20, height: 2.5, borderRadius: 2, background: 'var(--green, #0ea66e)', opacity: 0.7 }} />
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Bots</span>
+                </div>
+              )}
+            </div>
+            <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={equityCurve} margin={{ top: 10, right: 20, bottom: 10, left: 40 }}>
+                <LineChart
+                  data={(() => {
+                    let botCum = 0
+                    return equityCurve.map(pt => {
+                      botCum += (pt as { bot_pnl?: number }).bot_pnl ?? 0
+                      return { ...pt, bot_cumulative: Math.round(botCum * 100) / 100 }
+                    })
+                  })()}
+                  margin={{ top: 10, right: 20, bottom: 10, left: 40 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fill: 'var(--text-dim)', fontSize: 11 }} />
                   <YAxis tick={{ fill: 'var(--text-dim)', fontSize: 11 }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
-                    formatter={(v: number) => [`₹${v.toLocaleString('en-IN')}`, 'Cumulative P&L']}
+                    formatter={(v: number, name: string) => [
+                      `₹${v.toLocaleString('en-IN')}`,
+                      name === 'cumulative' ? 'Algos Cumulative' : 'Bots Cumulative',
+                    ]}
                     contentStyle={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: 'var(--neu-raised-sm)' }}
                     labelStyle={{ color: 'var(--text-dim)', fontSize: 11 }}
-                    itemStyle={{ color: fyTotal >= 0 ? '#0ea66e' : '#FF4444' }}
                   />
                   <Line type="monotone" dataKey="cumulative"
                     stroke={fyTotal >= 0 ? '#0ea66e' : '#FF4444'}
                     strokeWidth={2.5}
-                    dot={{ fill: fyTotal >= 0 ? '#0ea66e' : '#FF4444', r: 4, strokeWidth: 0 }}
-                    activeDot={{ r: 6, fill: 'var(--bg)', strokeWidth: 2, stroke: fyTotal >= 0 ? '#0ea66e' : '#FF4444' }}
+                    dot={{ fill: fyTotal >= 0 ? '#0ea66e' : '#FF4444', r: 3, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: 'var(--bg)', strokeWidth: 2, stroke: fyTotal >= 0 ? '#0ea66e' : '#FF4444' }}
                   />
+                  {botTradesCount > 0 && (
+                    <Line type="monotone" dataKey="bot_cumulative"
+                      stroke="var(--accent)"
+                      strokeWidth={2}
+                      strokeDasharray="4 3"
+                      dot={false}
+                      activeDot={{ r: 5, fill: 'var(--bg)', strokeWidth: 2, stroke: 'var(--accent)' }}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>

@@ -77,6 +77,9 @@ NSE_HOLIDAYS_2026_27: frozenset = frozenset({
 # ── Module-level singleton ─────────────────────────────────────────────────────
 _scheduler_instance: Optional["AlgoScheduler"] = None
 
+# P9 Phase 2: consecutive MISSING sweep counter — order_id → count
+_reconcile_missing_counts: dict = {}  # order_id → consecutive MISSING sweep count
+
 
 def set_scheduler(instance: "AlgoScheduler") -> None:
     global _scheduler_instance
@@ -711,11 +714,28 @@ class AlgoScheduler:
                         f"absent from AO orderbook (account={client_id})",
                         source="reconciler",
                     )
-                    _aio.create_task(tg_notifier.notify("order_disconnected", {
-                        "algo_name":       str(order.algo_id),
-                        "symbol":          order.symbol or "",
-                        "broker_order_id": broker_oid,
-                    }))
+                    # P9 Phase 2: track consecutive MISSING sweeps (15s each)
+                    _reconcile_missing_counts[order.id] = (
+                        _reconcile_missing_counts.get(order.id, 0) + 1
+                    )
+                    if _reconcile_missing_counts[order.id] == 3:
+                        logger.error(
+                            f"[RECONCILE] CONFIRMED MISSING after 45s: {order.symbol} "
+                            f"broker_id={broker_oid} algo={order.algo_id}"
+                        )
+                        try:
+                            _aio.create_task(tg_notifier.notify("order_missing", {
+                                "algo_name":       str(order.algo_id),
+                                "symbol":          order.symbol or "",
+                                "broker_order_id": broker_oid,
+                                "fill_price":      order.fill_price or "",
+                                "direction":       order.direction or "",
+                            }))
+                        except Exception as _tg_err:
+                            logger.warning(f"[RECONCILE] TG notify failed: {_tg_err}")
+                else:
+                    # Order is present in broker book — clear any MISSING streak
+                    _reconcile_missing_counts.pop(order.id, None)
 
             # ── Zerodha reconciliation ────────────────────────────────────────
             _zerodha = self._algo_runner._zerodha_broker

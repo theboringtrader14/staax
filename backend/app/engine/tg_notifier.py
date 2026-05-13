@@ -268,6 +268,22 @@ class TGNotifier:
                 f"Check Order Book → SYNC\n"
                 f"<i>{ts}</i>"
             )
+        if event_type == "order_missing":
+            algo      = payload.get('algo_name', '')
+            symbol    = payload.get('symbol', '')
+            broker_id = payload.get('broker_order_id', '')
+            direction = str(payload.get('direction', '')).upper()
+            fill      = payload.get('fill_price', '')
+            fill_str  = f"₹{fill}" if fill else "—"
+            return (
+                f"🚨 <b>Order Missing at Broker</b>\n"
+                f"{algo} — {symbol} {direction}\n"
+                f"Entry: {fill_str}\n"
+                f"Broker ID: {broker_id}\n"
+                f"STAAX shows OPEN but broker has no record (45s confirmed)\n"
+                f"⚠️ Check Order Book — manual action may be needed\n"
+                f"<i>{ts}</i>"
+            )
         if event_type == "feed_down":
             return f"🔌 <b>FEED DOWN</b>\nSmartStream disconnected. Monitor manually.\n<i>{ts}</i>"
         if event_type == "feed_up":

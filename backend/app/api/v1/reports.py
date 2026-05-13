@@ -29,6 +29,7 @@ from app.core.database import get_db
 from app.models.order import Order, OrderStatus
 from app.models.algo import Algo
 from app.models.account import Account
+from app.models.bot import BotOrder
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -240,6 +241,7 @@ async def equity_curve(
 ):
     if fy is None:
         fy = get_current_fy()
+    fy_start, fy_end = _fy_range(fy)
     conditions = _base_query(fy, account_id, is_practix)
     result = await db.execute(
         select(Order).where(*conditions).order_by(Order.fill_time)
@@ -253,14 +255,60 @@ async def equity_curve(
         d = o.fill_time.astimezone(IST).date().isoformat()
         by_date[d] = by_date.get(d, 0.0) + (o.pnl or 0.0)
 
+    # --- Bot P&L aggregation ---
+    bot_conditions = [
+        BotOrder.status == "closed",
+        BotOrder.pnl.isnot(None),
+        BotOrder.exit_time >= fy_start,
+        BotOrder.exit_time <= fy_end,
+    ]
+    if account_id:
+        import uuid as _uuid
+        try:
+            bot_conditions.append(BotOrder.account_id == _uuid.UUID(account_id))
+        except ValueError:
+            pass
+
+    bot_result = await db.execute(
+        select(BotOrder).where(*bot_conditions).order_by(BotOrder.exit_time)
+    )
+    bot_orders = bot_result.scalars().all()
+
+    bot_by_date: dict = {}
+    for bo in bot_orders:
+        if not bo.exit_time:
+            continue
+        d = bo.exit_time.astimezone(IST).date().isoformat()
+        bot_by_date[d] = bot_by_date.get(d, 0.0) + (bo.pnl or 0.0)
+
+    bot_pnl_total   = round(sum(bo.pnl or 0.0 for bo in bot_orders), 2)
+    bot_trades_count = len(bot_orders)
+
+    # Merge algo + bot date sets for curve
+    all_dates = sorted(set(list(by_date.keys()) + list(bot_by_date.keys())))
+
     cumulative = 0.0
     curve = []
-    for d, pnl in sorted(by_date.items()):
-        cumulative += pnl
+    for d in all_dates:
+        algo_pnl = by_date.get(d, 0.0)
+        bot_pnl  = bot_by_date.get(d, 0.0)
+        cumulative += algo_pnl
         dt = datetime.fromisoformat(d)
-        curve.append({"date": d, "month": dt.strftime("%b"),
-                      "pnl": round(pnl, 2), "cumulative": round(cumulative, 2)})
-    return {"data": curve, "fy": fy, "total": round(cumulative, 2)}
+        curve.append({
+            "date": d,
+            "month": dt.strftime("%b"),
+            "pnl": round(algo_pnl, 2),
+            "cumulative": round(cumulative, 2),
+            "bot_pnl": round(bot_pnl, 2),
+        })
+
+    return {
+        "data": curve,
+        "fy": fy,
+        "total": round(cumulative, 2),
+        "bot_pnl_total": bot_pnl_total,
+        "bot_trades_count": bot_trades_count,
+    }
 
 
 

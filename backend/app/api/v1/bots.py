@@ -473,9 +473,15 @@ async def bot_chart(
         ))
 
     # 5. Replay indicator
-    # For DTR, enable both longs and shorts so the chart shows all signals.
+    # Force all-signals mode so the chart shows both BUY and SELL markers
+    # regardless of the bot's own long_only / shorts_enabled setting.
     ind_type = bot.indicator or "channel"
-    ind_kwargs = {"longs_enabled": True, "shorts_enabled": True} if ind_type == "dtr" else {}
+    if ind_type == "dtr":
+        ind_kwargs = {"longs_enabled": True, "shorts_enabled": True}
+    elif ind_type == "channel":
+        ind_kwargs = {"long_only": False}   # show SHORT entries as well as LONG entries
+    else:
+        ind_kwargs = {}
     indicator = get_indicator(ind_type, **ind_kwargs)
     indicator.reset()
     candles_out: list = []
