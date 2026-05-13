@@ -642,50 +642,173 @@ function SmoothedSparkline({ algoId, legs, totalPnl }: { algoId: string; legs: L
 }
 
 // ── BotOrdersView ────────────────────────────────────────────────────────────
+interface BotOrderRow {
+  id: string; bot_name: string; is_practix: boolean; instrument: string
+  direction: string; lots: number; entry_price: number | null; ltp: number | null
+  exit_price: number | null; entry_time: string | null; exit_time: string | null
+  pnl: number | null; status: string; signal_type: string | null; expiry: string
+}
+
 function BotOrdersView() {
-  const [orders, setOrders] = React.useState<any[]>([]);
+  const [orders, setOrders] = React.useState<BotOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
   React.useEffect(() => {
-    fetch('/api/v1/bots/orders', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }})
+    fetch('/api/v1/bots/orders', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
       .then(r => r.json())
-      .then(d => { setOrders(d.orders ?? d ?? []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => { setOrders(Array.isArray(d) ? d : (d.orders ?? [])); setLoading(false); })
+      .catch(e => { setError(String(e)); setLoading(false); });
   }, []);
-  if (loading) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading bot orders…</div>;
-  if (!orders.length) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>No bot orders found.</div>;
+
+  // Group by bot_name, preserving insertion order (newest first from backend)
+  const groups = React.useMemo(() => {
+    const map = new Map<string, { open: BotOrderRow[]; closed: BotOrderRow[] }>();
+    for (const o of orders) {
+      const key = o.bot_name || '—';
+      if (!map.has(key)) map.set(key, { open: [], closed: [] });
+      const g = map.get(key)!;
+      const st = (o.status ?? '').toLowerCase();
+      if (st === 'open') g.open.push(o);
+      else g.closed.push(o);
+    }
+    return Array.from(map.entries());
+  }, [orders]);
+
+  if (loading) return (
+    <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+      Loading bot orders…
+    </div>
+  );
+  if (error) return (
+    <div style={{ padding: 48, textAlign: 'center', color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+      Error: {error}
+    </div>
+  );
+  if (!orders.length) return (
+    <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+      No bot orders found.
+    </div>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {orders.map((o: any, i: number) => {
-        const isBuy = (o.transaction_type ?? o.transactiontype ?? '').toUpperCase() === 'BUY';
-        const sideColor = isBuy ? 'var(--green)' : 'var(--red)';
-        const statusUp = (o.status ?? '').toUpperCase();
-        const isActive = statusUp === 'OPEN' || statusUp === 'COMPLETE';
-        return (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
-            borderRadius: 12, overflow: 'hidden', minHeight: 52,
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '4px 0' }}>
+      {groups.map(([botName, { open, closed }]) => (
+        <div key={botName} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Bot name header */}
+          <div style={{
+            fontFamily: 'var(--font-display)', color: 'var(--accent)',
+            fontSize: 13, fontWeight: 700, letterSpacing: '1px',
+            textTransform: 'uppercase' as const, paddingLeft: 4,
           }}>
-            <div style={{ width: 4, alignSelf: 'stretch', background: sideColor, flexShrink: 0 }} />
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, color: 'var(--accent)', whiteSpace: 'nowrap' as const, minWidth: 80 }}>
-              {o.bot_name ?? 'Bot'}
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap' as const }}>
-              {o.tradingsymbol ?? o.symbol ?? ''}
-            </span>
-            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: sideColor, whiteSpace: 'nowrap' as const }}>
-              {(o.transaction_type ?? o.transactiontype ?? '').toUpperCase()}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Qty: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{o.quantity ?? '—'}</span></span>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>₹{o.averageprice ?? o.price ?? '—'}</span>
-            <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)', color: isActive ? '#0ea66e' : 'var(--text-dim)', whiteSpace: 'nowrap' as const }}>
-              {statusUp}
-            </span>
-            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 12 }}>{o.order_id ?? ''}</span>
+            {botName}
           </div>
-        );
-      })}
+
+          {/* OPEN orders — neumorphic cards */}
+          {open.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {open.map((o) => {
+                const isBuy = (o.direction ?? '').toUpperCase() === 'BUY';
+                const dirColor = isBuy ? 'var(--green)' : 'var(--red)';
+                const pnl = o.pnl;
+                const pnlColor = pnl == null || pnl === 0 ? 'var(--text-dim)' : pnl > 0 ? 'var(--green)' : 'var(--red)';
+                const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}` : '—';
+                return (
+                  <div key={o.id} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 80px 60px 90px 90px 90px',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: 'var(--bg)',
+                    boxShadow: 'var(--neu-raised)',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                  }}>
+                    {/* Symbol */}
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                      {o.instrument}{o.expiry ? <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 4 }}>{o.expiry}</span> : null}
+                    </span>
+                    {/* Direction pill */}
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)',
+                      letterSpacing: '0.5px', padding: '2px 10px', borderRadius: 100,
+                      boxShadow: 'var(--neu-inset)', color: dirColor,
+                      textAlign: 'center' as const, whiteSpace: 'nowrap' as const,
+                    }}>
+                      {(o.direction ?? '').toUpperCase()}
+                    </span>
+                    {/* Lots */}
+                    <span style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'right' as const }}>
+                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{o.lots ?? '—'}</span>
+                      <span style={{ fontSize: 10, marginLeft: 3 }}>lots</span>
+                    </span>
+                    {/* Entry */}
+                    <span style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'right' as const }}>
+                      <span style={{ fontSize: 10 }}>Entry </span>
+                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{o.entry_price != null ? o.entry_price.toFixed(2) : '—'}</span>
+                    </span>
+                    {/* LTP */}
+                    <span style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'right' as const }}>
+                      <span style={{ fontSize: 10 }}>LTP </span>
+                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{o.ltp != null ? o.ltp.toFixed(2) : '—'}</span>
+                    </span>
+                    {/* P&L */}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: pnlColor, textAlign: 'right' as const, fontFamily: 'var(--font-mono)' }}>
+                      {pnlStr}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* CLOSED orders — compact dim rows */}
+          {closed.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {closed.map((o) => {
+                const isBuy = (o.direction ?? '').toUpperCase() === 'BUY';
+                const dirColor = isBuy ? 'var(--green)' : 'var(--red)';
+                const pnl = o.pnl;
+                const pnlColor = pnl == null || pnl === 0 ? 'var(--text-dim)' : pnl > 0 ? 'var(--green)' : 'var(--red)';
+                const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}` : '—';
+                return (
+                  <div key={o.id} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 60px 50px 1fr 90px',
+                    alignItems: 'center',
+                    gap: 10,
+                    color: 'var(--text-dim)',
+                    fontSize: 12,
+                    padding: '4px 14px',
+                    borderRadius: 6,
+                  }}>
+                    {/* Symbol */}
+                    <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                      {o.instrument}
+                    </span>
+                    {/* Direction */}
+                    <span style={{ color: dirColor, fontWeight: 600, fontSize: 10 }}>
+                      {(o.direction ?? '').toUpperCase()}
+                    </span>
+                    {/* Lots */}
+                    <span style={{ textAlign: 'right' as const }}>{o.lots ?? '—'} <span style={{ fontSize: 10 }}>lots</span></span>
+                    {/* Entry → Exit */}
+                    <span style={{ textAlign: 'right' as const, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                      {o.entry_price != null ? o.entry_price.toFixed(2) : '—'}
+                      <span style={{ margin: '0 4px' }}>→</span>
+                      {o.exit_price != null ? o.exit_price.toFixed(2) : '—'}
+                    </span>
+                    {/* P&L */}
+                    <span style={{ fontWeight: 700, color: pnlColor, textAlign: 'right' as const, fontFamily: 'var(--font-mono)' }}>
+                      {pnlStr}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

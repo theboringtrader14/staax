@@ -816,7 +816,7 @@ class AngelOneBroker(BaseBroker):
             "token": order_params.get("symboltoken", ""),
             "quantity": order_params.get("quantity", ""),
         }
-        logger.info(f"[ANGEL_CTX][{_fid}] {_json.dumps(_context, default=str)}")
+        logger.warning(f"[ANGEL_CTX][{_fid}] {_json.dumps(_context, default=str)}")
 
         if order_params.get("ordertype") == "STOPLOSS_LIMIT":
             try:
@@ -825,7 +825,7 @@ class AngelOneBroker(BaseBroker):
                 _diff = abs(_price - _trigger)
                 _pct = (_diff / _trigger * 100) if _trigger > 0 else 0
                 _tick_mod = round(_price * 100) % 5
-                logger.info(
+                logger.warning(
                     f"[ANGEL_VALIDATION][{_fid}] "
                     f"trigger={_trigger} price={_price} diff={_diff:.2f} "
                     f"pct_diff={_pct:.2f}% tick_aligned={_tick_mod == 0}"
@@ -834,7 +834,18 @@ class AngelOneBroker(BaseBroker):
                 logger.warning(f"[ANGEL_VALIDATION][{_fid}] validation log failed: {_ve}")
 
         _payload_log = {k: v for k, v in order_params.items() if k != 'password'}
-        logger.info(f"[ANGEL_REQ][{_fid}] place_order payload: {_json.dumps(_payload_log, default=str)}")
+        logger.warning(f"[ANGEL_REQ][{_fid}] place_order payload: {_json.dumps(_payload_log, default=str)}")
+
+        # ── Angel One mandate: STOPLOSS_LIMIT/STOPLOSS_MARKET require variety=STOPLOSS ──
+        if order_params.get("ordertype") in ("STOPLOSS_LIMIT", "STOPLOSS_MARKET"):
+            if order_params.get("variety") != "STOPLOSS":
+                logger.warning(
+                    f"[ANGEL_FIX][{_fid}] Auto-correcting variety "
+                    f"'{order_params.get('variety')}' → 'STOPLOSS' "
+                    f"for ordertype={order_params.get('ordertype')} "
+                    f"tag={order_params.get('ordertag', '')}"
+                )
+                order_params["variety"] = "STOPLOSS"
 
         try:
             # ── Inner try: capture raw SDK response + any SDK-level exception ─────

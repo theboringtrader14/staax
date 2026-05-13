@@ -75,6 +75,7 @@ class DTRAdapter(BaseIndicatorAdapter):
 
     def __init__(self, **kwargs):
         from app.engine.indicators.dtr_strategy import DTRStrategy
+        self._kwargs = kwargs
         self._s = DTRStrategy(**kwargs)
         self._reset_state()
 
@@ -87,7 +88,7 @@ class DTRAdapter(BaseIndicatorAdapter):
 
     def reset(self) -> None:
         from app.engine.indicators.dtr_strategy import DTRStrategy
-        self._s = DTRStrategy()
+        self._s = DTRStrategy(**self._kwargs)
         self._reset_state()
 
     def on_candle(self, candle) -> None:

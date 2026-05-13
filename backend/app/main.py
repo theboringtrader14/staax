@@ -313,12 +313,36 @@ async def lifespan(app: FastAPI):
     logger.info("✅ BotRunner started + LTP callback registered")
 
     # ── 12b2. CandleDBWriter — persist MCX 1-min candles to DB ───────────────
-    from app.engine.candle_db_writer import candle_db_writer, run_mcx_backfill
+    from app.engine.candle_db_writer import candle_db_writer, run_mcx_backfill, MCX_INSTRUMENTS
     from app.engine.candle_fetcher import candle_store
+    from app.engine.market_session import is_mcx_open
     candle_store.register_callback(candle_db_writer.on_candle_complete)
     asyncio.create_task(candle_db_writer.start(angelone_mom, ltp_consumer=ltp_consumer))
     asyncio.create_task(run_mcx_backfill(angelone_mom))
     logger.info("✅ CandleDBWriter started + MCX backfill scheduled")
+
+    # ── 12b3. MCX tick → CandleStore LTP callback ────────────────────────────
+    # candle_store.on_tick() is the only path that completes 1-min candles and
+    # fires candle_db_writer.on_candle_complete.  Without this callback the
+    # CandleStore is registered but never fed live ticks — candles stop updating.
+    # Gated to is_mcx_open() so off-hours ticks (e.g. stale AO reconnect ticks)
+    # don't produce phantom candles with wrong timestamps.
+    async def _mcx_candle_tick(token: int, ltp: float, tick: dict):
+        # Fast path: only process tokens that belong to MCX instruments
+        if not MCX_INSTRUMENTS:
+            return
+        mcx_token_ints = {int(t) for t in MCX_INSTRUMENTS.values() if t}
+        if token not in mcx_token_ints:
+            return
+        if not is_mcx_open():
+            return
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo as _ZI
+        ts = _dt.now(_ZI("Asia/Kolkata"))
+        candle_store.on_tick(token, ltp, ts)
+
+    ltp_consumer.register_callback(_mcx_candle_tick, "MCX_CANDLE")
+    logger.info("✅ MCX candle tick callback registered (MCX_CANDLE)")
 
     # ── 12c. Wire + start PositionReconciler (30 s, market hours only) ───────
     position_reconciler.wire(

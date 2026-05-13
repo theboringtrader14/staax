@@ -160,30 +160,46 @@ async def archive_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     return {"status": "archived"}
 
 @router.get("/orders")
-async def list_all_bot_orders(db: AsyncSession = Depends(get_db)):
+async def list_all_bot_orders(request: Request, db: AsyncSession = Depends(get_db)):
     """List all bot orders across all bots, newest first. Joins Bot for name + is_practix."""
+    from app.engine.bot_runner import MCX_TOKENS
+    ltp_cache = getattr(request.app.state, "ltp_cache", None)
+
     result = await db.execute(
         select(BotOrder, Bot.name.label("bot_name"), Bot.is_practix.label("is_practix"))
         .outerjoin(Bot, Bot.id == BotOrder.bot_id)
         .order_by(desc(BotOrder.entry_time))
     )
     rows = result.all()
-    return [{
-        "id":           str(o.id),
-        "bot_name":     bot_name or "—",
-        "is_practix":   is_practix if is_practix is not None else True,
-        "instrument":   o.instrument,
-        "direction":    o.direction,
-        "lots":         o.lots,
-        "entry_price":  o.entry_price,
-        "exit_price":   o.exit_price,
-        "entry_time":   o.entry_time.isoformat() if o.entry_time else None,
-        "exit_time":    o.exit_time.isoformat() if o.exit_time else None,
-        "pnl":          o.pnl,
-        "status":       o.status or "open",
-        "signal_type":  o.signal_type,
-        "expiry":       o.expiry,
-    } for o, bot_name, is_practix in rows]
+
+    out = []
+    for o, bot_name, is_practix in rows:
+        ltp = None
+        if ltp_cache and o.instrument:
+            token = MCX_TOKENS.get(o.instrument.upper())
+            if token is not None:
+                try:
+                    ltp = await ltp_cache.get(token)
+                except Exception:
+                    pass
+        out.append({
+            "id":           str(o.id),
+            "bot_name":     bot_name or "—",
+            "is_practix":   is_practix if is_practix is not None else True,
+            "instrument":   o.instrument,
+            "direction":    o.direction,
+            "lots":         o.lots,
+            "entry_price":  o.entry_price,
+            "ltp":          ltp,
+            "exit_price":   o.exit_price,
+            "entry_time":   o.entry_time.isoformat() if o.entry_time else None,
+            "exit_time":    o.exit_time.isoformat() if o.exit_time else None,
+            "pnl":          o.pnl,
+            "status":       o.status or "open",
+            "signal_type":  o.signal_type,
+            "expiry":       o.expiry,
+        })
+    return out
 
 
 @router.get("/{bot_id}/orders")
@@ -457,7 +473,10 @@ async def bot_chart(
         ))
 
     # 5. Replay indicator
-    indicator = get_indicator(bot.indicator or "channel")
+    # For DTR, enable both longs and shorts so the chart shows all signals.
+    ind_type = bot.indicator or "channel"
+    ind_kwargs = {"longs_enabled": True, "shorts_enabled": True} if ind_type == "dtr" else {}
+    indicator = get_indicator(ind_type, **ind_kwargs)
     indicator.reset()
     candles_out: list = []
     upper_out:   list = []

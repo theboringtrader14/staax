@@ -72,6 +72,18 @@ class CandleDBWriter:
         except Exception as e:
             logger.warning(f"[CANDLE] Token resolution failed: {e}")
 
+        # Register 1-min aggregators in CandleStore for each resolved MCX token.
+        # Without this, candle_store.on_tick() has no aggregators to route ticks to
+        # and the CandleStore callback (on_candle_complete) is never fired.
+        try:
+            from app.engine.candle_fetcher import candle_store as _cs
+            for name, token_str in MCX_INSTRUMENTS.items():
+                if token_str:
+                    _cs.get_or_create(int(token_str), 1)  # 1-minute candles
+                    logger.info(f"[CANDLE] CandleStore aggregator registered for {name} (token={token_str})")
+        except Exception as e:
+            logger.warning(f"[CANDLE] CandleStore aggregator registration failed: {e}")
+
         # Subscribe resolved MCX tokens to SmartStream via ltp_consumer
         if ltp_consumer is not None:
             mcx_token_strs = [t for t in MCX_INSTRUMENTS.values() if t]
