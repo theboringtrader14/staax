@@ -1,19 +1,18 @@
 /**
- * useWebSocket — connects to all four WebSocket channels.
+ * useWebSocket — connects to three WebSocket channels.
  * Runs once on app mount (inside Layout.tsx).
  *
  * Channels:
  *   /ws/pnl           → updates store.livePnl on every tick
  *   /ws/status        → updates store.orders via store.updateOrder
  *   /ws/notifications → pushes to store.notifications (bell panel)
- *   /ws/system        → engine log events; surfaces errors/warnings as toasts
  *
  * Reconnects automatically on disconnect (5 second backoff).
  * No-ops if backend is unreachable — app stays functional with demo data.
  */
 import { useEffect, useRef } from 'react'
 import { useStore } from '@/store'
-import { showError, showWarning } from '@/utils/toast'
+import { showError } from '@/utils/toast'
 import { sounds } from '@/utils/sounds'
 
 const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
@@ -74,7 +73,6 @@ export function useWebSocket() {
   const pnlRetry    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const statusRetry = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notifRetry  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const systemRetry = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -116,55 +114,10 @@ export function useWebSocket() {
       }
     }, notifRetry)
 
-    // /ws/system — engine log events: errors and order events become toasts
-    const systemWs = makeWs('/ws/system', (msg) => {
-      const data = rec(msg['data'])
-      const fullMessage: string =
-        str(msg['message']) || str(msg['msg']) || str(data['message']) || JSON.stringify(msg)
-      const rawText = (str(msg['message']) || str(msg['msg'])).toLowerCase()
-      const msgType = str(msg['type'])
-      const msgLevel = str(msg['level'])
-
-      const ERROR_KEYWORDS = ['exception', 'traceback', 'failed', 'crash']
-      const isError =
-        msgType === 'error' ||
-        msgLevel === 'error' ||
-        msgLevel === 'ERROR' ||
-        ERROR_KEYWORDS.some(kw => rawText.includes(kw))
-
-      const ORDER_TYPES = ['order_placed', 'sl_hit', 'target_hit', 'order_event']
-      const isWarning =
-        ORDER_TYPES.includes(msgType) ||
-        msgLevel === 'warning' ||
-        msgLevel === 'WARNING'
-
-      const labelFor = (type: string): string => {
-        const MAP: Record<string, string> = {
-          order_placed: 'Order Placed',
-          sl_hit:       'Stop Loss Hit',
-          target_hit:   'Target Hit',
-          order_event:  'Order Event',
-        }
-        return MAP[type] ?? 'System Warning'
-      }
-
-      if (isError) {
-        showError(fullMessage)
-        addNotification({ type: 'error', msg: fullMessage, time: new Date().toISOString() })
-      } else if (isWarning) {
-        showWarning(`${labelFor(msgType)}: ${fullMessage}`)
-        addNotification({ type: 'warn', msg: fullMessage, time: new Date().toISOString() })
-      } else {
-        // Silent — store only, no toast
-        addNotification({ type: 'info', msg: fullMessage, time: new Date().toISOString() })
-      }
-    }, systemRetry)
-
     return () => {
       pnlWs.close()
       statusWs.close()
       notifWs.close()
-      systemWs.close()
     }
   }, [isAuthenticated])
 }
