@@ -1140,43 +1140,29 @@ interface Algo360Data {
   monthly_pnl: Array<{ month: string; pnl: number; trades: number }>
 }
 
-function buildPeriodOptions(): { value: string; label: string }[] {
-  const now = new Date()
-  const opts: { value: string; label: string }[] = [{ value: 'all', label: 'All Time' }]
-
-  // Last 12 months
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const val = `month:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const label = d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-    opts.push({ value: val, label })
-  }
-
-  // Last 5 calendar years
-  for (let i = 0; i < 5; i++) {
-    const yr = now.getFullYear() - i
-    opts.push({ value: `year:${yr}`, label: String(yr) })
-  }
-
-  // Last 5 Indian FYs (Apr–Mar)
-  const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-  for (let i = 0; i < 5; i++) {
-    const s = fyStart - i
-    opts.push({ value: `fy:${s}`, label: `FY ${s}-${String(s + 1).slice(-2)}` })
-  }
-
-  return opts
-}
-
-const PERIOD_OPTIONS = buildPeriodOptions()
-
 function Algo360Tab() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [period, setPeriod] = useState<string>('all')
+  const [periodType, setPeriodType] = useState<'all' | 'month' | 'year' | 'fy'>('all')
+  const [periodValue, setPeriodValue] = useState<string>('')
   const [data, setData] = useState<Record<string, Algo360Data>>({})
   const [algos, setAlgos] = useState<Array<{ id: string; name: string }>>([])
   const [fetching, setFetching] = useState(false)
-  const [periodOpen, setPeriodOpen] = useState(false)
+
+  const getPeriodOptions = (type: string): { value: string; label: string }[] => {
+    if (type === 'month') {
+      return Array.from({ length: 12 }, (_, i) => {
+        const d = new Date()
+        d.setMonth(d.getMonth() - i)
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        return { value: `month:${val}`, label: d.toLocaleString('default', { month: 'short', year: 'numeric' }) }
+      })
+    }
+    if (type === 'year') return [2026, 2025, 2024, 2023, 2022].map(y => ({ value: `year:${y}`, label: `${y}` }))
+    if (type === 'fy') return ['2025-26', '2024-25', '2023-24', '2022-23'].map(fy => ({ value: `fy:${fy}`, label: `FY ${fy}` }))
+    return []
+  }
+
+  const period = periodType === 'all' ? 'all' : (periodValue || 'all')
 
   // Fetch algo list on mount
   useEffect(() => {
@@ -1192,10 +1178,8 @@ function Algo360Tab() {
   useEffect(() => {
     if (selectedIds.length === 0) { setData({}); return }
     setFetching(true)
-    const params = new URLSearchParams()
-    selectedIds.forEach(id => params.append('algo_ids', id))
-    params.set('period', period)
-    api.get(`/analytics/algo-360?${params.toString()}`)
+    const ids = selectedIds.join(',')
+    api.get(`/analytics/algo-360?algo_ids=${ids}&period=${period}`)
       .then(r => {
         const { algos: results = [] }: { algos: Algo360Data[] } = r.data ?? {}
         const map: Record<string, Algo360Data> = {}
@@ -1217,77 +1201,49 @@ function Algo360Tab() {
   const colCount = selectedIds.length || 1
   const is4col = colCount === 4
 
-  const selectedLabel = PERIOD_OPTIONS.find(o => o.value === period)?.label ?? 'All Time'
-
   return (
     <div>
       {/* Period selector */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'var(--font-display)', marginRight: 4 }}>Period</span>
-        {/* All Time quick button */}
-        <button
-          onClick={() => setPeriod('all')}
-          style={{
-            height: 30, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
-            fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
-            background: 'var(--bg)',
-            boxShadow: period === 'all' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-            color: period === 'all' ? 'var(--accent)' : 'var(--text-dim)',
-            transition: 'box-shadow 0.15s, color 0.15s',
-          }}
-        >All Time</button>
-        {/* Dropdown for other periods */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setPeriodOpen(o => !o)}
-            style={{
-              height: 30, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
-              fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
-              background: 'var(--bg)',
-              boxShadow: period !== 'all' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
-              color: period !== 'all' ? 'var(--accent)' : 'var(--text-dim)',
-              transition: 'box-shadow 0.15s, color 0.15s',
-            }}
-          >
-            {period !== 'all' ? selectedLabel : 'Month / Year / FY'} ▾
-          </button>
-          {periodOpen && (
-            <div
+      <div style={{ marginBottom: 14 }}>
+        {/* Row 1: type pills */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'var(--font-display)', marginRight: 4 }}>Period</span>
+          {(['all', 'month', 'year', 'fy'] as const).map(pt => (
+            <button key={pt} onClick={() => { setPeriodType(pt); setPeriodValue('') }}
               style={{
-                position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200,
-                background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 12,
-                padding: '6px 0', minWidth: 160, maxHeight: 320, overflowY: 'auto',
-              }}
-              className="no-scrollbar"
-            >
-              {PERIOD_OPTIONS.filter(o => o.value !== 'all').map(o => (
-                <div
-                  key={o.value}
-                  onClick={() => { setPeriod(o.value); setPeriodOpen(false) }}
-                  style={{
-                    padding: '7px 16px', fontSize: 11, cursor: 'pointer',
-                    color: period === o.value ? 'var(--accent)' : 'var(--text-dim)',
-                    fontWeight: period === o.value ? 700 : 400,
-                    fontFamily: 'var(--font-mono)',
-                    background: 'transparent',
-                    transition: 'color 0.12s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.color = 'var(--text)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.color = period === o.value ? 'var(--accent)' : 'var(--text-dim)' }}
-                >
-                  {o.label}
-                </div>
-              ))}
-            </div>
+                background: 'var(--bg)',
+                boxShadow: periodType === pt ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                color: periodType === pt ? 'var(--accent)' : 'var(--text-dim)',
+                border: 'none', borderRadius: 8, padding: '5px 14px', fontSize: 12, cursor: 'pointer',
+              }}>
+              {pt === 'all' ? 'All Time' : pt === 'fy' ? 'FY' : pt.charAt(0).toUpperCase() + pt.slice(1)}
+            </button>
+          ))}
+          {selectedIds.length > 0 && (
+            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>
+              {selectedIds.length}/4 selected
+            </span>
+          )}
+          {fetching && (
+            <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>Loading...</span>
           )}
         </div>
-        {selectedIds.length > 0 && (
-          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>
-            {selectedIds.length}/4 selected
-          </span>
-        )}
-        {fetching && (
-          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>Loading...</span>
+
+        {/* Row 2: specific options — only when not 'all' */}
+        {periodType !== 'all' && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            {getPeriodOptions(periodType).map(opt => (
+              <button key={opt.value} onClick={() => setPeriodValue(opt.value)}
+                style={{
+                  background: 'var(--bg)',
+                  boxShadow: periodValue === opt.value ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                  color: periodValue === opt.value ? 'var(--accent)' : 'var(--text-dim)',
+                  border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -1308,10 +1264,10 @@ function Algo360Tab() {
                 flexShrink: 0, height: 34, padding: '0 16px', borderRadius: 10, cursor: 'pointer',
                 fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)',
                 background: 'var(--bg)',
-                boxShadow: sel ? 'var(--neu-raised)' : 'var(--neu-raised-sm)',
-                border: sel ? '1px solid var(--accent)' : '1px solid transparent',
+                boxShadow: sel ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+                border: 'none',
                 color: sel ? 'var(--accent)' : 'var(--text-dim)',
-                transition: 'box-shadow 0.15s, color 0.15s, border-color 0.15s',
+                transition: 'box-shadow 0.15s, color 0.15s',
               } as React.CSSProperties}
             >
               {a.name}
@@ -1418,6 +1374,7 @@ function Algo360Tab() {
                               contentStyle={{ background: 'var(--bg)', border: 'none', boxShadow: 'var(--neu-raised)', borderRadius: 8, fontSize: 10 }}
                               formatter={(v: number) => [fmtPnl(v), 'Cumulative P&L']}
                             />
+                            <ReferenceLine y={0} stroke="var(--text-dim)" strokeDasharray="3 3" strokeWidth={1} />
                             <Line
                               type="monotone"
                               dataKey="cumulative_pnl"

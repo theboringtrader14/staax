@@ -30,6 +30,7 @@ from app.models.order import Order, OrderStatus
 from app.models.algo import Algo
 from app.models.account import Account
 from app.models.bot import BotOrder
+from app.models.hedge_order import HedgeOrder
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -254,6 +255,23 @@ async def equity_curve(
             continue
         d = o.fill_time.astimezone(IST).date().isoformat()
         by_date[d] = by_date.get(d, 0.0) + (o.pnl or 0.0)
+
+    # --- Hedge P&L aggregation ---
+    hedge_r = await db.execute(
+        select(HedgeOrder.trading_date, HedgeOrder.pnl)
+        .where(HedgeOrder.trading_date >= fy_start.date())
+        .where(HedgeOrder.status == 'CLOSED')
+    )
+    hedge_rows = hedge_r.fetchall()
+
+    hedge_pnl_by_date: dict = {}
+    for hr in hedge_rows:
+        d = str(hr[0])
+        hedge_pnl_by_date[d] = hedge_pnl_by_date.get(d, 0) + (hr[1] or 0)
+
+    # Merge hedge P&L into algo by_date
+    for d in hedge_pnl_by_date:
+        by_date[d] = by_date.get(d, 0.0) + hedge_pnl_by_date[d]
 
     # --- Bot P&L aggregation ---
     bot_conditions = [

@@ -34,6 +34,7 @@ from app.api.v1 import auth, accounts, algos, grid, orders, services, system, re
 from app.api.v1.engine_health import router as engine_health_router
 from app.api.v1.broker_orders import router as broker_orders_router
 from app.api.v1.algo_analytics import router as algo_analytics_router
+from app.api.v1.hedge import router as hedge_router
 from app.api.v1 import risk as risk_api
 from app.api.v1.system import daily_system_reset
 from app.engine.broker_reconnect   import broker_reconnect_manager
@@ -1246,6 +1247,7 @@ app.include_router(ai_api.router,       prefix="/api/v1/ai",        tags=["ai"])
 app.include_router(mobile_api.router,    prefix="/api/v1/mobile",    tags=["mobile"])
 app.include_router(analytics_api.router,    prefix="/api/v1")
 app.include_router(algo_analytics_router,   prefix="/api/v1")
+app.include_router(hedge_router,            prefix="/api/v1")
 app.include_router(engine_health_router, prefix="/api/v1/engine", tags=["engine"])
 app.include_router(whatsapp_api.router,  prefix="/api/v1",          tags=["whatsapp"])
 app.include_router(telegram_api.router,  prefix="/api/v1",          tags=["telegram"])

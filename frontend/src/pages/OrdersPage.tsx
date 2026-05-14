@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useStore } from '@/store'
 import { algosAPI, ordersAPI, holidaysAPI, accountsAPI, systemAPI } from '@/services/api'
 import { StaaxSelect } from '@/components/StaaxSelect'
@@ -641,6 +641,113 @@ function SmoothedSparkline({ algoId, legs, totalPnl }: { algoId: string; legs: L
   )
 }
 
+// ── HedgesView ───────────────────────────────────────────────────────────────
+type HedgeOrder = {
+  id: string
+  trading_date: string
+  instrument: string
+  option_type: string
+  symbol: string
+  lots: number
+  quantity: number
+  fill_price: number | null
+  ltp: number | null
+  pnl: number | null
+  broker_order_id: string | null
+  status: string
+  placed_at: string | null
+  reason: string | null
+}
+
+function HedgesView({ isPractix }: { isPractix: boolean }) {
+  const [orders, setOrders] = useState<HedgeOrder[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/hedge/orders')
+      const json = await res.json()
+      setOrders(json.orders ?? [])
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchOrders()
+    // Auto-refresh every 30s between 15:15–15:35 IST
+    const now = new Date()
+    const istHour = (now.getUTCHours() + 5) % 24
+    const istMin  = (now.getUTCMinutes() + 30) % 60
+    const istTime = istHour * 60 + istMin
+    const inWindow = istTime >= 15 * 60 + 15 && istTime <= 15 * 60 + 35
+    if (!inWindow) return
+    const t = setInterval(fetchOrders, 30_000)
+    return () => clearInterval(t)
+  }, [fetchOrders])
+
+  if (isPractix) {
+    return (
+      <div style={{ padding: '32px 28px', color: 'var(--text-dim)', fontSize: 13 }}>
+        Hedge orders are not available in Practix mode.
+      </div>
+    )
+  }
+
+  if (loading) {
+    return <div style={{ padding: 32, color: 'var(--text-dim)', fontSize: 13 }}>Loading...</div>
+  }
+
+  if (!orders.length) {
+    return (
+      <div style={{ padding: '32px 28px', color: 'var(--text-dim)', fontSize: 13 }}>
+        No hedge orders in the last 30 days.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: '16px 28px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {orders.map(o => {
+        const pnlColor = o.pnl == null ? 'var(--text-dim)' : o.pnl >= 0 ? 'var(--green)' : 'var(--red)'
+        const statusColor = o.status === 'OPEN' ? 'var(--accent)' : o.status === 'CLOSED' ? 'var(--green)' : 'var(--red)'
+        return (
+          <div key={o.id} style={{
+            background: 'var(--bg)',
+            boxShadow: o.status === 'OPEN' ? 'var(--neu-raised)' : 'var(--neu-raised-sm)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            display: 'grid',
+            gridTemplateColumns: '80px 60px 60px 1fr 70px 70px 70px 70px 80px',
+            gap: 12,
+            alignItems: 'center',
+            fontSize: 12,
+            opacity: o.status === 'CLOSED' ? 0.75 : 1,
+          }}>
+            <span style={{ color: 'var(--text-dim)' }}>{o.trading_date}</span>
+            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)' }}>{o.instrument}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{o.option_type}</span>
+            <span style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{o.symbol}</span>
+            <span style={{ color: 'var(--text-dim)', textAlign: 'right' }}>{o.lots}L</span>
+            <span style={{ color: 'var(--text)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+              {o.fill_price != null ? `₹${o.fill_price.toFixed(2)}` : '—'}
+            </span>
+            <span style={{ color: 'var(--text)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+              {o.ltp != null ? `₹${o.ltp.toFixed(2)}` : '—'}
+            </span>
+            <span style={{ color: pnlColor, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+              {o.pnl != null ? `${o.pnl >= 0 ? '+' : ''}₹${o.pnl.toFixed(0)}` : '—'}
+            </span>
+            <span style={{ color: statusColor, textAlign: 'right' }}>{o.status}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── BotOrdersView ────────────────────────────────────────────────────────────
 interface BotOrderRow {
   id: string; bot_name: string; is_practix: boolean; instrument: string
@@ -1030,7 +1137,7 @@ export default function OrdersPage() {
     try { return new Set(JSON.parse(localStorage.getItem('orders_expanded_algos') || '[]')) }
     catch { return new Set() }
   })
-  const [pageTab, setPageTab] = useState<'algos' | 'bots' | 'orderbook'>('algos')
+  const [pageTab, setPageTab] = useState<'algos' | 'bots' | 'hedges' | 'orderbook'>('algos')
   const weekLabel = useMemo(() => {
     const monDate = weekDates['MON']
     if (!monDate) return ''
@@ -1684,9 +1791,9 @@ export default function OrdersPage() {
 
         {/* Tab bar — neumorphic sliding pill */}
         {(() => {
-          const _allTabs = ['algos', 'bots', 'orderbook'] as const
-          const _tabs = isPractixMode ? (['algos', 'bots'] as const) : _allTabs
-          const _labels: Record<string, string> = { algos: 'Algos', bots: 'Bots', orderbook: 'Order Book' }
+          const _allTabs = ['algos', 'bots', 'hedges', 'orderbook'] as const
+          const _tabs = isPractixMode ? (['algos', 'bots', 'hedges'] as const) : _allTabs
+          const _labels: Record<string, string> = { algos: 'Algos', bots: 'Bots', hedges: 'Hedges', orderbook: 'Order Book' }
           const _idx = Math.max(0, (_tabs as readonly string[]).indexOf(pageTab))
           return (
             <div style={{
@@ -1883,6 +1990,7 @@ export default function OrdersPage() {
         {/* Live MTM wired to header — strip removed */}
 
         {pageTab === 'bots' && <BotOrdersView />}
+        {pageTab === 'hedges' && <HedgesView isPractix={isPractixMode} />}
         {pageTab === 'orderbook' && <OrderBookView />}
 
         {pageTab === 'algos' && (

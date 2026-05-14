@@ -285,7 +285,15 @@ class AlgoScheduler:
             misfire_grace_time=10,
         )
 
-        logger.info("Fixed daily jobs registered: token_refresh, refresh_scrip_master, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler, reconcile_orders")
+        # 15:20 — daily hedge assessment for net short NIFTY/SENSEX exposure
+        self._scheduler.add_job(
+            self._job_daily_hedge,
+            CronTrigger(hour=15, minute=20, timezone=IST),
+            id="daily_hedge",
+            replace_existing=True,
+        )
+
+        logger.info("Fixed daily jobs registered: token_refresh, refresh_scrip_master, premarkt_sweep, activate_all, overnight_sl_check, expiry_force_close, eod_cleanup, mcx_eod_report, broker_reconnect, missed_entry_recovery, state_reconciler, reconcile_orders, daily_hedge")
 
     # ── Per-algo jobs (scheduled at 09:15 after reading GridEntries) ──────────
 
@@ -1417,6 +1425,193 @@ class AlgoScheduler:
                     logger.error("[EXPIRY-EXIT] AlgoRunner not wired — cannot force close")
             except Exception as e:
                 logger.error(f"[EXPIRY-EXIT] Failed to square {symbol} (grid={grid_entry_id}): {e}")
+
+    async def _job_daily_hedge(self):
+        """15:20 IST — assess net short exposure and place OTM hedges for NIFTY/SENSEX."""
+        logger.info("[HEDGE] Daily hedge assessment at 15:20")
+        try:
+            from datetime import date as _date
+            from collections import defaultdict
+            from app.models.order import Order
+            from app.models.hedge_order import HedgeOrder
+            from app.models.algo import AlgoLeg
+            from sqlalchemy import select as _select
+
+            HEDGE_PREMIUM_TARGET = {'NIFTY': 10.0, 'SENSEX': 35.0}
+            HEDGE_EXCHANGES      = {'NIFTY': 'NFO', 'SENSEX': 'BFO'}
+            HEDGE_INSTRUMENTS    = list(HEDGE_PREMIUM_TARGET.keys())
+
+            # 1. Fetch all OPEN orders today for NIFTY and SENSEX
+            async with AsyncSessionLocal() as db:
+                r = await db.execute(
+                    _select(Order, AlgoLeg)
+                    .join(AlgoLeg, Order.leg_id == AlgoLeg.id)
+                    .where(Order.status == 'open')
+                    .where(Order.trading_date == _date.today())
+                )
+                rows = r.fetchall()
+
+            if not rows:
+                logger.info("[HEDGE] No open positions today — skipping")
+                return
+
+            # 2. Compute net short lots per instrument + option type
+            counts = defaultdict(lambda: {'CE': {'sell': 0, 'buy': 0}, 'PE': {'sell': 0, 'buy': 0}})
+            for order, leg in rows:
+                inst = (leg.underlying or '').upper()
+                if inst not in HEDGE_INSTRUMENTS:
+                    continue
+                symbol   = order.symbol or ''
+                opt_type = 'CE' if symbol.endswith('CE') else ('PE' if symbol.endswith('PE') else None)
+                if not opt_type:
+                    continue
+                direction = (order.direction or '').lower()
+                lots      = order.lots or 1
+                counts[inst][opt_type][direction] = counts[inst][opt_type].get(direction, 0) + lots
+
+            # 3. Get Mom's broker from runner
+            runner     = self._algo_runner
+            mom_broker = next(iter(runner._angel_broker_map.values()), None) if runner else None
+            if not mom_broker:
+                logger.error("[HEDGE] Mom broker not found in angel_broker_map")
+                return
+
+            # 4. Place hedges for net short legs
+            for inst, sides in counts.items():
+                for opt_type in ['CE', 'PE']:
+                    sells     = sides[opt_type].get('sell', 0)
+                    buys      = sides[opt_type].get('buy', 0)
+                    net_short = sells - buys
+                    if net_short <= 0:
+                        continue
+                    logger.info(f"[HEDGE] {inst} {opt_type}: net_short={net_short} — hedging")
+                    await self._place_hedge(
+                        instrument=inst,
+                        option_type=opt_type,
+                        lots=net_short,
+                        premium_target=HEDGE_PREMIUM_TARGET[inst],
+                        exchange=HEDGE_EXCHANGES[inst],
+                        broker=mom_broker,
+                        reason=f"Hedge {net_short}L {inst} {opt_type} net short",
+                    )
+
+        except Exception as e:
+            logger.error(f"[HEDGE] Job failed: {e}")
+            import traceback; logger.error(traceback.format_exc())
+
+    async def _place_hedge(
+        self,
+        instrument: str,
+        option_type: str,
+        lots: int,
+        premium_target: float,
+        exchange: str,
+        broker,
+        reason: str = "",
+    ):
+        """
+        Find an OTM strike near premium_target and place a MARKET BUY hedge.
+        Uses StrikeSelector.select() with strike_type='premium'.
+        Saves HedgeOrder to DB and sends Telegram notification.
+        """
+        from datetime import date as _date
+        from app.engine.strike_selector import StrikeSelector
+        from app.models.hedge_order import HedgeOrder
+        from app.engine.tg_notifier import tg_notifier
+
+        try:
+            selector = StrikeSelector(broker)
+            inst_dict = await selector.select(
+                underlying=instrument,
+                instrument_type=option_type.lower(),   # "ce" or "pe"
+                expiry="current_weekly",
+                strike_type="premium",
+                strike_value=premium_target,
+                broker=broker,
+            )
+
+            if not inst_dict:
+                logger.error(
+                    f"[HEDGE] Could not find strike for {instrument} {option_type} "
+                    f"premium_target={premium_target} — skipping"
+                )
+                return
+
+            symbol      = inst_dict.get("tradingsymbol", "")
+            token       = str(inst_dict.get("instrument_token", ""))
+            lot_size    = inst_dict.get("lot_size", 1)
+            quantity    = lots * lot_size
+
+            logger.info(
+                f"[HEDGE] Placing BUY {symbol} qty={quantity} lots={lots} "
+                f"exchange={exchange} token={token}"
+            )
+
+            # Fetch LTP before order for record-keeping
+            ltp = 0.0
+            try:
+                if token and hasattr(broker, "get_ltp_by_token"):
+                    ltp = await broker.get_ltp_by_token(exchange, symbol, token) or 0.0
+            except Exception as _ltp_err:
+                logger.warning(f"[HEDGE] LTP fetch failed (non-fatal): {_ltp_err}")
+
+            # Place MARKET BUY
+            broker_order_id = None
+            fill_price      = ltp
+            status          = "OPEN"
+            try:
+                broker_order_id = await broker.place_order(
+                    symbol=symbol,
+                    exchange=exchange,
+                    direction="buy",
+                    quantity=quantity,
+                    order_type="MARKET",
+                    symbol_token=token,
+                    tag="HEDGE",
+                )
+                logger.info(f"[HEDGE] Order placed: broker_order_id={broker_order_id}")
+            except Exception as _order_err:
+                logger.error(f"[HEDGE] place_order failed: {_order_err}")
+                status = "ERROR"
+
+            # Save HedgeOrder to DB
+            async with AsyncSessionLocal() as db:
+                try:
+                    hedge_rec = HedgeOrder(
+                        trading_date=_date.today(),
+                        instrument=instrument,
+                        option_type=option_type,
+                        symbol=symbol,
+                        symbol_token=token,
+                        lots=lots,
+                        quantity=quantity,
+                        ltp=ltp,
+                        fill_price=fill_price,
+                        broker_order_id=broker_order_id,
+                        status=status,
+                        reason=reason,
+                    )
+                    db.add(hedge_rec)
+                    await db.commit()
+                    logger.info(f"[HEDGE] HedgeOrder saved: {symbol} {lots}L status={status}")
+                except Exception as _db_err:
+                    await db.rollback()
+                    logger.error(f"[HEDGE] DB save failed: {_db_err}")
+
+            # Telegram notification
+            import asyncio as _aio
+            _aio.create_task(tg_notifier.notify("hedge_placed", {
+                "instrument":  instrument,
+                "option_type": option_type,
+                "symbol":      symbol,
+                "lots":        lots,
+                "premium":     ltp,
+                "reason":      reason,
+            }))
+
+        except Exception as e:
+            logger.error(f"[HEDGE] _place_hedge failed for {instrument} {option_type}: {e}")
+            import traceback; logger.error(traceback.format_exc())
 
     async def _job_eod_cleanup(self):
         """

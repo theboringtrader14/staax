@@ -64,6 +64,7 @@ class AngelOneBroker(BaseBroker):
     _master_date:  Optional[_date]      = None
     _tick_size_cache: dict = {}          # token → tick_size; populated alongside _master_cache
     _freeze_qty_cache: dict[str, int] = {}  # token → freeze_qty; populated alongside _master_cache
+    _lot_size_cache: Dict[str, int] = {}   # token → lot_size; populated alongside _master_cache
 
     # Per-call option chain cache — avoids double 209k-record scan for CE+PE legs
     # in a straddle entry. Key: (underlying, expiry_ao). TTL: 60 seconds.
@@ -530,6 +531,11 @@ class AngelOneBroker(BaseBroker):
                         for item in AngelOneBroker._master_cache
                         if item.get('token') and int(item.get('freeze_qty') or item.get('freezeQty') or 0) > 0
                     }
+                    AngelOneBroker._lot_size_cache = {
+                        str(item.get('token', '')): int(item.get('lotsize') or item.get('lot_size') or item.get('minimumLotSize') or 1)
+                        for item in AngelOneBroker._master_cache
+                        if item.get('token') and int(item.get('lotsize') or item.get('lot_size') or item.get('minimumLotSize') or 1) > 0
+                    }
                     return AngelOneBroker._master_cache
         except Exception as _ce:
             logger.warning(f"[AO master] Disk cache read failed: {_ce}")
@@ -563,6 +569,11 @@ class AngelOneBroker(BaseBroker):
                 for item in data
                 if item.get('token') and int(item.get('freeze_qty') or item.get('freezeQty') or 0) > 0
             }
+            AngelOneBroker._lot_size_cache = {
+                str(item.get('token', '')): int(item.get('lotsize') or item.get('lot_size') or item.get('minimumLotSize') or 1)
+                for item in data
+                if item.get('token') and int(item.get('lotsize') or item.get('lot_size') or item.get('minimumLotSize') or 1) > 0
+            }
             logger.info(f"[AO master] ✅ Cached {len(data):,} instruments")
             logger.info(f"[SCRIP] Instrument master refreshed — {len(self._tick_size_cache)} symbols loaded")
             return data
@@ -576,7 +587,14 @@ class AngelOneBroker(BaseBroker):
 
     def get_freeze_qty(self, symbol_token: str) -> int:
         """Return broker freeze quantity for this instrument token. Fallback: 1800 (NIFTY)."""
-        return AngelOneBroker._freeze_qty_cache.get(str(symbol_token), 1800)
+        val = AngelOneBroker._freeze_qty_cache.get(str(symbol_token))
+        if not val or val <= 0:
+            return 1800  # safe NIFTY/NFO default
+        return int(val)
+
+    def get_lot_size(self, symbol_token: str) -> int:
+        """Return lot size for this instrument token from master. Fallback: 1."""
+        return AngelOneBroker._lot_size_cache.get(str(symbol_token), 1)
 
     async def get_option_chain(self, underlying: str, expiry: str) -> dict:
         """

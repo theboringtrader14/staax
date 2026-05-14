@@ -316,6 +316,19 @@ class TGNotifier:
             return f"🔌 <b>FEED DOWN</b>\nSmartStream disconnected. Monitor manually.\n<i>{ts}</i>"
         if event_type == "feed_up":
             return f"🟢 <b>FEED UP</b>\nSmartStream reconnected.\n<i>{ts}</i>"
+        if event_type == "hedge_placed":
+            inst   = payload.get('instrument', '')
+            opt    = payload.get('option_type', '')
+            sym    = payload.get('symbol', '')
+            lots   = payload.get('lots', 0)
+            prem   = payload.get('premium', 0)
+            reason = payload.get('reason', '')
+            return (
+                f"<b>Hedge Placed</b>\n"
+                f"{inst} {opt} — {sym}\n"
+                f"{lots} lots @ Rs.{prem:.2f}\n"
+                f"<i>{reason}</i>"
+            )
         return ""
 
 
