@@ -171,6 +171,9 @@ class AlgoLeg(Base):
     wt_direction = Column(String(5), nullable=True)   # "up" or "down"
     wt_value     = Column(Float, nullable=True)
     wt_unit      = Column(String(5), nullable=True)   # "pts" or "pct"
+    wt_execution_mode = Column(String(10), nullable=False, server_default='sl_limit')
+    # "sl_limit" → broker-side STOPLOSS_LIMIT order (default, existing path)
+    # "market"   → engine-side MARKET order monitoring via WTEvaluator
 
     # ── Per-leg ORB Phase 2 fields ─────────────────────────────────────────────
     # orb_range_source: which price to track during ORB window

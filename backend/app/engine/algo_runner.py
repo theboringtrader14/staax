@@ -758,6 +758,20 @@ class AlgoRunner:
                 )
             _wt_threshold = _snap_to_005(_wt_threshold)
 
+            # ── W&T execution mode branch ─────────────────────────────────────
+            _wt_mode = getattr(leg, 'wt_execution_mode', 'sl_limit')
+
+            if _wt_mode == 'market':
+                logger.info(
+                    f"[WT_MARKET] {algo.name} leg {leg.leg_number}: "
+                    f"armed in MARKET mode — threshold={_wt_threshold} monitoring via engine"
+                )
+                # MARKET mode: engine monitors LTP and fires MARKET order at threshold
+                # No broker-side SL-Limit placed — WTEvaluator handles trigger
+                # TODO: wire WTEvaluator to fire MARKET order (future implementation)
+                return  # skip broker SL-Limit placement
+            # else: sl_limit mode — existing path continues unchanged
+
             # W&T: place SL-Limit directly at broker — broker holds and triggers on threshold
             _ge_id_str = str(grid_entry.id)
 

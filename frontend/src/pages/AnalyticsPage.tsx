@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import ReportsPage from '@/pages/ReportsPage'
-import { AreaChart, Area, XAxis, YAxis, LineChart, Line, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, LineChart, Line, BarChart, Bar, Cell, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts'
 import { useStore } from '@/store'
 import { reportsAPI, ordersAPI, algosAPI, api } from '@/services/api'
 import type { Order, Algo } from '@/types'
@@ -27,7 +27,7 @@ interface HealthScore {
   trades: number; win_pct: number; total_pnl: number
 }
 
-const TABS = ['Reports', 'Performance', 'Failures', 'Slippage', 'Latency'] as const
+const TABS = ['Reports', 'Performance', 'Failures', 'Slippage', 'Latency', '360 View'] as const
 type Tab = typeof TABS[number]
 
 interface StratRow {
@@ -1108,6 +1108,361 @@ function LatencyTab({ data }: { data: LatencyData | null }) {
 }
 
 
+// ── Tab 5: 360 View ────────────────────────────────────────────────────────────
+interface Algo360KPIs {
+  total_pnl: number
+  total_trades: number
+  wins: number
+  losses: number
+  win_rate: number
+  avg_win: number
+  avg_loss: number
+  best_trade: number
+  worst_trade: number
+  profit_factor: number
+  avg_pnl_per_trade: number
+  max_consecutive_wins: number
+  max_consecutive_losses: number
+  current_streak: number
+  max_drawdown: number
+  sharpe_ratio: number
+  sl_hit_count: number
+  tp_hit_count: number
+  sq_count: number
+}
+
+interface Algo360Data {
+  algo_id: string
+  algo_name: string
+  period: string
+  kpis: Algo360KPIs
+  equity_curve: Array<{ date: string; cumulative_pnl: number }>
+  monthly_pnl: Array<{ month: string; pnl: number; trades: number }>
+}
+
+function buildPeriodOptions(): { value: string; label: string }[] {
+  const now = new Date()
+  const opts: { value: string; label: string }[] = [{ value: 'all', label: 'All Time' }]
+
+  // Last 12 months
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const val = `month:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const label = d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+    opts.push({ value: val, label })
+  }
+
+  // Last 5 calendar years
+  for (let i = 0; i < 5; i++) {
+    const yr = now.getFullYear() - i
+    opts.push({ value: `year:${yr}`, label: String(yr) })
+  }
+
+  // Last 5 Indian FYs (Apr–Mar)
+  const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  for (let i = 0; i < 5; i++) {
+    const s = fyStart - i
+    opts.push({ value: `fy:${s}`, label: `FY ${s}-${String(s + 1).slice(-2)}` })
+  }
+
+  return opts
+}
+
+const PERIOD_OPTIONS = buildPeriodOptions()
+
+function Algo360Tab() {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [period, setPeriod] = useState<string>('all')
+  const [data, setData] = useState<Record<string, Algo360Data>>({})
+  const [algos, setAlgos] = useState<Array<{ id: string; name: string }>>([])
+  const [fetching, setFetching] = useState(false)
+  const [periodOpen, setPeriodOpen] = useState(false)
+
+  // Fetch algo list on mount
+  useEffect(() => {
+    algosAPI.list()
+      .then(r => {
+        const raw: any[] = Array.isArray(r.data) ? r.data : (r.data?.algos || r.data?.results || [])
+        setAlgos(raw.map(a => ({ id: String(a.id || a.algo_id || a.name || ''), name: a.name || a.algo_name || String(a.id || '') })))
+      })
+      .catch(console.error)
+  }, [])
+
+  // Fetch 360 data when selectedIds or period changes
+  useEffect(() => {
+    if (selectedIds.length === 0) { setData({}); return }
+    setFetching(true)
+    const params = new URLSearchParams()
+    selectedIds.forEach(id => params.append('algo_ids', id))
+    params.set('period', period)
+    api.get(`/analytics/algo-360?${params.toString()}`)
+      .then(r => {
+        const { algos: results = [] }: { algos: Algo360Data[] } = r.data ?? {}
+        const map: Record<string, Algo360Data> = {}
+        for (const item of results) map[item.algo_id] = item
+        setData(map)
+      })
+      .catch(console.error)
+      .finally(() => setFetching(false))
+  }, [selectedIds, period])
+
+  const toggleAlgo = (id: string) => {
+    setSelectedIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id)
+      if (prev.length >= 4) return prev
+      return [...prev, id]
+    })
+  }
+
+  const colCount = selectedIds.length || 1
+  const is4col = colCount === 4
+
+  const selectedLabel = PERIOD_OPTIONS.find(o => o.value === period)?.label ?? 'All Time'
+
+  return (
+    <div>
+      {/* Period selector */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'var(--font-display)', marginRight: 4 }}>Period</span>
+        {/* All Time quick button */}
+        <button
+          onClick={() => setPeriod('all')}
+          style={{
+            height: 30, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+            fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
+            background: 'var(--bg)',
+            boxShadow: period === 'all' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+            color: period === 'all' ? 'var(--accent)' : 'var(--text-dim)',
+            transition: 'box-shadow 0.15s, color 0.15s',
+          }}
+        >All Time</button>
+        {/* Dropdown for other periods */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setPeriodOpen(o => !o)}
+            style={{
+              height: 30, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-display)',
+              background: 'var(--bg)',
+              boxShadow: period !== 'all' ? 'var(--neu-inset)' : 'var(--neu-raised-sm)',
+              color: period !== 'all' ? 'var(--accent)' : 'var(--text-dim)',
+              transition: 'box-shadow 0.15s, color 0.15s',
+            }}
+          >
+            {period !== 'all' ? selectedLabel : 'Month / Year / FY'} ▾
+          </button>
+          {periodOpen && (
+            <div
+              style={{
+                position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200,
+                background: 'var(--bg)', boxShadow: 'var(--neu-raised)', borderRadius: 12,
+                padding: '6px 0', minWidth: 160, maxHeight: 320, overflowY: 'auto',
+              }}
+              className="no-scrollbar"
+            >
+              {PERIOD_OPTIONS.filter(o => o.value !== 'all').map(o => (
+                <div
+                  key={o.value}
+                  onClick={() => { setPeriod(o.value); setPeriodOpen(false) }}
+                  style={{
+                    padding: '7px 16px', fontSize: 11, cursor: 'pointer',
+                    color: period === o.value ? 'var(--accent)' : 'var(--text-dim)',
+                    fontWeight: period === o.value ? 700 : 400,
+                    fontFamily: 'var(--font-mono)',
+                    background: 'transparent',
+                    transition: 'color 0.12s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.color = 'var(--text)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.color = period === o.value ? 'var(--accent)' : 'var(--text-dim)' }}
+                >
+                  {o.label}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {selectedIds.length > 0 && (
+          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>
+            {selectedIds.length}/4 selected
+          </span>
+        )}
+        {fetching && (
+          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>Loading...</span>
+        )}
+      </div>
+
+      {/* Algo carousel */}
+      <div
+        className="no-scrollbar"
+        style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 }}
+      >
+        {algos.length === 0 ? (
+          <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>No algos available</span>
+        ) : algos.map(a => {
+          const sel = selectedIds.includes(a.id)
+          return (
+            <button
+              key={a.id}
+              onClick={() => toggleAlgo(a.id)}
+              style={{
+                flexShrink: 0, height: 34, padding: '0 16px', borderRadius: 10, cursor: 'pointer',
+                fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                background: 'var(--bg)',
+                boxShadow: sel ? 'var(--neu-raised)' : 'var(--neu-raised-sm)',
+                border: sel ? '1px solid var(--accent)' : '1px solid transparent',
+                color: sel ? 'var(--accent)' : 'var(--text-dim)',
+                transition: 'box-shadow 0.15s, color 0.15s, border-color 0.15s',
+              } as React.CSSProperties}
+            >
+              {a.name}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Empty state */}
+      {selectedIds.length === 0 ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          height: 300, color: 'var(--text-dim)', fontSize: 13,
+          fontFamily: 'var(--font-display)',
+        }}>
+          Select up to 4 algos above to compare
+        </div>
+      ) : (
+        /* Comparison grid */
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${colCount}, 1fr)`,
+          gap: 0,
+        }}>
+          {selectedIds.map((id, colIdx) => {
+            const d = data[id]
+            const k = d?.kpis
+            const isLast = colIdx === selectedIds.length - 1
+            const streak = k ? k.current_streak : 0
+            const streakColor = streak > 0 ? 'var(--green)' : streak < 0 ? 'var(--red)' : 'var(--text-mute)'
+            const finalPnl = d?.equity_curve?.length
+              ? d.equity_curve[d.equity_curve.length - 1]?.cumulative_pnl ?? 0
+              : (k?.total_pnl ?? 0)
+            const last6Months = d?.monthly_pnl?.slice(-6) ?? []
+
+            return (
+              <div
+                key={id}
+                style={{
+                  borderRight: isLast ? 'none' : '1px solid var(--border)',
+                  padding: '0 16px 16px',
+                }}
+              >
+                {/* Algo name header */}
+                <div style={{
+                  fontSize: 15, fontWeight: 700, color: 'var(--accent)',
+                  fontFamily: 'var(--font-display)', marginBottom: 12, paddingTop: 4,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {d?.algo_name ?? algos.find(a => a.id === id)?.name ?? id}
+                </div>
+
+                {!d ? (
+                  <div style={{ color: 'var(--text-mute)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                    {fetching ? 'Loading...' : 'No data'}
+                  </div>
+                ) : (
+                  <>
+                    {/* Primary KPI row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 8 }}>
+                      {[
+                        { label: 'Total P&L', value: fmtPnl(k.total_pnl), color: k.total_pnl >= 0 ? 'var(--green)' : 'var(--red)' },
+                        { label: 'Win Rate', value: `${k.win_rate.toFixed(1)}%`, color: k.win_rate >= 50 ? 'var(--green)' : 'var(--red)' },
+                        { label: 'Trades', value: String(k.total_trades), color: 'var(--text-dim)' },
+                        { label: 'Profit Factor', value: k.profit_factor > 0 ? k.profit_factor.toFixed(2) : '—', color: k.profit_factor >= 1 ? 'var(--green)' : 'var(--red)' },
+                      ].map(item => (
+                        <div key={item.label} style={{
+                          background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)', borderRadius: 10,
+                          padding: '10px 12px',
+                        }}>
+                          <div style={{ fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-mute)', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: 4 }}>{item.label}</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: item.color, fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Secondary KPIs — hidden in 4-col mode */}
+                    {!is4col && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 10 }}>
+                        {[
+                          { label: 'Avg Win', value: fmtPnl(k.avg_win), color: 'var(--green)' },
+                          { label: 'Avg Loss', value: fmtPnl(k.avg_loss), color: 'var(--red)' },
+                          { label: 'Best', value: fmtPnl(k.best_trade), color: 'var(--green)' },
+                          { label: 'Worst', value: fmtPnl(k.worst_trade), color: 'var(--red)' },
+                          { label: 'Max DD', value: fmtPnl(k.max_drawdown), color: 'var(--red)' },
+                          { label: 'Streak', value: streak === 0 ? '0' : `${streak > 0 ? '+' : ''}${streak}`, color: streakColor },
+                        ].map(item => (
+                          <div key={item.label} style={{ padding: '6px 8px' }}>
+                            <div style={{ fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-mute)', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: 2 }}>{item.label}</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: item.color, fontFamily: 'var(--font-mono)' }}>{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Equity curve */}
+                    {d.equity_curve && d.equity_curve.length >= 2 && (
+                      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 10, padding: '8px 4px 4px', marginBottom: 8, overflow: 'hidden' }}>
+                        <ResponsiveContainer width="100%" height={is4col ? 100 : 140}>
+                          <LineChart data={d.equity_curve} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                            <XAxis dataKey="date" tick={{ fontSize: 8, fill: 'var(--text-mute)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                            <YAxis hide />
+                            <Tooltip
+                              contentStyle={{ background: 'var(--bg)', border: 'none', boxShadow: 'var(--neu-raised)', borderRadius: 8, fontSize: 10 }}
+                              formatter={(v: number) => [fmtPnl(v), 'Cumulative P&L']}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="cumulative_pnl"
+                              stroke={finalPnl >= 0 ? 'var(--green)' : 'var(--red)'}
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Monthly P&L bars — hidden in 4-col mode */}
+                    {!is4col && last6Months.length > 0 && (
+                      <div style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)', borderRadius: 10, padding: '8px 4px 4px', overflow: 'hidden' }}>
+                        <div style={{ fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-mute)', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: 4, paddingLeft: 4 }}>Monthly P&amp;L</div>
+                        <ResponsiveContainer width="100%" height={100}>
+                          <BarChart data={last6Months} margin={{ top: 2, right: 4, left: 4, bottom: 0 }}>
+                            <XAxis dataKey="month" tick={{ fontSize: 8, fill: 'var(--text-mute)' }} axisLine={false} tickLine={false} />
+                            <YAxis hide />
+                            <Tooltip
+                              contentStyle={{ background: 'var(--bg)', border: 'none', boxShadow: 'var(--neu-raised)', borderRadius: 8, fontSize: 10 }}
+                              formatter={(v: number) => [fmtPnl(v), 'P&L']}
+                            />
+                            <Bar dataKey="pnl" radius={[3, 3, 0, 0]}>
+                              {last6Months.map((entry, idx) => (
+                                <Cell key={idx} fill={entry.pnl >= 0 ? 'var(--green)' : 'var(--red)'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const isPractixMode = useStore(s => s.isPractixMode)
@@ -1253,9 +1608,10 @@ export default function AnalyticsPage() {
                 stratRows={stratRows}
               />
             )}
-            {activeTab === 'Failures' && <FailuresTab data={errorsData} />}
+            {activeTab === 'Failures'  && <FailuresTab data={errorsData} />}
             {activeTab === 'Slippage'  && <SlippageTab data={slippageData} />}
             {activeTab === 'Latency'   && <LatencyTab data={latencyData} />}
+            {activeTab === '360 View'  && <Algo360Tab />}
           </>
         )}
 

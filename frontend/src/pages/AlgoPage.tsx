@@ -133,6 +133,7 @@ interface Leg {
   id: string; no: number; instType: string; instCode: string; direction: string; optType: string
   strikeMode: string; strikeType: string; premiumVal: string; lots: string; expiry: string
   slBufferPct: string  // SL buffer % for SL-Limit placement (default "2.0")
+  wt_execution_mode?: string  // 'sl_limit' | 'market' — W&T order execution mode
   active: Record<FeatureKey, boolean>; vals: LegVals; journey?: JourneyChild
   journey_trigger?: string  // 'sl' | 'tp' | 'either' — gates which exit fires child
   backendId?: string  // backend UUID — sent back on PUT to enable in-place update
@@ -142,7 +143,7 @@ const mkLeg = (n: number): Leg => ({
   id: `leg-${Date.now()}-${n}`, no: n,
   instType: 'OP', instCode: 'NF', direction: 'BUY', optType: 'CE',
   strikeMode: 'leg', strikeType: 'atm', premiumVal: '', lots: '', expiry: 'current_weekly',
-  slBufferPct: '2.0',
+  slBufferPct: '2.0', wt_execution_mode: 'sl_limit',
   active: { wt: false, sl: false, re: false, reentry: false, tp: false, tsl: false, ttp: false }, journey: mkJourneyChild(), journey_trigger: 'either',
   vals: { wt: { direction: 'up', value: '', unit: 'pts' }, sl: { type: 'pts_instrument', value: '' }, re: { mode: 'at_entry_price', trigger: 'sl', count: '1' },
     reentry: { type: 're_entry', ltpMode: 'ltp', onSl: false, onTp: false, maxSl: '1', maxTp: '1' },
@@ -215,7 +216,7 @@ function FeatVals({ leg, onUpdate, entryType }: { leg: Leg; onUpdate: (id: strin
         return <>{sel('tp', 'type', [['pts_instrument','Pts(I)'],['pct_instrument','%(I)'],['pts_underlying','Pts(U)'],['pct_underlying','%(U)']], '88px')} {inp('tp', 'value', 'val')}</>
       })()}
       {f.key === 'ttp' && <>{inp('ttp', 'x', 'X')} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>→</span> {inp('ttp', 'y', 'Y')} {sel('ttp', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
-      {f.key === 'wt' && <>{sel('wt', 'direction', [['up','↑Up'],['down','↓Dn']], '72px')} {inp('wt', 'value', 'val')} {sel('wt', 'unit', [['pts','pts'],['pct','%']], '60px')}</>}
+      {f.key === 'wt' && <>{sel('wt', 'direction', [['up','↑Up'],['down','↓Dn']], '72px')} {inp('wt', 'value', 'val')} {sel('wt', 'unit', [['pts','pts'],['pct','%']], '60px')} <select value={leg.wt_execution_mode ?? 'sl_limit'} onChange={e => onUpdate(leg.id, { wt_execution_mode: e.target.value })} title="W&T Mode: SL-Limit (broker-side) or Market (engine-side)" style={{ height: '28px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: 'none', borderRadius: 6, padding: '0 6px', color: 'var(--text)', fontSize: 11, fontFamily: 'inherit', cursor: 'pointer' }}><option value="sl_limit">SL-Lmt</option><option value="market">Mkt</option></select></>}
       {f.key === 'reentry' && <ReentryConfig rv={leg.vals.reentry} uRe={(sub, val) => onUpdate(leg.id, { vals: { ...leg.vals, reentry: { ...leg.vals.reentry, [sub]: val } } })} inpSt={inpSt} />}
     </div>
   )
@@ -858,6 +859,7 @@ const [saveError, setSaveError]   = useState('')
             lots:       String(l.lots || 1),
             expiry:     l.expiry || 'current_weekly',
             slBufferPct: l.sl_buffer_pct != null ? String(l.sl_buffer_pct) : '2.0',
+            wt_execution_mode: l.wt_execution_mode || 'sl_limit',
             active: {
               wt:      !!l.wt_enabled,
               sl:      !!(l.sl_type  && l.sl_value != null),
@@ -1076,10 +1078,11 @@ const [saveError, setSaveError]   = useState('')
       strike_offset:   0,
       lots:            parseInt(l.lots) || 1,
       // Features
-      wt_enabled:   l.active.wt,
-      wt_direction: l.active.wt ? l.vals.wt.direction : null,
-      wt_value:     l.active.wt ? (parseFloat(l.vals.wt.value) || undefined) : null,
-      wt_unit:      l.active.wt ? l.vals.wt.unit : null,
+      wt_enabled:        l.active.wt,
+      wt_direction:      l.active.wt ? l.vals.wt.direction : null,
+      wt_value:          l.active.wt ? (parseFloat(l.vals.wt.value) || undefined) : null,
+      wt_unit:           l.active.wt ? l.vals.wt.unit : null,
+      wt_execution_mode: l.wt_execution_mode || 'sl_limit',
       sl_type:      l.active.sl && entryType !== 'orb' ? l.vals.sl.type  : null,
       sl_value:     l.active.sl && entryType !== 'orb' ? parseFloat(l.vals.sl.value) || null : null,
       sl_buffer_pct: parseFloat(l.slBufferPct) || 2.0,

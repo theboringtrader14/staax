@@ -61,6 +61,7 @@ class LegCreate(BaseModel):
     wt_direction:    Optional[str]  = None
     wt_value:        Optional[float] = None
     wt_unit:         Optional[str]  = None
+    wt_execution_mode: str          = 'sl_limit'   # 'sl_limit' | 'market'
     # ORB Phase 2 per-leg fields
     orb_range_source:  Optional[str]   = None
     orb_entry_at:      Optional[str]   = None
@@ -176,10 +177,11 @@ def _leg_to_dict(leg: AlgoLeg) -> dict:
         "ttp_x":           leg.ttp_x,
         "ttp_y":           leg.ttp_y,
         "ttp_unit":        leg.ttp_unit,
-        "wt_enabled":      leg.wt_enabled,
-        "wt_direction":    leg.wt_direction,
-        "wt_value":        leg.wt_value,
-        "wt_unit":         leg.wt_unit,
+        "wt_enabled":         leg.wt_enabled,
+        "wt_direction":       leg.wt_direction,
+        "wt_value":           leg.wt_value,
+        "wt_unit":            leg.wt_unit,
+        "wt_execution_mode":  getattr(leg, 'wt_execution_mode', 'sl_limit'),
         "orb_range_source":  leg.orb_range_source,
         "orb_entry_at":      leg.orb_entry_at,
         "orb_sl_type":       leg.orb_sl_type,
@@ -239,6 +241,8 @@ def _algo_to_dict(algo: Algo, legs: list = None, account_nickname: str = None) -
 
 
 def _validate_leg_data(leg_data: LegCreate) -> None:
+    if leg_data.wt_execution_mode not in ('sl_limit', 'market'):
+        raise HTTPException(status_code=400, detail="wt_execution_mode must be 'sl_limit' or 'market'")
     if leg_data.tsl_enabled:
         if not leg_data.tsl_x or leg_data.tsl_x <= 0:
             raise HTTPException(status_code=400, detail="TSL activation step (X) must be > 0 when TSL is enabled")
@@ -284,6 +288,7 @@ def _build_leg(algo_id, leg_data: LegCreate) -> AlgoLeg:
         wt_direction=leg_data.wt_direction,
         wt_value=leg_data.wt_value,
         wt_unit=leg_data.wt_unit,
+        wt_execution_mode=leg_data.wt_execution_mode,
         orb_range_source  = leg_data.orb_range_source,
         orb_entry_at      = leg_data.orb_entry_at,
         orb_sl_type       = leg_data.orb_sl_type,
@@ -328,10 +333,11 @@ def _update_leg_fields(leg: AlgoLeg, data: LegCreate) -> None:
     leg.ttp_x           = data.ttp_x
     leg.ttp_y           = data.ttp_y
     leg.ttp_unit        = data.ttp_unit
-    leg.wt_enabled      = data.wt_enabled
-    leg.wt_direction    = data.wt_direction
-    leg.wt_value        = data.wt_value
-    leg.wt_unit         = data.wt_unit
+    leg.wt_enabled        = data.wt_enabled
+    leg.wt_direction      = data.wt_direction
+    leg.wt_value          = data.wt_value
+    leg.wt_unit           = data.wt_unit
+    leg.wt_execution_mode = data.wt_execution_mode
     leg.orb_range_source  = data.orb_range_source
     leg.orb_entry_at      = data.orb_entry_at
     leg.orb_sl_type       = data.orb_sl_type
@@ -787,6 +793,7 @@ async def duplicate_algo(algo_id: str, db: AsyncSession = Depends(get_db)):
             wt_direction=leg.wt_direction,
             wt_value=leg.wt_value,
             wt_unit=leg.wt_unit,
+            wt_execution_mode=getattr(leg, 'wt_execution_mode', 'sl_limit'),
             orb_range_source=leg.orb_range_source,
             orb_entry_at=leg.orb_entry_at,
             orb_sl_type=leg.orb_sl_type,
