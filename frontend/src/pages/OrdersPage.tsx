@@ -693,18 +693,39 @@ function BotOrdersView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '4px 0' }}>
-      {groups.map(([botName, { open, closed }]) => (
-        <div key={botName} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* Bot name header */}
-          <div style={{
-            fontFamily: 'var(--font-display)', color: 'var(--accent)',
-            fontSize: 13, fontWeight: 700, letterSpacing: '1px',
-            textTransform: 'uppercase' as const, paddingLeft: 4,
-          }}>
-            {botName}
+      {groups.map(([botName, { open, closed }]) => {
+        // D6: compute total P&L from closed orders
+        const totalPnl = closed.reduce((sum, o) => sum + (o.pnl ?? 0), 0);
+        return (
+        // D7: neumorphic outer bot group container
+        <div key={botName} style={{
+          display: 'flex', flexDirection: 'column', gap: 8,
+          background: 'var(--bg)', boxShadow: 'var(--neu-raised-sm)',
+          borderRadius: 12, padding: '14px 16px',
+        }}>
+          {/* D6: Bot name header with total P&L */}
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <span style={{
+              fontFamily: 'var(--font-display)', color: 'var(--accent)',
+              fontSize: 13, fontWeight: 700, letterSpacing: '1px',
+              textTransform: 'uppercase' as const,
+            }}>
+              {botName}
+            </span>
+            {closed.length > 0 && (
+              <span style={{
+                marginLeft: 12,
+                color: totalPnl >= 0 ? 'var(--green)' : 'var(--red)',
+                fontSize: 13,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 600,
+              }}>
+                {totalPnl >= 0 ? '+' : ''}&#8377;{totalPnl.toLocaleString('en-IN')}
+              </span>
+            )}
           </div>
 
-          {/* OPEN orders — neumorphic cards */}
+          {/* OPEN orders — prominent neumorphic cards with accent left border */}
           {open.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {open.map((o) => {
@@ -713,7 +734,12 @@ function BotOrdersView() {
                 const pnl = o.pnl;
                 const pnlColor = pnl == null || pnl === 0 ? 'var(--text-dim)' : pnl > 0 ? 'var(--green)' : 'var(--red)';
                 const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}` : '—';
+                // D5: format entry time for display
+                const entryTimeStr = o.entry_time
+                  ? new Date(o.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+                  : null;
                 return (
+                  // D7: open card — prominent with accent left border
                   <div key={o.id} style={{
                     display: 'grid',
                     gridTemplateColumns: '2fr 80px 60px 90px 90px 90px',
@@ -722,11 +748,13 @@ function BotOrdersView() {
                     background: 'var(--bg)',
                     boxShadow: 'var(--neu-raised)',
                     borderRadius: 10,
+                    borderLeft: '3px solid var(--accent)',
                     padding: '10px 14px',
                   }}>
-                    {/* Symbol */}
+                    {/* Symbol + entry time */}
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
                       {o.instrument}{o.expiry ? <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 4 }}>{o.expiry}</span> : null}
+                      {entryTimeStr && <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 6 }}>{entryTimeStr}</span>}
                     </span>
                     {/* Direction pill */}
                     <span style={{
@@ -762,29 +790,38 @@ function BotOrdersView() {
             </div>
           )}
 
-          {/* CLOSED orders — compact dim rows */}
+          {/* CLOSED orders — compact secondary rows */}
           {closed.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {closed.map((o) => {
                 const isBuy = (o.direction ?? '').toUpperCase() === 'BUY';
                 const dirColor = isBuy ? 'var(--green)' : 'var(--red)';
                 const pnl = o.pnl;
                 const pnlColor = pnl == null || pnl === 0 ? 'var(--text-dim)' : pnl > 0 ? 'var(--green)' : 'var(--red)';
                 const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}` : '—';
+                // D5: format exit time for display
+                const exitTimeStr = o.exit_time
+                  ? new Date(o.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+                  : null;
                 return (
+                  // D7: closed row — secondary inset style
                   <div key={o.id} style={{
                     display: 'grid',
-                    gridTemplateColumns: '2fr 60px 50px 1fr 90px',
+                    gridTemplateColumns: '2fr 60px 50px 1fr 80px 80px',
                     alignItems: 'center',
                     gap: 10,
                     color: 'var(--text-dim)',
                     fontSize: 12,
-                    padding: '4px 14px',
-                    borderRadius: 6,
+                    padding: '6px 14px',
+                    borderRadius: 8,
+                    background: 'transparent',
+                    boxShadow: 'var(--neu-inset)',
+                    opacity: 0.7,
                   }}>
                     {/* Symbol */}
                     <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
                       {o.instrument}
+                      {o.expiry ? <span style={{ fontSize: 10, marginLeft: 4 }}>{o.expiry}</span> : null}
                     </span>
                     {/* Direction */}
                     <span style={{ color: dirColor, fontWeight: 600, fontSize: 10 }}>
@@ -798,6 +835,10 @@ function BotOrdersView() {
                       <span style={{ margin: '0 4px' }}>→</span>
                       {o.exit_price != null ? o.exit_price.toFixed(2) : '—'}
                     </span>
+                    {/* Exit time — D5 */}
+                    <span style={{ textAlign: 'right' as const, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                      {exitTimeStr ?? '—'}
+                    </span>
                     {/* P&L */}
                     <span style={{ fontWeight: 700, color: pnlColor, textAlign: 'right' as const, fontFamily: 'var(--font-mono)' }}>
                       {pnlStr}
@@ -808,7 +849,8 @@ function BotOrdersView() {
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1959,6 +2001,17 @@ export default function OrdersPage() {
                 { label: retryLabel, col: retryCol, bg: retryBg, hBg: retryHBg, border: undefined, disabled: !canRetry, action: canRetry ? doWaitingRE : undefined },
               ]
 
+              // D2 fix: compute name color from status flags (mirrors stripBg logic)
+              const waitingNameColor =
+                isMissed                       ? '#F59E0B' :
+                isError                        ? 'var(--red)' :
+                isSkipped                      ? 'var(--text-dim)' :
+                displayStatus === 'MONITORING' ? '#2dd4bf' :
+                displayStatus === 'SCHEDULED'  ? '#4488FF' :
+                displayStatus === 'ERROR'      ? 'var(--red)' :
+                displayStatus === 'MISSED'     ? '#F59E0B' :
+                'var(--accent)'
+
               return (
                 <div key={w.grid_entry_id}>
 
@@ -1971,7 +2024,7 @@ export default function OrdersPage() {
                       marginBottom: '6px', cursor: 'pointer', overflow: 'hidden',
                     }} onClick={() => { sounds.click(); toggleExpand(w.grid_entry_id) }}>
                       <div style={{ width: 4, alignSelf: 'stretch', background: stripBg, flexShrink: 0, boxShadow: `0 0 8px ${stripGlow}` }} />
-                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: 'var(--accent)', fontVariantNumeric: 'lining-nums' }}>{w.algo_name}</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13, minWidth: 100, padding: '10px 0', whiteSpace: 'nowrap' as const, color: waitingNameColor, fontVariantNumeric: 'lining-nums' }}>{w.algo_name}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 70, whiteSpace: 'nowrap' as const }}>{w.account_name || '—'}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
                           padding: '2px 8px', borderRadius: 100, background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
@@ -2019,7 +2072,7 @@ export default function OrdersPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', flexWrap: 'wrap' as const, minWidth: 0 }}>
 
                         {/* Algo name */}
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: 'var(--accent)', whiteSpace: 'nowrap' as const, fontVariantNumeric: 'lining-nums' }}>
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '15px', color: waitingNameColor, whiteSpace: 'nowrap' as const, fontVariantNumeric: 'lining-nums' }}>
                           {w.algo_name}
                         </span>
 

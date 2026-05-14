@@ -48,21 +48,23 @@ export default function BotChart({ botId, timeframeMins }: BotChartProps) {
     const lowerBand = chart.addSeries(LineSeries, { color: '#f87171', lineWidth: 1, title: 'Lower' })
     const midLine   = chart.addSeries(LineSeries, { color: 'rgba(255,255,255,0.3)', lineWidth: 1, lineStyle: 2, title: 'Mid' })
 
+    const IST_OFFSET = 19800 // UTC+5:30 in seconds
+
     const fetchData = async () => {
       setLoading(true)
       try {
         const r = await fetch(`${API_BASE}/api/v1/bots/${botId}/chart?timeframe=${timeframeMins}&days=30`)
         if (!r.ok) throw new Error('no data')
         const d = await r.json()
-        if (d.candles?.length) candles.setData(d.candles)
-        if (d.upper?.length)   upperBand.setData(d.upper)
-        if (d.lower?.length)   lowerBand.setData(d.lower)
-        if (d.mid?.length)     midLine.setData(d.mid)
+        if (d.candles?.length) candles.setData(d.candles.map((c: any) => ({ ...c, time: (c.time as number) + IST_OFFSET })))
+        if (d.upper?.length)   upperBand.setData(d.upper.map((c: any) => ({ ...c, time: (c.time as number) + IST_OFFSET })))
+        if (d.lower?.length)   lowerBand.setData(d.lower.map((c: any) => ({ ...c, time: (c.time as number) + IST_OFFSET })))
+        if (d.mid?.length)     midLine.setData(d.mid.map((c: any) => ({ ...c, time: (c.time as number) + IST_OFFSET })))
         if (d.entries?.length) {
           createSeriesMarkers(candles, (d.entries as any[]).map((e) => {
             const dir = e.direction?.toLowerCase()
             return {
-              time: e.time,
+              time: ((e.time as number) + IST_OFFSET) as import('lightweight-charts').Time,
               position: dir === 'sell' ? 'aboveBar' : 'belowBar',
               color: dir === 'sell' ? '#ef4444' : '#22c55e',
               shape: dir === 'sell' ? 'arrowDown' : 'arrowUp',
