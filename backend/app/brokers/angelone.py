@@ -854,9 +854,13 @@ class AngelOneBroker(BaseBroker):
                     None,
                     lambda: client.placeOrder(order_params)
                 )
+                try:
+                    _resp_str = _json.dumps(_raw_response, default=str)
+                except Exception:
+                    _resp_str = repr(_raw_response)[:500]
                 logger.info(
                     f"[ANGEL_RESP][{_fid}] raw type={type(_raw_response).__name__} "
-                    f"value={_json.dumps(_raw_response, default=str) if _raw_response else 'EMPTY/None'}"
+                    f"value={_resp_str if _raw_response else 'EMPTY/None'}"
                 )
             except Exception as _angel_exc:
                 logger.error(
@@ -865,7 +869,16 @@ class AngelOneBroker(BaseBroker):
                 logger.error(f"[ANGEL_EXC][{_fid}] traceback: {_tb.format_exc()}")
                 raise
 
-            data = _raw_response
+            # Normalize response — Angel SDK sometimes returns string instead of dict
+            if isinstance(_raw_response, str):
+                logger.warning(
+                    f"[ANGEL_STR_RESP][{_fid}] SDK returned string: '{_raw_response[:300]}'"
+                )
+                data = {"status": False, "message": _raw_response, "errorcode": "STR_RESPONSE"}
+            elif _raw_response is None:
+                data = None
+            else:
+                data = _raw_response
 
             try:
                 _http_info = {}
@@ -898,8 +911,8 @@ class AngelOneBroker(BaseBroker):
                     logger.error(f"[ANGEL_EMPTY][{_fid}] SDK ._last_response: {client._last_response}")
                 raise RuntimeError("Angel One order placement failed: No response from broker")
 
-            if data.get("status") is False:
-                broker_msg = data.get("message") or data.get("errormessage") or data.get("errorcode") or "Unknown error"
+            if not isinstance(data, dict) or data.get("status") is False:
+                broker_msg = data.get("message") if isinstance(data, dict) else str(data)[:300]
                 raise RuntimeError(f"Angel One order placement failed: {broker_msg}")
 
             order_id = data.get("data", {}).get("orderid", "")

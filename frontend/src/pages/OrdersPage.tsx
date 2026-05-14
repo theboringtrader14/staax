@@ -1511,8 +1511,7 @@ export default function OrdersPage() {
       if (groups === undefined) {
         result[day] = null  // not yet loaded
       } else {
-        const filtered = (accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter))
-          .filter(g => !g.isPractix) // Exclude PRACTIX orders from day pill P&L
+        const filtered = accountFilter === 'all' ? groups : groups.filter(g => g.account === accountFilter)
         if (!filtered.some(g => g.legs.length > 0)) {
           result[day] = null  // loaded but empty
         } else {

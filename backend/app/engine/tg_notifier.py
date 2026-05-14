@@ -68,22 +68,35 @@ class TGNotifier:
     async def _fetch_eod_data(self) -> dict:
         from app.core.database import AsyncSessionLocal
         from app.models.order import Order, OrderStatus
+        from app.models.algo import Algo
+        from app.models.algo_state import AlgoState, AlgoRunStatus
         from sqlalchemy import select, and_, func, cast
         from sqlalchemy.types import Date
 
         today_ist = datetime.now(IST).date()
+        today_str = today_ist.strftime("%Y-%m-%d")
 
         async with AsyncSessionLocal() as db:
-            closed = (await db.execute(
-                select(Order).where(
+            # FIX D8: JOIN with Algo to get human-readable algo name directly.
+            # Previously, algo_pnl was keyed by o.algo_tag which is only a
+            # truncated UUID prefix (e.g. "8f75bb67"), because algo_runner sets
+            # algo_tag = str(grid_entry.id)[:8] — not the SEBI name format that
+            # _parse_algo_name() expects.  Joining to Algo gives the real name.
+            closed_rows = (await db.execute(
+                select(Order, Algo).join(Algo, Order.algo_id == Algo.id).where(
                     and_(
                         Order.status == OrderStatus.CLOSED,
                         cast(func.timezone("Asia/Kolkata", Order.updated_at), Date) == today_ist,
                     )
                 )
-            )).scalars().all()
+            )).all()
+            closed = [row[0] for row in closed_rows]
 
-            errors = (await db.execute(
+            # FIX D9: count Order-level errors (broker failures) AND AlgoState-level
+            # errors (pre-order failures: margin, instrument lookup, etc.).  Previously
+            # only Order.status==ERROR was counted, missing algos that errored before
+            # any order record was written.
+            order_errors = (await db.execute(
                 select(Order).where(
                     and_(
                         Order.status == OrderStatus.ERROR,
@@ -91,6 +104,15 @@ class TGNotifier:
                     )
                 )
             )).scalars().all()
+
+            algo_error_count = (await db.execute(
+                select(func.count()).select_from(AlgoState).where(
+                    and_(
+                        AlgoState.trading_date == today_str,
+                        AlgoState.status == AlgoRunStatus.ERROR,
+                    )
+                )
+            )).scalar() or 0
 
             open_orders = (await db.execute(
                 select(Order).where(Order.status == OrderStatus.OPEN)
@@ -101,18 +123,24 @@ class TGNotifier:
         losses  = sum(1 for o in closed if (o.pnl or 0) < 0)
         sl_hits = sum(1 for o in closed if o.exit_reason == "sl")
 
+        # Build algo_pnl keyed by Algo.name (human-readable) from the joined rows.
         algo_pnl: dict = {}
-        for o in closed:
-            name = o.algo_tag or "Unknown"
-            algo_pnl[name] = algo_pnl.get(name, 0) + (o.pnl or 0)
+        for order, algo in closed_rows:
+            name = algo.name if algo else "Unknown"
+            algo_pnl[name] = algo_pnl.get(name, 0) + (order.pnl or 0)
 
         best  = max(algo_pnl, key=algo_pnl.get) if algo_pnl else None
         worst = min(algo_pnl, key=algo_pnl.get) if algo_pnl else None
 
+        # Total errors = order-level + algo-level (deduplicated by taking the max,
+        # since an algo that errored at broker will have both an Order ERROR and an
+        # AlgoState ERROR; we show the higher of the two counts rather than double-count).
+        total_error_count = max(len(order_errors), algo_error_count)
+
         error_lines = []
-        for e in errors[:3]:
+        for e in order_errors[:3]:
             error_lines.append(
-                f"  • {e.algo_tag or 'Unknown'}: {(e.error_message or 'error')[:50]}"
+                f"  • {self._parse_algo_name(e.algo_tag) if e.algo_tag else 'Unknown'}: {(e.error_message or 'error')[:50]}"
             )
 
         return {
@@ -121,11 +149,11 @@ class TGNotifier:
             "wins":           wins,
             "losses":         losses,
             "sl_hits":        sl_hits,
-            "error_count":    len(errors),
+            "error_count":    total_error_count,
             "error_lines":    error_lines,
             "open_positions": len(open_orders),
-            "best_algo":      f"{self._parse_algo_name(best)} (+₹{algo_pnl[best]:,.0f})" if best else "—",
-            "worst_algo":     f"{self._parse_algo_name(worst)} (-₹{abs(algo_pnl[worst]):,.0f})" if worst and algo_pnl[worst] < 0 else "—",
+            "best_algo":      f"{best} (+₹{algo_pnl[best]:,.0f})" if best else "—",
+            "worst_algo":     f"{worst} (-₹{abs(algo_pnl[worst]):,.0f})" if worst and algo_pnl[worst] < 0 else "—",
         }
 
     async def notify(self, event_type: str, payload: dict) -> None:

@@ -793,6 +793,13 @@ class AlgoRunner:
                 f"[W&T] Placing SL-Limit at broker: {symbol} "
                 f"trigger={_wt_threshold:.2f} limit={_wt_limit_price:.2f} ref={_wt_option_ltp:.2f}"
             )
+            # Refresh session before W&T placement — token may have expired since 08:45 login
+            if hasattr(account_broker, '_refresh_session'):
+                try:
+                    await account_broker._refresh_session()
+                    logger.info(f"[WT_SESSION] Session refreshed before W&T placement for {algo.name}")
+                except Exception as _se:
+                    logger.warning(f"[WT_SESSION] Session refresh failed: {_se} — attempting placement anyway")
             # 2-attempt retry: if Angel One returns "No response" (expired
             # session), refresh the session token and try once more.
             _wt_broker_order_id = None
